@@ -23,7 +23,8 @@ function api_base() {
 	return SERVER_URL;
 }
 
-function api_request(_method, _path, _body, _cb, _ctx) {
+/// _quiet: 몇 초마다 묻는 요청(카카오 로그인 결과 확인 등)은 「통신 중」 표시·버튼 잠금을 하지 않는다
+function api_request(_method, _path, _body, _cb, _ctx, _quiet = false) {
 	var _h = ds_map_create();
 	ds_map_add(_h, "x-gmm", "1");
 	ds_map_add(_h, "x-gmm-app", "1");
@@ -43,8 +44,8 @@ function api_request(_method, _path, _body, _cb, _ctx) {
 		_cb(false, undefined, 0, _ctx);
 		return -1;
 	}
-	global.api_pending[$ string(_id)] = { cb: _cb, ctx: _ctx, path: _path };
-	global.ui.busy += 1;
+	global.api_pending[$ string(_id)] = { cb: _cb, ctx: _ctx, path: _path, quiet: _quiet };
+	if (!_quiet) global.ui.busy += 1;
 	return _id;
 }
 
@@ -60,7 +61,7 @@ function api_async_http() {
 	var _status = async_load[? "status"];
 	if (_status == 1) return;   // 아직 받는 중
 	variable_struct_remove(global.api_pending, _key);
-	global.ui.busy = max(0, global.ui.busy - 1);
+	if (!_p.quiet) global.ui.busy = max(0, global.ui.busy - 1);
 	var _code = async_load[? "http_status"];
 	if (is_undefined(_code)) _code = 0;
 	var _res = async_load[? "result"], _data = undefined;

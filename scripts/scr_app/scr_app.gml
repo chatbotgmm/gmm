@@ -112,17 +112,83 @@ function boot_draw() {
 	if (ui_button(_u.W / 2 - 100, _u.H / 2 + 20, 200, 52, "다시 시도", "primary")) go("boot");
 }
 
-// ── 로그인: 카톡 6자리 코드(앱의 「카톡 코드로 로그인」과 같음) ──
+// ── 로그인: 카카오 로그인(브라우저) 또는 카톡 6자리 코드(앱의 「카톡 코드로 로그인」과 같음) ──
 function login_draw() {
 	var _u = global.ui;
 	app_backdrop(0.55);
-	var _w = 560, _h = 270, _x = (_u.W - _w) / 2, _y = (_u.H - _h) / 2;
+	var _w = 560, _h = 330, _x = (_u.W - _w) / 2, _y = (_u.H - _h) / 2;
 	ui_panel(_x, _y, _w, _h);
+	var _k = global.S[$ "kk"];
+	if (is_struct(_k)) { kakao_wait_draw(_k, _x, _y, _w, _h); return; }
 	ui_text(_x + 28, _y + 26, "갈매미맨 방범대", global.F28, C_TEXT);
-	ui_text_wrap(_x + 28, _y + 76, "앱과 같은 계정으로 이어서 해요. 카카오톡 「갈매미맨」 채널에 「웹 로그인」이라고 보내면 6자리 코드가 와요.", global.F16, C_MUTED, _w - 56);
-	if (ui_button(_x + 28, _y + _h - 28 - 56, _w - 56, 56, "카톡 코드로 로그인", "primary")) {
+	ui_text_wrap(_x + 28, _y + 76, "앱과 같은 계정으로 이어서 해요. 「카카오로 로그인」을 누르면 브라우저가 열려요. 카톡 코드는 「갈매미맨」 채널에 「웹 로그인」이라고 보내면 와요.", global.F16, C_MUTED, _w - 56);
+	var _by = _y + _h - 28 - 48;
+	if (ui_button(_x + 28, _by - 12 - 56, _w - 56, 56, "카카오로 로그인", "primary")) kakao_login_start();
+	if (ui_button(_x + 28, _by, _w - 56, 48, "카톡 코드로 로그인", "normal")) {
 		global.dialog = get_string_async("카카오톡에서 받은 6자리 코드를 적어 주세요.", "");
 	}
+}
+
+// ── 카카오 로그인(서버 9차 패치 필요) ──
+// 서버에 시작 요청 → 브라우저로 카카오 로그인 → 브라우저 확인 화면에서 게임과 같은 확인 글자를 보고 누름 → 게임이 2초마다 결과를 물어 열쇠를 받음.
+// 결과를 받는 비밀값(secret)은 게임만 가진다(브라우저 주소에는 요청 번호만).
+function kakao_login_start() {
+	api_post("app/kakao-start", {}, kakao_start_cb, undefined);
+}
+function kakao_start_cb(_ok, _data, _code, _ctx) {
+	if (global.screen != "login") return;
+	if (api_failed(_ok, _data, _code)) return;
+	var _url = jv(_data, "url", ""), _t = jv(_data, "ticket", ""), _s = jv(_data, "secret", "");
+	if (_url == "" || _t == "" || _s == "") { ui_toast("카카오 로그인을 시작하지 못했어요. 다시 시도해 주세요."); return; }
+	global.S.kk = { url: _url, ticket: _t, secret: _s, word: jv(_data, "word", ""), step: "wait", waiting: false, next: current_time + 2000 };
+	url_open(_url);
+}
+/// obj_app 「스텝」에서 부른다(창이 가려져도 계속 묻도록 그리기가 아닌 스텝에서)
+function app_step() {
+	if (global.screen == "login") kakao_login_step();
+}
+function kakao_login_step() {
+	var _k = global.S[$ "kk"];
+	if (!is_struct(_k) || _k.waiting || current_time < _k.next) return;
+	_k.waiting = true;
+	api_request("POST", "app/kakao-poll", { ticket: _k.ticket, secret: _k.secret }, kakao_poll_cb, { ticket: _k.ticket }, true);
+}
+function kakao_poll_cb(_ok, _data, _code, _ctx) {
+	if (global.screen != "login") return;
+	var _k = global.S[$ "kk"];
+	if (!is_struct(_k) || _k.ticket != _ctx.ticket) return;   // 그사이 취소했거나 새로 시작함
+	_k.waiting = false;
+	if (_ok) {
+		var _t = jv(_data, "token", "");
+		if (_t != "") {
+			api_save_token(_t);
+			go("boot");
+			return;
+		}
+		_k.step = jv(_data, "step", "wait");
+		_k.next = current_time + 2000;
+		return;
+	}
+	// 잠깐 끊김·너무 잦은 요청·서버 오류: 조금 쉬었다가 다시 묻는다
+	if (_code == 0 || _code == 429 || _code >= 500) { _k.next = current_time + 5000; return; }
+	global.S.kk = undefined;
+	ui_toast(error_text(_data, _code));
+}
+function kakao_wait_draw(_k, _x, _y, _w, _h) {
+	ui_text(_x + 28, _y + 26, "카카오 로그인 중", global.F28, C_TEXT);
+	var _msg = (_k.step == "confirm")
+		? "브라우저에 나온 확인 글자가 아래와 같은지 보고 「같아요, 게임에 로그인」을 눌러 주세요."
+		: "열린 브라우저에서 카카오 로그인을 마쳐 주세요. 그다음 확인 글자가 아래와 같은지 보고 누르면 돼요.";
+	ui_text_wrap(_x + 28, _y + 76, _msg, global.F16, C_MUTED, _w - 56);
+	var _word = "";
+	for (var _i = 1; _i <= string_length(_k.word); _i++) _word += (_i > 1 ? "  " : "") + string_char_at(_k.word, _i);
+	var _bw = 260, _bh = 60, _bx = _x + (_w - _bw) / 2, _wy = _y + 166;
+	ui_rect(_bx, _wy, _bw, _bh, C_SLOT, 1, 8);
+	ui_outline(_bx, _wy, _bw, _bh, C_GOLD_EDGE, 8);
+	ui_text(_bx + _bw / 2, _wy + _bh / 2, _word, global.F28, C_GOLD, fa_center, fa_middle);
+	var _by = _y + _h - 28 - 48, _hw = (_w - 56 - 12) / 2;
+	if (ui_button(_x + 28, _by, _hw, 48, "브라우저 다시 열기", "normal")) url_open(_k.url);
+	if (ui_button(_x + 28 + _hw + 12, _by, _hw, 48, "취소", "quiet")) global.S.kk = undefined;
 }
 /// obj_app 「비동기 - 대화창」
 function app_async_dialog() {

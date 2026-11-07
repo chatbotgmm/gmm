@@ -78,6 +78,8 @@ function error_text(_data, _code) {
 		case "BATTLE_NOT_FINISHED": return "전투가 아직 끝나지 않았어요.";
 		case "login": return "로그인이 필요해요.";
 	}
+	// 서버가 사람에게 보여 줄 문장(띄어쓰기가 있는 글)을 보냈으면 그대로 보여 준다
+	if (is_string(_c) && string_pos(" ", _c) > 0) return _c;
 	if (_code == 0) return "서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.";
 	if (_code == 429) return "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.";
 	if (is_string(_c) && _c != "") return "요청을 처리하지 못했어요 (" + _c + ").";
