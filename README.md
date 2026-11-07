@@ -5,7 +5,7 @@ Android 앱을 GameMaker로 대체하기 위한 프로젝트다. 서버·계정�
 ## 여는 법
 GameMaker의 「소스 제어(Git) 저장소 복제」에 `https://github.com/chatbotgmm/gmm.git` 를 넣고 빈 폴더를 고른 뒤, 그 폴더의 `Galmaegiman.yyp`를 연다.
 (명령줄: `git clone https://github.com/chatbotgmm/gmm.git`)
-- 형식: GameMaker **2024.11** 형식으로 만들었다(2024.11.0.179로 저장된 공개 프로젝트 파일을 그대로 본뜸). 더 새 GameMaker는 열 때 자동으로 바꿔 준다. 2024.11보다 옛 판(예: 2022 LTS)에서는 열리지 않을 수 있다.
+- 형식: GameMaker **2023.11** 형식으로 만들었다(IDE 2023.11.1.129로 저장된 공개 프로젝트 shdwcat/Inspectron의 파일을 그대로 본뜸). 처음엔 2024.11 형식이었는데, IDE 2023.11에서 「읽기 전용 모드」로 열려서 바꿨다. 더 새 GameMaker는 열 때 새 형식으로 바꾸자고 물을 수 있다.
 - 이 프로젝트는 **GameMaker로 실행해 보지 않았다**(만든 환경에 GameMaker가 없음). 문법 검사(@bscotch/gml-parser), 내장 함수·상수·인자 수 대조(GmlSpec), 프로젝트 파일 읽기 검사(@bscotch/yy), 같은 서버 요청 시험(서버 복제본)까지만 했다. 처음 열어 실행할 때 나는 오류는 알려 주면 고친다.
 
 ## 1단계에 있는 것
@@ -22,7 +22,7 @@ GameMaker의 「소스 제어(Git) 저장소 복제」에 `https://github.com/ch
 - `objects/obj_app`: 하나뿐인 오브젝트. Create·Step·Draw GUI·비동기 HTTP(62)·비동기 대화창(63)
 - `rooms/rm_main`: obj_app 하나가 있는 방
 - `datafiles/`: 그림(PNG, 앱 그림에서 만든 것)·글꼴(Noto 기반 OFL, 배포 가능). 하위 폴더 형식을 확인하지 못해 한 폴더에 접두어로 구분
-- `options/`: 2024.11 템플릿 + Android(org.dpdns.gmmgame, 가로 전용, 인터넷 권한, arm64), Windows(창 크기 바꾸기 허용), 화면 맞춤은 전체(full scale)
+- `options/`: 2023.11 템플릿(Inspectron) + Android(org.dpdns.gmmgame, 가로 전용, 인터넷 권한, arm64), Windows(창 크기 바꾸기 허용), 화면 맞춤은 전체(full scale)
 
 ## 알려진 제약
 - **HTML5(웹)**: GameMaker 설명서상 HTML5의 font_add는 웹 글꼴만, WebGL을 끈 경우에만 된다. 그래서 지금 그대로 HTML5로 내보내면 한글이 안 나올 수 있다(웹은 지금 /game60 웹게임이 있음). HTML5는 같은 서버 주소에서 돌려야 한다(다른 출처는 서버가 막음).

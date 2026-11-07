@@ -1,13 +1,11 @@
 {
-  "$GMScript":"v1",
-  "%Name":"scr_assets",
-  "isCompatibility":false,
-  "isDnD":false,
-  "name":"scr_assets",
-  "parent":{
-    "name":"Scripts",
-    "path":"folders/Scripts.yy",
+  "resourceType": "GMScript",
+  "resourceVersion": "1.0",
+  "name": "scr_assets",
+  "isCompatibility": false,
+  "isDnD": false,
+  "parent": {
+    "name": "Scripts",
+    "path": "folders/Scripts.yy",
   },
-  "resourceType":"GMScript",
-  "resourceVersion":"2.0",
 }
