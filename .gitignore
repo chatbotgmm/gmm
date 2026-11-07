@@ -1,0 +1,5 @@
+# GameMaker가 만드는 임시·개인 파일
+*.resource_order
+*.old
+*.bak
+/tmp/
