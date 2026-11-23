@@ -17,6 +17,10 @@ const START_WOOD = 6, START_STONE = 6;
 
 const clampIn = (v, a, b) => Math.min(b, Math.max(a, v));
 
+/** 계단 디딤판: 단 수는 높이 0.12 m에 한 단(3~12단), t(0 입구 → 1 위쪽)에서 밟는 높이. 그림(views.js)과 같은 식. */
+export const stairCount = r => Math.max(3, Math.min(12, Math.round((r.h1 - r.h0) / 0.12)));
+export const stairStep = (r, t) => { const n = stairCount(r), i = Math.min(n - 1, Math.max(0, Math.floor(t * n))); return r.h0 + (r.h1 - r.h0) * (i + 1) / n; };
+
 export class World {
   constructor(grid, modules, rnd = Math.random, extra = {}) {
     this.grid = grid; this.modules = modules; this.rnd = rnd; this.time = 0;
@@ -171,6 +175,10 @@ export class World {
   /** 격자 좌표(연속)에 서는 높이: 부두처럼 걸을 수 있는 시설 위면 그 높이, 아니면 보이는 땅 높이(경사면 포함). */
   standHeight(gx, gz) {
     const x = Math.floor(gx), z = Math.floor(gz), c = this.grid.get(x, z), o = c?.occupiedId && this.grid.occupants.get(c.occupiedId);
+    if (o && o.ramp && o.walkable) {                                             // 계단: 디딤판 높이
+      const r = o.ramp, u = gx - x, v = gz - z, t = r.dx ? (r.dx > 0 ? u : 1 - u) : (r.dz > 0 ? v : 1 - v);
+      return stairStep(r, t);
+    }
     if (o && o.walkable) return o.surface;
     return stairHeightAt(this.grid, x, z, gx - x, gz - z) ?? terrainHeight(this.grid, gx, gz);   // 계단에서는 디딤판 높이(경사면처럼 미끄러져 오르지 않게)
   }
@@ -243,8 +251,10 @@ export class World {
     if (!r.ok) return { ok: false, reason: r.reason };
     const b = createBuildingData(id || `b${this.nextId++}`, def, ax, az, rot, r.cells, r.door);
     b.elevation = r.elevation; b.need = 3 * def.footprint.w * def.footprint.d; b.hits = hits ?? (this.instantBuild ? b.need : 0); b.busy = null;
-    this.grid.occupy(b.cells, b.id, { kind: "building", walkable: false });   // 길찾기 장애물로 반영(grid.version 증가)
+    b.ramp = r.ramp; if (b.ramp) b.hits = Math.min(b.hits, b.need);
+    this.grid.occupy(b.cells, b.id, { kind: "building", walkable: !!b.ramp && this.isDone(b), surface: r.elevation, ramp: b.ramp });   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
     this.grid.reserveDoor(b.door.x, b.door.z, b.id);
+    if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
     this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
     return { ok: true, building: b };
   }
@@ -253,9 +263,12 @@ export class World {
     if (this.isDone(b)) return;
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
     b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
-    if (this.isDone(b)) { this.emit("buildingDone", b); if (u) emote(u, "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
+    if (this.isDone(b)) { this.openStairs(b); this.emit("buildingDone", b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
-  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.emit("buildingDone", b); } }
+  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.openStairs(b); this.emit("buildingDone", b); } }
+  /** 다 지은 계단을 걸을 수 있게(길찾기 다시) */
+  openStairs(b) { const o = b.ramp && this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; } }
+  isHouse(b) { return !BUILDINGS[b.defId].stairs; }                              // 들어가 쉬는 건물(계단 제외)
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
@@ -278,6 +291,7 @@ export class World {
   dropUnit(u, x, z, at = null) {                                             // at: 마우스가 가리킨 정확한 점(그 칸 안이면 거기에)
     if (!u || u.state !== UnitState.Held) return { ok: false, reason: "" };
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
+    if (b && b.ramp && this.isDone(b) && this.grid.inBounds(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); return { ok: true }; }   // 다 지은 계단 위
     if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
     let spot = null;
     if (b) spot = this.grid.isWalkable(b.door.x, b.door.z) ? [b.door.x, b.door.z] : null;                 // 공사장: 문 앞에

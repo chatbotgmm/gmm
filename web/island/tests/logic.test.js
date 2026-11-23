@@ -232,6 +232,29 @@ test("계단: 갈매미는 디딤판 높이를 밟음(비탈처럼 미끄러져 
   for (let i = 0; i < L.n; i++) assert.ok(hs.has(treadHeight(L, i).toFixed(4)));
 });
 
+test("계단 건축물: 뒤가 높아야 놓이고, 다 지으면 앞뒤로만 오르내리며 디딤판을 밟음", async () => {
+  const { findPath } = await import("../src/world/pathfinding.js");
+  const w = World.create(7, seededRandom(3)), g = w.grid; w.instantBuild = true;
+  for (let z = 36; z <= 44; z++) for (let x = 42; x <= 46; x++) { g.get(x, z).elevation = 0; g.get(x, z).groundType = "Grass"; g.get(x, z).occupiedId = null; }
+  for (let z = 36; z <= 39; z++) for (let x = 42; x <= 46; x++) g.get(x, z).elevation = 1.0;   // 북쪽은 1 m 높은 대지(절벽)
+  assert.equal(g.canStep(44, 40, 44, 39), false, "그냥은 못 오름");
+  // rot 0: 문은 +z(남쪽) → 위쪽 칸은 북쪽(44,39)
+  assert.match(w.placeBuilding("stairs", 44, 41, 2).reason ?? "", /더 높아야|막혀/, "방향이 반대면 못 놓음");
+  const r = w.placeBuilding("stairs", 44, 40, 0); assert.equal(r.ok, true, r.reason);
+  assert.equal(g.canStep(44, 41, 44, 40), true, "앞에서 올라섬"); assert.equal(g.canStep(44, 40, 44, 39), true, "위쪽으로 나감");
+  assert.equal(g.canStep(43, 40, 44, 40), false, "옆으로는 못 드나듦");
+  assert.ok(findPath(g, 44, 43, 44, 37), "아래에서 위 대지까지 길이 있음");
+  const hs = []; for (let k = 0; k < 10; k++) hs.push(w.standHeight(44.5, 41 - (k + 0.5) / 10));
+  for (let k = 1; k < 10; k++) assert.ok(hs[k] >= hs[k - 1] - 1e-9, "올라갈수록 높아짐");
+  assert.ok(Math.abs(hs[9] - 1.0) < 1e-6 && hs[0] > 0 && hs[0] <= 0.15, `입구 ${hs[0]} · 위 ${hs[9]}`);
+  assert.equal(w.canReshape(44, 39), false, "계단 위쪽 칸은 높이를 못 바꿈");
+  // 짓는 중에는 못 지나감
+  const w2 = World.create(7, seededRandom(3)), g2 = w2.grid;
+  for (let z = 36; z <= 44; z++) for (let x = 42; x <= 46; x++) { g2.get(x, z).elevation = z <= 39 ? 0.5 : 0; g2.get(x, z).groundType = "Grass"; g2.get(x, z).occupiedId = null; }
+  const b = w2.placeBuilding("stairs", 44, 40, 0).building; assert.equal(g2.canStep(44, 41, 44, 40), false);
+  w2.finishAll(); assert.equal(g2.canStep(44, 41, 44, 40), true); assert.equal(w2.isHouse(b), false);
+});
+
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
   const w = World.create(7, seededRandom(11));
   w.placeBuilding("house", 38, 26, 0);                       // 공사장(갈매미가 지어야 함)

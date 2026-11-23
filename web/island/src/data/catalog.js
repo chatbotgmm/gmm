@@ -10,6 +10,11 @@ import { GroundType, InteractionType } from "./types.js";
 const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, KENNEY_YAW = Math.PI;
 
 export const BUILDINGS = {
+  // 계단: 낮은 칸에 놓고, 문 쪽(앞)이 입구·뒤쪽 칸이 올라갈 곳. 뒤가 0.1~1.5 m 더 높아야 함. 다 지으면 앞뒤로만 오르내림.
+  stairs: {
+    id: "stairs", tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true,
+    placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 },
+  },
   house: {
     id: "house", tier: 1, name: "작은 집", footprint: { w: 2, d: 2 }, height: 1.3, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },

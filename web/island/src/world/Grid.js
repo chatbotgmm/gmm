@@ -58,8 +58,17 @@ export class Grid {
     return c.elevation < SEA_LEVEL ? null : c.elevation;
   }
   isWalkable(x, z) { return this.walkHeight(x, z) !== null; }
+  /** 이웃 쪽(dx, dz)으로 넘어갈 때 이 칸 가장자리의 높이. 계단은 앞(낮은 쪽)·뒤(높은 쪽)로만 드나듦. */
+  edgeHeight(x, z, dx, dz) {
+    const c = this.get(x, z), o = c?.occupiedId && this.occupants.get(c.occupiedId);
+    if (o && o.ramp) {
+      if (!o.walkable) return null;
+      const r = o.ramp; return dx === r.dx && dz === r.dz ? r.h1 : dx === -r.dx && dz === -r.dz ? r.h0 : null;
+    }
+    return this.walkHeight(x, z);
+  }
   canStep(ax, az, bx, bz) {
-    const a = this.walkHeight(ax, az), b = this.walkHeight(bx, bz);
+    const dx = bx - ax, dz = bz - az, a = this.edgeHeight(ax, az, dx, dz), b = this.edgeHeight(bx, bz, -dx, -dz);
     return a !== null && b !== null && Math.abs(a - b) <= MAX_STEP + 1e-6;
   }
 

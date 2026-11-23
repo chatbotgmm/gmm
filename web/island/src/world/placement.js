@@ -35,7 +35,15 @@ export function checkPlacement(grid, def, ax, az, rot, units = []) {
   if (fp.cells.some(([x, z]) => Math.abs(grid.get(x, z).elevation - e) > 1e-6)) return fail("바닥이 평평하지 않아요");
   const dh = grid.walkHeight(fp.door.x, fp.door.z);
   if (dh === null || Math.abs(dh - e) > MAX_STEP + 1e-6) return fail("문 앞이 막혀 있어요");
+  let ramp = null;
+  if (def.stairs) {                                                          // 계단: 문(입구) 반대쪽 칸이 올라갈 곳
+    const [sx, sz] = fp.cells[0], bx = 2 * sx - fp.door.x, bz = 2 * sz - fp.door.z, top = grid.walkHeight(bx, bz);
+    if (top === null || grid.get(bx, bz)?.occupiedId || grid.doorOwner(bx, bz)) return fail("계단 뒤쪽(올라갈 곳)이 막혀 있어요");
+    if (top - e < 0.1) return fail("계단 뒤쪽이 더 높아야 해요(R로 방향 돌리기)");
+    if (top - e > 1.5 + 1e-6) return fail("너무 높아요(계단 하나로 1.5 m까지)");
+    ramp = { dx: bx - sx, dz: bz - sz, bx, bz, h0: e, h1: top };
+  }
   const inFp = new Set(fp.cells.map(([x, z]) => `${x},${z}`));
   if (units.some(u => !u.insideBuildingId && inFp.has(`${Math.floor(u.x)},${Math.floor(u.z)}`))) return fail("갈매미가 서 있어요");
-  return { ...fp, ok: true, reason: "", elevation: e };
+  return { ...fp, ok: true, reason: "", elevation: e, ramp };
 }

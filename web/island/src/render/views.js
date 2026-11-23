@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { toWorldX, toWorldZ, WATER_Y } from "../config.js";
 import { BUILDINGS, MODULES } from "../data/catalog.js";
+import { stairCount } from "../world/World.js";
 import { modelFor } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
 import { tintRoofs } from "./roofTint.js";
@@ -21,7 +22,7 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = await modelFor(def, () => buildingPlaceholder(def));
+    const model = def.stairs ? stairsModel(b.ramp) : await modelFor(def, () => buildingPlaceholder(def));
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
@@ -61,6 +62,18 @@ export class BuildingViews {
       if (tmp.z > 1) v.badge.hidden = true;
     }
   }
+}
+
+/** 계단 모델: 문 쪽(+z)이 입구, -z로 올라감. 디딤판 높이는 World.stairStep과 같은 식. 바닥에서부터 꽉 찬 돌계단. */
+const STONE = new THREE.MeshStandardMaterial({ color: 0xcfc6b6, roughness: 0.9 }), STONE2 = new THREE.MeshStandardMaterial({ color: 0xbdb3a2, roughness: 0.9 });
+function stairsModel(r) {
+  const g = new THREE.Group(); if (!r) return g;
+  const n = stairCount(r), H = r.h1 - r.h0;
+  for (let i = 0; i < n; i++) {
+    const top = H * (i + 1) / n, depth = 1 / n, m = new THREE.Mesh(new THREE.BoxGeometry(0.96, top + 0.02, depth + 0.002), i % 2 ? STONE2 : STONE);
+    m.position.set(0, (top - 0.02) / 2, 0.5 - (i + 0.5) * depth); m.castShadow = m.receiveShadow = true; g.add(m);
+  }
+  return g;
 }
 
 export async function addModuleViews(scene, world) {
