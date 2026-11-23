@@ -56,7 +56,7 @@ export class Tools {
   applyControls() {
     const t = this.toolActive, M = THREE.MOUSE, T = THREE.TOUCH;
     this.controls.mouseButtons = { LEFT: t ? null : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t ? M.ROTATE : M.PAN };
-    this.controls.touches = { ONE: t ? null : T.PAN, TWO: T.DOLLY_ROTATE };                 // 터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대
+    this.controls.touches = { ONE: t ? null : T.PAN, TWO: null };                           // 터치: 한 손가락 = 옮기기, 두 손가락(비틀기 돌리기·벌려 확대)은 twoFinger.js
     this.dom.style.cursor = this.mode === "view" ? "" : t ? "crosshair" : "grab";
   }
   setHand(on) { this.hand = on; this.cancelStroke(); this.applyControls(); this.onHand?.(on); }

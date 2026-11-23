@@ -366,6 +366,8 @@ test("한 파일 빌드(tools/bundle.py --flat)가 성공하고, 합친 코드�
 test("높이: 한 단은 걸어서 오르는 경사, 두 단은 절벽, 파서 바다 높이 아래면 연못, 경사면 높이는 부드럽게 이어짐", async () => {
   const { terrainHeight } = await import("../src/world/terrain.js");
   const w = World.create(7, seededRandom(41)), g = w.grid;
+  assert.equal(w.heightStep, 0.5, "올리기 한 번 = 0.5 m");
+  w.heightStep = 0.25;                                                          // 아래는 한 단(0.25 m)씩 올려 경사·절벽 규칙을 봄
   assert.equal(w.reshape(40, 40, "raise"), true); assert.equal(g.get(40, 40).elevation, 0.25);
   assert.equal(g.canStep(39, 40, 40, 40), true);                               // 한 단: 오를 수 있음
   const mid = terrainHeight(g, 40, 40.5), top = terrainHeight(g, 40.5, 40.5);    // 꼭짓점 높이는 둘러싼 칸 평균 → 이어진 비탈
@@ -423,7 +425,7 @@ test("굶는 갈매미가 없다(긴 시뮬레이션, 칸 모서리에 끼지 �
 });
 
 test("높이: 부드러운 붓은 가장자리를 조금만, 다듬기는 이웃과 비슷하게, 화면용은 스르르 바뀐다", () => {
-  const w = World.create(7, seededRandom(71)), g = w.grid;
+  const w = World.create(7, seededRandom(71)), g = w.grid; w.heightStep = 0.25;
   w.reshape(40, 40, "raise", 0, 1); w.reshape(41, 40, "raise", 0, 0.25);
   assert.equal(g.get(40, 40).elevation, 0.25); assert.ok(Math.abs(g.get(41, 40).elevation - 0.06) < 0.011);
   for (let i = 0; i < 4; i++) w.reshape(40, 40, "raise");                        // 뾰족하게 쌓고

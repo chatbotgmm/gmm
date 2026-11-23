@@ -25,6 +25,7 @@ export class World {
     this.res = { wood: START_WOOD, stone: START_STONE, iron: 0, food: 10, coins: 0, fish: 0, eaten: 0 };
     this.treasures = {}; this.collection = {}; this.items = {};
     this.instantBuild = false;                         // true면 건물을 놓자마자 완공(갈매미 공사 없음)
+    this.heightStep = 0.5;                                // 올리기·내리기 한 번에 바뀌는 높이(m). 걸어 오르는 한 단(MAX_STEP)은 0.25
     this.animateShape = false; this.shaping = new Map(); // 높이 바꾸기를 스르르(화면에서만 켬)
     this.spots = (extra.spots || []).map(s => ({ ...s, claimed: null }));
     this.zones = extra.zones || [];
@@ -182,7 +183,7 @@ export class World {
   canPaint(x, z) { const c = this.grid.get(x, z); return !!c && !this.grid.isWater(x, z) && !c.occupiedId && !this.isPlot(x, z); }
   paint(x, z, type) { if (!this.canPaint(x, z)) return false; const ok = this.grid.setGround(x, z, type); if (ok) this.emit("ground", { x, z, type }); return ok; }
 
-  // ---- 높이(층·경사·계단·연못): 한 단 = MAX_STEP(0.25 m). 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽.
+  // ---- 높이(층·경사·계단·연못): 한 단 = MAX_STEP(0.25 m). 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽. 올리기 한 번 = heightStep(0.5 m = 두 단).
   //      돌길·데크가 깔린 경사는 계단으로 그려짐. 바다 높이 아래로 파면 물이 차서 연못이 됨.
   canReshape(x, z) { const c = this.grid.get(x, z); return !!c && !c.occupiedId && !this.isPlot(x, z) && !this.grid.doorOwner(x, z); }
   /**
@@ -191,7 +192,7 @@ export class World {
    */
   reshape(x, z, op, target = 0, amount = 1) {
     if (!this.canReshape(x, z) || amount <= 0) return false;
-    const c = this.grid.get(x, z), idx = this.grid.index(x, z), step = 0.25;
+    const c = this.grid.get(x, z), idx = this.grid.index(x, z), step = this.heightStep;
     const cur = this.shaping.get(idx)?.target ?? c.elevation;
     let e = cur;
     if (op === "raise") e = cur + step * amount;
@@ -202,7 +203,7 @@ export class World {
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const o = this.grid.get(x + dx, z + dz); if (o && (dx || dz)) { sum += this.shaping.get(this.grid.index(x + dx, z + dz))?.target ?? o.elevation; n++; } }
       if (n) e = cur + (sum / n - cur) * 0.6 * amount;
     }
-    e = Math.max(-1, Math.min(2, Math.round(e * 100) / 100));
+    e = Math.max(-1, Math.min(3, Math.round(e * 100) / 100));
     if (op === "raise" && cur < 0 && cur > -step && e > 0 && amount >= 0.99) e = 0;      // 모래사장 비탈(-0.15 등)은 0으로 맞춤
     if (Math.abs(e - cur) < 0.005) return false;
     if (this.animateShape) { this.shaping.set(idx, { x, z, target: e }); return true; }

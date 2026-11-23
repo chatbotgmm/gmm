@@ -69,7 +69,7 @@ export class Hud {
       this.sub.appendChild(el("span", "lab", "붓"));
       this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
         b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
-      this.status("가운데가 한 단(0.25 m)씩, 가장자리는 조금씩 · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 경사에 돌길·데크 = 계단 · 바다 높이 아래로 파면 연못");
+      this.status("가운데가 한 번에 0.5 m씩(옆과 턱이 생김), 가장자리는 조금씩 · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 경사에 돌길·데크 = 계단 · 바다 높이 아래로 파면 연못");
     }
     if (mode === "paint") {
       this.lastPaint = arg;

@@ -9,6 +9,7 @@ import { LifeViews } from "./render/life.js";
 import { PROPS, TRIBES, JOBS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
+import { TwoFinger } from "./systems/twoFinger.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
@@ -72,6 +73,7 @@ const charSet = await findCharacterSet();          // web/village의 갈매미 �
 const charPool = charSet ? preloadCharacters(charSet, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model) : null;
 const firstLoad = mount(World.create(7, Math.random, { empty: true }));          // 갈매미 없이 시작 → 🥚 소환
 tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
+new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
 tools.applyControls();                              // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대)
 hud = new Hud({ tools, world,
   onSave: () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize())); hud.status("저장했어요(이 브라우저에만)"); } catch (e) { hud.status("저장하지 못했어요: " + e.message); } },
