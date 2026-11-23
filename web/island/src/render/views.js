@@ -1,6 +1,6 @@
 // 월드 상태를 따라 그리는 뷰: 건물, 해안 모듈, 유닛. 월드는 그림을 모르고, 뷰가 이벤트와 매 프레임 상태를 읽는다.
 import * as THREE from "three";
-import { toWorldX, toWorldZ } from "../config.js";
+import { toWorldX, toWorldZ, WATER_Y } from "../config.js";
 import { BUILDINGS, MODULES } from "../data/catalog.js";
 import { modelFor } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
@@ -78,6 +78,8 @@ export async function addModuleViews(scene, world) {
 }
 
 const BLOB_GEO = new THREE.CircleGeometry(1, 20);
+const WAKE_GEO = new THREE.RingGeometry(0.86, 1, 28);
+const WAKE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
 const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x1d2b14, transparent: true, opacity: 0.28, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
 const frustum = new THREE.Frustum(), projView = new THREE.Matrix4(), sphere = new THREE.Sphere();
 
@@ -106,6 +108,23 @@ export class UnitViews {
     });
     return results.filter(r => r.status === "fulfilled").length;
   }
+  /** 헤엄: 몸이 물 위에서 출렁이고 좌우로 살짝 기울며 앞으로 숙임, 발밑 그림자 대신 물결 고리 두 개가 퍼짐. */
+  swimLook(v, u, i, dt, time) {
+    const sw = !!u.swimming && !u.insideBuildingId, body = v.ch ? v.ch.root : v.cap, s = u.scale || 1;
+    v.swimK = THREE.MathUtils.clamp((v.swimK || 0) + (sw ? dt : -dt) * 2.5, 0, 1);       // 들어가고 나올 때 부드럽게
+    const k = v.swimK;
+    v.blob.visible = k < 0.5;
+    if (body) { body.rotation.x = 0.14 * k; body.rotation.z = Math.sin(time * 1.7 + i) * 0.07 * k; body.position.y = Math.sin(time * 2.4 + i * 1.3) * 0.025 * s * k; }
+    if (!v.wake && k > 0) {
+      v.wake = [0, 1].map(() => { const m = new THREE.Mesh(WAKE_GEO, WAKE_MAT.clone()); m.rotation.x = -Math.PI / 2; m.renderOrder = 2; v.g.add(m); return m; });
+    }
+    if (v.wake) v.wake.forEach((m, j) => {
+      m.visible = k > 0.05; if (!m.visible) return;
+      const ph = ((time * 0.6 + j * 0.5 + i * 0.13) % 1);                                   // 0→1 커지며 옅어짐
+      m.position.y = WATER_Y + 0.012 - u.y; m.scale.setScalar((0.25 + ph * 0.55) * (0.6 + 0.4 * s));
+      m.material.opacity = 0.55 * (1 - ph) * k;
+    });
+  }
   /** 매 프레임: 위치·방향, 동작(AI가 정한 u.anim, 아니면 걷기·달리기·서 있기), 손의 도구, 낚싯줄과 찌. */
   sync(dt, playAnim, walkScale = 2.2, runScale = 1.5, speedBoost = 1, time = 0, camera = null) {
     if (camera) { projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projView); }
@@ -114,6 +133,7 @@ export class UnitViews {
       const v = this.views[i], { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));
+      this.swimLook(v, u, i, dt, time);
       let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
       const walking = !!u.path && u.pathIndex < u.path.length && u.state !== "Held";
       if (ch) {

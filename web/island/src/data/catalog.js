@@ -101,14 +101,14 @@ export const PROPS = {
 // 성격: 할 일이 없을 때 각 활동을 고르는 비중(web/village와 같은 값 + 건물 들어가기 enter).
 // timid: 큰 갈매미(자이언트)가 가까이 오면 도망. loner: 쉬는데 누가 가까이 오면 자리를 피함.
 export const PERSONA = {
-  "기본":    { rest: 3, wander: 3, forage: 2, visit: 3, zoomies: 1, chop: 3, mine: 1, fish: 2, build: 4, enter: 2 },
-  "미니":    { rest: 2, wander: 3, forage: 5, visit: 2, zoomies: 2, chop: 0, mine: 0, fish: 4, build: 1, enter: 2, timid: true },
-  "자이언트": { rest: 4, wander: 2, forage: 1, visit: 1, zoomies: 0, chop: 5, mine: 5, fish: 1, build: 3, enter: 1 },
-  "꽃":      { rest: 5, wander: 3, forage: 4, visit: 2, zoomies: 1, chop: 0, mine: 0, fish: 4, build: 1, enter: 3 },
-  "황금":    { rest: 3, wander: 3, forage: 2, visit: 2, zoomies: 1, chop: 2, mine: 3, fish: 1, build: 5, enter: 2 },
-  "물방울":  { rest: 1, wander: 3, forage: 2, visit: 2, zoomies: 4, chop: 1, mine: 0, fish: 5, build: 1, enter: 2 },
-  "불씨":    { rest: 2, wander: 2, forage: 2, visit: 2, zoomies: 3, chop: 2, mine: 4, fish: 0, build: 2, enter: 2 },
-  "그림자":  { rest: 4, wander: 4, forage: 2, visit: 0, zoomies: 0, chop: 2, mine: 4, fish: 2, build: 0, enter: 1, loner: true },
+  "기본":    { rest: 3, wander: 3, forage: 2, visit: 3, zoomies: 1, chop: 3, mine: 1, fish: 2, build: 4, enter: 2, swim: 1 },
+  "미니":    { rest: 2, wander: 3, forage: 5, visit: 2, zoomies: 2, chop: 0, mine: 0, fish: 4, build: 1, enter: 2, swim: 1, timid: true },
+  "자이언트": { rest: 4, wander: 2, forage: 1, visit: 1, zoomies: 0, chop: 5, mine: 5, fish: 1, build: 3, enter: 1, swim: 1 },
+  "꽃":      { rest: 5, wander: 3, forage: 4, visit: 2, zoomies: 1, chop: 0, mine: 0, fish: 4, build: 1, enter: 3, swim: 2 },
+  "황금":    { rest: 3, wander: 3, forage: 2, visit: 2, zoomies: 1, chop: 2, mine: 3, fish: 1, build: 5, enter: 2, swim: 1 },
+  "물방울":  { rest: 1, wander: 3, forage: 2, visit: 2, zoomies: 4, chop: 1, mine: 0, fish: 5, build: 1, enter: 2, swim: 4 },
+  "불씨":    { rest: 2, wander: 2, forage: 2, visit: 2, zoomies: 3, chop: 2, mine: 4, fish: 0, build: 2, enter: 2, swim: 0.5 },
+  "그림자":  { rest: 4, wander: 4, forage: 2, visit: 0, zoomies: 0, chop: 2, mine: 4, fish: 2, build: 0, enter: 1, swim: 2, loner: true },
 };
 
 // ---------------------------------------------------------------- 종족(직업)·희귀도

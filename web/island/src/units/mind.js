@@ -6,7 +6,7 @@
 // 친구: 인사하면 서로 호감이 오르고, 친구를 찾아갈 때 호감 높은 쪽을 더 자주 고른다.
 export const NEED_KEYS = ["energy", "social", "fun"];
 export const LEARN_RATE = 0.15;
-const ACTIVITIES = ["rest", "wander", "forage", "visit", "zoomies", "chop", "mine", "fish", "build", "enter", "eat", "trade", "farm"];
+const ACTIVITIES = ["rest", "wander", "forage", "visit", "zoomies", "chop", "mine", "fish", "build", "enter", "eat", "trade", "farm", "swim"];
 const WORK = new Set(["chop", "mine", "fish", "build", "trade", "farm"]);
 
 export function initMind(u, rnd) {
@@ -24,7 +24,7 @@ export function tickNeeds(u, dt, state, inside) {
   const working = ["Chop", "Mine", "Build", "Farm", "Trade", "Fish"].includes(state), resting = state === "Idle" || state === "Sleep";
   n.energy = clamp(n.energy + dt * (state === "Sleep" ? 6 : inside ? 3 : resting ? 0.6 : working ? -0.35 : -0.15));
   n.social = clamp(n.social + dt * (inside ? 0.8 : -0.12));
-  n.fun = clamp(n.fun + dt * (state === "Zoomies" ? 4 : state === "Fish" ? 0.8 : -0.1));
+  n.fun = clamp(n.fun + dt * (state === "Zoomies" || state === "Swim" ? 4 : state === "Fish" ? 0.8 : -0.1));
 }
 
 /** 욕구가 급할수록 그 욕구를 채우는 활동의 비중을 키움(지친 갈매미는 일을 덜 함). */
@@ -33,7 +33,7 @@ export function needMult(u, kind) {
   if (kind === "rest") return 1 + (100 - n.energy) / 25;
   if (kind === "enter") return 1 + (100 - n.energy) / 50 + (100 - n.social) / 50;
   if (kind === "visit") return 1 + (100 - n.social) / 22;
-  if (kind === "zoomies" || kind === "wander") return 1 + (100 - n.fun) / 30;
+  if (kind === "zoomies" || kind === "wander" || kind === "swim") return 1 + (100 - n.fun) / 30;
   if (WORK.has(kind)) return clamp(n.energy / 60, 0.25, 1.3);
   return 1;
 }
@@ -64,4 +64,4 @@ export function bestFriend(u, units) {
 }
 
 export const ACTIVITY_NAME = { rest: "쉬기", wander: "산책", forage: "씨앗 찾기", visit: "친구 만나기", zoomies: "뛰어놀기", chop: "벌목", mine: "채광",
-  fish: "낚시", build: "집 짓기", enter: "집 구경", eat: "먹기", trade: "장사", farm: "밭일" };
+  fish: "낚시", build: "집 짓기", enter: "집 구경", eat: "먹기", trade: "장사", farm: "밭일", swim: "헤엄" };

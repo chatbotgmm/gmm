@@ -5,7 +5,7 @@
 //   쉬기 · 산책 · 씨앗 먹기 · 친구에게 가서 인사 · 신나서 뛰기 · 벌목 · 채광 · 낚시 · 집 짓기(공사장) · 건물 들어가기
 // 반사 행동: 겁 많은 갈매미(미니)는 큰 갈매미가 다가오면 도망, 혼자 있고 싶은 갈매미(그림자)는 쉬다가 붐비면 자리를 피함.
 import { UnitState as US } from "../data/types.js";
-import { UNIT_SPEED } from "../config.js";
+import { UNIT_SPEED, WATER_Y } from "../config.js";
 import { PERSONA, BUILDINGS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
@@ -50,7 +50,7 @@ export function setIdle(u, rnd, world = null, secs = null) {
   if (u.activity) { M.learn(u, u.activity, -0.2); u.activity = null; }   // 끝내지 못하고 그만둔 일 = 조금 나쁜 경험
   release(u);
   u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null;
-  u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined;
+  u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined; u.swimming = false; u.swimGoal = null;   // 물속에서 그만두면 다음 프레임에 가까운 땅으로 올라옴
 }
 
 /** 활동을 잘 마침: 보상으로 배우고 쉼. */
@@ -240,6 +240,19 @@ function startActivityInner(u, kind, world, rnd) {
       if (!pl || !startPath(u, world, pl.x, pl.z)) return false;
       pl.claimed = u.unitId; u.focus = pl; u.state = US.GoFarm; return true;
     }
+    case "swim": {                                                                // 물가 땅까지 걸어간 뒤 얕은 물로 들어가 헤엄
+      const [sx, sz] = cellOf(u), r = Math.round(reach(u) * 1.5), shores = [];
+      for (let z = sz - r; z <= sz + r; z++) for (let x = sx - r; x <= sx + r; x++) {
+        if (!g.isWalkable(x, z) || g.get(x, z)?.occupiedId) continue;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (g.inBounds(x + dx, z + dz) && g.isWater(x + dx, z + dz) && g.isWater(x + 2 * dx, z + 2 * dz)) { shores.push([x, z, x + dx, z + dz]); break; }
+      }
+      shores.sort((a, b) => Math.hypot(a[0] - u.x, a[1] - u.z) - Math.hypot(b[0] - u.x, b[1] - u.z));
+      for (const s of shores.slice(0, 4).sort(() => rnd() - 0.5)) {
+        if (!startPath(u, world, s[0], s[1])) continue;
+        u.swim = { sx: s[0], sz: s[1], wx: s[2], wz: s[3] }; u.state = US.GoSwim; return true;
+      }
+      return false;
+    }
     case "enter": {
       const done = [...world.buildings.values()].filter(b => world.isDone(b));
       if (!done.length) return false;
@@ -323,6 +336,9 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
+  if (!u.swimming && !u.insideBuildingId && world.grid.isWater(...cellOf(u)) && !world.grid.isWalkable(...cellOf(u))) {   // 헤엄 중이 아닌데 물에 있으면(헤엄을 그만둠 등) 가까운 땅으로(부두 위는 그대로)
+    const spot = nearestWalkable(world.grid, ...cellOf(u)); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; u.anim = null; emote(u, "푸하!"); }
+  }
   if (u.once) {                                                         // 한 번 하는 동작이 끝날 때까지 기다림
     const o = u.once; o.t += dt;
     if (o.onHit && o.t >= o.hit) { const f = o.onHit; o.onHit = null; f(); }
@@ -331,7 +347,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   }
   const p = PERSONA[u.name] || PERSONA["기본"];
   // 반사 행동
-  if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding].includes(u.state)) {
+  if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding, US.Swim].includes(u.state)) {
     const big = world.units.find(o => o !== u && visible(o) && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < 1.8);
     if (big) {
       setIdle(u, rnd, world); emote(u, "!"); M.befriend(u, big, -0.3);
@@ -467,6 +483,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       });
       break;
     }
+    case US.GoSwim:
+      if (followPath(u, dt, world, rnd)) { u.state = US.Swim; u.swimming = true; u.timer = 8 + rnd() * 7; u.swimGoal = null; u.anim = "Swim"; emote(u, pick(["첨벙!", "♪", "시원해~"], rnd)); }
+      break;
+    case US.Swim: swimStep(u, dt, world, rnd); break;
     case US.GoToBuilding: {
       const b = world.buildings.get(u.targetBuildingId);
       if (!b) { setIdle(u, rnd, world); break; }
@@ -499,9 +519,50 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   settle(u, dt, world);
 }
 
+// ---------------------------------------------------------------- 헤엄
+/** 헤엄칠 때 몸 기준 높이: 물 표면에서 키의 30%쯤 잠김. */
+export const swimY = u => WATER_Y - 0.3 * (u.height ?? 0.8 * (u.scale || 1));
+const SWIM_RANGE = 3.5;                                                   // 들어간 곳에서 이만큼(칸)까지만 헤엄
+/** 두 점 사이가 모두 물인지(0.25칸 간격으로 확인). */
+function waterLine(grid, ax, az, bx, bz) {
+  const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.25);
+  for (let i = 1; i <= n; i++) { const t = i / n; if (!grid.isWater(Math.floor(ax + (bx - ax) * t), Math.floor(az + (bz - az) * t))) return false; }
+  return true;
+}
+/** 지금 자리(물 칸)에서 바로 헤엄 시작. 올라올 땅 칸(sx, sz)을 함께 줌. */
+export function startSwimHere(u, world, rnd, sx, sz) {
+  setIdle(u, rnd, world); u.swim = { sx, sz, wx: Math.floor(u.x), wz: Math.floor(u.z) };
+  u.state = US.Swim; u.swimming = true; u.timer = 8 + rnd() * 7; u.swimGoal = null; u.anim = "Swim"; u.activity = "swim"; emote(u, "첨벙!");
+}
+/** 헤엄: 들어간 물 칸 둘레의 물 위를 천천히 오가다가, 시간이 다 되면 들어간 곳으로 돌아와 땅으로 올라온다. */
+function swimStep(u, dt, world, rnd) {
+  const g = world.grid, s = u.swim; u.anim = "Swim";
+  if (!s) { setIdle(u, rnd, world); return; }
+  const home = u.timer <= 0;
+  if (home) u.swimGoal = Math.hypot(s.wx + 0.5 - u.x, s.wz + 0.5 - u.z) < 0.3 || u.swimGoal?.land ? { x: s.sx + 0.5, z: s.sz + 0.5, land: true } : { x: s.wx + 0.5, z: s.wz + 0.5 };
+  if (!u.swimGoal) {
+    for (let k = 0; k < 10 && !u.swimGoal; k++) {
+      const a = rnd() * Math.PI * 2, d = 1 + rnd() * SWIM_RANGE, x = s.wx + 0.5 + Math.cos(a) * d, z = s.wz + 0.5 + Math.sin(a) * d;
+      if (g.inBounds(Math.floor(x), Math.floor(z)) && waterLine(g, u.x, u.z, x, z)) u.swimGoal = { x, z };
+    }
+    if (!u.swimGoal) u.swimGoal = { x: s.wx + 0.5, z: s.wz + 0.5 };
+  }
+  const goal = u.swimGoal, dx = goal.x - u.x, dz = goal.z - u.z, d = Math.hypot(dx, dz), speed = 0.55 * Math.sqrt(u.scale || 1) * dt;
+  if (d > 1e-3) { let h = Math.atan2(dx, dz) - u.heading; h = Math.atan2(Math.sin(h), Math.cos(h)); u.heading += h * Math.min(1, dt * 3); }   // 물에서는 천천히 돈다
+  if (d <= speed) {
+    u.x = goal.x; u.z = goal.z; u.swimGoal = null;
+    if (goal.land) { u.swimming = false; u.swim = null; u.anim = null; emote(u, pick(["휴~ 상쾌!", "♪", "부르르"], rnd)); done(u, 0.6 + (100 - (u.needs?.fun ?? 100)) / 200, rnd, world); }
+    else if (!home) u.timer -= rnd() * 0.5;                                 // 잠깐 떠 있다가 다음 곳으로
+    return;
+  }
+  u.x += dx / d * speed; u.z += dz / d * speed;
+  settle(u, dt, world);
+}
+
 /** 서 있는 높이를 부드럽게 따라감(계단·부두). */
 function settle(u, dt, world) {
   if (u.insideBuildingId) return;
+  if (u.swimming) { u.y += (swimY(u) - u.y) * Math.min(1, dt * 6); return; }   // 물에 몸이 반쯤 잠김
   const h = world.standHeight ? world.standHeight(u.x, u.z) : world.grid.walkHeight(...cellOf(u));
   if (h !== null) u.y += (h - u.y) * Math.min(1, dt * 12);              // 경사면·계단을 따라 부드럽게
 }

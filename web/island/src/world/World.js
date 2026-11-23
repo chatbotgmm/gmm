@@ -8,7 +8,7 @@ import { generateIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
-import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear } from "../units/unitBrain.js";
+import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
 import { initMind } from "../units/mind.js";
 import { seededRandom } from "../util.js";
 
@@ -187,7 +187,7 @@ export class World {
     if (!this.grid.setElevation(x, z, e)) return false;
     if (wasWater && !this.grid.isWater(x, z) && c.groundType !== "Sand") c.groundType = "Sand";
     for (const s of [...this.seeds]) if (s.x === x && s.z === z && this.grid.isWater(x, z)) this.eatSeed(s);   // 물에 잠긴 씨앗은 없앰
-    for (const u of this.units) if (!u.insideBuildingId && u.state !== UnitState.Held && Math.floor(u.x) === x && Math.floor(u.z) === z && !this.grid.isWalkable(x, z)) {
+    for (const u of this.units) if (!u.insideBuildingId && u.state !== UnitState.Held && Math.floor(u.x) === x && Math.floor(u.z) === z && !this.grid.isWalkable(x, z) && !(u.swimming && this.grid.isWater(x, z))) {
       const spot = nearestWalkable(this.grid, x, z); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; } setIdle(u, this.rnd, this);   // 물에 빠지면 가까운 땅으로
     }
     this.emit("ground", { x, z }); return true;
@@ -259,6 +259,10 @@ export class World {
       if (!act) { emote(u, "휴…"); this.notice(u.x, u.z, "drop", u); return { ok: true }; }
       return { ok: true, act };
     }
+    if (this.grid.inBounds(x, z) && this.grid.isWater(x, z)) {                                          // 물가(땅에서 2칸 안) 물에 놓으면 헤엄
+      const land = nearestWalkable(this.grid, x, z, 2);
+      if (land && Math.hypot(land[0] - x, land[1] - z) <= 2.5) { u.x = x + 0.5; u.z = z + 0.5; startSwimHere(u, this, this.rnd, land[0], land[1]); return { ok: true, act: { kind: "swim", label: "헤엄쳐요" } }; }
+    }
     u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
     return { ok: false, reason: b ? "공사장 문 앞이 막혀 있어요" : this.grid.isWater(x, z) ? "바다에는 내려놓을 수 없어요" : "거기에는 내려놓을 수 없어요" };
   }
@@ -274,7 +278,7 @@ export class World {
   // 겹친 갈매미를 살짝 밀어냄. 밀린 자리가 걸을 수 없는 칸이면 밀지 않는다.
   // 걷는 중인 갈매미는 밀지 않음(잠깐 겹쳐 지나감) → 좁은 곳에서 서로 밀다가 제자리에서 떠는 일이 없음.
   separate() {
-    const us = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && !(u.path && u.pathIndex < u.path.length));
+    const us = this.units.filter(u => !u.insideBuildingId && !u.swimming && u.state !== UnitState.Held && !(u.path && u.pathIndex < u.path.length));
     for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
       const A = us[i], B = us[j], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz);
       const ra = 0.16 * (A.scale || 1) + 0.08, rb = 0.16 * (B.scale || 1) + 0.08, min = ra + rb;

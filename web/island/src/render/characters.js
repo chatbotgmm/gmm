@@ -105,6 +105,30 @@ export function loadTools(props) {
   return toolProtos;
 }
 
+// ---- 헤엄 동작: 모델에 없어서 기존 동작으로 만든다(뼈 이름이 모델마다 달라도 되게 이름 규칙으로 고름).
+// 다리(leg/thigh/shin/foot)는 걷기 동작을 조금 느리게 되풀이 = 물속에서 발 젓기, 나머지(몸·날개·머리)는 서 있기 동작 = 날개를 접고 떠 있음.
+// 몸이 출렁이고 기우는 것과 물결은 views.js에서 더함.
+const LEG = /^(leg|thigh|shin|foot|toe|calf)\b|^(leg|thigh|shin|foot|toe|calf)[._]/i;
+function tileTrack(t, srcDur, dstDur, slow) {
+  const times = [], values = [], n = t.getValueSize(), period = srcDur * slow;
+  for (let k = 0; k * period < dstDur + 1e-6; k++) {
+    for (let i = 0; i < t.times.length; i++) {
+      const tt = k * period + t.times[i] * slow; if (tt > dstDur + 1e-6) break;
+      if (times.length && tt <= times[times.length - 1] + 1e-6) continue;
+      times.push(tt); for (let j = 0; j < n; j++) values.push(t.values[i * n + j]);
+    }
+  }
+  return new t.constructor(t.name, times, values);
+}
+export function makeSwimClip(idle, walk) {
+  if (!idle || !walk) return null;
+  const bone = t => t.name.split(".").slice(0, -1).join("."), isLeg = t => LEG.test(bone(t));
+  const dur = Math.max(idle.duration, walk.duration * 1.4 * 2);
+  const tracks = [...idle.tracks.filter(t => !isLeg(t)).map(t => tileTrack(t, idle.duration, dur, 1)),
+                  ...walk.tracks.filter(isLeg).map(t => tileTrack(t, walk.duration, dur, 1.4))];
+  return tracks.some(isLeg) ? new THREE.AnimationClip("Swim", dur, tracks) : null;
+}
+
 /** 캐릭터 하나: 장면 오브젝트, 애니메이션 믹서, 동작들, 손에 붙인 도구, 동작 길이(clip: AI가 타격 시점 계산에 씀). */
 export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   const g = await loadGLB(dir + cfg.file.split("/").pop()), root = g.scene;
@@ -127,10 +151,12 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
     const hit = { Chop: cfg.workHit?.Chop, Mine: cfg.workHit?.Mine, Build: cfg.workHit?.Build, Attack: cfg.hit, FishReel: 0.25, Jump: c.duration / 2 }[key];
     clip[key] = { len: c.duration, hit: hit ?? c.duration };
   }
+  const swim = makeSwimClip(acts.Idle?.getClip(), acts.Walk?.getClip());
+  if (swim) { acts.Swim = mixer.clipAction(swim); clip.Swim = { len: swim.duration, hit: swim.duration }; }
   let hand = null; root.traverse(o => { if (o.isBone && /^prop.?R$/i.test(o.name)) hand = o; });
   const inHand = {};
   if (hand && tools) {
-    // 손 뼈에는 모델 안에서 따로 붙은 크기가 있어 그대로 붙이면 도구가 아주 작아짐 → 몸 크기 기준으로 되돌림
+    // 손 뼈에 따로 붙은 배율이 있으면 상쇄해 몸 크기 기준으로 맞춤(지금 갈매미 모델은 1이라 그대로)
     root.updateMatrixWorld(true);
     const handScale = hand.getWorldScale(new THREE.Vector3()).x / cfg.scale;
     for (const [k, proto] of Object.entries(await tools)) {

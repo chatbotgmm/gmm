@@ -8,6 +8,9 @@ import { josa } from "../util.js";
 
 const DRAG_PX = 6;
 
+// 물 칸인데 2칸 안에 걸을 수 있는 땅이 있으면(물가) 내려놓으면 헤엄침
+const nearLand = (g, x, z) => { for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (Math.hypot(dx, dz) <= 2.5 && g.isWalkable(x + dx, z + dz)) return true; return false; };
+
 export class UnitControl {
   constructor({ dom, camera, controls, tools, getWorld, getUnitViews, onStatus, onFollow }) {
     Object.assign(this, { dom, camera, controls, tools, getWorld, getUnitViews, onStatus, onFollow });
@@ -52,8 +55,8 @@ export class UnitControl {
     if (this.held) {
       const c = this.tools.pick(e.clientX, e.clientY), u = this.held, w = this.getWorld();
       if (c) {
-        const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z) || !w.grid.isWater(c.x, c.z), h = w.grid.walkHeight(c.x, c.z);
-        u.x = c.x + 0.5; u.z = c.z + 0.5; u.y = (b ? b.elevation ?? 0 : w.standHeight(c.x + 0.5, c.z + 0.5)) + 0.5;      // 살짝 들린 채 따라옴
+        const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z) || !w.grid.isWater(c.x, c.z) || nearLand(w.grid, c.x, c.z), h = w.grid.walkHeight(c.x, c.z);
+        u.x = c.x + 0.5; u.z = c.z + 0.5; u.y = (b ? b.elevation ?? 0 : Math.max(w.standHeight(c.x + 0.5, c.z + 0.5), -0.18)) + 0.5;      // 살짝 들린 채 따라옴
         this.mark.visible = true; this.mark.position.set(toWorldX(c.x + 0.5), Math.max(w.standHeight(c.x + 0.5, c.z + 0.5), -0.18) + 0.04, toWorldZ(c.z + 0.5));
         this.mark.material.color.setHex(ok ? 0x4fcf78 : 0xe0574f);
         this.target = c;

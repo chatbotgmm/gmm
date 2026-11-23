@@ -118,7 +118,7 @@ test("유닛: 가는 길에 건물이 생기면 다시 길을 찾고, 바다에 
   for (let t = 0; t < 120; t += 1 / 30) {
     w.update(1 / 30);
     if (Math.abs(t - 30) < 1e-3) w.placeBuilding("post", 36, 30, 0);
-    for (const u of w.units) if (!u.insideBuildingId) assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), `${u.name} at ${u.x},${u.z}`);
+    for (const u of w.units) if (!u.insideBuildingId && !u.swimming) assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), `${u.name} at ${u.x},${u.z}`);
   }
 });
 
@@ -178,6 +178,31 @@ test("끌어다 놓기: 놓은 곳 가까운 나무·광석·공사장·친구�
   assert.fail("빈 땅을 못 찾음");
 });
 
+test("헤엄: 물가로 가서 얕은 물에서 헤엄치다 땅으로 올라오고, 물가 물에 놓으면 바로 헤엄", async () => {
+  const { interactNear } = await import("../src/units/unitBrain.js"); void interactNear;
+  const w = World.create(7, seededRandom(5)), u = w.units[0];
+  w.units.forEach(o => { if (o !== u) { o.timer = 1e9; } });
+  // 활동을 직접 시킴: chooseNext 대신 swim만 고르게
+  u.timer = 0; const real = Math.random;
+  let swam = false, maxOut = 0, landed = false;
+  w.pickUpUnit(u);
+  // 물가 물 칸 찾기
+  let spot = null;
+  for (let z = 0; z < 64 && !spot; z++) for (let x = 0; x < 64 && !spot; x++)
+    if (w.grid.isWater(x, z) && [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dz]) => w.grid.isWalkable(x + dx, z + dz))) spot = [x, z];
+  const r = w.dropUnit(u, spot[0], spot[1]);
+  assert.equal(r.ok, true); assert.equal(r.act.kind, "swim"); assert.equal(u.state, UnitState.Swim); assert.equal(u.swimming, true);
+  for (let t = 0; t < 60 && !landed; t += 0.1) {
+    w.update(0.1);
+    if (u.swimming) { swam = true; assert.ok(w.grid.isWater(Math.floor(u.x), Math.floor(u.z)) || Math.hypot(u.x - u.swim.sx - 0.5, u.z - u.swim.sz - 0.5) < 1.2, `물 밖을 헤엄 ${u.x},${u.z}`);
+      maxOut = Math.max(maxOut, Math.hypot(u.x - spot[0] - 0.5, u.z - spot[1] - 0.5)); }
+    else landed = true;
+  }
+  assert.ok(swam); assert.ok(landed, "시간이 지나면 땅으로 올라옴"); assert.ok(maxOut <= 5, `너무 멀리 감 ${maxOut}`);
+  assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)));
+  void real;
+});
+
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
   const w = World.create(7, seededRandom(11));
   w.placeBuilding("house", 38, 26, 0);                       // 공사장(갈매미가 지어야 함)
@@ -188,7 +213,7 @@ test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·�
     w.update(1 / 20);
     for (const u of w.units) {
       seen.add(u.state);
-      if (!u.insideBuildingId && u.state !== "Held") assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), `${u.name} ${u.state} at ${u.x.toFixed(1)},${u.z.toFixed(1)}`);
+      if (!u.insideBuildingId && u.state !== "Held" && !u.swimming) assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), `${u.name} ${u.state} at ${u.x.toFixed(1)},${u.z.toFixed(1)}`);
     }
   }
   for (const st of ["Chop", "Mine", "Fish", "Eat", "Greet", "Build", "Zoomies"]) assert.ok(seen.has(st), `상태 ${st}를 한 번도 안 함: ${[...seen].join(",")}`);
@@ -217,9 +242,10 @@ test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 10
   const builders = new Set(); let first = null, gathered = false;
   w.on("buildingProgress", x => { if (x === b) { builders.add(x.lastBuilder); first ??= x.lastBuilder; } });
   for (let t = 0; t < 900 && !w.isDone(b); t += 1 / 20) {
+    for (const o of w.units) if (o !== boss) { o.curious = null; if (o.state === "Idle") o.timer = 1e9; }   // 구경(호기심)으로 깨어나 재료를 대신 구하지 않게
     w.update(1 / 20);
     const u = first && w.units.find(u => u.unitId === first);
-    if (u && ["GoChop", "Chop", "GoMine", "Mine"].includes(u.state) && u.committed === b.id) gathered = true;
+    if (["GoChop", "Chop", "GoMine", "Mine"].includes(boss.state) && boss.committed === b.id) gathered = true;   // 첫 망치질 전에 구하러 가도 셈
     if (u && !w.isDone(b)) assert.equal(b.busy, first, "맡은 동안 다른 갈매미가 가져가지 않음");
   }
   assert.ok(w.isDone(b), `완공돼야 함: ${b.hits}/${b.need}`);
