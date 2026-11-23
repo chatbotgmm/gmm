@@ -12,7 +12,7 @@ export class BuildingViews {
     this.scene = scene; this.views = new Map(); this.overlay = overlay;
     world.on("buildingAdded", b => this.add(b));
     world.on("buildingRemoved", b => this.remove(b.id));
-    for (const b of world.buildings.values()) this.add(b);
+    this.ready = Promise.allSettled([...world.buildings.values()].map(b => this.add(b)));   // 처음 있던 건물들을 다 그렸을 때
   }
   async add(b) {
     const def = BUILDINGS[b.defId], holder = new THREE.Group();

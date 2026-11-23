@@ -10,7 +10,14 @@ export const WALK_SCALE = 2.2, RUN_SCALE = 1.5;        // web/village와 같은 
 const loader = new GLTFLoader();
 
 /** .glb를 받아 파싱. 없으면 같은 이름 + ".json"(base64를 담은 {glb}) 도 시도. */
+// 불러오기 진행(첫 화면 진행 막대용): 시작한 모델 수·끝난 수·실패한 수
+export const loadProgress = { total: 0, done: 0, failed: 0, onChange: null };
 export async function loadGLB(url) {
+  loadProgress.total++; loadProgress.onChange?.();
+  try { return await fetchGLB(url); } catch (e) { loadProgress.failed++; throw e; }
+  finally { loadProgress.done++; loadProgress.onChange?.(); }
+}
+async function fetchGLB(url) {
   let res = await fetch(url).catch(() => null);
   if (res && res.ok) return loader.parseAsync(await res.arrayBuffer(), url.slice(0, url.lastIndexOf("/") + 1));
   res = await fetch(url + ".json").catch(() => null);

@@ -12,7 +12,7 @@ import { UnitControl } from "./systems/unitControl.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
-import { findCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE } from "./render/characters.js";
+import { findCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -52,13 +52,21 @@ function mount(w) {
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world);
   lifeViews = new LifeViews(worldRoot, world, overlay);
-  addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map));
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model); }
+  const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map))];
+  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model)); }
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
+  return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }
 let tools = null, hud = null;
+// 첫 화면: 모델을 다 받을 때까지 「불러오는 중」 화면(진행 막대)을 보여 주고, 그동안 마을 시간은 멈춤
+const loadingEl = document.getElementById("loading"), loadBar = document.getElementById("loadBar"), loadText = document.getElementById("loadText");
+let ready = false;
+loadProgress.onChange = () => {
+  const { total, done } = loadProgress; if (!total) return;
+  loadBar.style.width = `${Math.round(done / total * 100)}%`; loadText.textContent = `모델 불러오는 중 ${done} / ${total}`;
+};
 const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
-mount(World.create(7));
+const firstLoad = mount(World.create(7));
 tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
 hud = new Hud({ tools, world,
   onSave: () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize())); hud.status("저장했어요(이 브라우저에만)"); } catch (e) { hud.status("저장하지 못했어요: " + e.message); } },
@@ -71,7 +79,13 @@ hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u
 hud.onSeeds = () => { for (let i = 0; i < 10; i++) world.addSeed(); hud.status("씨앗을 뿌렸어요"); };
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };
-document.getElementById("loading").hidden = true;
+// 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
+Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
+  loadProgress.onChange = null; ready = true; clock.getDelta();
+  if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`);
+  else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)");
+  loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
+});
 
 // ---------- 매 프레임
 const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0;
@@ -91,7 +105,7 @@ function keyCamera(dt) {
 }
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
-  world.update(dt);
+  if (ready) world.update(dt);                       // 불러오는 동안은 멈춤
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(); lastSync = now; }
   keyCamera(dt);

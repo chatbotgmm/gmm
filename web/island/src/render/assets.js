@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { CELL } from "../config.js";
-import { loadGLB } from "./characters.js";
+import { loadGLB, loadProgress } from "./characters.js";
 
 const cache = new Map();
 
@@ -13,8 +13,8 @@ function load(url) {
     const fbx = /\.fbx$/i.test(url), tries = [url, url.replace(/^\.\.\/village\//, "")].filter((u, i, a) => a.indexOf(u) === i);
     cache.set(url, (async () => {
       let err;
-      for (const u of tries) {
-        try { return fbx ? await new FBXLoader().loadAsync(u) : (await loadGLB(u)).scene; } catch (e) { err = e; }
+      for (const [i, u] of tries.entries()) {
+        try { const r = fbx ? await new FBXLoader().loadAsync(u) : (await loadGLB(u)).scene; loadProgress.failed -= i; return r; } catch (e) { err = e; }   // 다른 경로로 받았으면 앞의 실패는 셈에서 뺌
       }
       throw err;
     })());
