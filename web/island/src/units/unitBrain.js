@@ -110,6 +110,7 @@ function face(u, x, z) { u.heading = Math.atan2(x - u.x, z - u.z); }
 function followPath(u, dt, world, rnd) {
   const grid = world.grid; let move = (u.running ? u.runSpeed : u.walkSpeed ?? UNIT_SPEED) * dt;
   u.moveT = (u.moveT || 0) + dt;
+  const want = move, x0 = u.x, z0 = u.z;
   let guard = 0;
   while (move > 0 && u.path && u.pathIndex < u.path.length && guard++ < 20) {
     const [nx, nz] = u.path[u.pathIndex], [cx, cz] = cellOf(u);
@@ -127,6 +128,16 @@ function followPath(u, dt, world, rnd) {
     if (d > 1e-6) u.heading = Math.atan2(dx, dz);
     u.x = ex; u.z = ez; move -= stepLen; u.repaths = 0;
     if (stepLen >= d - 1e-9) { u.x = tx; u.z = tz; u.pathIndex++; }
+  }
+  // 멈춤 감지: 2초 넘게 가야 할 거리의 20%도 못 가면 → 목적지 바로 앞이면 도착, 아니면 길을 다시 찾음
+  if (u.path && u.pathIndex < u.path.length) {
+    u.stallT = Math.hypot(u.x - x0, u.z - z0) < want * 0.2 ? (u.stallT || 0) + dt : 0;
+    if (u.stallT > 2) {
+      u.stallT = 0;
+      const last = u.path[u.path.length - 1];
+      if (Math.hypot(last[0] + 0.5 - u.x, last[1] + 0.5 - u.z) < 0.7) { u.pathIndex = u.path.length; return true; }
+      if (!u.goal || !startPath(u, world, u.goal.x, u.goal.z, u.running)) { setIdle(u, rnd, world); return false; }
+    }
   }
   return !!u.path && u.pathIndex >= u.path.length;
 }

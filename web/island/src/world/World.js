@@ -262,8 +262,9 @@ export class World {
     this.separate();
   }
   // 겹친 갈매미를 살짝 밀어냄. 밀린 자리가 걸을 수 없는 칸이면 밀지 않는다.
+  // 걷는 중인 갈매미는 밀지 않음(잠깐 겹쳐 지나감) → 좁은 곳에서 서로 밀다가 제자리에서 떠는 일이 없음.
   separate() {
-    const us = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held);
+    const us = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && !(u.path && u.pathIndex < u.path.length));
     for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
       const A = us[i], B = us[j], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz);
       const ra = 0.16 * (A.scale || 1) + 0.08, rb = 0.16 * (B.scale || 1) + 0.08, min = ra + rb;

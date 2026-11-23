@@ -359,3 +359,16 @@ test("높이: 부드러운 붓은 가장자리를 조금만, 다듬기는 이웃
   for (let i = 0; i < 20; i++) w.update(0.05);
   assert.equal(g.get(44, 44).elevation, 0.75);
 });
+
+test("마주 보고 가는 두 갈매미가 서로 밀다 제자리에서 떨지 않고 지나간다", () => {
+  const w = World.create(7, seededRandom(81));
+  w.units.forEach(o => { o.timer = 1e9; o.path = null; o.state = "Idle"; o.x = 10 + o.x * 0; });
+  const [a, b] = w.units; a.x = 38.5; a.z = 40.5; b.x = 44.5; b.z = 40.5; a.timer = b.timer = 1e9;
+  const go = (u, gx, gz) => { u.path = [[gx, gz]]; u.pathIndex = 0; u.goal = { x: gx, z: gz }; u.state = "Wander"; u.moveT = 0; };
+  for (let x = 39; x <= 43; x++) w.grid.get(x, 39).elevation = w.grid.get(x, 41).elevation = 1;   // 좁은 통로(위아래 막힘)
+  a.path = [[39, 40], [40, 40], [41, 40], [42, 40], [43, 40], [44, 40]]; a.pathIndex = 0; a.goal = { x: 44, z: 40 }; a.state = "Wander";
+  b.path = [[43, 40], [42, 40], [41, 40], [40, 40], [39, 40], [38, 40]]; b.pathIndex = 0; b.goal = { x: 38, z: 40 }; b.state = "Wander";
+  void go;
+  let t = 0; for (; t < 30 && !(Math.floor(a.x) === 44 && Math.floor(b.x) === 38); t += 1 / 30) w.update(1 / 30);
+  assert.ok(Math.floor(a.x) >= 43 && Math.floor(b.x) <= 39, `지나가야 함: a ${a.x.toFixed(2)} b ${b.x.toFixed(2)} (${t.toFixed(1)}초)`);
+});
