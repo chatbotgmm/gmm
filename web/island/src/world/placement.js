@@ -30,10 +30,15 @@ export function checkPlacement(grid, def, ax, az, rot, units = []) {
   if (!fp.cells.every(([x, z]) => grid.inBounds(x, z))) return fail("섬 밖이에요");
   if (fp.cells.some(([x, z]) => grid.isWater(x, z))) return fail("바다에는 지을 수 없어요");
   if (fp.cells.some(([x, z]) => grid.get(x, z).occupiedId)) return fail("다른 건물·시설과 겹쳐요");
-  if (fp.cells.some(([x, z]) => grid.doorOwner(x, z))) return fail("다른 건물의 문 앞이에요");
+  // 계단 이어 놓기: 아래 계단의 위쪽 칸에, 같은 방향으로 놓는 계단은 괜찮음(아래 계단 → 이 계단으로 바로 이어짐)
+  const [s0x, s0z] = fp.cells[0], upDx = s0x - fp.door.x, upDz = s0z - fp.door.z;
+  const rampOf = id => id && grid.occupants.get(id)?.ramp;
+  const continues = (x, z) => { const r = rampOf(grid.doorOwner(x, z)); return def.stairs && r && r.bx === x && r.bz === z && r.dx === upDx && r.dz === upDz; };
+  if (fp.cells.some(([x, z]) => grid.doorOwner(x, z) && !continues(x, z))) return fail("다른 건물의 문 앞이에요");
   const e = grid.get(fp.cells[0][0], fp.cells[0][1]).elevation;
   if (fp.cells.some(([x, z]) => Math.abs(grid.get(x, z).elevation - e) > 1e-6)) return fail("바닥이 평평하지 않아요");
-  const dh = grid.walkHeight(fp.door.x, fp.door.z);
+  const below = def.stairs && rampOf(grid.get(fp.door.x, fp.door.z)?.occupiedId);   // 문(입구) 칸이 아래 계단이면 그 계단 꼭대기 높이
+  const dh = below ? (below.dx === upDx && below.dz === upDz ? below.h1 : null) : grid.walkHeight(fp.door.x, fp.door.z);
   if (dh === null || Math.abs(dh - e) > MAX_STEP + 1e-6) return fail("문 앞이 막혀 있어요");
   let ramp = null;
   if (def.stairs) {                                                          // 계단: 문(입구) 반대쪽 칸이 올라갈 곳

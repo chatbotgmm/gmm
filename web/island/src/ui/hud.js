@@ -32,7 +32,11 @@ export class Hud {
     tools.onMode = (m, arg) => this.showMode(m, arg);
     // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
     const cf = document.getElementById("confirm"), cfBuild = document.getElementById("cfBuild");
-    tools.onPlan = (on, ok) => { cf.hidden = !on; cfBuild.disabled = !ok; };
+    tools.onPlan = (on, ok) => {
+      cf.hidden = !on; cfBuild.disabled = !ok; if (!on) return;
+      const top = document.getElementById("top").getBoundingClientRect();           // 휴대폰은 도구 막대가 아래 → 그 바로 위에 띄움
+      cf.style.bottom = top.top > innerHeight / 2 ? `${innerHeight - top.top + 8}px` : "";
+    };
     cfBuild.onclick = () => tools.confirmBuild();
     document.getElementById("cfRot").onclick = () => tools.rotate();
     document.getElementById("cfCancel").onclick = () => tools.clearPlan();

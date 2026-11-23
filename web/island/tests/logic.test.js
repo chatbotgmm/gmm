@@ -258,6 +258,17 @@ test("집 크기·전용 집: 집은 갈매미 키에 맞게 커졌고, 자이�
   w.pickUpUnit(giant); assert.equal(w.dropUnit(giant, 37, 37).building, gh.building);
 });
 
+test("계단 이어 놓기: 아래 계단 위쪽 칸에 같은 방향으로 놓으면 이어지고, 옆 방향은 안 됨", async () => {
+  const { findPath } = await import("../src/world/pathfinding.js");
+  const w = World.create(7, seededRandom(3)), g = w.grid; w.instantBuild = true;
+  for (let z = 34; z <= 44; z++) for (let x = 42; x <= 46; x++) { const c = g.get(x, z); c.groundType = "Grass"; c.occupiedId = null; c.elevation = z <= 38 ? 2.0 : z === 39 ? 1.0 : 0; }
+  assert.ok(w.placeBuilding("stairs", 44, 40, 0).ok, "땅 → 1 m 단");
+  assert.match(w.placeBuilding("stairs", 44, 39, 1).reason, /문 앞/, "옆 방향은 안 됨");
+  const r = w.placeBuilding("stairs", 44, 39, 0); assert.ok(r.ok, r.reason);
+  assert.ok(findPath(g, 44, 42, 44, 35), "땅에서 2 m 대지까지 계단 두 개로 이어짐");
+  assert.equal(g.canStep(44, 40, 44, 39), true);
+});
+
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
   const w = World.create(7, seededRandom(11));
   w.placeBuilding("house", 38, 26, 0);                       // 공사장(갈매미가 지어야 함)
