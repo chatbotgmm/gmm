@@ -128,10 +128,22 @@ export const JOBS = {
   merchant:   { id: "merchant",   name: "상인",   icon: "🐚", skill: "trade", desc: "가판대에서 남는 자재·보물을 팔고, 공사에 모자란 자재를 사 옴" },
   farmer:     { id: "farmer",     name: "농부",   icon: "🌾", skill: "farm",  desc: "밭에 심고 거둬 음식을 만듦" },
 };
-// 지금 있는 갈매미 8종의 직업·희귀도(바꾸고 싶으면 여기만 고치면 됨)
+// 종족: 갈매미맨 방범대(GameMaker 프로젝트 scr_util.gml의 tribe_of, 방범대 등록증 v10 자료)의 10종족
+export const TRIBES = {
+  "태초": { icon: "🥚", desc: "가장 오래된 갈매미" }, "거인": { icon: "🗿", desc: "몸집이 크고 힘이 셈" },
+  "수목": { icon: "🌿", desc: "풀과 나무를 닮음" },   "정령": { icon: "🔥", desc: "불·물 같은 기운을 품음" },
+  "망령": { icon: "👻", desc: "그늘과 밤을 좋아함" }, "해인": { icon: "🌊", desc: "바다에 사는 갈매미" },
+  "요정": { icon: "🧚", desc: "작고 재빠름" },         "야수": { icon: "🐾", desc: "거칠고 날쌤" },
+  "용족": { icon: "🐉", desc: "용의 피를 이음" },       "천익": { icon: "🪽", desc: "하늘의 날개" },
+};
+// 지금 있는 갈매미 8마리: [종족, 직업, 희귀도]. 모두 일반 등급. 직업은 종족·이름에 어울리게(바꾸려면 여기만 고치면 됨).
+//  기본(태초)=건축가: 마을의 기본을 세움 · 미니(요정)=농부: 작고 부지런, 씨앗을 좋아함 · 자이언트(거인)=나무꾼: 힘
+//  꽃(수목)=농부: 풀과 나무 · 황금(천익)=상인: 황금빛, 장사 · 물방울(해인)=낚시꾼: 바다 · 불씨(정령)=광부: 불·대장간
+//  그림자(망령)=광부: 어두운 땅속
 export const UNIT_JOBS = {
-  "기본": ["builder", "common"], "미니": ["farmer", "common"], "자이언트": ["lumberjack", "rare"], "꽃": ["farmer", "rare"],
-  "황금": ["builder", "epic"], "물방울": ["fisher", "rare"], "불씨": ["miner", "rare"], "그림자": ["merchant", "rare"],
+  "기본": ["태초", "builder", "common"], "미니": ["요정", "farmer", "common"], "자이언트": ["거인", "lumberjack", "common"],
+  "꽃": ["수목", "farmer", "common"], "황금": ["천익", "merchant", "common"], "물방울": ["해인", "fisher", "common"],
+  "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"],
 };
 
 // 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중.

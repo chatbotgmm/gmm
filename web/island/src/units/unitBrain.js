@@ -9,6 +9,7 @@ import { UNIT_SPEED } from "../config.js";
 import { PERSONA, BUILDINGS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
+import * as M from "./mind.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
@@ -46,16 +47,48 @@ export function uncommit(u, world) {
   u.committed = null;
 }
 export function setIdle(u, rnd, world = null, secs = null) {
+  if (u.activity) { M.learn(u, u.activity, -0.2); u.activity = null; }   // 끝내지 못하고 그만둔 일 = 조금 나쁜 경험
   release(u);
   u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null;
   u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined;
 }
 
+/** 활동을 잘 마침: 보상으로 배우고 쉼. */
+function done(u, reward, rnd, world, secs = null) {
+  if (u.activity) { M.learn(u, u.activity, reward); u.activity = null; }
+  setIdle(u, rnd, world, secs);
+}
+
+// ---- 길 다듬기: 격자 길(칸마다 꺾임)에서 곧게 갈 수 있는 중간 칸을 빼서 사선으로 곧게 걷게 함
+function lineClear(grid, ax, az, bx, bz) {
+  const x0 = ax + 0.5, z0 = az + 0.5, x1 = bx + 0.5, z1 = bz + 0.5, n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.2);
+  let px = ax, pz = az;
+  for (let i = 1; i <= n; i++) {
+    const cx = Math.floor(x0 + (x1 - x0) * i / n), cz = Math.floor(z0 + (z1 - z0) * i / n);
+    if (cx === px && cz === pz) continue;
+    if (!grid.canStep(px, pz, cx, cz)) return false;
+    if (cx !== px && cz !== pz && !(grid.canStep(px, pz, cx, pz) && grid.canStep(px, pz, px, cz))) return false;   // 모서리 가로지르기 금지
+    px = cx; pz = cz;
+  }
+  return true;
+}
+export function smoothPath(grid, sx, sz, path) {
+  const out = []; let ax = sx, az = sz, i = 0;
+  while (i < path.length) {
+    let j = i;
+    while (j + 1 < path.length && j - i < 12 && lineClear(grid, ax, az, path[j + 1][0], path[j + 1][1])) j++;
+    out.push(path[j]); [ax, az] = path[j]; i = j + 1;
+  }
+  return out;
+}
+
 function startPath(u, world, gx, gz, run = null) {
-  const [sx, sz] = cellOf(u), path = findPath(world.grid, sx, sz, gx, gz);
-  if (!path) return false;
+  const [sx, sz] = cellOf(u), raw = findPath(world.grid, sx, sz, gx, gz);
+  if (!raw) return false;
+  const path = smoothPath(world.grid, sx, sz, raw);
+  if (Math.hypot(u.x - (sx + 0.5), u.z - (sz + 0.5)) > 0.2) path.unshift([sx, sz]);   // 칸 모서리에 서 있으면 먼저 칸 가운데로
   u.path = path; u.pathIndex = 0; u.goal = { x: gx, z: gz }; u.moveT = 0;
-  u.running = run ?? (!!u.runSpeed && path.length > 7);           // 먼 길은 달림
+  u.running = run ?? (!!u.runSpeed && raw.length > 7);            // 먼 길은 달림
   return true;
 }
 /** (tx,tz) 칸 바로 옆의 걸을 수 있는 칸으로 가는 길. 가까운 칸부터 시도. */
@@ -77,16 +110,23 @@ function face(u, x, z) { u.heading = Math.atan2(x - u.x, z - u.z); }
 function followPath(u, dt, world, rnd) {
   const grid = world.grid; let move = (u.running ? u.runSpeed : u.walkSpeed ?? UNIT_SPEED) * dt;
   u.moveT = (u.moveT || 0) + dt;
-  while (move > 0 && u.path && u.pathIndex < u.path.length) {
+  let guard = 0;
+  while (move > 0 && u.path && u.pathIndex < u.path.length && guard++ < 20) {
     const [nx, nz] = u.path[u.pathIndex], [cx, cz] = cellOf(u);
-    if ((nx !== cx || nz !== cz) && !grid.canStep(cx, cz, nx, nz)) {
-      if (!u.goal || !startPath(u, world, u.goal.x, u.goal.z, u.running)) { setIdle(u, rnd, world); return false; }
+    const tx = nx + 0.5, tz = nz + 0.5, dx = tx - u.x, dz = tz - u.z, d = Math.hypot(dx, dz);
+    const stepLen = Math.min(d, move, 0.45), ex = d > 1e-6 ? u.x + dx / d * stepLen : tx, ez = d > 1e-6 ? u.z + dz / d * stepLen : tz;
+    const [ncx, ncz] = [Math.floor(ex), Math.floor(ez)];
+    if ((ncx !== cx || ncz !== cz) && !(grid.canStep(cx, cz, ncx, ncz) && (ncx === cx || ncz === cz || (grid.canStep(cx, cz, ncx, cz) && grid.canStep(cx, cz, cx, ncz))))) {
+      // 앞이 막힘(새 건물·물 등) → 같은 목적지로 다시 길 찾기. 계속 막히면 포기.
+      u.repaths = (u.repaths || 0) + 1;
+      const tries = u.repaths, t0 = u.moveT;
+      if (tries > 5 || !u.goal || !startPath(u, world, u.goal.x, u.goal.z, u.running)) { u.repaths = 0; setIdle(u, rnd, world); return false; }
+      u.repaths = tries; u.moveT = t0;                                       // 다시 찾아도 포기 시계는 이어감
       continue;
     }
-    const tx = nx + 0.5, tz = nz + 0.5, dx = tx - u.x, dz = tz - u.z, d = Math.hypot(dx, dz);
     if (d > 1e-6) u.heading = Math.atan2(dx, dz);
-    if (d <= move) { u.x = tx; u.z = tz; move -= d; u.pathIndex++; }
-    else { u.x += dx / d * move; u.z += dz / d * move; move = 0; }
+    u.x = ex; u.z = ez; move -= stepLen; u.repaths = 0;
+    if (stepLen >= d - 1e-9) { u.x = tx; u.z = tz; u.pathIndex++; }
   }
   return !!u.path && u.pathIndex >= u.path.length;
 }
@@ -110,9 +150,19 @@ function workLoop(u, dt, key, hits, onHit, onEnd) {
 function reach(u) { return 4 + 6 * Math.sqrt(u.scale || 1); }
 
 function startActivity(u, kind, world, rnd) {
+  const ok = startActivityInner(u, kind, world, rnd);
+  if (ok && !(kind === "build" && u.state !== US.GoBuild)) u.activity = kind;   // 재료 구하러 간 경우는 그 일(벌목·채광)로 기억
+  return ok;
+}
+function startActivityInner(u, kind, world, rnd) {
   const g = world.grid, persona = PERSONA[u.name] || PERSONA["기본"];
   switch (kind) {
     case "rest": setIdle(u, rnd, world, 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
+    case "sleep": {                                                               // 지치면: 가까운 완성된 집에 들어가 자거나, 그 자리에서 잠
+      const home = nearest(u, [...world.buildings.values()].filter(b => world.isDone(b) && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 14), b => [b.door.x, b.door.z]);
+      if (home && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, "졸려…"); return true; }
+      setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; emote(u, "💤", 3); return true;
+    }
     case "wander": {
       const [sx, sz] = cellOf(u), r = Math.round(reach(u));
       for (let k = 0; k < 12; k++) {
@@ -122,7 +172,7 @@ function startActivity(u, kind, world, rnd) {
       return false;
     }
     case "zoomies": {
-      if (!startActivity(u, "wander", world, rnd)) return false;
+      if (!startActivityInner(u, "wander", world, rnd)) return false;
       u.state = US.Zoomies; u.running = true; u.chain = 3; emote(u, "✨"); return true;
     }
     case "forage": {
@@ -131,7 +181,9 @@ function startActivity(u, kind, world, rnd) {
       s.claimed = u.unitId; u.focus = s; u.state = US.Forage; return true;
     }
     case "visit": {
-      const f = nearest(u, world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [US.Idle, US.Wander].includes(o.state)), o => cellOf(o));
+      // 가깝고 친한 친구일수록 먼저(호감 1당 6칸 거리만큼 더 가도 감)
+      const cands = world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [US.Idle, US.Wander].includes(o.state) && M.affinity(u, o) > -2);
+      const f = cands.sort((a, b) => (Math.hypot(a.x - u.x, a.z - u.z) - 6 * M.affinity(u, a)) - (Math.hypot(b.x - u.x, b.z - u.z) - 6 * M.affinity(u, b)))[0];
       if (!f) return false;
       const [fx, fz] = cellOf(f);
       if (!pathBeside(u, world, fx, fz)) return false;
@@ -163,7 +215,7 @@ function startActivity(u, kind, world, rnd) {
     case "eat": {                                                                 // 음식이 있으면 그 자리에서 먹고, 없으면 씨앗을 찾음
       if (world.res.food < 1) return startActivity(u, "forage", world, rnd);
       setIdle(u, rnd, world); u.state = US.Eat;
-      doOnce(u, "Attack", () => { if (world.eatFood(u)) emote(u, J.isLazy(u) ? "배불러…" : "냠냠"); }, () => setIdle(u, rnd, world));
+      doOnce(u, "Attack", () => { if (world.eatFood(u)) emote(u, J.isLazy(u) ? "배불러…" : "냠냠"); }, () => done(u, 1, rnd, world));
       return true;
     }
     case "trade": {                                                               // 상인: 가판대 앞으로
@@ -193,7 +245,9 @@ function chooseNext(u, world, rnd) {
   if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
-  const opts = J.activityWeights(u);                                         // 성격 + 직업 특기
+  if (u.needs && u.needs.energy < 20 && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠
+  // 성격 + 직업 특기 × 욕구(급한 욕구를 채우는 일) × 배운 취향(해 보니 좋았던 일)
+  const opts = J.activityWeights(u).map(([k, w]) => [k, w * M.needMult(u, k) * M.prefMult(u, k)]);
   for (let tries = 0; tries < 3; tries++) {
     let r = rnd() * opts.reduce((s, [, w]) => s + w, 0), kind = "rest";
     for (const [k, w] of opts) if ((r -= w) <= 0) { kind = k; break; }
@@ -204,7 +258,10 @@ function chooseNext(u, world, rnd) {
 
 export function enterBuilding(u, b, rnd) {
   release(u);
-  u.state = US.Inside; u.insideBuildingId = b.id; u.timer = 6 + rnd() * 8; u.path = null; u.goal = null; u.running = false;
+  const act = u.activity, sleepy = u.sleepy; u.activity = null; u.sleepy = false;
+  release(u);
+  u.state = US.Inside; u.insideBuildingId = b.id; u.timer = sleepy ? 15 + rnd() * 10 : 6 + rnd() * 8; u.path = null; u.goal = null; u.running = false;
+  u.insideAct = sleepy ? "sleep" : act;
   if (!b.occupants.includes(u.unitId)) b.occupants.push(u.unitId);
 }
 export function exitBuilding(u, world, rnd) {
@@ -212,13 +269,16 @@ export function exitBuilding(u, world, rnd) {
   if (b) b.occupants = b.occupants.filter(id => id !== u.unitId);
   const spot = b ? nearestWalkable(world.grid, b.door.x, b.door.z) : nearestWalkable(world.grid, Math.floor(u.x), Math.floor(u.z));
   if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; }
-  u.insideBuildingId = null; setIdle(u, rnd, world);
+  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null;
+  done(u, 0.7, rnd, world);                                                // 집 구경·잠 = 좋은 경험
 }
 
 // ---------------------------------------------------------------- 매 프레임
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
   u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
+  M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
+  if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
   if (u.once) {                                                         // 한 번 하는 동작이 끝날 때까지 기다림
     const o = u.once; o.t += dt;
@@ -231,7 +291,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding].includes(u.state)) {
     const big = world.units.find(o => o !== u && visible(o) && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < 1.8);
     if (big) {
-      setIdle(u, rnd, world); emote(u, "!");
+      setIdle(u, rnd, world); emote(u, "!"); M.befriend(u, big, -0.3);
       const dx = u.x - big.x, dz = u.z - big.z, d = Math.hypot(dx, dz) || 1;
       const spot = nearestWalkable(world.grid, Math.floor(u.x + dx / d * 4), Math.floor(u.z + dz / d * 4), 3);
       if (spot && startPath(u, world, spot[0], spot[1], true)) { u.state = US.Flee; return settle(u, dt, world); }
@@ -241,19 +301,39 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     if (startActivity(u, "wander", world, rnd)) { u.state = US.Avoid; emote(u, "…"); }
   }
   if (moving(u) && u.moveT > GIVE_UP) { setIdle(u, rnd, world); return settle(u, dt, world); }
+  // 호기심: 근처에서 무슨 일이 생기면(집 완성·나무 쓰러짐·희귀 물고기·누가 옮겨짐) 쳐다보고, 가끔 가서 구경
+  if (u.curious && [US.Idle, US.Wander].includes(u.state)) {
+    const c = u.curious; u.curious = null;
+    if (Math.hypot(c.x - u.x, c.z - u.z) < 9) {
+      setIdle(u, rnd, world, 1 + rnd()); face(u, c.x, c.z);
+      emote(u, { building: "오!", tree: "와!", fish: "우와!", drop: "?", site: "뭐 짓지?" }[c.kind] || "!");
+      if (rnd() < 0.4 && pathBeside(u, world, Math.floor(c.x), Math.floor(c.z))) { u.state = US.Curious; u.curiousAt = c; }
+    }
+  }
 
   switch (u.state) {
     case US.Idle:
-      if (rnd() < dt * 0.25) u.lookAt = u.heading + (rnd() * 2 - 1) * 1.2;          // 두리번
+      if (rnd() < dt * 0.25) {                                                        // 두리번: 가까이 있는 친구 쪽을 보거나 아무 데나
+        const near = world.units.find(o => o !== u && visible(o) && Math.hypot(o.x - u.x, o.z - u.z) < 3);
+        u.lookAt = near && rnd() < 0.6 ? Math.atan2(near.x - u.x, near.z - u.z) : u.heading + (rnd() * 2 - 1) * 1.2;
+      }
+      if (u.activity === "rest" && u.timer <= 0) { M.learn(u, "rest", 0.3 + (100 - (u.needs?.energy ?? 100)) / 200); u.activity = null; }
       if (u.lookAt !== undefined) { let d = u.lookAt - u.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); u.heading += d * Math.min(1, 1.5 * dt); }
       if (u.timer <= 0) chooseNext(u, world, rnd);
       break;
     case US.Wander: case US.Avoid: case US.Flee:
-      if (followPath(u, dt, world, rnd)) setIdle(u, rnd, world); break;
+      if (followPath(u, dt, world, rnd)) done(u, 0.4 + (100 - (u.needs?.fun ?? 100)) / 250, rnd, world); break;
+    case US.Curious:
+      if (followPath(u, dt, world, rnd)) { face(u, u.curiousAt.x, u.curiousAt.z); emote(u, pick(["오~", "멋지다", "흠흠"], rnd)); setIdle(u, rnd, world, 2 + rnd() * 2); }
+      break;
+    case US.Sleep:
+      if ((u.emoteT ?? 0) <= 0) emote(u, "💤", 2.5);
+      if (u.timer <= 0 || (u.needs?.energy ?? 100) >= 95) { u.activity = "sleep"; done(u, 1, rnd, world); emote(u, "잘 잤다!"); }
+      break;
     case US.Zoomies:
       if (followPath(u, dt, world, rnd)) {
-        if (--u.chain > 0 && startActivity(u, "wander", world, rnd)) { u.state = US.Zoomies; u.running = true; }
-        else { u.state = US.Zoomies; u.path = null; doOnce(u, "Jump", null, () => { emote(u, pick(["♪", "✨"], rnd)); setIdle(u, rnd, world); }); }
+        if (--u.chain > 0 && startActivityInner(u, "wander", world, rnd)) { u.state = US.Zoomies; u.running = true; }   // 활동 이름은 그대로(뛰어놀기)
+        else { u.state = US.Zoomies; u.path = null; doOnce(u, "Jump", null, () => { emote(u, pick(["♪", "✨"], rnd)); done(u, 0.9, rnd, world); }); }
       }
       break;
     case US.Forage: {
@@ -261,7 +341,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (!world.seeds.includes(s)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
         face(u, s.x + s.ox, s.z + s.oz); u.state = US.Eat;
-        doOnce(u, "Attack", () => { world.eatSeed(s, u); emote(u, "♥"); }, () => setIdle(u, rnd, world));
+        doOnce(u, "Attack", () => { world.eatSeed(s, u); emote(u, "♥"); }, () => done(u, 0.9, rnd, world));
       }
       break;
     }
@@ -272,10 +352,12 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (u.state !== US.Visit) break;                                         // 길이 막혀 그만둠
       if (arrived || close) {
         if (!close) { setIdle(u, rnd, world); break; }                        // 가 보니 친구가 떠남
-        u.path = null; face(u, f.x, f.z); u.state = US.Greet; emote(u, pick(["♪", "♥", "안녕!"], rnd));
+        u.path = null; face(u, f.x, f.z); u.state = US.Greet; M.befriend(u, f, 1);         // 인사하면 서로 친해짐
+        emote(u, M.affinity(u, f) >= 4 ? pick(["♥♥", "보고 싶었어!", "단짝!"], rnd) : pick(["♪", "♥", "안녕!"], rnd));
         if ([US.Idle, US.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = US.Greet; face(f, u.x, u.z); emote(f, "!");
           doOnce(f, "Jump", null, () => setIdle(f, rnd, world)); }
-        doOnce(u, "Jump", null, () => setIdle(u, rnd, world));
+        doOnce(u, "Jump", null, () => done(u, 0.8 + (100 - (u.needs?.social ?? 100)) / 120, rnd, world));
+        if (u.needs) u.needs.social = Math.min(100, u.needs.social + 35); if (f.needs) f.needs.social = Math.min(100, f.needs.social + 25);
       }
       break;
     }
@@ -290,7 +372,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const t = u.focus, chop = u.state === US.Chop; face(u, t.x + 0.5, t.z + 0.5);
       workLoop(u, dt, chop ? "Chop" : "Mine", u.workHits,
         () => { if (chop) world.hitTree(t, u); else world.hitOre(t, u); },
-        () => { emote(u, t.alive ? "💪" : chop ? `나무+${t.lastYield}` : `돌+${t.lastYield}${t.lastIron ? " 철+1" : ""}`); setIdle(u, rnd, world); });
+        () => { emote(u, t.alive ? "💪" : chop ? `나무+${t.lastYield}` : `돌+${t.lastYield}${t.lastIron ? " 철+1" : ""}`);
+          done(u, t.alive ? 0.4 : 0.8 + t.lastYield / 5 + (t.lastIron ? 0.5 : 0), rnd, world); });
       break;
     }
     case US.GoFish: {
@@ -308,11 +391,12 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         u.fishT = undefined;
         doOnce(u, "FishReel", () => {
           u.fishing = null; const r = world.catchFish(u);
+          u.lastReward = !r ? 0.05 : { common: 0.8, rare: 1.4, epic: 2, legend: 3 }[r.fish.rarity] + (r.item ? 1 : 0);
           if (!r) { emote(u, "💧"); return; }
           const star = { common: "", rare: "✨", epic: "🌟", legend: "👑" }[r.fish.rarity];
           emote(u, r.item ? `🎁 ${r.item.name}!` : `${star}${r.fish.name}`, r.item || star ? 2.6 : 1.6);
         },
-          () => setIdle(u, rnd, world));
+          () => done(u, u.lastReward ?? 0.5, rnd, world));
       }
       break;
     }
@@ -332,8 +416,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const c = b.cells.reduce((a, [x, z]) => [a[0] + x + 0.5, a[1] + z + 0.5], [0, 0]); face(u, c[0] / b.cells.length, c[1] / b.cells.length);
       // 망치질 3번마다 나무 1·돌 1을 더 써서 그 자리에서 계속. 재료가 없으면 구하러 갔다가 돌아옴. 100%가 되면 끝.
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
-        if (world.isDone(b)) { uncommit(u, world); setIdle(u, rnd, world); return; }
+        if (world.isDone(b)) { uncommit(u, world); done(u, 2, rnd, world); return; }
+        M.learn(u, "build", 0.8);                                               // 한 바퀴 지을 때마다 보람
         if (hasMaterials(world, b)) { useMaterials(world, b); return; }         // u.work가 비었으니 다음 바퀴부터 다시
+        u.activity = null;
         emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);
       });
       break;
@@ -349,16 +435,18 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoTrade:
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Trade; face(u, world.stall.x + 0.5, world.stall.z + 0.5);
-        doOnce(u, "Attack", () => { const l = world.trade(u); emote(u, l.sold || l.bought ? `🐚 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : "손님이 없네", 2.2); },
-          () => setIdle(u, rnd, world, 1 + rnd()));
+        doOnce(u, "Attack", () => { const l = world.trade(u); u.lastReward = l.sold > 0 ? 1 + Math.min(1, l.sold / 50) : l.bought > 0 ? 0.7 : 0.1;
+            emote(u, l.sold || l.bought ? `🐚 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : "손님이 없네", 2.2); },
+          () => done(u, u.lastReward ?? 0.5, rnd, world, 1 + rnd()));
       }
       break;
     case US.GoFarm: {
       const pl = u.focus;
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Farm;
-        doOnce(u, "Attack", () => { const r = world.farmPlot(pl, u); emote(u, r === "plant" ? "🌱" : r === "harvest" ? `🌾+${pl.lastYield}` : "…"); },
-          () => setIdle(u, rnd, world));
+        doOnce(u, "Attack", () => { const r = world.farmPlot(pl, u); u.lastReward = r === "harvest" ? 1.3 : r === "plant" ? 0.6 : 0;
+            emote(u, r === "plant" ? "🌱" : r === "harvest" ? `🌾+${pl.lastYield}` : "…"); },
+          () => done(u, u.lastReward ?? 0.5, rnd, world));
       }
       break;
     }
@@ -371,6 +459,6 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
 /** 서 있는 높이를 부드럽게 따라감(계단·부두). */
 function settle(u, dt, world) {
   if (u.insideBuildingId) return;
-  const [cx, cz] = cellOf(u), h = world.grid.walkHeight(cx, cz);
-  if (h !== null) u.y += (h - u.y) * Math.min(1, dt * 10);
+  const h = world.standHeight ? world.standHeight(u.x, u.z) : world.grid.walkHeight(...cellOf(u));
+  if (h !== null) u.y += (h - u.y) * Math.min(1, dt * 12);              // 경사면·계단을 따라 부드럽게
 }

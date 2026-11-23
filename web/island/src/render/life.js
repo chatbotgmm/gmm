@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 import { PROPS } from "../data/catalog.js";
 import { modelFor } from "./assets.js";
+import { terrainHeight } from "../world/terrain.js";
 
 export class LifeViews {
   constructor(scene, world, overlay) {
@@ -25,7 +26,7 @@ export class LifeViews {
     this.cropRipe = new THREE.MeshStandardMaterial({ color: 0xe8b830, roughness: 0.7 });
     this.cropGeo = new THREE.ConeGeometry(0.07, 0.32, 6).translate(0, 0.16, 0);
     this.crops = world.plots.map(p => {
-      const g = new THREE.Group(); g.position.set(toWorldX(p.x + 0.5), (world.grid.get(p.x, p.z)?.elevation ?? 0) + 0.01, toWorldZ(p.z + 0.5));
+      const g = new THREE.Group(); g.position.set(toWorldX(p.x + 0.5), terrainHeight(world.grid, p.x + 0.5, p.z + 0.5) + 0.01, toWorldZ(p.z + 0.5));
       for (const [dx, dz] of [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]]) {
         const m = new THREE.Mesh(this.cropGeo, this.cropGreen); m.position.set(dx, 0, dz); m.castShadow = true; g.add(m); }
       scene.add(g); return { p, g };
@@ -39,7 +40,7 @@ export class LifeViews {
 
   addSeed(s) {
     const m = new THREE.Mesh(this.seedGeo, this.seedMat); m.castShadow = true;
-    m.position.set(toWorldX(s.x + s.ox), (this.world.grid.get(s.x, s.z)?.elevation ?? 0) + 0.045, toWorldZ(s.z + s.oz));
+    m.position.set(toWorldX(s.x + s.ox), terrainHeight(this.world.grid, s.x + s.ox, s.z + s.oz) + 0.045, toWorldZ(s.z + s.oz));
     this.scene.add(m); this.seedMeshes.set(s.id, m);
   }
   removeSeed(s) { const m = this.seedMeshes.get(s.id); if (m) { this.scene.remove(m); this.seedMeshes.delete(s.id); } }
@@ -54,7 +55,7 @@ export class LifeViews {
     let s = this.stumps.get(tree.id);
     if (!s && on) {
       s = await modelFor({ footprint: { w: 0.55, d: 0.55 } }, () => new THREE.Group(), PROPS.stump);
-      s.position.set(toWorldX(tree.x + 0.5), this.world.grid.get(tree.x, tree.z).elevation, toWorldZ(tree.z + 0.5));
+      s.position.set(toWorldX(tree.x + 0.5), terrainHeight(this.world.grid, tree.x + 0.5, tree.z + 0.5), toWorldZ(tree.z + 0.5));
       this.scene.add(s); this.stumps.set(tree.id, s);
     }
     if (s) s.visible = on && !tree.alive;
@@ -66,7 +67,7 @@ export class LifeViews {
     o.visible = true; o.rotation.x = 0; o.rotation.z = 0; this.anims.push({ kind: "grow", o, t: 0 });
   }
   spark(o) {
-    const y = (this.world.grid.get(o.x, o.z)?.elevation ?? 0) + 0.2;
+    const y = terrainHeight(this.world.grid, o.x + 0.5, o.z + 0.5) + 0.2;
     for (let i = 0; i < 6; i++) {
       const m = new THREE.Mesh(this.sparkGeo, this.sparkMat); m.position.set(toWorldX(o.x + 0.5), y, toWorldZ(o.z + 0.5)); this.scene.add(m);
       this.sparks.push({ m, v: new THREE.Vector3(Math.random() * 2 - 1, 1.2 + Math.random(), Math.random() * 2 - 1), t: 0.5 });

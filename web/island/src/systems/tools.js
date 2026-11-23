@@ -5,6 +5,7 @@ import { CELL, toWorldX, toWorldZ, toGridX, toGridZ } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
 import { anchorFor } from "../world/placement.js";
 import { josa } from "../util.js";
+import { terrainHeight } from "../world/terrain.js";
 
 const OK = 0x4fcf78, BAD = 0xe0574f;
 
@@ -36,6 +37,7 @@ export class Tools {
 
   setMode(mode, arg = null) {
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null;
+    this.heightOp = mode === "height" ? (arg || "raise") : null;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     const tool = mode !== "view";
     this.controls.mouseButtons.LEFT = tool ? null : THREE.MOUSE.ROTATE;
@@ -67,7 +69,11 @@ export class Tools {
     if (this.mode === "view" || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
     this.controls.enabled = false;                    // 이번 누름은 도구가 씀
     this.hover = this.pick(e.clientX, e.clientY); this.refresh();
-    if (this.mode === "paint") { this.painting = true; this.apply(); }
+    if (this.mode === "paint" || this.mode === "height") {
+      this.painting = true; this.stroke = new Set();                  // 한 번 끌 때 같은 칸은 한 번만 올리고 내림
+      this.flatTarget = this.hover ? this.world.grid.get(this.hover.x, this.hover.z).elevation : 0;   // 평평하게: 처음 누른 칸 높이로
+      this.apply();
+    }
   }
   move(e) {
     if (this.mode === "view") return;
@@ -86,6 +92,9 @@ export class Tools {
   apply() {
     const h = this.hover; if (!h) return;
     if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) this.world.paint(x, z, this.paintType); }
+    else if (this.mode === "height") {
+      for (const [x, z] of this.brushCells(h)) { const k = `${x},${z}`; if (this.stroke?.has(k)) continue; this.stroke?.add(k); this.world.reshape(x, z, this.heightOp, this.flatTarget); }
+    }
     else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
       this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요` : `${def.name} 공사를 시작했어요 · 갈매미가 나무·돌로 지어요`); return;    // 미리보기 문구보다 결과를 보여 줌
@@ -102,11 +111,11 @@ export class Tools {
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false;
     if (!h) { this.buildingViews.setHighlight(null); return; }
     const cell = grid.get(h.x, h.z);
-    if (this.mode === "paint") {
-      const cells = this.brushCells(h), top = Math.max(...cells.map(([x, z]) => Math.max(grid.get(x, z).elevation, grid.walkHeight(x, z) ?? -9)));
+    if (this.mode === "paint" || this.mode === "height") {
+      const cells = this.brushCells(h), top = Math.max(...cells.map(([x, z]) => Math.max(terrainHeight(grid, x + 0.5, z + 0.5), grid.walkHeight(x, z) ?? -9)));
       this.cursor.visible = true; this.cursor.scale.set(this.brush, this.brush, 1);
       this.cursor.position.set(toWorldX(h.x + 0.5), top + 0.03, toWorldZ(h.z + 0.5));
-      this.cursor.material.color.setHex(cells.some(([x, z]) => this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
+      this.cursor.material.color.setHex(cells.some(([x, z]) => this.mode === "height" ? this.world.canReshape(x, z) : this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
     } else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.check(this.buildId, a.x, a.z, this.rot);
       const y = r.ok ? r.elevation : Math.max(0, cell.elevation), col = r.ok ? OK : BAD;
@@ -118,7 +127,7 @@ export class Tools {
       this.onStatus(r.ok ? `${def.name} · 눌러서 짓기 · R 돌리기` : r.reason);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
-      this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), cell.elevation + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
+      this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
     }
   }
 }

@@ -53,8 +53,8 @@ export class UnitControl {
       const c = this.tools.pick(e.clientX, e.clientY), u = this.held, w = this.getWorld();
       if (c) {
         const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z), h = w.grid.walkHeight(c.x, c.z);
-        u.x = c.x + 0.5; u.z = c.z + 0.5; u.y = (b ? b.elevation ?? 0 : h ?? 0) + 0.5;      // 살짝 들린 채 따라옴
-        this.mark.visible = true; this.mark.position.set(toWorldX(c.x + 0.5), (h ?? Math.max(0, w.grid.get(c.x, c.z).elevation)) + 0.04, toWorldZ(c.z + 0.5));
+        u.x = c.x + 0.5; u.z = c.z + 0.5; u.y = (b ? b.elevation ?? 0 : w.standHeight(c.x + 0.5, c.z + 0.5)) + 0.5;      // 살짝 들린 채 따라옴
+        this.mark.visible = true; this.mark.position.set(toWorldX(c.x + 0.5), Math.max(w.standHeight(c.x + 0.5, c.z + 0.5), -0.18) + 0.04, toWorldZ(c.z + 0.5));
         this.mark.material.color.setHex(ok ? 0x4fcf78 : 0xe0574f);
         this.target = c;
       }

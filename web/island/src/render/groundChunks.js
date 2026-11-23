@@ -1,24 +1,67 @@
 // 바닥 렌더링(지시서 3-B-2): 칸마다 오브젝트를 만들지 않고 16×16 청크마다 메쉬 하나로 합친다.
-// 바뀐 칸이 속한 청크만(grid.takeDirty) 다시 만든다. 길 종류는 오토타일 조각(tilePieces)을 살짝 띄워 그린다.
+// 바뀐 칸이 속한 청크만(grid.takeDirty) 다시 만든다.
+// 모양: 칸을 3×3 조각으로 나누고, 높이는 꼭짓점 높이(terrain.js)로 부드럽게 잇는다(경사면). 한 단보다 큰 차이만 절벽 벽.
+// 색: 칸 경계에서 이웃 바닥 종류와 둥글게 섞고(체스판 없음), 잔잔한 얼룩 무늬로 단조롭지 않게. 경사진 돌길·데크는 계단.
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
-import { PATH_TYPES, tilePieces } from "../world/autotile.js";
+import { corners, bilinear, terrainHeight } from "../world/terrain.js";
 
-const SIDE = { [GroundType.Sand]: 0xd8c38f, default: 0xb48557 };    // 절벽·턱 옆면 색
-const SEABED_COLOR = 0xd9c896, LOWEST = -1.6;
-const tmpColor = new THREE.Color();
+const SUB = 3, STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
+const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
+const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
+const tmp = new THREE.Color(), tmp2 = new THREE.Color();
+const BASE = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[0])]));
+const ALT = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[1] ?? v.colors[0])]));
+
+// ---- 값 노이즈(얼룩 무늬)
+function hash(ix, iz) { let h = (ix * 374761393 + iz * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function noise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz, sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = hash(ix, iz), b = hash(ix + 1, iz), c = hash(ix, iz + 1), d = hash(ix + 1, iz + 1);
+  return (a + (b - a) * sx) * (1 - sz) + (c + (d - c) * sx) * sz;
+}
+const fbm = (x, z) => 0.6 * noise(x * 0.35, z * 0.35) + 0.4 * noise(x * 1.3 + 17, z * 1.3 - 9);
+
+/** 바닥 종류 하나의 색(위치에 따라 조금씩 다름). */
+function typeColor(type, gx, gz, out) {
+  const n = fbm(gx, gz);
+  out.copy(BASE[type]).lerp(ALT[type], n);
+  if (type === GroundType.Grass) out.offsetHSL((noise(gx * 0.12, gz * 0.12) - 0.5) * 0.04, 0, (n - 0.5) * 0.06);
+  else if (type === GroundType.Cobble) out.multiplyScalar(0.9 + 0.2 * noise(gx * 3.1, gz * 3.1));          // 돌 알갱이
+  else if (type === GroundType.WoodDeck) out.multiplyScalar(0.88 + 0.12 * (Math.sin(gz * Math.PI * 4) > 0.7 ? 0 : 1));   // 널빤지 틈
+  else if (type === GroundType.Dirt) out.multiplyScalar(0.92 + 0.14 * noise(gx * 2.2, gz * 2.2));
+  else out.multiplyScalar(0.96 + 0.06 * noise(gx * 1.7, gz * 1.7));
+  return out;
+}
+
+/** 격자 좌표 (gx, gz)에서의 바닥 색: 근처 칸들의 종류를 경계에서 둥글게 섞는다(위치만의 함수라 칸 사이 이음매가 없음). */
+function groundColor(grid, rx, rz, out) {
+  // 경계를 칸 선에서 살짝 비틀어(도메인 워프) 계단 모양 대신 구불구불한 자연스러운 경계로
+  const gx = rx + (noise(rx * 0.8 + 3.1, rz * 0.8) - 0.5) * 0.75, gz = rz + (noise(rx * 0.8, rz * 0.8 - 5.7) - 0.5) * 0.75;
+  const x0 = Math.floor(gx), z0 = Math.floor(gz);
+  let tw = 0; out.setRGB(0, 0, 0);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    const x = x0 + dx, z = z0 + dz, c = grid.get(x, z); if (!c) continue;
+    const ddx = Math.max(x - gx, 0, gx - (x + 1)), ddz = Math.max(z - gz, 0, gz - (z + 1)), d = Math.hypot(ddx, ddz);
+    if (d >= BLEND_R) continue;
+    const w = (1 - d / BLEND_R) ** 2;
+    if (grid.isWater(x, z)) tmp2.copy(SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
+    out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w;
+  }
+  return tw ? out.multiplyScalar(1 / tw) : out.copy(BASE[GroundType.Grass]);
+}
 
 class Builder {
   constructor() { this.pos = []; this.nor = []; this.col = []; }
-  // 네 꼭짓점(순서대로 둘레)을 normal 쪽에서 보면 반시계가 되도록 맞춰 삼각형 두 개로 넣는다.
-  quad(a, b, c, d, n, hex) {
-    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  vert(p, n, c) { this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); }
+  /** 사각형 하나(a→b→c→d 둘레 순서). 각 꼭짓점에 법선·색. 위에서 볼 때 반시계가 앞면이 되게 맞춤. */
+  quad(v) {
+    const [a, b, c] = v, ab = [b.p[0] - a.p[0], b.p[1] - a.p[1], b.p[2] - a.p[2]], ac = [c.p[0] - a.p[0], c.p[1] - a.p[1], c.p[2] - a.p[2]];
     const cr = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
-    if (cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] < 0) [b, d] = [d, b];
-    tmpColor.setHex(hex);
-    for (const p of [a, b, c, a, c, d]) { this.pos.push(...p); this.nor.push(...n); this.col.push(tmpColor.r, tmpColor.g, tmpColor.b); }
+    const want = v[0].n; if (cr[0] * want[0] + cr[1] * want[1] + cr[2] * want[2] < 0) v = [v[0], v[3], v[2], v[1]];
+    for (const i of [0, 1, 2, 0, 2, 3]) this.vert(v[i].p, v[i].n, v[i].c);
   }
   geometry() {
     const g = new THREE.BufferGeometry();
@@ -29,37 +72,76 @@ class Builder {
   }
 }
 
-function baseColor(grid, x, z, c) {
-  if (grid.isWater(x, z)) return SEABED_COLOR;
-  let t = c.groundType;
-  if (PATH_TYPES.has(t)) {                                    // 길 아래 바탕: 이웃에 모래만 있으면 모래, 아니면 잔디
-    const ns = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => grid.get(x + dx, z + dz)?.groundType);
-    t = ns.includes(GroundType.Sand) && !ns.includes(GroundType.Grass) ? GroundType.Sand : GroundType.Grass;
+/** 부드러운 법선: 주변 높이 차로 기울기를 잼(칸 경계를 넘어도 이어짐). */
+function normalAt(grid, gx, gz) {
+  const e = 0.25, dx = terrainHeight(grid, gx + e, gz) - terrainHeight(grid, gx - e, gz), dz = terrainHeight(grid, gx, gz + e) - terrainHeight(grid, gx, gz - e);
+  const n = [-dx / (2 * e * CELL), 1, -dz / (2 * e * CELL)], l = Math.hypot(...n); return [n[0] / l, n[1] / l, n[2] / l];
+}
+const W = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
+
+function cliffColor(grid, x, z, y, gx, gz) {
+  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : CLIFF;
+  return new THREE.Color().copy(base).multiplyScalar(0.82 + 0.18 * noise(gx * 2 + y * 3, gz * 2 - y * 3) + Math.max(-0.15, y * 0.1));
+}
+
+/** 칸 테두리 한 변: 내 변이 이웃보다 높으면 그 사이에 벽(절벽·턱). */
+function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
+  const [ha, hb] = my, [la, lb] = nb;
+  if (ha - la < 0.01 && hb - lb < 0.01) return;
+  b.quad([
+    { p: W(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az) }, { p: W(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz) },
+    { p: W(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz) }, { p: W(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az) },
+  ]);
+}
+
+function cellSurface(b, grid, x, z, c) {
+  const cell = grid.get(x, z), range = Math.max(...c) - Math.min(...c);
+  if (PAVED.has(cell.groundType) && !grid.isWater(x, z) && range > 0.05) return stairs(b, grid, x, z, c);
+  const step = 1 / SUB;
+  for (let j = 0; j < SUB; j++) for (let i = 0; i < SUB; i++) {
+    const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
+      const u = a * step, v = d * step, gx = x + u, gz = z + v;
+      return { p: W(gx, bilinear(c, u, v), gz), n: normalAt(grid, gx, gz), c: groundColor(grid, gx, gz, new THREE.Color()) };
+    });
+    b.quad(pts);
   }
-  return GROUND_STYLE[t].colors[(x + z) & 1];
+}
+
+/** 경사진 돌길·데크: 4×4 조각을 평평한 단으로 만들고 단 사이에 디딤판 벽(계단). */
+function stairs(b, grid, x, z, c) {
+  const n = STAIR_SUB, step = 1 / n, lo = Math.min(...c), hi = Math.max(...c), rise = (hi - lo) / Math.max(2, Math.round((hi - lo) / 0.06));
+  const flat = [];
+  for (let j = 0; j < n; j++) { flat.push([]); for (let i = 0; i < n; i++) flat[j].push(lo + Math.round((bilinear(c, (i + 0.5) * step, (j + 0.5) * step) - lo) / rise) * rise); }
+  const up = [0, 1, 0];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const h = flat[j][i], u0 = i * step, v0 = j * step, col = groundColor(grid, x + u0 + step / 2, z + v0 + step / 2, new THREE.Color());
+    b.quad([[u0, v0], [u0 + step, v0], [u0 + step, v0 + step], [u0, v0 + step]].map(([u, v]) => ({ p: W(x + u, h, z + v), n: up, c: col })));
+    const dark = col.clone().multiplyScalar(0.72);
+    // 오른쪽·아래 이웃 조각(또는 칸 가장자리의 실제 높이)과의 높이 차를 벽으로 메움
+    const riser = (ax, az, bx, bz, ha, hb, nrm) => b.quad([
+      { p: W(x + ax, h, z + az), n: nrm, c: dark }, { p: W(x + bx, h, z + bz), n: nrm, c: dark },
+      { p: W(x + bx, hb, z + bz), n: nrm, c: dark }, { p: W(x + ax, ha, z + az), n: nrm, c: dark }]);
+    const right = i + 1 < n ? [flat[j][i + 1], flat[j][i + 1]] : [bilinear(c, 1, v0), bilinear(c, 1, v0 + step)];
+    const down = j + 1 < n ? [flat[j + 1][i], flat[j + 1][i]] : [bilinear(c, u0, 1), bilinear(c, u0 + step, 1)];
+    const left = i === 0 ? [bilinear(c, 0, v0), bilinear(c, 0, v0 + step)] : null, top = j === 0 ? [bilinear(c, u0, 0), bilinear(c, u0 + step, 0)] : null;
+    if (Math.abs(right[0] - h) > 0.004 || Math.abs(right[1] - h) > 0.004) riser(u0 + step, v0, u0 + step, v0 + step, right[0], right[1], [right[0] > h ? -1 : 1, 0, 0]);
+    if (Math.abs(down[0] - h) > 0.004 || Math.abs(down[1] - h) > 0.004) riser(u0, v0 + step, u0 + step, v0 + step, down[0], down[1], [0, 0, down[0] > h ? -1 : 1]);
+    if (left && (Math.abs(left[0] - h) > 0.004 || Math.abs(left[1] - h) > 0.004)) riser(u0, v0, u0, v0 + step, left[0], left[1], [left[0] > h ? 1 : -1, 0, 0]);
+    if (top && (Math.abs(top[0] - h) > 0.004 || Math.abs(top[1] - h) > 0.004)) riser(u0, v0, u0 + step, v0, top[0], top[1], [0, 0, top[0] > h ? 1 : -1]);
+  }
 }
 
 export function buildChunkGeometry(grid, cx, cz) {
   const b = new Builder(), n = grid.chunk;
   for (let z = cz * n; z < Math.min(grid.h, (cz + 1) * n); z++) for (let x = cx * n; x < Math.min(grid.w, (cx + 1) * n); x++) {
-    const c = grid.get(x, z), y = c.elevation, x0 = toWorldX(x), z0 = toWorldZ(z), x1 = x0 + CELL, z1 = z0 + CELL;
-    b.quad([x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0], [0, 1, 0], baseColor(grid, x, z, c));
-    // 옆면: 이웃이 더 낮으면 그 높이까지 벽을 세운다(언덕 절벽, 해안 턱)
-    const side = SIDE[c.groundType] ?? SIDE.default;
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nb = grid.get(x + dx, z + dz), ny = nb ? nb.elevation : LOWEST;
-      if (ny >= y - 1e-4) continue;
-      const sc = grid.isWater(x, z) ? SEABED_COLOR : side;
-      if (dx === 1) b.quad([x1, y, z0], [x1, y, z1], [x1, ny, z1], [x1, ny, z0], [1, 0, 0], sc);
-      if (dx === -1) b.quad([x0, y, z0], [x0, y, z1], [x0, ny, z1], [x0, ny, z0], [-1, 0, 0], sc);
-      if (dz === 1) b.quad([x0, y, z1], [x1, y, z1], [x1, ny, z1], [x0, ny, z1], [0, 0, 1], sc);
-      if (dz === -1) b.quad([x0, y, z0], [x1, y, z0], [x1, ny, z0], [x0, ny, z0], [0, 0, -1], sc);
-    }
-    if (PATH_TYPES.has(c.groundType) && !grid.isWater(x, z)) {
-      const hex = GROUND_STYLE[c.groundType].colors[(x + z) & 1], py = y + 0.012;
-      for (const [a0, b0, a1, b1] of tilePieces(grid, x, z))
-        b.quad([x0 + a0, py, z0 + b0], [x0 + a0, py, z0 + b1], [x0 + a1, py, z0 + b1], [x0 + a1, py, z0 + b0], [0, 1, 0], hex);
-    }
+    const c = corners(grid, x, z);                               // [왼위, 오위, 왼아래, 오아래]
+    cellSurface(b, grid, x, z, c);
+    // 네 변: 이웃 칸의 맞닿은 꼭짓점 높이와 비교해 벽
+    const nb = (nx, nz, ci) => grid.inBounds(nx, nz) ? ci.map(([a, d]) => corners(grid, nx, nz)[a + 2 * d]) : [LOWEST, LOWEST];
+    edgeWall(b, grid, x, z, [c[1], c[3]], nb(x + 1, z, [[0, 0], [0, 1]]), x + 1, z, x + 1, z + 1, [1, 0, 0]);
+    edgeWall(b, grid, x, z, [c[0], c[2]], nb(x - 1, z, [[1, 0], [1, 1]]), x, z, x, z + 1, [-1, 0, 0]);
+    edgeWall(b, grid, x, z, [c[2], c[3]], nb(x, z + 1, [[0, 0], [1, 0]]), x, z + 1, x + 1, z + 1, [0, 0, 1]);
+    edgeWall(b, grid, x, z, [c[0], c[1]], nb(x, z - 1, [[0, 1], [1, 1]]), x, z, x + 1, z, [0, 0, -1]);
   }
   return b.geometry();
 }

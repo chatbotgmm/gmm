@@ -5,6 +5,7 @@ import { BUILDINGS, MODULES } from "../data/catalog.js";
 import { modelFor } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
 import { tintRoofs } from "./roofTint.js";
+import { terrainHeight } from "../world/terrain.js";
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -70,7 +71,7 @@ export async function addModuleViews(scene, world) {
     if (!asset) { const obj = modulePlaceholder(m.defId, cellsWorld, m.rot); obj.name = m.id; scene.add(obj); return; }
     // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
     const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
-    obj.position.set(cellsWorld[0][0], world.grid.get(x, z).elevation, cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
+    obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
     obj.name = m.id; scene.add(obj); map.set(m.id, obj);
   }));
   return map;

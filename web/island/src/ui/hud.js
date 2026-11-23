@@ -2,12 +2,15 @@
 import { GROUND_TYPES, UnitState } from "../data/types.js";
 import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
+import * as M from "../units/mind.js";
+import { TRIBES } from "../data/catalog.js";
 
 const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
   [UnitState.Zoomies]: "신나서 뛰는 중", [UnitState.Flee]: "도망치는 중", [UnitState.Avoid]: "혼자 있고 싶어",
   [UnitState.GoChop]: "숲으로 가는 중", [UnitState.Chop]: "나무 베는 중", [UnitState.GoMine]: "광산으로 가는 중", [UnitState.Mine]: "광석 캐는 중",
   [UnitState.GoFish]: "낚시터로 가는 중", [UnitState.Fish]: "낚시 중", [UnitState.GoBuild]: "공사장으로 가는 중", [UnitState.Build]: "집 짓는 중",
   [UnitState.Idle]: "쉬는 중", [UnitState.Wander]: "산책 중", [UnitState.GoToBuilding]: "건물로 가는 중",
+  [UnitState.Sleep]: "자는 중", [UnitState.Curious]: "구경하러 가는 중",
   [UnitState.GoTrade]: "시장으로 가는 중", [UnitState.Trade]: "장사 중", [UnitState.GoFarm]: "밭으로 가는 중", [UnitState.Farm]: "밭일 중",
   [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중", [UnitState.Held]: "들려 있음" };
 
@@ -18,9 +21,9 @@ export class Hud {
   constructor({ tools, world, onSave, onLoad, onReset }) {
     this.tools = tools; this.world = world;
     const bar = document.getElementById("tools"), sub = document.getElementById("sub");
-    const modes = [["view", "👀 둘러보기"], ["paint", "🖌 바닥 칠하기"], ["build", "🏠 건물 짓기"], ["demolish", "🧹 철거"]];
+    const modes = [["view", "👀 둘러보기"], ["paint", "🖌 바닥 칠하기"], ["height", "⛰ 높이"], ["build", "🏠 건물 짓기"], ["demolish", "🧹 철거"]];
     this.modeBtns = modes.map(([m, label]) => { const b = el("button", "", label); b.dataset.mode = m; bar.appendChild(b);
-      b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : null); return b; });
+      b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : null); return b; });
     this.sub = sub;
     tools.onMode = (m, arg) => this.showMode(m, arg);
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
@@ -51,7 +54,16 @@ export class Hud {
   }
   showMode(mode, arg) {
     this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
-    this.sub.innerHTML = ""; this.sub.hidden = mode !== "paint" && mode !== "build";
+    this.sub.innerHTML = ""; this.sub.hidden = !["paint", "build", "height"].includes(mode);
+    if (mode === "height") {
+      this.lastHeight = arg;
+      for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["flatten", "▬ 평평하게"]]) {
+        const b = el("button", op === arg ? "on" : "", label); b.onclick = () => this.tools.setMode("height", op); this.sub.appendChild(b); }
+      this.sub.appendChild(el("span", "lab", "붓"));
+      this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
+        b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
+      this.status("한 번에 한 단(0.25 m) · 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽 · 경사에 돌길·데크를 깔면 계단 · 바다 높이 아래로 파면 연못");
+    }
     if (mode === "paint") {
       this.lastPaint = arg;
       for (const t of GROUND_TYPES) { const b = el("button", t === arg ? "on" : "");
@@ -110,7 +122,10 @@ export class Hud {
     // 따라가는 갈매미 정보
     const u = this.follow; this.info.hidden = !u;
     if (u) { const job = JOBS[u.job], r = RARITY[u.rarity];
-      this.info.innerHTML = `<b style="color:${r.color}">${job.icon} ${u.name}</b> · ${r.name} ${job.name} (특기 ×${r.mult})<br>` +
-        `포만감 ${Math.round(u.full)} · 능률 ×${(u.eff ?? 1).toFixed(2)}${J.isLazy(u) ? " · 배불러 게으름" : (u.full < J.HUNGRY ? " · 배고픔" : "")}<br><span class="dim">${job.desc}</span>`; }
+      const n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
+      this.info.innerHTML = `<b style="color:${r.color}">${job.icon} ${u.name}</b> · ${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} ${job.name} (특기 ×${r.mult})<br>` +
+        `🍗 ${Math.round(u.full)} · ⚡기력 ${Math.round(n.energy ?? 0)} · 💬친구 ${Math.round(n.social ?? 0)} · 🎈재미 ${Math.round(n.fun ?? 0)} · 능률 ×${(u.eff ?? 1).toFixed(2)}` +
+        `${J.isLazy(u) ? " · 배불러 게으름" : (u.full < J.HUNGRY ? " · 배고픔" : "")}<br>` +
+        `좋아하게 된 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · 단짝: ${bf.name} ♥${Math.round(M.affinity(u, bf))}` : ""}<br><span class="dim">${job.desc}</span>`; }
   }
 }

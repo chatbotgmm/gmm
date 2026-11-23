@@ -2,7 +2,8 @@
 import { GRID_W, GRID_H, CHUNK, SEA_LEVEL, MAX_STEP } from "../config.js";
 import { createCell, GROUND_TYPES } from "../data/types.js";
 
-const AROUND = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+// 한 칸의 모양·색·법선은 둘레 2칸까지의 높이·종류에 따라 달라진다(꼭짓점 평균·경계 섞기·법선)
+const AROUND = []; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) AROUND.push([dx, dz]);
 
 export class Grid {
   constructor(w = GRID_W, h = GRID_H, chunk = CHUNK) {

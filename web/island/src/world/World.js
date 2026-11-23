@@ -6,8 +6,10 @@ import { createBuildingData, createUnitAIState, UnitState } from "../data/types.
 import { Grid } from "./Grid.js";
 import { generateIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
+import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit } from "../units/unitBrain.js";
+import { initMind } from "../units/mind.js";
 import { seededRandom } from "../util.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -41,13 +43,18 @@ export class World {
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
   emit(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); }
   after(secs, fn) { this.timers.push({ t: secs, fn }); }
+  /** 근처 갈매미들이 알아차릴 일(호기심): kind = building | tree | fish | drop | site */
+  notice(x, z, kind, src = null) {
+    const chance = { building: 0.7, tree: 0.35, fish: 0.6, drop: 0.7, site: 0.5 }[kind] ?? 0.4;
+    for (const u of this.units) if (u !== src && !u.insideBuildingId && Math.hypot(u.x - x, u.z - z) < 9 && this.rnd() < chance) u.curious = { x, z, kind };
+  }
 
   spawnUnits() {
     const r = seededRandom(99);
     UNITS.forEach((u, i) => {
       const a = i / UNITS.length * Math.PI * 2, spot = nearestWalkable(this.grid, Math.floor(32 + Math.cos(a) * 5), Math.floor(32 + Math.sin(a) * 5));
       const s = createUnitAIState(`u${i + 1}`, u.name, spot[0] + 0.5, spot[1] + 0.5, 0.5 + r() * 2); s.scale = u.scale;
-      J.assignJob(s); s.full = 55 + r() * 35;                                // 직업·희귀도, 처음 포만감
+      J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                // 직업·희귀도, 처음 포만감, 욕구·취향·친구
       this.units.push(s);
     });
   }
@@ -89,7 +96,7 @@ export class World {
     t.hp -= who ? 3 / J.chopsNeeded(who) : 1; this.emit("treeHit", t);
     if (t.hp > 1e-6) return;
     t.alive = false; const got = who ? J.woodYield(who) : 2; this.res.wood += got; t.lastYield = got;
-    this.emit("treeFell", { tree: t, dir: [t.x + 0.5 - who.x, t.z + 0.5 - who.z] });
+    this.emit("treeFell", { tree: t, dir: [t.x + 0.5 - who.x, t.z + 0.5 - who.z] }); this.notice(t.x + 0.5, t.z + 0.5, "tree", who);
     this.after(25 + this.rnd() * 15, () => { t.alive = true; t.hp = 3; this.emit("treeGrow", t); });
   }
   hitOre(o, who = null) {
@@ -109,7 +116,7 @@ export class World {
     if (f.rarity === "common") this.res.food += f.food; else this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
     let item = null;
     if (this.rnd() < J.itemChance(u)) { item = J.rollItem(u, this.rnd); this.items[item.id] = (this.items[item.id] || 0) + 1; }
-    this.emit("fish", { u, fish: f, item });
+    this.emit("fish", { u, fish: f, item }); if (f.rarity !== "common" || item) this.notice(u.x, u.z, "fish", u);
     return { fish: f, item };
   }
 
@@ -133,6 +140,11 @@ export class World {
     if (p.stage === "ripe") { const n = J.harvestYield(u); this.res.food += n; p.stage = "empty"; p.t = 0; p.lastYield = n; this.emit("plot", p); return "harvest"; }
     return null;
   }
+  /** 격자 좌표(연속)에 서는 높이: 부두처럼 걸을 수 있는 시설 위면 그 높이, 아니면 보이는 땅 높이(경사면 포함). */
+  standHeight(gx, gz) {
+    const x = Math.floor(gx), z = Math.floor(gz), c = this.grid.get(x, z), o = c?.occupiedId && this.grid.occupants.get(c.occupiedId);
+    return o && o.walkable ? o.surface : terrainHeight(this.grid, gx, gz);
+  }
   isPlot(x, z) { return this.plots.some(p => p.x === x && p.z === z); }
 
   /** 이 등급의 건물을 지을 수 있는 건축가가 있나(1등급은 누구나). */
@@ -141,6 +153,26 @@ export class World {
   // ---- 바닥 칠하기(지시서 3-B): 땅 칸이고 건물·시설이 없을 때만
   canPaint(x, z) { const c = this.grid.get(x, z); return !!c && !this.grid.isWater(x, z) && !c.occupiedId && !this.isPlot(x, z); }
   paint(x, z, type) { if (!this.canPaint(x, z)) return false; const ok = this.grid.setGround(x, z, type); if (ok) this.emit("ground", { x, z, type }); return ok; }
+
+  // ---- 높이(층·경사·계단·연못): 한 단 = MAX_STEP(0.25 m). 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽.
+  //      돌길·데크가 깔린 경사는 계단으로 그려짐. 바다 높이 아래로 파면 물이 차서 연못이 됨.
+  canReshape(x, z) { const c = this.grid.get(x, z); return !!c && !c.occupiedId && !this.isPlot(x, z) && !this.grid.doorOwner(x, z); }
+  /** op: "raise" | "lower" | "flatten"(target 높이로). 바뀌면 true. */
+  reshape(x, z, op, target = 0) {
+    if (!this.canReshape(x, z)) return false;
+    const c = this.grid.get(x, z), step = 0.25;
+    let e = op === "raise" ? c.elevation + step : op === "lower" ? c.elevation - step : target;
+    e = Math.max(-1, Math.min(2, Math.round(e * 100) / 100));
+    if (op !== "flatten" && c.elevation < 0 && op === "raise" && e > 0 && c.elevation > -step) e = 0;   // 모래사장 비탈(-0.15 등)은 0으로 맞춤
+    const wasWater = this.grid.isWater(x, z);
+    if (!this.grid.setElevation(x, z, e)) return false;
+    if (wasWater && !this.grid.isWater(x, z) && c.groundType !== "Sand") c.groundType = "Sand";
+    for (const s of [...this.seeds]) if (s.x === x && s.z === z && this.grid.isWater(x, z)) this.eatSeed(s);   // 물에 잠긴 씨앗은 없앰
+    for (const u of this.units) if (!u.insideBuildingId && u.state !== UnitState.Held && Math.floor(u.x) === x && Math.floor(u.z) === z && !this.grid.isWalkable(x, z)) {
+      const spot = nearestWalkable(this.grid, x, z); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; } setIdle(u, this.rnd, this);   // 물에 빠지면 가까운 땅으로
+    }
+    this.emit("ground", { x, z }); return true;
+  }
 
   // ---- 건물(지시서 4-1). 놓으면 공사장이 되고, 갈매미가 나무 1·돌 1을 들고 와서 망치질 3번씩 해서 완공한다.
   check(defId, ax, az, rot) {
@@ -157,7 +189,7 @@ export class World {
     b.elevation = r.elevation; b.need = 3 * def.footprint.w * def.footprint.d; b.hits = hits ?? (this.instantBuild ? b.need : 0); b.busy = null;
     this.grid.occupy(b.cells, b.id, { kind: "building", walkable: false });   // 길찾기 장애물로 반영(grid.version 증가)
     this.grid.reserveDoor(b.door.x, b.door.z, b.id);
-    this.buildings.set(b.id, b); this.emit("buildingAdded", b);
+    this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
     return { ok: true, building: b };
   }
   isDone(b) { return b.hits >= b.need; }
@@ -165,7 +197,7 @@ export class World {
     if (this.isDone(b)) return;
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
     b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
-    if (this.isDone(b)) { this.emit("buildingDone", b); if (u) emote(u, "🏠!"); }
+    if (this.isDone(b)) { this.emit("buildingDone", b); if (u) emote(u, "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
   finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.emit("buildingDone", b); } }
   removeBuilding(id) {
@@ -181,7 +213,7 @@ export class World {
   pickUpUnit(u) {
     if (!u || u.insideBuildingId || u.state === UnitState.Held) return false;
     uncommit(u, this); setIdle(u, this.rnd, this);                          // 하던 일(찜한 나무·낚시 자리·맡은 공사)을 내려놓음
-    u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held;
+    u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held; emote(u, "!?");
     return true;
   }
   /** 내려놓기. 완공된 건물이면 들어가고, 걸을 수 있는 칸이면 거기 서고, 아니면(바다·공사 중 등) 원래 자리로 돌아간다. */
@@ -189,7 +221,7 @@ export class World {
     if (!u || u.state !== UnitState.Held) return { ok: false, reason: "" };
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
     if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
-    if (!b && this.grid.isWalkable(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.grid.walkHeight(x, z); setIdle(u, this.rnd, this); return { ok: true }; }
+    if (!b && this.grid.isWalkable(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); emote(u, "휴…"); this.notice(u.x, u.z, "drop", u); return { ok: true }; }
     u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
     return { ok: false, reason: b ? "아직 짓는 중인 건물이에요" : this.grid.isWater(x, z) ? "바다에는 내려놓을 수 없어요" : "거기에는 내려놓을 수 없어요" };
   }

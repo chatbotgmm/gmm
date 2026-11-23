@@ -8,8 +8,8 @@ export const skillMult = (u, skill) => (jobOf(u)?.skill === skill ? rarityOf(u).
 
 /** 직업·희귀도를 붙인다(이름으로 UNIT_JOBS에서 찾음). */
 export function assignJob(u) {
-  const [job, rarity] = UNIT_JOBS[u.name] || ["builder", "common"];
-  u.job = job; u.rarity = rarity;
+  const [tribe, job, rarity] = UNIT_JOBS[u.name] || ["태초", "builder", "common"];
+  u.tribe = tribe; u.job = job; u.rarity = rarity;
 }
 
 // ---- 포만감(0~120). 100을 넘으면 너무 배불러 게을러진다.

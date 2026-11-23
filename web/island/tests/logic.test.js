@@ -99,7 +99,7 @@ test("월드: 건물을 지으면 칸이 차지되고 길찾기에서 빠지며,
 
 test("유닛: 건물 문으로 걸어가 들어가고, 시간이 지나면 문 앞으로 나온다", () => {
   const rnd = seededRandom(3), w = World.create(7, rnd); w.instantBuild = true;
-  const b = w.placeBuilding("post", 40, 36, 2).building;
+  const b = w.placeBuilding("cottage", 40, 36, 2).building;
   w.units.forEach(u => { u.timer = 1e9; });                                   // 다른 유닛은 가만히
   const u = w.units[0];
   u.state = UnitState.GoToBuilding; u.targetBuildingId = b.id;
@@ -124,7 +124,7 @@ test("유닛: 가는 길에 건물이 생기면 다시 길을 찾고, 바다에 
 
 test("저장/불러오기: 바닥·건물이 그대로 돌아온다", () => {
   const w = World.create(7, seededRandom(2));
-  w.paint(40, 40, GroundType.WoodDeck); w.placeBuilding("cafe", 38, 26, 1);
+  w.paint(40, 40, GroundType.WoodDeck); w.placeBuilding("cottage", 38, 26, 1);
   const j = JSON.parse(JSON.stringify(w.serialize())), w2 = World.fromJSON(j, seededRandom(2));
   assert.equal(w2.grid.get(40, 40).groundType, GroundType.WoodDeck);
   assert.equal(w2.buildings.size, 1);
@@ -183,11 +183,12 @@ test("찜(나무·낚시 자리)은 하던 갈매미를 들어 올리면 풀린�
   w.pickUpUnit(u); assert.equal(spot.claimed, null); assert.equal(u.tool, null);
 });
 
-test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 100%까지 혼자 끝낸다", () => {
+test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 100%까지 혼자 끝낸다", async () => {
+  const J = await import("../src/world/jobs.js");
   const w = World.create(7, seededRandom(21));
-  const b = w.placeBuilding("cafe", 38, 34, 0).building;        // 2등급 3×2 → 18, 건축가(배율)만 지을 수 있음. 나무·돌이 모자라게 시작
+  const b = w.placeBuilding("cottage", 38, 34, 0).building;     // 2×2 → 망치질 12(건축가는 ×1.3). 나무·돌이 없이 시작
   w.res.wood = 0; w.res.stone = 0;
-  const boss = w.units.find(u => u.name === "황금");                 // 영웅 건축가(카페를 지을 수 있는 유일한 갈매미)
+  const boss = w.units.find(u => u.name === "기본");                 // 건축가
   for (const u of w.units) if (u !== boss) u.timer = 1e9;           // 다른 갈매미는 가만히(재료를 대신 구해 주지 않게)
   const builders = new Set(); let first = null, gathered = false;
   w.on("buildingProgress", x => { if (x === b) { builders.add(x.lastBuilder); first ??= x.lastBuilder; } });
@@ -199,7 +200,7 @@ test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 10
   }
   assert.ok(w.isDone(b), `완공돼야 함: ${b.hits}/${b.need}`);
   assert.deepEqual([...builders], [boss.unitId], "한 갈매미가 끝까지");
-  assert.ok(b.hits / 2 <= 9, "영웅 건축가는 망치질 한 번에 2씩");
+  assert.equal(J.hammerPower(boss), 1.3, "일반 건축가는 망치질 한 번에 1.3씩");
   assert.ok(gathered, "재료가 모자라 구하러 다녀옴");
   for (let t = 0; t < 2; t += 1 / 20) w.update(1 / 20);          // 마지막 망치질 동작이 끝나면 맡은 일을 내려놓음
   const u = w.units.find(u => u.unitId === first);
@@ -214,21 +215,23 @@ test("공사를 맡은 갈매미를 들어 올리면 공사장이 풀린다", ()
   w.pickUpUnit(u); assert.equal(b.busy, null); assert.equal(u.committed, null);
 });
 
-test("종족: 직업·희귀도 배율이 일과 건물 등급에 반영된다", async () => {
+test("종족: 10종족·직업·희귀도(지금은 모두 일반)가 일과 건물 등급에 반영된다", async () => {
   const J = await import("../src/world/jobs.js");
-  const { BUILDINGS } = await import("../src/data/catalog.js");
+  const { BUILDINGS, TRIBES } = await import("../src/data/catalog.js");
   const w = World.create(7, seededRandom(31)), by = n => w.units.find(u => u.name === n);
-  assert.equal(by("자이언트").job, "lumberjack"); assert.equal(by("황금").rarity, "epic");
-  assert.equal(J.chopsNeeded(by("자이언트")), 2); assert.equal(J.chopsNeeded(by("꽃")), 3);       // 나무꾼(희귀 1.6)은 도끼질 2번
-  assert.equal(J.woodYield(by("자이언트")), 3); assert.equal(J.stoneYield(by("불씨")), 3);
-  assert.equal(J.hammerPower(by("황금")), 2); assert.equal(J.hammerPower(by("물방울")), 1);
-  assert.ok(J.canBuild(by("황금"), BUILDINGS.post) && !J.canBuild(by("기본"), BUILDINGS.cafe) && J.canBuild(by("미니"), BUILDINGS.house));
-  assert.equal(w.check("manor", 38, 26, 0).reason, "전설 이상 건축가가 있어야 지을 수 있어요");       // 전설 건축가가 없음
-  assert.equal(w.check("post", 38, 26, 0).ok, true);
+  assert.ok(w.units.every(u => TRIBES[u.tribe] && u.rarity === "common"), "모두 10종족 중 하나, 일반 등급");
+  assert.equal(by("자이언트").tribe, "거인"); assert.equal(by("자이언트").job, "lumberjack"); assert.equal(by("물방울").tribe, "해인");
+  assert.equal(J.woodYield(by("자이언트")), 3); assert.equal(J.woodYield(by("꽃")), 2);           // 나무꾼 ×1.3
+  assert.equal(J.stoneYield(by("불씨")), 3); assert.equal(J.hammerPower(by("기본")), 1.3); assert.equal(J.hammerPower(by("물방울")), 1);
+  assert.ok(J.canBuild(by("미니"), BUILDINGS.house) && !J.canBuild(by("기본"), BUILDINGS.cafe));
+  assert.equal(w.check("cafe", 38, 26, 0).reason, "희귀 이상 건축가가 있어야 지을 수 있어요");       // 일반뿐이라 2등급부터 잠김
+  assert.equal(w.check("cottage", 38, 26, 0).ok, true);
+  // 희귀도가 오르면 배율과 지을 수 있는 건물이 늘어남
+  const boss = { ...by("기본"), rarity: "epic" };
+  assert.equal(J.hammerPower(boss), 2); assert.ok(J.canBuild(boss, BUILDINGS.post) && !J.canBuild(boss, BUILDINGS.manor));
   assert.ok(J.catchChance(by("물방울")) > J.catchChance(by("기본")));
-  // 낚시꾼은 희귀 이상 물고기를 더 자주
-  const rnd = seededRandom(5), rare = u => { let n = 0; for (let i = 0; i < 4000; i++) if (J.rollFish(u, rnd).rarity !== "common") n++; return n; };
-  assert.ok(rare(by("물방울")) > rare(by("기본")) * 1.3);
+  const rnd = seededRandom(5), rare = u => { let n = 0; for (let i = 0; i < 6000; i++) if (J.rollFish(u, rnd).rarity !== "common") n++; return n; };
+  assert.ok(rare(by("물방울")) > rare(by("기본")) * 1.1);
 });
 
 test("배고픔: 포만감에 따라 능률이 바뀌고, 음식을 먹으면 차고, 너무 부르면 게을러진다", async () => {
@@ -261,7 +264,7 @@ test("상인·농부: 가판대에서 남는 것을 팔고 모자란 자재를 �
 test("마을 경제: 오래 돌리면 상인 거래·농사·철 채굴·보물 낚시가 실제로 일어난다", () => {
   const w = World.create(7, seededRandom(34)); const ev = { trade: 0, plot: 0, fish: 0 };
   for (const k of Object.keys(ev)) w.on(k, () => ev[k]++);
-  w.placeBuilding("post", 38, 34, 0);
+  w.placeBuilding("cottage", 38, 34, 0);
   for (let t = 0; t < 900; t += 1 / 20) w.update(1 / 20);
   assert.ok(ev.trade > 0 && ev.plot > 2 && ev.fish > 0, JSON.stringify(ev));
   assert.ok(Object.keys(w.collection).length >= 2, JSON.stringify(w.collection));
@@ -279,4 +282,59 @@ test("한 파일 빌드(tools/bundle.py --flat)가 성공하고, 합친 코드�
   // three import를 빼고 모듈로 문법 검사(실행은 안 함)
   writeFileSync(join(dir, "check.mjs"), code.replace(/^import .* from "three.*";$/gm, ""));
   execFileSync(process.execPath, ["--check", join(dir, "check.mjs")]);
+});
+
+test("높이: 한 단은 걸어서 오르는 경사, 두 단은 절벽, 파서 바다 높이 아래면 연못, 경사면 높이는 부드럽게 이어짐", async () => {
+  const { terrainHeight } = await import("../src/world/terrain.js");
+  const w = World.create(7, seededRandom(41)), g = w.grid;
+  assert.equal(w.reshape(40, 40, "raise"), true); assert.equal(g.get(40, 40).elevation, 0.25);
+  assert.equal(g.canStep(39, 40, 40, 40), true);                               // 한 단: 오를 수 있음
+  const mid = terrainHeight(g, 40, 40.5);                                         // 두 칸 사이 경계는 중간 높이(경사면)
+  assert.ok(mid > 0.05 && mid < 0.2, `경사면 높이 ${mid}`);
+  w.reshape(40, 40, "raise"); assert.equal(g.canStep(39, 40, 40, 40), false);   // 두 단: 절벽
+  assert.equal(terrainHeight(g, 40.5, 40.5), 0.5);                               // 절벽 위는 평평
+  for (const [x, z] of [[44, 44], [45, 44], [44, 45], [45, 45]]) { w.reshape(x, z, "lower"); w.reshape(x, z, "lower"); }
+  assert.ok(g.isWater(44, 44), "파서 바다 높이 아래로 내려가면 물");
+  assert.equal(w.reshape(18, 26, "raise"), false, "광석 바위 칸은 못 바꿈");
+  w.reshape(41, 41, "raise"); w.reshape(42, 42, "raise"); w.reshape(42, 41, "flatten", 0);
+  assert.equal(g.get(42, 41).elevation, 0);
+  // 갈매미가 서는 높이 = 보이는 땅 높이(경사면 위에서도)
+  assert.equal(w.standHeight(40.5, 40.5), terrainHeight(g, 40.5, 40.5));
+});
+
+test("마음: 보상이 좋은 일을 더 좋아하게 배우고, 인사하면 친해지고, 지치면 잔다", async () => {
+  const M = await import("../src/units/mind.js");
+  const w = World.create(7, seededRandom(51)), u = w.units[0], v = w.units[1];
+  const before = M.prefMult(u, "fish");
+  for (let i = 0; i < 10; i++) M.learn(u, "fish", 2);
+  for (let i = 0; i < 10; i++) M.learn(u, "chop", 0);
+  assert.ok(M.prefMult(u, "fish") > before && M.prefMult(u, "fish") > M.prefMult(u, "chop") * 2);
+  assert.equal(M.favorite(u), "fish");
+  M.befriend(u, v, 1); M.befriend(u, v, 1); assert.equal(M.affinity(u, v), 2); assert.equal(M.bestFriend(u, w.units), v);
+  // 지친 갈매미는 잠(집이 없으면 그 자리에서)
+  w.units.forEach(o => { o.timer = 1e9; }); u.timer = 0; u.needs.energy = 5; u.full = 90;
+  w.update(1 / 20); assert.equal(u.state, "Sleep");
+  for (let t = 0; t < 20; t += 1 / 20) w.update(1 / 20);
+  assert.ok(u.needs.energy > 60 && u.state !== "Sleep", `${u.state} ${u.needs.energy}`);
+});
+
+test("길 다듬기: 칸마다 꺾지 않고 곧게 가되, 장애물 모서리는 가로지르지 않는다", async () => {
+  const { smoothPath } = await import("../src/units/unitBrain.js");
+  const g = new Grid(20, 20, 20);
+  const raw = findPath(g, 1, 1, 12, 7), smooth = smoothPath(g, 1, 1, raw);
+  assert.ok(smooth.length <= 2, `빈 땅에서는 거의 한 번에: ${smooth.length}`);
+  for (let z = 0; z < 15; z++) g.get(8, z).elevation = -1;       // 바다 벽(z=15부터 열림)
+  const r2 = findPath(g, 1, 1, 15, 1), s2 = smoothPath(g, 1, 1, r2);
+  assert.ok(s2.length < r2.length);
+  let [px, pz] = [1, 1];                                          // 다듬은 길의 각 직선 구간에 바다가 없어야 함
+  for (const [x, z] of s2) { for (let i = 0; i <= 20; i++) { const cx = Math.floor(px + 0.5 + (x - px) * i / 20), cz = Math.floor(pz + 0.5 + (z - pz) * i / 20); assert.ok(g.isWalkable(cx, cz), `${cx},${cz}`); } [px, pz] = [x, z]; }
+});
+
+test("굶는 갈매미가 없다(긴 시뮬레이션, 칸 모서리에 끼지 않음)", () => {
+  for (const seed of [34, 61]) {
+    const w = World.create(7, seededRandom(seed)); w.placeBuilding("cottage", 38, 34, 0);
+    let minFull = 999;
+    for (let t = 0; t < 900; t += 1 / 20) { w.update(1 / 20); if (t > 60) for (const u of w.units) minFull = Math.min(minFull, u.full); }
+    assert.ok(minFull > 5, `seed ${seed}: 최저 포만감 ${minFull}`);
+  }
 });
