@@ -250,7 +250,7 @@ export class World {
     const def = BUILDINGS[defId], r = hits !== null ? checkPlacement(this.grid, def, ax, az, rot, this.units) : this.check(defId, ax, az, rot);
     if (!r.ok) return { ok: false, reason: r.reason };
     const b = createBuildingData(id || `b${this.nextId++}`, def, ax, az, rot, r.cells, r.door);
-    b.elevation = r.elevation; b.need = 3 * def.footprint.w * def.footprint.d; b.hits = hits ?? (this.instantBuild ? b.need : 0); b.busy = null;
+    b.elevation = r.elevation; b.need = 3 * (def.work ?? def.footprint.w * def.footprint.d); b.hits = hits ?? (this.instantBuild ? b.need : 0); b.busy = null;
     b.ramp = r.ramp; if (b.ramp) b.hits = Math.min(b.hits, b.need);
     this.grid.occupy(b.cells, b.id, { kind: "building", walkable: !!b.ramp && this.isDone(b), surface: r.elevation, ramp: b.ramp });   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
     this.grid.reserveDoor(b.door.x, b.door.z, b.id);
@@ -269,6 +269,12 @@ export class World {
   /** 다 지은 계단을 걸을 수 있게(길찾기 다시) */
   openStairs(b) { const o = b.ramp && this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; } }
   isHouse(b) { return !BUILDINGS[b.defId].stairs; }                              // 들어가 쉬는 건물(계단 제외)
+  /** 이 갈매미가 이 건물에 들어갈 수 있나: 전용 집(forUnit)은 그 갈매미만, 전용 집이 있는 갈매미(자이언트)는 그 집에만 */
+  canEnter(u, b) {
+    if (!this.isHouse(b) || !this.isDone(b)) return false;
+    const only = BUILDINGS[b.defId].forUnit;
+    return only ? only === u.name : !Object.values(BUILDINGS).some(d => d.forUnit === u.name);
+  }
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
@@ -292,6 +298,8 @@ export class World {
     if (!u || u.state !== UnitState.Held) return { ok: false, reason: "" };
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
     if (b && b.ramp && this.isDone(b) && this.grid.inBounds(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); return { ok: true }; }   // 다 지은 계단 위
+    if (b && this.isDone(b) && !this.canEnter(u, b)) { u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
+      const only = BUILDINGS[b.defId].forUnit; return { ok: false, reason: only ? `${only} 전용 집이에요` : `${u.name}에게는 너무 작아요(전용 집에 들어가요)` }; }
     if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
     let spot = null;
     if (b) spot = this.grid.isWalkable(b.door.x, b.door.z) ? [b.door.x, b.door.z] : null;                 // 공사장: 문 앞에

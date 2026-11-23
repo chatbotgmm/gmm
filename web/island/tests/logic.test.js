@@ -53,7 +53,7 @@ test("길찾기: 바다·건물·높은 턱은 돌아가고, 막히면 null", ()
 });
 
 test("배치: 회전한 차지 칸과 문 위치, 실패 이유", () => {
-  const def = BUILDINGS.cafe;                                  // 3×2, 문은 +z 쪽
+  const def = { ...BUILDINGS.cafe, footprint: { w: 3, d: 2 } };   // 3×2(배치 계산만 봄), 문은 +z 쪽
   const f0 = footprint(def, 10, 10, 0);
   assert.deepEqual(f0.cells.map(c => c.join()).sort(), ["10,10", "10,11", "11,10", "11,11", "12,10", "12,11"]);
   assert.deepEqual(f0.door, { x: 11, z: 12 });
@@ -92,7 +92,8 @@ test("월드: 건물을 지으면 칸이 차지되고 길찾기에서 빠지며,
   for (const [x, z] of r.building.cells) { assert.equal(w.grid.get(x, z).occupiedId, r.building.id); assert.equal(w.grid.isWalkable(x, z), false); }
   assert.equal(w.check("house", 38, 26, 0).ok, false);                       // 같은 자리에 또는 못 지음
   assert.equal(w.check("house", 38, 25, 0).reason, "다른 건물·시설과 겹쳐요");
-  assert.equal(w.check("house", 38, 28, 0).reason, "다른 건물의 문 앞이에요"); // 문 앞 칸(38,28)
+  assert.deepEqual(r.building.door, { x: 39, z: 29 });                          // 3×3 집: 문 앞 칸은 앞면 가운데 바로 앞
+  assert.equal(w.check("house", 38, 29, 0).reason, "다른 건물의 문 앞이에요");
   w.removeBuilding(r.building.id);
   for (const [x, z] of r.building.cells) assert.equal(w.grid.isWalkable(x, z), true);
 });
@@ -253,6 +254,20 @@ test("계단 건축물: 뒤가 높아야 놓이고, 다 지으면 앞뒤로만 �
   for (let z = 36; z <= 44; z++) for (let x = 42; x <= 46; x++) { g2.get(x, z).elevation = z <= 39 ? 0.5 : 0; g2.get(x, z).groundType = "Grass"; g2.get(x, z).occupiedId = null; }
   const b = w2.placeBuilding("stairs", 44, 40, 0).building; assert.equal(g2.canStep(44, 41, 44, 40), false);
   w2.finishAll(); assert.equal(g2.canStep(44, 41, 44, 40), true); assert.equal(w2.isHouse(b), false);
+});
+
+test("집 크기·전용 집: 집은 갈매미 키에 맞게 커졌고, 자이언트는 자이언트의 집에만, 다른 갈매미는 일반 집에만 들어감", () => {
+  assert.deepEqual(BUILDINGS.house.footprint, { w: 3, d: 3 }); assert.equal(BUILDINGS.house.work, 4, "망치질 양은 처음 크기 그대로");
+  const w = World.create(7, seededRandom(6)); w.instantBuild = true;
+  const h = w.placeBuilding("house", 38, 26, 0).building, gh = w.placeBuilding("giantHouse", 36, 36, 0);
+  assert.ok(gh.ok, gh.reason); assert.equal(h.need, 12);
+  const giant = w.units.find(u => u.name === "자이언트"), mini = w.units.find(u => u.name === "미니");
+  assert.equal(w.canEnter(giant, h), false); assert.equal(w.canEnter(giant, gh.building), true);
+  assert.equal(w.canEnter(mini, h), true); assert.equal(w.canEnter(mini, gh.building), false);
+  w.pickUpUnit(giant); const r = w.dropUnit(giant, 38, 26);
+  assert.equal(r.ok, false); assert.match(r.reason, /너무 작아요/);
+  w.pickUpUnit(mini); assert.match(w.dropUnit(mini, 36, 36).reason, /자이언트 전용/);
+  w.pickUpUnit(giant); assert.equal(w.dropUnit(giant, 37, 37).building, gh.building);
 });
 
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {

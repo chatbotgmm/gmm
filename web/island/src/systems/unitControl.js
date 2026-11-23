@@ -21,7 +21,8 @@ export class UnitControl {
     dom.addEventListener("pointerdown", e => this.down(e), { capture: true });      // OrbitControls보다 먼저
     addEventListener("pointermove", e => this.move(e));
     addEventListener("pointerup", e => this.up(e));
-    addEventListener("pointercancel", () => this.cancel());                        // 브라우저가 손짓을 가져가면
+    addEventListener("pointercancel", () => this.cancel());
+    dom.addEventListener("wheel", () => { this.zoom = null; }, { passive: true });                        // 브라우저가 손짓을 가져가면
   }
 
   unitAt(cx, cy) {
@@ -40,6 +41,7 @@ export class UnitControl {
     this.press = null; this.held = null; this.heldGoal = null; this.target = null; this.mark.visible = false; this.controls.enabled = true;
   }
   down(e) {
+    this.zoom = null;                                                              // 직접 조작하면 가까이 보기를 멈춤
     // 두 번째 손가락이 닿으면(두 손가락 확대·회전) 갈매미 잡기를 취소하고 시야 조작에 넘긴다
     if (!e.isPrimary) { if (this.press) this.cancel(); return; }
     if (this.tools.mode !== "view" || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
@@ -78,7 +80,22 @@ export class UnitControl {
       return;
     }
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_PX) return;   // 시야를 돌린 드래그
+    // 두 번 누르기(더블클릭·더블탭, 0.35초 안·30픽셀 안): 그곳을 가까이 보기. 갈매미면 따라가며 가까이.
+    const now = performance.now(), last = this.lastTap;
+    if (last && now - last.t < 350 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 30) {
+      this.lastTap = null;
+      if (p.unit) { this.setFollow(p.unit); this.zoomIn(null); return; }
+      const c = this.tools.pickPoint(e.clientX, e.clientY);
+      this.setFollow(null); if (c) this.zoomIn(new THREE.Vector3(toWorldX(c.gx), Math.max(w.standHeight(c.gx, c.gz), -0.18), toWorldZ(c.gz)));
+      return;
+    }
+    this.lastTap = { t: now, x: e.clientX, y: e.clientY };
     this.setFollow(p.unit && this.follow !== p.unit ? p.unit : null);
+  }
+  /** 가까이 보기: 화면 중심을 to로(없으면 따라가는 갈매미), 거리를 줄임(멀면 10 m, 가까우면 0.6배, 최소 거리까지). */
+  zoomIn(to) {
+    const len = this.camera.position.distanceTo(this.controls.target);
+    this.zoom = { to, len: len > 14 ? 10 : Math.max(this.controls.minDistance, len * 0.6) };
   }
 
   setFollow(u) { this.follow = u; this.onFollow?.(u); if (u) this.onStatus(`${josa(u.name, "을", "를")} 따라가요 · 빈 땅을 누르면 그만`); }
@@ -89,6 +106,13 @@ export class UnitControl {
     if (h && g) {                                                                   // 들고 있는 갈매미: 마우스 아래 점을 빠르게, 부드럽게 따라감
       const a = 1 - Math.exp(-dt * 22);
       h.x += (g.x - h.x) * a; h.z += (g.z - h.z) * a; h.y += (g.y - h.y) * a;
+    }
+    const z = this.zoom;
+    if (z) {                                                                       // 가까이 보기: 부드럽게 다가감
+      const a = 1 - Math.exp(-dt * 7), t = this.controls.target, off = this.camera.position.clone().sub(t);
+      if (z.to) { const d = z.to.clone().sub(t).multiplyScalar(a); t.add(d); }
+      const L = off.length(); off.setLength(L + (z.len - L) * a); this.camera.position.copy(t).add(off);
+      if (Math.abs(L - z.len) < 0.05 && (!z.to || z.to.distanceTo(t) < 0.05)) this.zoom = null;
     }
     const u = this.follow; if (!u || this.held === u) return;
     if (!this.getWorld().units.includes(u)) { this.setFollow(null); return; }

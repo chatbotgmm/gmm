@@ -170,7 +170,7 @@ function startActivityInner(u, kind, world, rnd) {
   switch (kind) {
     case "rest": setIdle(u, rnd, world, 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
     case "sleep": {                                                               // 지치면: 가까운 완성된 집에 들어가 자거나, 그 자리에서 잠
-      const home = nearest(u, [...world.buildings.values()].filter(b => world.isDone(b) && world.isHouse(b) && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 14), b => [b.door.x, b.door.z]);
+      const home = nearest(u, [...world.buildings.values()].filter(b => world.canEnter(u, b) && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 14), b => [b.door.x, b.door.z]);
       if (home && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, "졸려…"); return true; }
       setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; emote(u, "💤", 3); return true;
     }
@@ -254,7 +254,7 @@ function startActivityInner(u, kind, world, rnd) {
       return false;
     }
     case "enter": {
-      const done = [...world.buildings.values()].filter(b => world.isDone(b) && world.isHouse(b));
+      const done = [...world.buildings.values()].filter(b => world.canEnter(u, b));
       if (!done.length) return false;
       const b = pick(done, rnd);
       if (!startPath(u, world, b.door.x, b.door.z)) return false;

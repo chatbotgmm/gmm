@@ -9,6 +9,7 @@ import { GroundType, InteractionType } from "./types.js";
 
 const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, KENNEY_YAW = Math.PI;
 
+// 집 크기: 갈매미(키 약 0.9 m)가 문으로 들어갈 수 있게 처음 크기의 1.5배. work = 망치질 양(처음 크기 기준 칸 수, 3번씩)
 export const BUILDINGS = {
   // 계단: 낮은 칸에 놓고, 문 쪽(앞)이 입구·뒤쪽 칸이 올라갈 곳. 뒤가 0.1~1.5 m 더 높아야 함. 다 지으면 앞뒤로만 오르내림.
   stairs: {
@@ -16,27 +17,32 @@ export const BUILDINGS = {
     placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   house: {
-    id: "house", tier: 1, name: "작은 집", footprint: { w: 2, d: 2 }, height: 1.3, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "house", tier: 1, name: "작은 집", footprint: { w: 3, d: 3 }, work: 4, height: 1.95, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },
   },
   cottage: {
-    id: "cottage", tier: 1, name: "2층집", footprint: { w: 2, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cottage", tier: 1, name: "2층집", footprint: { w: 3, d: 3 }, work: 4, height: 2.55, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {
-    id: "cafe", tier: 2, name: "카페", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cafe", tier: 2, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
   shop: {
-    id: "shop", tier: 2, name: "잡화점", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "shop", tier: 2, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
-    id: "post", tier: 3, name: "우체국", footprint: { w: 3, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "post", tier: 3, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 3.3, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
+  // 자이언트 전용 집: 몸이 커서(키 약 1.4 m) 일반 집에는 못 들어가고 이 집에만 들어감. 다른 갈매미는 못 들어감.
+  giantHouse: {
+    id: "giantHouse", tier: 1, name: "자이언트의 집", footprint: { w: 5, d: 5 }, work: 6, forUnit: "자이언트", height: 3.0, asset: "assets/suburban/building-type-a.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xefe6d2, roof: 0x9fd3e6, roof_shape: "pyramid", chimney: true }, interior: { w: 8, d: 8 },
+  },
   manor: {
-    id: "manor", tier: 4, name: "큰 집", footprint: { w: 4, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "manor", tier: 4, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
   },
 };
