@@ -7,7 +7,7 @@ import { loadGLB } from "./characters.js";
 
 const cache = new Map();
 
-// 경로 후보: 적힌 그대로, 그리고 "../village/"를 뗀 것(아티팩트처럼 한 폴더에 모아 올린 경우). .glb는 .glb.json(base64)도 받는다.
+// 경로 후보: 적힌 그대로, 그리고 앞의 village 폴더 부분을 뗀 것(아티팩트처럼 한 폴더에 모아 올린 경우). .glb는 .glb.json(base64)도 받는다.
 function load(url) {
   if (!cache.has(url)) {
     const fbx = /\.fbx$/i.test(url), tries = [url, url.replace(/^\.\.\/village\//, "")].filter((u, i, a) => a.indexOf(u) === i);
