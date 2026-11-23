@@ -52,11 +52,11 @@ export class Tools {
   /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
   get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld; }
   /** 조작 배치: 도구 중에는 한 손가락·왼쪽 = 도구, 두 손가락 = 돌리기·확대, 오른쪽 = 돌리기, 가운데 = 확대.
-   *  둘러보기(또는 ✋)에서는 한 손가락·왼쪽 = 돌리기, 두 손가락 = 확대·옮기기, 오른쪽 = 옮기기. */
+   *  둘러보기(또는 ✋)에서는 한 손가락 = 화면 옮기기, 두 손가락 = 돌리기·확대 / 마우스 왼쪽 = 돌리기, 오른쪽 = 옮기기. */
   applyControls() {
     const t = this.toolActive, M = THREE.MOUSE, T = THREE.TOUCH;
     this.controls.mouseButtons = { LEFT: t ? null : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t ? M.ROTATE : M.PAN };
-    this.controls.touches = { ONE: t ? null : T.ROTATE, TWO: t ? T.DOLLY_ROTATE : T.DOLLY_PAN };
+    this.controls.touches = { ONE: t ? null : T.PAN, TWO: T.DOLLY_ROTATE };                 // 터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대
     this.dom.style.cursor = this.mode === "view" ? "" : t ? "crosshair" : "grab";
   }
   setHand(on) { this.hand = on; this.cancelStroke(); this.applyControls(); this.onHand?.(on); }
