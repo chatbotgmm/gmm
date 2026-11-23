@@ -108,7 +108,8 @@ export class UnitViews {
       if (ch) {
         if (ch.clip && u.clip !== ch.clip) u.clip = ch.clip;                                       // 실제 동작 길이를 AI에 알려 줌
         const restart = !!u.once && ch.onceRef !== u.once; if (u.once) ch.onceRef = u.once;      // 같은 한 번 동작을 다시 시작
-        if (!(u.anim && playAnim(ch, u.anim, 1, 0.12, restart))) {
+        const workSpeed = ["Chop", "Mine", "Build"].includes(u.anim) ? (u.eff ?? 1) : 1;            // 일 동작은 능률만큼 빠르게/느리게
+        if (!(u.anim && playAnim(ch, u.anim, workSpeed, 0.12, restart))) {
           if (!walking) playAnim(ch, "Idle", 1); else if (u.running) playAnim(ch, "Run", runScale * speedBoost); else playAnim(ch, "Walk", walkScale * speedBoost);
         }
         for (const [k, t] of Object.entries(ch.inHand)) t.visible = u.tool === k;

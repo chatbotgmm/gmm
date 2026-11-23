@@ -17,6 +17,7 @@ export const UnitState = Object.freeze({
   // 마을 생활(web/village에서 옮김)
   Forage: "Forage", Eat: "Eat", Visit: "Visit", Greet: "Greet", Zoomies: "Zoomies", Flee: "Flee", Avoid: "Avoid",
   GoChop: "GoChop", Chop: "Chop", GoMine: "GoMine", Mine: "Mine", GoFish: "GoFish", Fish: "Fish", GoBuild: "GoBuild", Build: "Build",
+  GoTrade: "GoTrade", Trade: "Trade", GoFarm: "GoFarm", Farm: "Farm",   // 상인·농부
 });
 
 /**

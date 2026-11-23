@@ -11,27 +11,27 @@ const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, KENN
 
 export const BUILDINGS = {
   house: {
-    id: "house", name: "작은 집", footprint: { w: 2, d: 2 }, height: 1.3, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "house", tier: 1, name: "작은 집", footprint: { w: 2, d: 2 }, height: 1.3, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },
   },
   cottage: {
-    id: "cottage", name: "2층집", footprint: { w: 2, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cottage", tier: 1, name: "2층집", footprint: { w: 2, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {
-    id: "cafe", name: "카페", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cafe", tier: 2, name: "카페", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
   shop: {
-    id: "shop", name: "잡화점", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "shop", tier: 2, name: "잡화점", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
-    id: "post", name: "우체국", footprint: { w: 3, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "post", tier: 3, name: "우체국", footprint: { w: 3, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
   manor: {
-    id: "manor", name: "큰 집", footprint: { w: 4, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "manor", tier: 4, name: "큰 집", footprint: { w: 4, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
   },
 };
@@ -70,6 +70,7 @@ export const MODULES = {
   ore:        { id: "ore", name: "광석 바위", walkable: false, viewSize: 0.8,
                 assets: ["../village/assets/sk/rock-a.glb", "../village/assets/sk/rock-b.glb", "../village/assets/sk/rock-c.glb"] },
   fishStand:  { id: "fishStand", name: "생선 건조대", walkable: false, viewSize: 1.0, assets: ["../village/assets/sk/campfire-fishing-stand.glb"] },
+  stall:      { id: "stall", name: "시장 가판대", walkable: false, viewSize: 1.3, assets: ["../village/assets/sk/workbench.glb"] },
   bucket:     { id: "bucket", name: "양동이", walkable: false, viewSize: 0.45, assets: ["../village/assets/sk/bucket.glb"] },
   tree:       { id: "tree", name: "나무", walkable: false, viewSize: 1.7,           // 잎이 옆 칸까지 퍼져 보이게(차지는 1칸)
                 assets: ["../village/assets/nk/tree_oak.glb", "../village/assets/nk/tree_default.glb", "../village/assets/nk/tree_fat.glb",
@@ -109,3 +110,49 @@ export const PERSONA = {
   "불씨":    { rest: 2, wander: 2, forage: 2, visit: 2, zoomies: 3, chop: 2, mine: 4, fish: 0, build: 2, enter: 2 },
   "그림자":  { rest: 4, wander: 4, forage: 2, visit: 0, zoomies: 0, chop: 2, mine: 4, fish: 2, build: 0, enter: 1, loner: true },
 };
+
+// ---------------------------------------------------------------- 종족(직업)·희귀도
+// 희귀도가 높을수록 자기 특기의 배율(mult)이 크다. rank는 건물 등급(tier)과 비교한다.
+export const RARITY = {
+  common: { id: "common", name: "일반", rank: 1, mult: 1.3, color: "#7d8590" },
+  rare:   { id: "rare",   name: "희귀", rank: 2, mult: 1.6, color: "#2f7fd0" },
+  epic:   { id: "epic",   name: "영웅", rank: 3, mult: 2.0, color: "#9152d0" },
+  legend: { id: "legend", name: "전설", rank: 4, mult: 2.5, color: "#d4900f" },
+};
+// skill: 이 직업이 잘하는 활동(PERSONA의 활동 이름). 그 활동을 더 자주 고르고, 할 때 배율이 붙는다.
+export const JOBS = {
+  builder:    { id: "builder",    name: "건축가", icon: "🔨", skill: "build", desc: "망치질 한 번이 배율만큼 진행. 희귀도 이상 등급의 건물까지 지을 수 있음" },
+  miner:      { id: "miner",      name: "광부",   icon: "⛏", skill: "mine",  desc: "돌을 더 많이 캐고, 철(높은 등급 건물 재료)이 잘 나옴" },
+  lumberjack: { id: "lumberjack", name: "나무꾼", icon: "🪓", skill: "chop",  desc: "도끼질을 덜 하고 나무를 더 많이 얻음" },
+  fisher:     { id: "fisher",     name: "낚시꾼", icon: "🎣", skill: "fish",  desc: "잘 낚고, 희귀한 물고기·보물·가구를 더 자주 얻음" },
+  merchant:   { id: "merchant",   name: "상인",   icon: "🐚", skill: "trade", desc: "가판대에서 남는 자재·보물을 팔고, 공사에 모자란 자재를 사 옴" },
+  farmer:     { id: "farmer",     name: "농부",   icon: "🌾", skill: "farm",  desc: "밭에 심고 거둬 음식을 만듦" },
+};
+// 지금 있는 갈매미 8종의 직업·희귀도(바꾸고 싶으면 여기만 고치면 됨)
+export const UNIT_JOBS = {
+  "기본": ["builder", "common"], "미니": ["farmer", "common"], "자이언트": ["lumberjack", "rare"], "꽃": ["farmer", "rare"],
+  "황금": ["builder", "epic"], "물방울": ["fisher", "rare"], "불씨": ["miner", "rare"], "그림자": ["merchant", "rare"],
+};
+
+// 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중.
+export const FISH = [
+  { id: "anchovy",  name: "멸치",     rarity: "common", weight: 34, food: 1, price: 1 },
+  { id: "mackerel", name: "고등어",   rarity: "common", weight: 26, food: 2, price: 2 },
+  { id: "squid",    name: "오징어",   rarity: "common", weight: 16, food: 2, price: 3 },
+  { id: "flatfish", name: "광어",     rarity: "rare",   weight: 10, food: 3, price: 8 },
+  { id: "octopus",  name: "문어",     rarity: "rare",   weight: 7,  food: 3, price: 10 },
+  { id: "tuna",     name: "참치",     rarity: "epic",   weight: 4,  food: 5, price: 25 },
+  { id: "seabream", name: "황금 도미", rarity: "epic",  weight: 2,  food: 4, price: 35 },
+  { id: "whaleshark", name: "고래상어", rarity: "legend", weight: 1, food: 0, price: 120 },
+];
+// 낚시로 가끔 건지는 물건(가구는 2단계 실내 꾸미기에서 놓을 수 있게 가방에 모아 둠)
+export const ITEMS = [
+  { id: "bottle",  name: "유리병 편지", rarity: "common", price: 4 },
+  { id: "pearl",   name: "진주",       rarity: "rare",   price: 20 },
+  { id: "chair",   name: "표류목 의자", rarity: "rare",   furniture: "chair" },
+  { id: "table",   name: "산호 테이블", rarity: "epic",   furniture: "table" },
+  { id: "bookshelf", name: "난파선 책장", rarity: "epic", furniture: "bookshelf" },
+  { id: "bed",     name: "조개 침대",   rarity: "legend", furniture: "bed" },
+];
+// 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
+export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

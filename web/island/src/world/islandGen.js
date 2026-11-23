@@ -97,8 +97,16 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
     if (grid.inBounds(x, pierBase) && !grid.isWater(x, pierBase) && !used.has(`${x},${pierBase}`))
       { modules.push({ id: `${defId}-1`, defId, cells: [[x, pierBase]], rot: 0 }); used.add(`${x},${pierBase}`); }
   });
+  // 밭(농부가 심고 거둠): 광장 서쪽 3×2칸, 흙으로 칠함. 걸어 다닐 수 있는 칸이다.
+  const plots = [];
+  for (let z = 32; z <= 33; z++) for (let x = 25; x <= 27; x++)
+    if (freeGrass(x, z) && !used.has(`${x},${z}`)) { set(x, z, GroundType.Dirt); plots.push({ x, z }); used.add(`${x},${z}`); }
+  // 시장 가판대(상인이 사고팖): 광장 동쪽 가장자리, 상인은 광장 쪽 칸에 서서 장사
+  const stall = { x: 35, z: 30, standX: 34, standZ: 30 };
+  if (!used.has("35,30") && !grid.isWater(35, 30)) { modules.push({ id: "stall-1", defId: "stall", cells: [[35, 30]], rot: 3 }); used.add("35,30"); }
   const zones = [{ id: "forest", label: "🌲 숲", x: forest.x, z: forest.z }, { id: "mine", label: "⛏ 광산", x: mine.x, z: mine.z },
-                 { id: "fishing", label: "🎣 낚시터", x: 32, z: pierEnd - 1 }];
+                 { id: "fishing", label: "🎣 낚시터", x: 32, z: pierEnd - 1 }, { id: "farm", label: "🌾 밭", x: 26, z: 32 },
+                 { id: "market", label: "🐚 시장", x: 35, z: 30 }];
   grid.markAllDirty();
-  return { grid, modules, spots, zones };
+  return { grid, modules, spots, zones, plots, stall };
 }

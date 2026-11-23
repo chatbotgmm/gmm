@@ -20,6 +20,16 @@ export class LifeViews {
     world.on("oreHit", o => { this.shake(o.id, 0.3, "x"); this.spark(o); });
     world.on("oreBroke", o => this.vanish(o.id));
     world.on("oreGrow", o => this.grow(o.id));
+    // 밭 작물: 칸마다 싹 4개. 자라는 동안 커지고, 다 자라면 노랗게(거둘 때).
+    this.cropGreen = new THREE.MeshStandardMaterial({ color: 0x6fbf55, roughness: 0.8 });
+    this.cropRipe = new THREE.MeshStandardMaterial({ color: 0xe8b830, roughness: 0.7 });
+    this.cropGeo = new THREE.ConeGeometry(0.07, 0.32, 6).translate(0, 0.16, 0);
+    this.crops = world.plots.map(p => {
+      const g = new THREE.Group(); g.position.set(toWorldX(p.x + 0.5), (world.grid.get(p.x, p.z)?.elevation ?? 0) + 0.01, toWorldZ(p.z + 0.5));
+      for (const [dx, dz] of [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]]) {
+        const m = new THREE.Mesh(this.cropGeo, this.cropGreen); m.position.set(dx, 0, dz); m.castShadow = true; g.add(m); }
+      scene.add(g); return { p, g };
+    });
     // 말풍선(유닛마다 하나)과 구역 이름
     this.emotes = world.units.map(() => { const e = document.createElement("div"); e.className = "emote"; e.hidden = true; overlay.appendChild(e); return e; });
     this.zoneEls = world.zones.map(z => { const e = document.createElement("div"); e.className = "zone"; e.textContent = z.label; overlay.appendChild(e); return { z, e }; });
@@ -85,6 +95,11 @@ export class LifeViews {
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const s = this.sparks[i]; s.t -= dt; s.v.y -= 9.8 * dt; s.m.position.addScaledVector(s.v, dt);
       if (s.t <= 0) { this.scene.remove(s.m); this.sparks.splice(i, 1); }
+    }
+    for (const { p, g } of this.crops) {
+      const grow = p.stage === "growing" ? 1 - Math.max(0, p.t) / (p.grow || 40) : p.stage === "ripe" ? 1 : 0;
+      g.visible = p.stage !== "empty"; g.scale.setScalar(0.25 + 0.75 * grow);
+      for (const m of g.children) m.material = p.stage === "ripe" ? this.cropRipe : this.cropGreen;
     }
     // 말풍선
     this.world.units.forEach((u, i) => {

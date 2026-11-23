@@ -185,7 +185,10 @@ test("찜(나무·낚시 자리)은 하던 갈매미를 들어 올리면 풀린�
 
 test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 100%까지 혼자 끝낸다", () => {
   const w = World.create(7, seededRandom(21));
-  const b = w.placeBuilding("manor", 38, 34, 0).building;       // 4×3 → 망치질 36번, 나무·돌 각 12 필요(처음엔 6씩)
+  const b = w.placeBuilding("cafe", 38, 34, 0).building;        // 2등급 3×2 → 18, 건축가(배율)만 지을 수 있음. 나무·돌이 모자라게 시작
+  w.res.wood = 0; w.res.stone = 0;
+  const boss = w.units.find(u => u.name === "황금");                 // 영웅 건축가(카페를 지을 수 있는 유일한 갈매미)
+  for (const u of w.units) if (u !== boss) u.timer = 1e9;           // 다른 갈매미는 가만히(재료를 대신 구해 주지 않게)
   const builders = new Set(); let first = null, gathered = false;
   w.on("buildingProgress", x => { if (x === b) { builders.add(x.lastBuilder); first ??= x.lastBuilder; } });
   for (let t = 0; t < 900 && !w.isDone(b); t += 1 / 20) {
@@ -195,7 +198,8 @@ test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 10
     if (u && !w.isDone(b)) assert.equal(b.busy, first, "맡은 동안 다른 갈매미가 가져가지 않음");
   }
   assert.ok(w.isDone(b), `완공돼야 함: ${b.hits}/${b.need}`);
-  assert.deepEqual([...builders], [first], "한 갈매미가 끝까지");
+  assert.deepEqual([...builders], [boss.unitId], "한 갈매미가 끝까지");
+  assert.ok(b.hits / 2 <= 9, "영웅 건축가는 망치질 한 번에 2씩");
   assert.ok(gathered, "재료가 모자라 구하러 다녀옴");
   for (let t = 0; t < 2; t += 1 / 20) w.update(1 / 20);          // 마지막 망치질 동작이 끝나면 맡은 일을 내려놓음
   const u = w.units.find(u => u.unitId === first);
@@ -208,4 +212,58 @@ test("공사를 맡은 갈매미를 들어 올리면 공사장이 풀린다", ()
   for (let t = 0; t < 400 && !b.busy; t += 1 / 20) w.update(1 / 20);
   const u = w.units.find(u => u.unitId === b.busy); assert.ok(u);
   w.pickUpUnit(u); assert.equal(b.busy, null); assert.equal(u.committed, null);
+});
+
+test("종족: 직업·희귀도 배율이 일과 건물 등급에 반영된다", async () => {
+  const J = await import("../src/world/jobs.js");
+  const { BUILDINGS } = await import("../src/data/catalog.js");
+  const w = World.create(7, seededRandom(31)), by = n => w.units.find(u => u.name === n);
+  assert.equal(by("자이언트").job, "lumberjack"); assert.equal(by("황금").rarity, "epic");
+  assert.equal(J.chopsNeeded(by("자이언트")), 2); assert.equal(J.chopsNeeded(by("꽃")), 3);       // 나무꾼(희귀 1.6)은 도끼질 2번
+  assert.equal(J.woodYield(by("자이언트")), 3); assert.equal(J.stoneYield(by("불씨")), 3);
+  assert.equal(J.hammerPower(by("황금")), 2); assert.equal(J.hammerPower(by("물방울")), 1);
+  assert.ok(J.canBuild(by("황금"), BUILDINGS.post) && !J.canBuild(by("기본"), BUILDINGS.cafe) && J.canBuild(by("미니"), BUILDINGS.house));
+  assert.equal(w.check("manor", 38, 26, 0).reason, "전설 이상 건축가가 있어야 지을 수 있어요");       // 전설 건축가가 없음
+  assert.equal(w.check("post", 38, 26, 0).ok, true);
+  assert.ok(J.catchChance(by("물방울")) > J.catchChance(by("기본")));
+  // 낚시꾼은 희귀 이상 물고기를 더 자주
+  const rnd = seededRandom(5), rare = u => { let n = 0; for (let i = 0; i < 4000; i++) if (J.rollFish(u, rnd).rarity !== "common") n++; return n; };
+  assert.ok(rare(by("물방울")) > rare(by("기본")) * 1.3);
+});
+
+test("배고픔: 포만감에 따라 능률이 바뀌고, 음식을 먹으면 차고, 너무 부르면 게을러진다", async () => {
+  const J = await import("../src/world/jobs.js");
+  assert.equal(J.efficiency(10), 0.5); assert.equal(J.efficiency(50), 1); assert.equal(J.efficiency(80), 1.2); assert.equal(J.efficiency(110), 0.85);
+  const w = World.create(7, seededRandom(32)), u = w.units[0];
+  u.full = 30; w.res.food = 5; assert.equal(w.eatFood(u), true); assert.equal(u.full, 65); assert.equal(w.res.food, 4);
+  u.full = 110; assert.ok(J.isLazy(u));
+  const lazyW = Object.fromEntries(J.activityWeights(u)), okW = Object.fromEntries(J.activityWeights({ ...u, full: 70 }));
+  assert.ok(lazyW.rest > okW.rest * 3 && (lazyW.build ?? 0) < okW.build);
+  // 오래 두면 배가 고파지고, 배고픈 갈매미는 먹으러 감
+  const v = w.units[1]; v.full = 20; v.timer = 0; w.res.food = 3;
+  for (let t = 0; t < 3; t += 1 / 20) w.update(1 / 20);
+  assert.ok(v.full > 40, `먹었어야 함: ${v.full}`);
+});
+
+test("상인·농부: 가판대에서 남는 것을 팔고 모자란 자재를 사며, 밭에 심고 거둔다", () => {
+  const w = World.create(7, seededRandom(33)), merchant = w.units.find(u => u.job === "merchant"), farmer = w.units.find(u => u.job === "farmer");
+  w.res.wood = 30; w.res.stone = 2; w.treasures.tuna = 1;
+  w.placeBuilding("house", 38, 26, 0);                                        // 공사 중 → 돌이 모자라면 사 옴
+  const log = w.trade(merchant);
+  assert.ok(log.sold > 0 && w.res.wood === 20 && w.treasures.tuna === 0);
+  assert.ok(w.res.stone >= 4, `돌을 사 왔어야 함: ${w.res.stone}`);
+  const p = w.plots[0]; assert.equal(w.farmPlot(p, farmer), "plant"); assert.equal(p.stage, "growing");
+  for (let t = 0; t < 60; t += 1) w.update(1);
+  assert.equal(p.stage, "ripe"); const f0 = w.res.food; assert.equal(w.farmPlot(p, farmer), "harvest"); assert.ok(w.res.food > f0);
+  assert.equal(w.canPaint(p.x, p.z), false); assert.equal(w.check("house", p.x, p.z, 0).ok, false);
+});
+
+test("마을 경제: 오래 돌리면 상인 거래·농사·철 채굴·보물 낚시가 실제로 일어난다", () => {
+  const w = World.create(7, seededRandom(34)); const ev = { trade: 0, plot: 0, fish: 0 };
+  for (const k of Object.keys(ev)) w.on(k, () => ev[k]++);
+  w.placeBuilding("post", 38, 34, 0);
+  for (let t = 0; t < 900; t += 1 / 20) w.update(1 / 20);
+  assert.ok(ev.trade > 0 && ev.plot > 2 && ev.fish > 0, JSON.stringify(ev));
+  assert.ok(Object.keys(w.collection).length >= 2, JSON.stringify(w.collection));
+  assert.ok(w.units.every(u => u.full > 0), "굶어 쓰러진 갈매미가 없어야 함: " + w.units.map(u => u.full.toFixed(0)).join(","));
 });

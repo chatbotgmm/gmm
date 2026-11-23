@@ -6,7 +6,8 @@
 // 반사 행동: 겁 많은 갈매미(미니)는 큰 갈매미가 다가오면 도망, 혼자 있고 싶은 갈매미(그림자)는 쉬다가 붐비면 자리를 피함.
 import { UnitState as US } from "../data/types.js";
 import { UNIT_SPEED } from "../config.js";
-import { PERSONA } from "../data/catalog.js";
+import { PERSONA, BUILDINGS } from "../data/catalog.js";
+import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
@@ -19,6 +20,17 @@ const pick = (a, rnd) => a[Math.floor(rnd() * a.length)];
 const visible = u => !u.insideBuildingId && u.state !== US.Held;
 
 export function emote(u, text, secs = 1.6) { u.emoteText = text; u.emoteT = secs; }
+
+// 공사 한 번(망치질 3번)에 드는 재료: 나무 1·돌 1, 3등급 이상 건물은 철 1도
+const needsIron = b => (BUILDINGS[b.defId].tier || 1) >= 3;
+const hasMaterials = (world, b) => world.res.wood >= 1 && world.res.stone >= 1 && (!needsIron(b) || world.res.iron >= 1);
+function useMaterials(world, b) { world.res.wood--; world.res.stone--; if (needsIron(b)) world.res.iron--; }
+/** 모자란 재료를 구하러 감: 나무가 모자라면 벌목, 돌·철이 모자라면 채광. */
+function gatherFor(u, world, b, rnd) {
+  const r = world.res, first = r.wood < 1 ? "chop" : "mine", second = first === "chop" ? "mine" : "chop";
+  if (startActivity(u, first, world, rnd) || startActivity(u, second, world, rnd)) { emote(u, "재료 구하러!"); return true; }
+  return false;
+}
 
 /** 찜해 둔 것(나무·광석·씨앗·낚시 자리·공사장)을 놓고 손을 비운다. */
 function release(u) {
@@ -88,7 +100,7 @@ function doOnce(u, key, onHit, then, hitAt = null) {
 function workLoop(u, dt, key, hits, onHit, onEnd) {
   const c = clip(u, key); u.anim = key;
   if (!u.work) u.work = { t: 0, done: 0 };
-  u.work.t += dt;
+  u.work.t += dt * (u.eff ?? 1);                                         // 배고프면 느리게, 든든하면 빠르게
   const n = Math.min(hits, Math.floor((u.work.t - c.hit) / c.len) + 1);
   while (u.work && u.work.done < n) { u.work.done++; onHit(u.work.done); }
   if (u.work && u.work.done >= hits && u.work.t >= hits * c.len) { u.work = null; onEnd(); }
@@ -140,16 +152,30 @@ function startActivity(u, kind, world, rnd) {
       // 맡은 공사장이 있으면 그곳, 없으면 남이 안 맡은 공사장 중 많이 지어진 곳. 한 번 맡으면 100%까지 맡는다.
       let b = u.committed ? world.buildings.get(u.committed) : null;
       if (b && (world.isDone(b) || (b.busy && b.busy !== u.unitId))) { uncommit(u, world); b = null; }
-      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy).sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
+      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy && J.canBuild(u, BUILDINGS[b.defId]))
+        .sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
       if (!b) return false;
       u.committed = b.id; b.busy = u.unitId;
-      if (world.res.wood < 1 || world.res.stone < 1) {                            // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
-        if (startActivity(u, world.res.wood <= world.res.stone ? "chop" : "mine", world, rnd)) { emote(u, "재료 구하러!"); return true; }
-        if (startActivity(u, world.res.wood <= world.res.stone ? "mine" : "chop", world, rnd)) { emote(u, "재료 구하러!"); return true; }
-        return false;
-      }
+      if (!hasMaterials(world, b)) return gatherFor(u, world, b, rnd);             // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
       if (!startPath(u, world, b.door.x, b.door.z)) return false;
       u.focus = b; u.state = US.GoBuild; return true;
+    }
+    case "eat": {                                                                 // 음식이 있으면 그 자리에서 먹고, 없으면 씨앗을 찾음
+      if (world.res.food < 1) return startActivity(u, "forage", world, rnd);
+      setIdle(u, rnd, world); u.state = US.Eat;
+      doOnce(u, "Attack", () => { if (world.eatFood(u)) emote(u, J.isLazy(u) ? "배불러…" : "냠냠"); }, () => setIdle(u, rnd, world));
+      return true;
+    }
+    case "trade": {                                                               // 상인: 가판대 앞으로
+      const st = world.stall; if (!st || u.job !== "merchant") return false;
+      if (!startPath(u, world, st.standX, st.standZ)) return false;
+      u.state = US.GoTrade; return true;
+    }
+    case "farm": {                                                                // 농부: 비었거나 다 자란 밭
+      if (u.job !== "farmer") return false;
+      const pl = nearest(u, world.plots.filter(p => !p.claimed && (p.stage === "empty" || p.stage === "ripe")), p => [p.x, p.z]);
+      if (!pl || !startPath(u, world, pl.x, pl.z)) return false;
+      pl.claimed = u.unitId; u.focus = pl; u.state = US.GoFarm; return true;
     }
     case "enter": {
       const done = [...world.buildings.values()].filter(b => world.isDone(b));
@@ -163,9 +189,11 @@ function startActivity(u, kind, world, rnd) {
 }
 
 function chooseNext(u, world, rnd) {
+  // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
+  if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
-  const p = PERSONA[u.name] || PERSONA["기본"];
-  const opts = Object.entries(p).filter(([, w]) => typeof w === "number" && w > 0);
+  if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
+  const opts = J.activityWeights(u);                                         // 성격 + 직업 특기
   for (let tries = 0; tries < 3; tries++) {
     let r = rnd() * opts.reduce((s, [, w]) => s + w, 0), kind = "rest";
     for (const [k, w] of opts) if ((r -= w) <= 0) { kind = k; break; }
@@ -190,6 +218,7 @@ export function exitBuilding(u, world, rnd) {
 // ---------------------------------------------------------------- 매 프레임
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
+  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
   if (u.once) {                                                         // 한 번 하는 동작이 끝날 때까지 기다림
     const o = u.once; o.t += dt;
@@ -232,7 +261,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (!world.seeds.includes(s)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
         face(u, s.x + s.ox, s.z + s.oz); u.state = US.Eat;
-        doOnce(u, "Attack", () => { world.eatSeed(s); emote(u, "♥"); }, () => setIdle(u, rnd, world));
+        doOnce(u, "Attack", () => { world.eatSeed(s, u); emote(u, "♥"); }, () => setIdle(u, rnd, world));
       }
       break;
     }
@@ -254,14 +283,14 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoChop: case US.GoMine: {
       const t = u.focus;
       if (!t.alive) { setIdle(u, rnd, world); break; }
-      if (followPath(u, dt, world, rnd)) { u.state = u.state === US.GoChop ? US.Chop : US.Mine; u.tool = u.state === US.Chop ? "axe" : "pickaxe"; u.workHits = t.hp; }
+      if (followPath(u, dt, world, rnd)) { u.state = u.state === US.GoChop ? US.Chop : US.Mine; u.tool = u.state === US.Chop ? "axe" : "pickaxe"; u.workHits = u.state === US.Chop ? Math.ceil(t.hp / (3 / J.chopsNeeded(u)) - 1e-6) : t.hp; }
       break;
     }
     case US.Chop: case US.Mine: {
       const t = u.focus, chop = u.state === US.Chop; face(u, t.x + 0.5, t.z + 0.5);
       workLoop(u, dt, chop ? "Chop" : "Mine", u.workHits,
-        () => { if (chop) world.hitTree(t, u); else world.hitOre(t); },
-        () => { emote(u, t.alive ? "💪" : chop ? "나무+2" : "돌+2"); setIdle(u, rnd, world); });
+        () => { if (chop) world.hitTree(t, u); else world.hitOre(t, u); },
+        () => { emote(u, t.alive ? "💪" : chop ? `나무+${t.lastYield}` : `돌+${t.lastYield}${t.lastIron ? " 철+1" : ""}`); setIdle(u, rnd, world); });
       break;
     }
     case US.GoFish: {
@@ -277,7 +306,12 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       u.anim = "FishWait"; u.fishT -= dt;
       if (u.fishT <= 0) {
         u.fishT = undefined;
-        doOnce(u, "FishReel", () => { u.fishing = null; if (rnd() < 0.7) { world.catchFish(u); emote(u, "🐟"); } else emote(u, "💧"); },
+        doOnce(u, "FishReel", () => {
+          u.fishing = null; const r = world.catchFish(u);
+          if (!r) { emote(u, "💧"); return; }
+          const star = { common: "", rare: "✨", epic: "🌟", legend: "👑" }[r.fish.rarity];
+          emote(u, r.item ? `🎁 ${r.item.name}!` : `${star}${r.fish.name}`, r.item || star ? 2.6 : 1.6);
+        },
           () => setIdle(u, rnd, world));
       }
       break;
@@ -286,8 +320,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = u.focus;
       if (!world.buildings.has(b.id) || world.isDone(b)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        if (world.res.wood < 1 || world.res.stone < 1) { setIdle(u, rnd, world, 0.2); break; }   // 그새 재료가 떨어짐 → 구하러 감(맡은 건 유지)
-        world.res.wood--; world.res.stone--;                                   // 도착하면 나무 1·돌 1을 씀
+        if (!hasMaterials(world, b)) { setIdle(u, rnd, world, 0.2); break; }  // 그새 재료가 떨어짐 → 구하러 감(맡은 건 유지)
+        useMaterials(world, b);                                                // 도착하면 나무 1·돌 1(+철 1)을 씀
         u.state = US.Build; u.tool = "hammer";
       }
       break;
@@ -299,7 +333,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       // 망치질 3번마다 나무 1·돌 1을 더 써서 그 자리에서 계속. 재료가 없으면 구하러 갔다가 돌아옴. 100%가 되면 끝.
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
         if (world.isDone(b)) { uncommit(u, world); setIdle(u, rnd, world); return; }
-        if (world.res.wood >= 1 && world.res.stone >= 1) { world.res.wood--; world.res.stone--; return; }   // u.work가 비었으니 다음 바퀴부터 다시
+        if (hasMaterials(world, b)) { useMaterials(world, b); return; }         // u.work가 비었으니 다음 바퀴부터 다시
         emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);
       });
       break;
@@ -312,7 +346,23 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case US.Inside:
       if (u.timer <= 0) exitBuilding(u, world, rnd); break;
-    case US.Greet: case US.Eat: break;                                        // doOnce가 끝나면 풀림
+    case US.GoTrade:
+      if (followPath(u, dt, world, rnd)) {
+        u.state = US.Trade; face(u, world.stall.x + 0.5, world.stall.z + 0.5);
+        doOnce(u, "Attack", () => { const l = world.trade(u); emote(u, l.sold || l.bought ? `🐚 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : "손님이 없네", 2.2); },
+          () => setIdle(u, rnd, world, 1 + rnd()));
+      }
+      break;
+    case US.GoFarm: {
+      const pl = u.focus;
+      if (followPath(u, dt, world, rnd)) {
+        u.state = US.Farm;
+        doOnce(u, "Attack", () => { const r = world.farmPlot(pl, u); emote(u, r === "plant" ? "🌱" : r === "harvest" ? `🌾+${pl.lastYield}` : "…"); },
+          () => setIdle(u, rnd, world));
+      }
+      break;
+    }
+    case US.Greet: case US.Eat: case US.Trade: case US.Farm: break;          // doOnce가 끝나면 풀림
     default: setIdle(u, rnd, world);
   }
   settle(u, dt, world);
