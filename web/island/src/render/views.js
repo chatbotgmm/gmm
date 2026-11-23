@@ -41,26 +41,47 @@ export class BuildingViews {
 }
 
 export async function addModuleViews(scene, world) {
-  for (const m of world.modules) {
+  await Promise.all(world.modules.map(async m => {
     const def = MODULES[m.defId], cellsWorld = m.cells.map(([x, z]) => [toWorldX(x + 0.5), toWorldZ(z + 0.5)]);
-    const obj = await modelFor(def.asset ? def : { asset: null }, () => modulePlaceholder(m.defId, cellsWorld, m.rot));
+    const asset = def.assets ? def.assets[(m.variant ?? 0) % def.assets.length] : def.asset;
+    if (!asset) { const obj = modulePlaceholder(m.defId, cellsWorld, m.rot); obj.name = m.id; scene.add(obj); return; }
+    // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
+    const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
+    obj.position.set(cellsWorld[0][0], world.grid.get(x, z).elevation, cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
     obj.name = m.id; scene.add(obj);
-  }
+  }));
 }
 
 export class UnitViews {
   constructor(scene, world) {
-    this.world = world; this.views = world.units.map(u => {
-      const g = unitPlaceholder(u.scale || 1); g.userData.unitId = u.unitId; scene.add(g); return g;
+    this.world = world; this.chars = [];
+    this.views = world.units.map(u => {
+      const g = new THREE.Group(), cap = unitPlaceholder(u.scale || 1); g.add(cap); g.userData.unitId = u.unitId; scene.add(g);
+      return { g, cap, ch: null };
     });
   }
-  sync() {
+  /** 기존 갈매미 모델로 바꾼다(i번째 유닛 ↔ chars[i]). 모델을 못 불러온 유닛은 캡슐 그대로. */
+  async useCharacters(set, loadCharacter) {
+    const results = await Promise.allSettled(this.views.map((v, i) => loadCharacter(set.dir, set.chars[i % set.chars.length])));
+    results.forEach((r, i) => {
+      const v = this.views[i];
+      if (r.status !== "fulfilled") { console.warn("갈매미 모델을 못 불러와 캡슐을 씁니다", r.reason); return; }
+      v.g.remove(v.cap); v.g.add(r.value.root); v.ch = r.value;
+    });
+    return results.filter(r => r.status === "fulfilled").length;
+  }
+  sync(dt, playAnim, walkScale = 2.2, runScale = 1.5) {
     this.world.units.forEach((u, i) => {
-      const g = this.views[i]; g.visible = !u.insideBuildingId;
+      const { g, cap, ch } = this.views[i]; g.visible = !u.insideBuildingId;
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));
-      let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * 0.25;   // 몸 돌리기 부드럽게
-      const walking = u.path && u.pathIndex < u.path.length;
-      g.children[0].position.y = walking ? Math.abs(Math.sin(performance.now() / 110 + i)) * 0.05 : 0;     // 걸을 때 콩콩
+      let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
+      const walking = !!u.path && u.pathIndex < u.path.length;
+      if (ch) {                                                    // 진짜 모델: Idle / Walk / Run 애니메이션
+        if (!walking) playAnim(ch, "Idle", 1); else if (u.running) playAnim(ch, "Run", runScale); else playAnim(ch, "Walk", walkScale);
+        if (g.visible) ch.mixer.update(dt);
+      } else {
+        cap.position.y = walking ? Math.abs(Math.sin(performance.now() / 110 + i)) * 0.05 : 0;   // 캡슐: 걸을 때 콩콩
+      }
     });
   }
 }

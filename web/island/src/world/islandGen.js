@@ -54,7 +54,14 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
     const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z);
     if (grid.isWater(x, z) || c.groundType !== GroundType.Sand || c.elevation > -0.05) continue;
     if ([...used].some(s => { const [ux, uz] = s.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < 4; })) continue;
-    modules.push({ id: `rock-${k + 1}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4) }); used.add(`${x},${z}`); k++;
+    modules.push({ id: `rock-${k + 1}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 3 }); used.add(`${x},${z}`); k++;
+  }
+  // 나무: 잔디 가장자리(해안 쪽)와 언덕 둘레에 띄엄띄엄. 광장·길·언덕 위·다른 모듈 가까이는 피함.
+  for (let k = 0, tries = 0; k < 16 && tries < 2000; tries++) {
+    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z), r = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
+    if (grid.isWater(x, z) || c.groundType !== GroundType.Grass || c.elevation !== 0 || r < 12) continue;
+    if ([...used].some(s => { const [ux, uz] = s.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < 4; })) continue;
+    modules.push({ id: `tree-${k + 1}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 5 }); used.add(`${x},${z}`); k++;
   }
   grid.markAllDirty();
   return { grid, modules };

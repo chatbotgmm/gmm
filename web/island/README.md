@@ -3,10 +3,17 @@
 「갈매미맨 마을 개발 지시서 & 아키텍처 가이드」 5장의 1단계(폴더 구조, 핵심 데이터 모델, 그리드 바닥 타일 변경 + 건물 배치 프로토타입)를 three.js로 만든 것. Tripo 에셋이 들어갈 자리는 임시 도형(상자·원뿔·원기둥·캡슐)이다.
 
 ## 실행
-    cd web/island
-    python3 -m http.server 8000      # 브라우저에서 http://localhost:8000/
+    cd web
+    python3 -m http.server 8000      # 브라우저에서 http://localhost:8000/island/
     node --test tests/*.test.js      # 로직 시험 (npm test 와 같음)
 three.js 0.170.0은 cdn.jsdelivr.net에서 받는다(인터넷 필요). 빌드 단계 없음.
+
+## 기존 모델 사용
+- 갈매미 8마리는 `web/village/models`의 진짜 모델(gmm_char1~8.glb, Idle·Walk·Run 애니메이션)을 쓴다. 크기·걷기/달리기 속도는 `chars.json` 값 그대로(발이 미끄러지지 않게 잰 값). 먼 길(8칸 넘게)은 달린다.
+- 해변 바위와 나무는 `web/village/assets/nk`의 Kenney Nature Kit 모델(CC0).
+- 그래서 **`web/` 폴더에서 서버를 열어야** 모델이 나온다: `cd web && python3 -m http.server 8000` → http://localhost:8000/island/
+- 모델을 못 찾으면(파일을 더블클릭해서 연 경우 등) 갈매미는 캡슐, 나무·바위는 임시 도형으로 나온다.
+- 한 파일 만들기: `python3 tools/bundle.py 갈매미맨마을.html` (claude.ai 아티팩트용은 `--artifact`). 모델은 `models/`, `assets/nk/` 폴더(.glb 또는 .glb.json)에서도 찾는다.
 
 ## 조작
 - 👀 둘러보기: 드래그 돌리기, 오른쪽 드래그 옮기기, 휠 확대
@@ -53,7 +60,6 @@ three.js 0.170.0은 cdn.jsdelivr.net에서 받는다(인터넷 필요). 빌드 �
 ## 2단계로 남긴 것
 - 실내 방 쉘(L자 컷어웨이) 전환, 바닥재·벽지 바꾸기, 가구 배치·회전·회수. 데이터는 `BuildingData.interior`, `FurnitureData`, 카탈로그 `FURNITURE`(InteractionPoint·InteractionType)에 준비만 함.
 - 건물 안 갈매미의 가구 이용(`UnitState.GoToFurniture` / `Interact`). 지금은 건물 안에 일정 시간 머물다 나오고, 건물 위에 안에 있는 수가 표시된다.
-- web/village의 진짜 갈매미 모델(.glb, 애니메이션)로 캡슐 바꾸기.
 
 ## 알려진 한계
 - 실제 기기(휴대폰 터치)에서는 시험하지 않았다. Playwright 휴대폰 화면(390×844)에서 레이아웃과 탭만 확인했다.

@@ -8,13 +8,15 @@ import { findPath, nearestWalkable } from "../world/pathfinding.js";
 const cellOf = u => [Math.floor(u.x), Math.floor(u.z)];
 
 function setIdle(u, rnd) {
-  u.state = UnitState.Idle; u.timer = 1.5 + rnd() * 4; u.path = null; u.pathIndex = 0; u.goal = null; u.targetBuildingId = null;
+  u.running = false; u.state = UnitState.Idle; u.timer = 1.5 + rnd() * 4; u.path = null; u.pathIndex = 0; u.goal = null; u.targetBuildingId = null;
 }
 
 function startPath(u, world, gx, gz) {
   const [sx, sz] = cellOf(u), path = findPath(world.grid, sx, sz, gx, gz);
   if (!path) return false;
-  u.path = path; u.pathIndex = 0; u.goal = { x: gx, z: gz }; return true;
+  u.path = path; u.pathIndex = 0; u.goal = { x: gx, z: gz };
+  u.running = !!u.runSpeed && path.length > 7;                     // 먼 길은 달림(모델의 Run 동작이 있을 때)
+  return true;
 }
 
 function chooseNext(u, world, rnd) {
@@ -33,7 +35,7 @@ function chooseNext(u, world, rnd) {
 
 /** 경로를 따라 한 프레임 이동. 도착하면 true. 앞 칸이 막히면(새 건물 등) 같은 목적지로 다시 길을 찾는다. */
 function followPath(u, dt, world, rnd) {
-  const grid = world.grid; let move = UNIT_SPEED * dt;
+  const grid = world.grid; let move = (u.running ? u.runSpeed : u.walkSpeed ?? UNIT_SPEED) * dt;
   while (move > 0 && u.path && u.pathIndex < u.path.length) {
     const [nx, nz] = u.path[u.pathIndex], [cx, cz] = cellOf(u);
     if ((nx !== cx || nz !== cz) && !grid.canStep(cx, cz, nx, nz)) {

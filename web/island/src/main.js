@@ -7,6 +7,7 @@ import { createWater } from "./render/water.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { Tools } from "./systems/tools.js";
 import { Hud } from "./ui/hud.js";
+import { findCharacterSet, loadCharacter, playAnim, WALK_SCALE, RUN_SCALE } from "./render/characters.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -43,9 +44,11 @@ function mount(w) {
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world);
   addModuleViews(worldRoot, world);
+  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter); }
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); }
 }
 let tools = null, hud = null;
+const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
 mount(World.create(7));
 tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
 hud = new Hud({ tools, world,
@@ -61,7 +64,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   world.update(dt);
   chunks.sync();                                    // 바뀐 청크만 다시 만듦
-  unitViews.sync();
+  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE);
   water.userData.tick(simT);
   controls.target.x = THREE.MathUtils.clamp(controls.target.x, -30, 30); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -30, 30);
   controls.update();

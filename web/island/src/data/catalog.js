@@ -50,7 +50,12 @@ export const MODULES = {
   pier:       { id: "pier", name: "나무 부두", asset: null, walkable: true, surface: 0.0 },
   breakwater: { id: "breakwater", name: "돌 방파제", asset: null, walkable: false },
   lighthouse: { id: "lighthouse", name: "등대", asset: null, walkable: false },
-  beachRock:  { id: "beachRock", name: "해변 바위", asset: null, walkable: false },
+  // 기존 Kenney Nature Kit 모델(web/village/assets, CC0)을 쓴다. 여러 개면 모듈마다 variant 번호로 고른다.
+  beachRock:  { id: "beachRock", name: "해변 바위", walkable: false,
+                assets: ["../village/assets/nk/rock_smallA.glb", "../village/assets/nk/rock_smallB.glb", "../village/assets/nk/rock_smallC.glb"] },
+  tree:       { id: "tree", name: "나무", walkable: false, viewSize: 1.7,           // 잎이 옆 칸까지 퍼져 보이게(차지는 1칸)
+                assets: ["../village/assets/nk/tree_oak.glb", "../village/assets/nk/tree_default.glb", "../village/assets/nk/tree_fat.glb",
+                         "../village/assets/nk/tree_pineRoundA.glb", "../village/assets/nk/tree_detailed.glb"] },
 };
 
 // 바닥 색(두 색을 칸마다 번갈아 칠함)과 이름. asset: 오토타일 조각 모델을 쓸 때 경로(1단계는 도형으로 그림).

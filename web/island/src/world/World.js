@@ -30,6 +30,13 @@ export class World {
     });
   }
 
+  /** 모델 정보(web/village/models/chars.json)로 몸 크기와 걷기·달리기 속도(m/s = 칸/초)를 맞춘다. */
+  applyCharacterProfiles(chars, walkScale, runScale) {
+    this.units.forEach((u, i) => { const c = chars[i % chars.length]; if (!c) return;
+      u.name = c.name; u.scale = c.scale; u.height = c.height * c.scale;
+      u.walkSpeed = c.walk * walkScale * c.scale; u.runSpeed = c.run * runScale * c.scale; });
+  }
+
   // ---- 바닥 칠하기(지시서 3-B): 땅 칸이고 건물·시설이 없을 때만
   canPaint(x, z) { const c = this.grid.get(x, z); return !!c && !this.grid.isWater(x, z) && !c.occupiedId; }
   paint(x, z, type) { if (!this.canPaint(x, z)) return false; const ok = this.grid.setGround(x, z, type); if (ok) this.emit("ground", { x, z, type }); return ok; }

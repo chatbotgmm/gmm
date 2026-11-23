@@ -63,6 +63,11 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
     const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 12), mat(0xffe08a, { emissive: 0xffc24a, emissiveIntensity: 0.8 }));
     lamp.position.y = 3.5; t.add(lamp);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; t.add(cap);
+  } else if (defId === "tree") {
+    for (const [x, z] of cellsWorld) {
+      g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.6, 8), mat(0x8a5a32)), { castShadow: true }).translateX(x).translateY(0.3).translateZ(z));
+      g.add(Object.assign(new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.0, 10), mat(0x6fbf73)), { castShadow: true }).translateX(x).translateY(1.0).translateZ(z));
+    }
   } else if (defId === "beachRock") {
     for (const [x, z] of cellsWorld) {
       const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42), mat(0x9a968f));
