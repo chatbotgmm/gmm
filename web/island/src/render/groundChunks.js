@@ -6,7 +6,8 @@ import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
-import { corners as cornersRaw, heightIn } from "../world/terrain.js";
+import { connectMask, N, E, S, W as WEST } from "../world/autotile.js";
+import { corners as cornersRaw, heightIn, bilinear } from "../world/terrain.js";
 
 const SUB = 4, STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
@@ -90,7 +91,7 @@ function normalAt(grid, gx, gz) {
   const e = 0.25, dx = chunkHeight(grid, gx + e, gz) - chunkHeight(grid, gx - e, gz), dz = chunkHeight(grid, gx, gz + e) - chunkHeight(grid, gx, gz - e);
   const n = [-dx / (2 * e * CELL), 1, -dz / (2 * e * CELL)], l = Math.hypot(...n); return [n[0] / l, n[1] / l, n[2] / l];
 }
-const W = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
+const toW = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
 
 function cliffColor(grid, x, z, y, gx, gz) {
   const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : CLIFF;
@@ -102,14 +103,15 @@ function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
   const [ha, hb] = my, [la, lb] = nb;
   if (ha - la < 0.01 && hb - lb < 0.01) return;
   b.quad([
-    { p: W(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az) }, { p: W(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz) },
-    { p: W(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz) }, { p: W(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az) },
+    { p: toW(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az) }, { p: toW(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz) },
+    { p: toW(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz) }, { p: toW(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az) },
   ]);
 }
 
 function cellSurface(b, grid, x, z, c) {
   const cell = grid.get(x, z), e = cell.elevation, range = Math.max(...c, e) - Math.min(...c, e);
-  if (PAVED.has(cell.groundType) && !grid.isWater(x, z) && range > 0.05) return stairs(b, grid, x, z, c);
+  const slope = Math.max(Math.abs((c[1] + c[3] - c[0] - c[2]) / 2), Math.abs((c[2] + c[3] - c[0] - c[1]) / 2));
+  if (PAVED.has(cell.groundType) && !grid.isWater(x, z) && slope > 0.06) return stairs(b, grid, x, z, c);
   const step = 1 / SUB;
   for (let j = 0; j < SUB; j++) for (let i = 0; i < SUB; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
@@ -121,34 +123,45 @@ function cellSurface(b, grid, x, z, c) {
         if (steep > 0 && !grid.isWater(Math.floor(gx), Math.floor(gz))) col.lerp(cliffColor(grid, Math.floor(gx), Math.floor(gz), 0, gx, gz), steep * 0.85);
         pc = { n, c: col }; pointCache.set(k, pc);
       }
-      return { p: W(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c };
+      return { p: toW(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c };
     });
     b.quad(pts);
   }
 }
 
-/** 경사진 돌길·데크: 4×4 조각을 평평한 단으로 만들고 단 사이에 디딤판 벽(계단). */
+/**
+ * 경사진 돌길·데크 = 계단. 칸에서 더 많이 기운 방향(x 또는 z)을 골라, 칸 너비 전체에 걸친 반듯한 디딤판을 2~6단 놓는다.
+ * 디딤판 높이는 올라가는 방향으로 고르게 나누고, 칸 둘레는 이웃 땅의 실제 가장자리 높이(꼭짓점 쌍선형, 이웃과 같은 값)까지
+ * 벽으로 메워 틈이 없다.
+ */
 function stairs(b, grid, x, z, c) {
-  const e = grid.get(x, z).elevation, bilinear = (cc, u, v) => heightIn(cc, e, u, v);
-  const n = STAIR_SUB, step = 1 / n, lo = Math.min(...c, e), hi = Math.max(...c, e), rise = (hi - lo) / Math.max(2, Math.round((hi - lo) / 0.06));
-  const flat = [];
-  for (let j = 0; j < n; j++) { flat.push([]); for (let i = 0; i < n; i++) flat[j].push(lo + Math.round((bilinear(c, (i + 0.5) * step, (j + 0.5) * step) - lo) / rise) * rise); }
-  const up = [0, 1, 0];
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const h = flat[j][i], u0 = i * step, v0 = j * step, col = groundColor(grid, x + u0 + step / 2, z + v0 + step / 2, new THREE.Color());
-    b.quad([[u0, v0], [u0 + step, v0], [u0 + step, v0 + step], [u0, v0 + step]].map(([u, v]) => ({ p: W(x + u, h, z + v), n: up, c: col })));
-    const dark = col.clone().multiplyScalar(0.72);
-    // 오른쪽·아래 이웃 조각(또는 칸 가장자리의 실제 높이)과의 높이 차를 벽으로 메움
-    const riser = (ax, az, bx, bz, ha, hb, nrm) => b.quad([
-      { p: W(x + ax, h, z + az), n: nrm, c: dark }, { p: W(x + bx, h, z + bz), n: nrm, c: dark },
-      { p: W(x + bx, hb, z + bz), n: nrm, c: dark }, { p: W(x + ax, ha, z + az), n: nrm, c: dark }]);
-    const right = i + 1 < n ? [flat[j][i + 1], flat[j][i + 1]] : [bilinear(c, 1, v0), bilinear(c, 1, v0 + step)];
-    const down = j + 1 < n ? [flat[j + 1][i], flat[j + 1][i]] : [bilinear(c, u0, 1), bilinear(c, u0 + step, 1)];
-    const left = i === 0 ? [bilinear(c, 0, v0), bilinear(c, 0, v0 + step)] : null, top = j === 0 ? [bilinear(c, u0, 0), bilinear(c, u0 + step, 0)] : null;
-    if (Math.abs(right[0] - h) > 0.004 || Math.abs(right[1] - h) > 0.004) riser(u0 + step, v0, u0 + step, v0 + step, right[0], right[1], [right[0] > h ? -1 : 1, 0, 0]);
-    if (Math.abs(down[0] - h) > 0.004 || Math.abs(down[1] - h) > 0.004) riser(u0, v0 + step, u0 + step, v0 + step, down[0], down[1], [0, 0, down[0] > h ? -1 : 1]);
-    if (left && (Math.abs(left[0] - h) > 0.004 || Math.abs(left[1] - h) > 0.004)) riser(u0, v0, u0, v0 + step, left[0], left[1], [left[0] > h ? 1 : -1, 0, 0]);
-    if (top && (Math.abs(top[0] - h) > 0.004 || Math.abs(top[1] - h) > 0.004)) riser(u0, v0, u0 + step, v0, top[0], top[1], [0, 0, top[0] > h ? 1 : -1]);
+  const gx = (c[1] + c[3] - c[0] - c[2]) / 2, gz = (c[2] + c[3] - c[0] - c[1]) / 2;
+  // 단 방향: 길이 한 방향(남북·동서)으로 이어져 있으면 그 길을 따라, 아니면(넓은 면) 더 많이 기운 쪽
+  const m = connectMask(grid, x, z), ns = (m & (N | S)) && !(m & (E | WEST)), ew = (m & (E | WEST)) && !(m & (N | S));
+  const alongX = ew ? true : ns ? false : Math.abs(gx) >= Math.abs(gz);
+  // t: 올라가는 축(0→1), s: 가로 축. P(t, s) → 칸 안 (u, v)
+  const uv = (t, s2) => (alongX ? [t, s2] : [s2, t]);
+  const edgeH = (t, s2) => { const [u, v] = uv(t, s2); return bilinear(c, u, v); };   // 가장자리 실제 높이(이웃과 같음)
+  const h0 = (edgeH(0, 0) + edgeH(0, 1)) / 2, h1 = (edgeH(1, 0) + edgeH(1, 1)) / 2;
+  const n = Math.max(2, Math.min(6, Math.round(Math.abs(h1 - h0) / 0.07)));
+  const tread = i => h0 + (h1 - h0) * (i + 0.5) / n;
+  const P = (t, s2, h) => { const [u, v] = uv(t, s2); return toW(x + u, h, z + v); };
+  const up = [0, 1, 0], col = groundColor(grid, x + 0.5, z + 0.5, new THREE.Color()), dark = col.clone().multiplyScalar(0.7);
+  const axisN = sign => (alongX ? [sign, 0, 0] : [0, 0, sign]), sideN = sign => (alongX ? [0, 0, sign] : [sign, 0, 0]);
+  const wall = (a, bb, cc, d, nrm) => b.quad([a, bb, cc, d].map(p => ({ p, n: nrm, c: dark })));
+  const SEG = 4;
+  for (let i = 0; i < n; i++) {
+    const t0 = i / n, t1 = (i + 1) / n, h = tread(i), tc = col.clone().multiplyScalar(0.94 + 0.06 * (i % 2));
+    b.quad([P(t0, 0, h), P(t1, 0, h), P(t1, 1, h), P(t0, 1, h)].map(p => ({ p, n: up, c: tc })));
+    // 디딤판 사이 벽(다음 단과의 높이 차)
+    if (i + 1 < n) { const hn = tread(i + 1); wall(P(t1, 0, h), P(t1, 1, h), P(t1, 1, hn), P(t1, 0, hn), axisN(hn > h ? -1 : 1)); }
+    // 옆 두 변: 디딤판 높이 ↔ 이웃 땅 가장자리 높이
+    for (const s2 of [0, 1]) wall(P(t0, s2, h), P(t1, s2, h), P(t1, s2, edgeH(t1, s2)), P(t0, s2, edgeH(t0, s2)), sideN(s2 ? 1 : -1));
+  }
+  // 앞·뒤 변: 첫 단·마지막 단 높이 ↔ 이웃 땅 가장자리(이웃 꼭짓점 간격대로 나눠서)
+  for (const [t, h] of [[0, tread(0)], [1, tread(n - 1)]]) for (let k = 0; k < SEG; k++) {
+    const s0 = k / SEG, s1 = (k + 1) / SEG;
+    wall(P(t, s0, h), P(t, s1, h), P(t, s1, edgeH(t, s1)), P(t, s0, edgeH(t, s0)), axisN(t ? 1 : -1));
   }
 }
 
@@ -173,7 +186,7 @@ export function buildChunkGeometry(grid, cx, cz) {
 export class GroundChunks {
   constructor(scene, grid) {
     this.scene = scene; this.grid = grid; this.meshes = new Map(); this.rebuilt = 0;
-    this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+    this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });   // 어느 쪽에서 봐도 비치지 않게
   }
   /** 바뀐 청크만 다시 만든다. 다시 만든 청크 수를 돌려준다. */
   sync() {
