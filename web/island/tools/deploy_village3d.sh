@@ -8,6 +8,7 @@
 #          그 index.html과 assets/suburban/(건물 모델)만 폴더에 넣는다. models/, assets/nk/, assets/sk/, play.html은 그대로 둔다.
 set -euo pipefail
 
+cd /tmp                                   # sudo -u 로 다른 사용자가 실행해도 지금 폴더 권한 문제가 없게
 BRANCH="${BRANCH:-ccr-8c22e145-eamoew}"
 DIR="${1:-}"
 if [ -z "$DIR" ]; then echo "사용법: bash $0 /village3d/폴더/경로 [--rollback]"; exit 1; fi
