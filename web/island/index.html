@@ -12,6 +12,10 @@
   canvas { display: block; touch-action: none; }
   [hidden] { display: none !important; }
   button:disabled { opacity: .55; cursor: default; }
+  #confirm { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 4; display: flex; gap: 8px;
+    background: rgba(255,255,255,.92); padding: 8px; border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+  #confirm[hidden] { display: none; }
+  #confirm .go { background: #e8742c; color: #fff; font-weight: 700; padding: 9px 16px; }
   button { border: 0; border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13.5px; cursor: pointer;
     background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); white-space: nowrap; }
   button.on { background: var(--accent); color: #fff; }
@@ -79,6 +83,7 @@
   <div id="files"><button id="summon" title="아직 마을에 없는 갈매미 하나가 무작위로 와요">🥚 소환</button><button id="dexBtn">도감·가방</button><button id="quality" title="자동: 느리면 해상도를 낮춤 · 높음 · 낮음(지형·그림자 가볍게)">화질: 자동</button><button id="seeds">씨앗 뿌리기</button><button id="zones">구역 이름</button><button id="save">저장</button><button id="load">불러오기</button><button id="reset">새 섬</button></div>
 </div>
 <div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기 &nbsp;|&nbsp; 도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기 &nbsp;|&nbsp; 휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 벌리기 = 확대 &nbsp;|&nbsp; 갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)</div>
+<div id="confirm" hidden><button id="cfBuild" class="go">🔨 건설</button><button id="cfRot">↻ 돌리기</button><button id="cfCancel">✕ 취소</button></div>
 <div id="overlay"></div>
 <div id="dex" hidden><div class="card"><div class="head"><b>도감 · 가방</b><button id="dexClose">닫기</button></div><div id="dexBody"></div></div></div>
 <div id="loading"><div class="gull">🐦</div><div class="title">갈매미맨 마을</div><div class="track"><div id="loadBar"></div></div><div id="loadText">불러오는 중…</div></div>

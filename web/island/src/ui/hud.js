@@ -30,6 +30,12 @@ export class Hud {
     this.handBtn.onclick = () => tools.setHand(!tools.hand); bar.appendChild(this.handBtn);
     tools.onHand = on => this.handBtn.classList.toggle("on", on);
     tools.onMode = (m, arg) => this.showMode(m, arg);
+    // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
+    const cf = document.getElementById("confirm"), cfBuild = document.getElementById("cfBuild");
+    tools.onPlan = (on, ok) => { cf.hidden = !on; cfBuild.disabled = !ok; };
+    cfBuild.onclick = () => tools.confirmBuild();
+    document.getElementById("cfRot").onclick = () => tools.rotate();
+    document.getElementById("cfCancel").onclick = () => tools.clearPlan();
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     this.instantBuild = false;
     document.getElementById("seeds").onclick = () => this.onSeeds?.();

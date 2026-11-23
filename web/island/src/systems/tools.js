@@ -34,7 +34,8 @@ export class Tools {
     addEventListener("pointercancel", e => { this.touchIds.delete(e.pointerId); this.cancelStroke(); });
     addEventListener("keydown", e => {
       if (e.target?.tagName === "INPUT") return;
-      if (e.code === "KeyR") this.rotate(); if (e.code === "Escape") this.setMode("view");
+      if (e.code === "KeyR") this.rotate(); if (e.code === "Enter" && this.plan) this.confirmBuild();
+      if (e.code === "Escape") { if (this.plan) this.clearPlan(); else this.setMode("view"); }   // Esc: 정해 둔 자리 취소 → 한 번 더 누르면 도구 끄기
       if (e.code === "BracketLeft") this.setBrush(this.brush - 2); if (e.code === "BracketRight") this.setBrush(this.brush + 2);
       if (e.code === "Space") { e.preventDefault(); if (!this.spaceHeld) { this.spaceHeld = true; this.cancelStroke(); this.applyControls(); } }   // 스페이스 누른 채 드래그 = 화면 돌리기
     });
@@ -43,7 +44,7 @@ export class Tools {
   }
 
   setMode(mode, arg = null) {
-    this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null;
+    this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null; this.plan = null;
     this.heightOp = mode === "height" ? (arg || "raise") : null;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
@@ -146,9 +147,8 @@ export class Tools {
         this.world.reshape(x, z, this.heightOp, this.flatTarget, amount);
       }
     }
-    else if (this.mode === "build") {
-      const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
-      this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요` : `${def.name} 공사를 시작했어요 · 갈매미가 나무·돌로 지어요`); return;    // 미리보기 문구보다 결과를 보여 줌
+    else if (this.mode === "build") {                                            // 누르면 자리만 정함 → 🔨 건설 버튼(또는 Enter)으로 지음
+      this.plan = { x: h.x, z: h.z }; this.refresh(); return;
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
       if (b) { this.world.removeBuilding(b.id); this.refresh(); this.onStatus(`${josa(BUILDINGS[b.defId].name, "을", "를")} 철거했어요`); return; }
@@ -156,10 +156,21 @@ export class Tools {
     this.refresh();
   }
 
+  /** 정해 둔 자리에 짓기(🔨 건설). */
+  confirmBuild() {
+    const h = this.plan; if (this.mode !== "build" || !h) return;
+    const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
+    if (r.ok) this.plan = null;
+    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요` : `${def.name} 공사를 시작했어요 · 갈매미가 나무·돌로 지어요`);
+  }
+  clearPlan() { this.plan = null; this.refresh(); }
+
   // 미리보기 갱신: 칸 커서 / 고스트 색(초록 = 지을 수 있음, 빨강 = 못 지음 + 이유) / 철거 대상 강조
   refresh() {
-    const h = this.hover, grid = this.world.grid;
+    const plan = this.mode === "build" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false;
+    if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok); }
+    else this.onPlan?.(false);
     if (!h) { this.buildingViews.setHighlight(null); return; }
     const cell = grid.get(h.x, h.z);
     if (this.mode === "paint" || this.mode === "height") {
@@ -175,7 +186,7 @@ export class Tools {
       this.ghostFloor.scale.set(def.footprint.w, def.footprint.d, 1); this.ghostFloor.position.y = 0.04;
       this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
       this.doorMark.visible = true; this.doorMark.position.set(toWorldX(r.door.x + 0.5), y + 0.35, toWorldZ(r.door.z + 0.5));
-      this.onStatus(r.ok ? `${def.name} · 눌러서 짓기 · R 돌리기` : r.reason);
+      this.onStatus(!r.ok ? r.reason : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 누르면 옮김 · R 돌리기)` : `${def.name} · 눌러서 자리 정하기 · R 돌리기`);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
