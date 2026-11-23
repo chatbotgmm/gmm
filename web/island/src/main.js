@@ -10,6 +10,8 @@ import { PROPS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { Hud } from "./ui/hud.js";
+import { Quality } from "./render/quality.js";
+import { setTerrainDetail } from "./render/groundChunks.js";
 import { findCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE } from "./render/characters.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
@@ -36,10 +38,13 @@ sun.shadow.mapSize.set(TOUCH ? 2048 : 4096, TOUCH ? 2048 : 4096);
 Object.assign(sun.shadow.camera, { left: -36, right: 36, top: 36, bottom: -36, near: 1, far: 100 });
 sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; scene.add(sun);
 const water = createWater(); scene.add(water);
+
 const overlay = document.getElementById("overlay");
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
 let world, chunks, buildingViews, unitViews, lifeViews, worldRoot;
+// 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
+const quality = new Quality(renderer, sun, sub => { if (setTerrainDetail(sub) && world) world.grid.markAllDirty(); });
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = true; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 화면에서는 높이가 스르르 바뀜
@@ -48,7 +53,7 @@ function mount(w) {
   unitViews = new UnitViews(worldRoot, world);
   lifeViews = new LifeViews(worldRoot, world, overlay);
   addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map));
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS)); }
+  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS), quality.cfg.model); }
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
 }
 let tools = null, hud = null;
@@ -69,7 +74,7 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 document.getElementById("loading").hidden = true;
 
 // ---------- 매 프레임
-const clock = new THREE.Clock(); let simT = 0, lastSync = 0;
+const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0;
 // 키보드로 화면: Q/E 돌리기, 방향키 옮기기(입력창이 아닐 때)
 const keys = new Set();
 addEventListener("keydown", e => { if (e.target?.tagName !== "INPUT" && /^(KeyQ|KeyE|Arrow(Up|Down|Left|Right))$/.test(e.code)) { keys.add(e.code); if (e.code.startsWith("Arrow")) e.preventDefault(); } });
@@ -90,7 +95,7 @@ function frame() {
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(); lastSync = now; }
   keyCamera(dt);
-  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT);
+  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   water.userData.tick(simT);
@@ -98,12 +103,15 @@ function frame() {
   controls.target.x = THREE.MathUtils.clamp(controls.target.x, -30, 30); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -30, 30);
   controls.update();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);
-  hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt });
+  if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps }); }   // 글자판은 1초에 5번만
+  quality.frame(dt, now);
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
+hud.onQuality = () => { quality.next(); hud.status(`화질: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.cfg.name; };
+hud.setQualityLabel(quality.cfg.name);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { quality, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

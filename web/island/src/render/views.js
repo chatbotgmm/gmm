@@ -77,6 +77,10 @@ export async function addModuleViews(scene, world) {
   return map;
 }
 
+const BLOB_GEO = new THREE.CircleGeometry(1, 20);
+const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x1d2b14, transparent: true, opacity: 0.28, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+const frustum = new THREE.Frustum(), projView = new THREE.Matrix4(), sphere = new THREE.Sphere();
+
 export class UnitViews {
   constructor(scene, world) {
     this.world = world; this.chars = []; this.scene = scene;
@@ -85,12 +89,16 @@ export class UnitViews {
       // 누르기용 보이지 않는 원기둥(작은 갈매미도 누르기 쉽게 최소 크기를 둠). 크기는 sync에서 몸에 맞춤.
       const pick = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ visible: false }));
       pick.userData.unitId = u.unitId; g.add(pick);
-      return { g, cap, ch: null, pick };
+      cap.traverse(o => { if (o.isMesh) o.castShadow = false; });
+      // 발밑 둥근 그림자(가벼움)
+      const blob = new THREE.Mesh(BLOB_GEO, BLOB_MAT); blob.rotation.x = -Math.PI / 2; blob.position.y = 0.02; blob.renderOrder = 1;
+      blob.scale.setScalar(0.32 * (u.scale || 1) + 0.08); g.add(blob);
+      return { g, cap, ch: null, pick, blob };
     });
   }
   /** 기존 갈매미 모델로 바꾼다(i번째 유닛 ↔ chars[i]). 모델을 못 불러온 유닛은 캡슐 그대로. */
-  async useCharacters(set, loadCharacter, tools = null) {
-    const results = await Promise.allSettled(this.views.map((v, i) => loadCharacter(set.dir, set.chars[i % set.chars.length], tools)));
+  async useCharacters(set, loadCharacter, tools = null, simplifyRatio = 1) {
+    const results = await Promise.allSettled(this.views.map((v, i) => loadCharacter(set.dir, set.chars[i % set.chars.length], tools, simplifyRatio)));
     results.forEach((r, i) => {
       const v = this.views[i];
       if (r.status !== "fulfilled") { console.warn("갈매미 모델을 못 불러와 캡슐을 씁니다", r.reason); return; }
@@ -99,7 +107,9 @@ export class UnitViews {
     return results.filter(r => r.status === "fulfilled").length;
   }
   /** 매 프레임: 위치·방향, 동작(AI가 정한 u.anim, 아니면 걷기·달리기·서 있기), 손의 도구, 낚싯줄과 찌. */
-  sync(dt, playAnim, walkScale = 2.2, runScale = 1.5, speedBoost = 1, time = 0) {
+  sync(dt, playAnim, walkScale = 2.2, runScale = 1.5, speedBoost = 1, time = 0, camera = null) {
+    if (camera) { projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projView); }
+    this.frameNo = (this.frameNo || 0) + 1;
     this.world.units.forEach((u, i) => {
       const v = this.views[i], { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
@@ -114,7 +124,12 @@ export class UnitViews {
           if (!walking) playAnim(ch, "Idle", 1); else if (u.running) playAnim(ch, "Run", runScale * speedBoost); else playAnim(ch, "Walk", walkScale * speedBoost);
         }
         for (const [k, t] of Object.entries(ch.inHand)) t.visible = u.tool === k;
-        if (g.visible) ch.mixer.update(dt);
+        // 애니메이션 계산: 화면 밖이면 건너뛰고, 멀면 두 프레임에 한 번(시간은 모아서)
+        sphere.center.copy(g.position); sphere.radius = 1.5 * (u.scale || 1);
+        const onScreen = !camera || frustum.intersectsSphere(sphere), far = camera && camera.position.distanceTo(g.position) > 28;
+        v.animDt = (v.animDt || 0) + dt;
+        if (g.visible && onScreen && (!far || (this.frameNo + i) % 2 === 0)) { ch.mixer.update(v.animDt); v.animDt = 0; }
+        else if (v.animDt > 0.5) v.animDt = 0.5;
       } else {
         cap.position.y = walking ? Math.abs(Math.sin(performance.now() / 110 + i)) * 0.05 : 0;   // 캡슐: 걸을 때 콩콩
       }

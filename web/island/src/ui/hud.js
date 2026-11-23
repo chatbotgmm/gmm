@@ -34,6 +34,7 @@ export class Hud {
     this.instantBuild = false;
     document.getElementById("seeds").onclick = () => this.onSeeds?.();
     document.getElementById("dexBtn").onclick = () => this.showDex(true);
+    this.qBtn = document.getElementById("quality"); this.qBtn.onclick = () => this.setQualityLabel(this.onQuality?.());
     document.getElementById("dexClose").onclick = () => this.showDex(false);
     this.info = document.getElementById("info");
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
@@ -111,6 +112,7 @@ export class Hud {
       i => i.furniture ? "가구 · 2단계 실내 꾸미기에서 놓기" : `${i.price}🐚`);
     body.append(el("p", "dim", "다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
+  setQualityLabel(name) { if (name) this.qBtn.textContent = `화질: ${name}`; }
   status(text) { this.msg.textContent = text; this.msg.hidden = !text; }
   update(chunkInfo) {
     const w = this.world, inside = w.units.filter(u => u.insideBuildingId).length;
@@ -119,7 +121,7 @@ export class Hud {
     this.stats.innerHTML = `<span>🌳 나무 ${w.res.wood}</span><span>⛰ 돌 ${w.res.stone}</span><span>⚙ 철 ${w.res.iron}</span>` +
       `<span>🍗 음식 ${w.res.food}</span><span>🐚 조개 ${w.res.coins}</span><span>${mood} 포만감 ${avg.toFixed(0)}</span>` +
       `<span>🏠 건물 ${w.buildings.size}${building ? ` (공사 ${building})` : ""}</span><span>🐦 ${w.units.length}마리 · 건물 안 ${inside}</span>` +
-      `<span class="dim">🧩 청크 ${chunkInfo.count}개 · 다시 그림 ${chunkInfo.rebuilt}회</span>`;
+      `<span class="dim">🧩 청크 ${chunkInfo.count}개 · 다시 그림 ${chunkInfo.rebuilt}회${chunkInfo.fps ? ` · ${chunkInfo.fps} fps` : ""}</span>`;
     w.units.forEach((u, i) => { const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
       this.rows[i].querySelector(".act").textContent = b ? `${BUILDINGS[b.defId].name} 안` : STATE_LABEL[u.state] || u.state;
       const f = this.rows[i].querySelector(".full"); f.textContent = Math.round(u.full ?? 0);

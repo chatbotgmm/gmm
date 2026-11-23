@@ -9,7 +9,9 @@ import { GROUND_STYLE } from "../data/catalog.js";
 import { connectMask, N, E, S, W as WEST } from "../world/autotile.js";
 import { corners as cornersRaw, heightIn, bilinear } from "../world/terrain.js";
 
-const SUB = 4, STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
+let SUB = 4;                                   // 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
+const STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
+export function setTerrainDetail(sub) { const changed = SUB !== sub; SUB = sub; return changed; }
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
 const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
@@ -196,7 +198,7 @@ export class GroundChunks {
       const [cx, cz] = key.split(",").map(Number), geo = buildChunkGeometry(this.grid, cx, cz);
       let m = this.meshes.get(key);
       if (m) { m.geometry.dispose(); m.geometry = geo; }
-      else { m = new THREE.Mesh(geo, this.material); m.receiveShadow = true; m.castShadow = true; m.name = `chunk ${key}`; m.userData.chunk = key; this.scene.add(m); this.meshes.set(key, m); }
+      else { m = new THREE.Mesh(geo, this.material); m.receiveShadow = true; m.castShadow = false; m.name = `chunk ${key}`; m.userData.chunk = key; this.scene.add(m); this.meshes.set(key, m); }   // 땅은 그림자를 받기만(그림자용으로 다시 그리지 않음)
     }
     this.rebuilt += keys.length; return keys.length;
   }

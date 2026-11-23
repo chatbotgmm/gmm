@@ -26,6 +26,31 @@ export async function findCharacterSet() {
   return null;
 }
 
+// ---- 갈매미 모델 가볍게: 마리당 약 3만 삼각형이라 불러올 때 meshoptimizer로 줄인다(뼈대 가중치는 꼭짓점에 그대로 있어 애니메이션 유지).
+let simplifier = null;
+async function getSimplifier() {
+  if (!simplifier) simplifier = import("https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.js")
+    .then(async m => { await m.MeshoptSimplifier.ready; return m.MeshoptSimplifier; }).catch(e => { console.warn("모델 줄이기를 못 불러옴(원본 사용)", e); return null; });
+  return simplifier;
+}
+/** 메쉬 하나의 삼각형을 ratio(0~1) 정도로 줄임. 재질 묶음(groups)이 있으면 묶음마다. */
+export async function simplifyMesh(mesh, ratio) {
+  const S = await getSimplifier(), g = mesh.geometry;
+  if (!S || ratio >= 0.99 || !g.index || !g.attributes.position || g.attributes.position.isInterleavedBufferAttribute) return false;
+  const pos = g.attributes.position, P = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) { P[i * 3] = pos.getX(i); P[i * 3 + 1] = pos.getY(i); P[i * 3 + 2] = pos.getZ(i); }
+  const idx = g.index.array, groups = g.groups.length ? g.groups : [{ start: 0, count: idx.length, materialIndex: 0 }];
+  const parts = [], newGroups = [];
+  for (const gr of groups) {
+    const src = new Uint32Array(idx.subarray(gr.start, gr.start + gr.count)), target = Math.max(3, Math.floor(src.length * ratio / 3) * 3);
+    const [out] = S.simplify(src, P, 3, target, 0.02, ["LockBorder"]);
+    newGroups.push({ start: parts.reduce((a, p) => a + p.length, 0), count: out.length, materialIndex: gr.materialIndex }); parts.push(out);
+  }
+  const all = new Uint32Array(parts.reduce((a, p) => a + p.length, 0)); let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
+  g.setIndex(new THREE.BufferAttribute(all, 1)); g.clearGroups(); if (g.groups !== undefined && groups.length > 1) for (const gr of newGroups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  return true;
+}
+
 const KEYS = ["Idle", "Walk", "Run", "Jump", "Attack", "Chop", "Mine", "Build", "FishCast", "FishWait", "FishReel"];
 const ONCE = new Set(["Jump", "Attack", "FishCast", "FishReel"]);
 
@@ -54,9 +79,13 @@ export function loadTools(props) {
 }
 
 /** 캐릭터 하나: 장면 오브젝트, 애니메이션 믹서, 동작들, 손에 붙인 도구, 동작 길이(clip: AI가 타격 시점 계산에 씀). */
-export async function loadCharacter(dir, cfg, tools = null) {
+export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   const g = await loadGLB(dir + cfg.file.split("/").pop()), root = g.scene;
-  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false;
+  if (simplifyRatio < 0.99) { const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); }); for (const m of meshes) await simplifyMesh(m, simplifyRatio); }
+  // 그림자는 발밑 원판으로(무거운 모델을 그림자용으로 한 번 더 그리지 않음). 화면 밖이면 그리지 않게, 움직여도 잘리지 않을 만큼 넉넉한 범위.
+  root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = true;
+    if (o.geometry) { o.geometry.computeBoundingSphere(); if (o.geometry.boundingSphere) o.geometry.boundingSphere.radius *= 1.6; }
+    if (o.isSkinnedMesh) { o.computeBoundingSphere?.(); if (o.boundingSphere) o.boundingSphere.radius *= 1.6; }
     for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; } } });   // 환경맵 없이 검게 보이지 않게
   root.scale.setScalar(cfg.scale);
   const mixer = new THREE.AnimationMixer(root), acts = {}, clip = {};
