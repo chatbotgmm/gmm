@@ -6,7 +6,7 @@ import { Grid } from "./Grid.js";
 import { generateIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
 import { nearestWalkable } from "./pathfinding.js";
-import { updateUnit, exitBuilding, enterBuilding, setIdle, emote } from "../units/unitBrain.js";
+import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit } from "../units/unitBrain.js";
 import { seededRandom } from "../util.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -106,14 +106,14 @@ export class World {
   isDone(b) { return b.hits >= b.need; }
   hammer(b, u) {
     if (this.isDone(b)) return;
-    b.hits++; this.emit("buildingProgress", b);
+    b.hits++; b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
     if (this.isDone(b)) { this.emit("buildingDone", b); if (u) emote(u, "🏠!"); }
   }
   finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.emit("buildingDone", b); } }
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
-    for (const u of this.units) if (u.focus === b) setIdle(u, this.rnd, this);                     // 짓던 갈매미는 그만
+    for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) u.committed = null; }   // 짓던 갈매미는 그만
     this.grid.release(id); this.buildings.delete(id); this.emit("buildingRemoved", b);
     return true;
   }
@@ -122,7 +122,7 @@ export class World {
   // ---- 갈매미 들어 옮기기(드래그). 건물 안에 있는 갈매미는 보이지 않으므로 들 수 없다.
   pickUpUnit(u) {
     if (!u || u.insideBuildingId || u.state === UnitState.Held) return false;
-    setIdle(u, this.rnd, this);                                             // 하던 일(찜한 나무·낚시 자리 등)을 내려놓음
+    uncommit(u, this); setIdle(u, this.rnd, this);                          // 하던 일(찜한 나무·낚시 자리·맡은 공사)을 내려놓음
     u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held;
     return true;
   }

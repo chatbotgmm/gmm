@@ -24,8 +24,14 @@ export function emote(u, text, secs = 1.6) { u.emoteText = text; u.emoteT = secs
 function release(u) {
   const f = u.focus;
   if (f && f.claimed === u.unitId) f.claimed = null;
-  if (f && f.busy === u.unitId) f.busy = null;
+  if (f && f.busy === u.unitId && u.committed !== f.id) f.busy = null;   // 맡은 공사장(committed)은 끝날 때까지 찜 유지
   u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined;
+}
+/** 맡은 공사를 내려놓음(완공·들어 올림·철거 때). */
+export function uncommit(u, world) {
+  const b = u.committed && world && world.buildings.get(u.committed);
+  if (b && b.busy === u.unitId) b.busy = null;
+  u.committed = null;
 }
 export function setIdle(u, rnd, world = null, secs = null) {
   release(u);
@@ -131,12 +137,19 @@ function startActivity(u, kind, world, rnd) {
       s.claimed = u.unitId; u.focus = s; u.state = US.GoFish; return true;
     }
     case "build": {
-      const b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy).sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
+      // 맡은 공사장이 있으면 그곳, 없으면 남이 안 맡은 공사장 중 많이 지어진 곳. 한 번 맡으면 100%까지 맡는다.
+      let b = u.committed ? world.buildings.get(u.committed) : null;
+      if (b && (world.isDone(b) || (b.busy && b.busy !== u.unitId))) { uncommit(u, world); b = null; }
+      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy).sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
       if (!b) return false;
-      if (world.res.wood < 1 || world.res.stone < 1)                              // 재료가 없으면 구하러 감
-        return startActivity(u, world.res.wood <= world.res.stone ? "chop" : "mine", world, rnd);
+      u.committed = b.id; b.busy = u.unitId;
+      if (world.res.wood < 1 || world.res.stone < 1) {                            // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
+        if (startActivity(u, world.res.wood <= world.res.stone ? "chop" : "mine", world, rnd)) { emote(u, "재료 구하러!"); return true; }
+        if (startActivity(u, world.res.wood <= world.res.stone ? "mine" : "chop", world, rnd)) { emote(u, "재료 구하러!"); return true; }
+        return false;
+      }
       if (!startPath(u, world, b.door.x, b.door.z)) return false;
-      b.busy = u.unitId; u.focus = b; u.state = US.GoBuild; return true;
+      u.focus = b; u.state = US.GoBuild; return true;
     }
     case "enter": {
       const done = [...world.buildings.values()].filter(b => world.isDone(b));
@@ -150,6 +163,7 @@ function startActivity(u, kind, world, rnd) {
 }
 
 function chooseNext(u, world, rnd) {
+  if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
   const p = PERSONA[u.name] || PERSONA["기본"];
   const opts = Object.entries(p).filter(([, w]) => typeof w === "number" && w > 0);
   for (let tries = 0; tries < 3; tries++) {
@@ -272,7 +286,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = u.focus;
       if (!world.buildings.has(b.id) || world.isDone(b)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        if (world.res.wood < 1 || world.res.stone < 1) { emote(u, "재료가 없어"); setIdle(u, rnd, world); break; }
+        if (world.res.wood < 1 || world.res.stone < 1) { setIdle(u, rnd, world, 0.2); break; }   // 그새 재료가 떨어짐 → 구하러 감(맡은 건 유지)
         world.res.wood--; world.res.stone--;                                   // 도착하면 나무 1·돌 1을 씀
         u.state = US.Build; u.tool = "hammer";
       }
@@ -282,7 +296,12 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = u.focus;
       if (!world.buildings.has(b.id)) { setIdle(u, rnd, world); break; }
       const c = b.cells.reduce((a, [x, z]) => [a[0] + x + 0.5, a[1] + z + 0.5], [0, 0]); face(u, c[0] / b.cells.length, c[1] / b.cells.length);
-      workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => { if (!world.isDone(b)) emote(u, "🔨"); setIdle(u, rnd, world); });
+      // 망치질 3번마다 나무 1·돌 1을 더 써서 그 자리에서 계속. 재료가 없으면 구하러 갔다가 돌아옴. 100%가 되면 끝.
+      workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
+        if (world.isDone(b)) { uncommit(u, world); setIdle(u, rnd, world); return; }
+        if (world.res.wood >= 1 && world.res.stone >= 1) { world.res.wood--; world.res.stone--; return; }   // u.work가 비었으니 다음 바퀴부터 다시
+        emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);
+      });
       break;
     }
     case US.GoToBuilding: {

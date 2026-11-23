@@ -182,3 +182,30 @@ test("찜(나무·낚시 자리)은 하던 갈매미를 들어 올리면 풀린�
   const spot = w.spots.find(s => s.claimed === u.unitId); assert.ok(spot);
   w.pickUpUnit(u); assert.equal(spot.claimed, null); assert.equal(u.tool, null);
 });
+
+test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 100%까지 혼자 끝낸다", () => {
+  const w = World.create(7, seededRandom(21));
+  const b = w.placeBuilding("manor", 38, 34, 0).building;       // 4×3 → 망치질 36번, 나무·돌 각 12 필요(처음엔 6씩)
+  const builders = new Set(); let first = null, gathered = false;
+  w.on("buildingProgress", x => { if (x === b) { builders.add(x.lastBuilder); first ??= x.lastBuilder; } });
+  for (let t = 0; t < 900 && !w.isDone(b); t += 1 / 20) {
+    w.update(1 / 20);
+    const u = first && w.units.find(u => u.unitId === first);
+    if (u && ["GoChop", "Chop", "GoMine", "Mine"].includes(u.state) && u.committed === b.id) gathered = true;
+    if (u && !w.isDone(b)) assert.equal(b.busy, first, "맡은 동안 다른 갈매미가 가져가지 않음");
+  }
+  assert.ok(w.isDone(b), `완공돼야 함: ${b.hits}/${b.need}`);
+  assert.deepEqual([...builders], [first], "한 갈매미가 끝까지");
+  assert.ok(gathered, "재료가 모자라 구하러 다녀옴");
+  for (let t = 0; t < 2; t += 1 / 20) w.update(1 / 20);          // 마지막 망치질 동작이 끝나면 맡은 일을 내려놓음
+  const u = w.units.find(u => u.unitId === first);
+  assert.equal(u.committed, null); assert.equal(b.busy, null);
+});
+
+test("공사를 맡은 갈매미를 들어 올리면 공사장이 풀린다", () => {
+  const w = World.create(7, seededRandom(22));
+  const b = w.placeBuilding("house", 38, 26, 0).building;
+  for (let t = 0; t < 400 && !b.busy; t += 1 / 20) w.update(1 / 20);
+  const u = w.units.find(u => u.unitId === b.busy); assert.ok(u);
+  w.pickUpUnit(u); assert.equal(b.busy, null); assert.equal(u.committed, null);
+});
