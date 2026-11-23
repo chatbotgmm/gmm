@@ -52,7 +52,7 @@ export class UnitControl {
     if (this.held) {
       const c = this.tools.pick(e.clientX, e.clientY), u = this.held, w = this.getWorld();
       if (c) {
-        const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z), h = w.grid.walkHeight(c.x, c.z);
+        const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z) || !w.grid.isWater(c.x, c.z), h = w.grid.walkHeight(c.x, c.z);
         u.x = c.x + 0.5; u.z = c.z + 0.5; u.y = (b ? b.elevation ?? 0 : w.standHeight(c.x + 0.5, c.z + 0.5)) + 0.5;      // 살짝 들린 채 따라옴
         this.mark.visible = true; this.mark.position.set(toWorldX(c.x + 0.5), Math.max(w.standHeight(c.x + 0.5, c.z + 0.5), -0.18) + 0.04, toWorldZ(c.z + 0.5));
         this.mark.material.color.setHex(ok ? 0x4fcf78 : 0xe0574f);
@@ -67,7 +67,7 @@ export class UnitControl {
     if (this.held) {
       const u = this.held, c = this.target || { x: Math.floor(u.heldFrom.x), z: Math.floor(u.heldFrom.z) }; this.held = null; this.target = null;
       const r = w.dropUnit(u, c.x, c.z);
-      this.onStatus(r.ok ? (r.building ? `${josa(u.name, "이", "가")} 건물에 들어갔어요` : `${josa(u.name, "을", "를")} 옮겼어요`) : r.reason);
+      this.onStatus(r.ok ? (r.building ? `${josa(u.name, "이", "가")} 건물에 들어갔어요` : r.act ? `${u.name}: ${r.act.label}` : `${josa(u.name, "을", "를")} 옮겼어요`) : r.reason);
       return;
     }
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_PX) return;   // 시야를 돌린 드래그

@@ -146,12 +146,36 @@ test("갈매미 들어 옮기기: 땅에 내려놓기 / 건물에 넣기 / 바�
   const x0 = u.x, z0 = u.z;
   assert.equal(w.pickUpUnit(u), true); assert.equal(u.state, UnitState.Held);
   w.update(1); assert.equal(u.x, x0);                                        // 들려 있는 동안 AI가 움직이지 않음
-  assert.deepEqual(w.dropUnit(u, 40, 40), { ok: true }); assert.equal(u.x, 40.5); assert.equal(u.z, 40.5); assert.equal(u.state, UnitState.Idle);
+  assert.equal(w.dropUnit(u, 40, 40).ok, true); assert.equal(u.x, 40.5); assert.equal(u.z, 40.5);
   w.pickUpUnit(u); const r = w.dropUnit(u, 38, 26);
   assert.equal(r.building, b); assert.equal(u.state, UnitState.Inside); assert.deepEqual(b.occupants, [u.unitId]);
   assert.equal(w.pickUpUnit(u), false);                                      // 건물 안이면 못 듦
   const v = w.units[1], vx = v.x, vz = v.z; w.pickUpUnit(v);
   assert.equal(w.dropUnit(v, 0, 0).reason, "바다에는 내려놓을 수 없어요"); assert.equal(v.x, vx); assert.equal(v.z, vz);
+});
+
+test("끌어다 놓기: 놓은 곳 가까운 나무·광석·공사장·친구와 바로 상호작용", () => {
+  const w = World.create(7, seededRandom(4)), u = w.units[0];
+  const near = (list, ok) => list.find(t => ok(t) && w.grid.isWalkable(t.x + 1, t.z));
+  const tree = near(w.trees, t => t.alive && !t.claimed);
+  w.pickUpUnit(u); let r = w.dropUnit(u, tree.x, tree.z);                  // 나무 칸에 놓으면 옆 땅에 서서 그 나무를 벰
+  assert.equal(r.ok, true); assert.equal(r.act.kind, "chop"); assert.equal(u.focus, tree); assert.equal(tree.claimed, u.unitId); assert.equal(u.state, UnitState.GoChop);
+  const ore = near(w.ores, t => t.alive && !t.claimed);
+  w.pickUpUnit(u); assert.equal(tree.claimed, null, "들면 찜한 나무를 내려놓음");
+  r = w.dropUnit(u, ore.x + 1, ore.z); assert.equal(r.act.kind, "mine"); assert.equal(u.focus, ore);
+  const b = w.placeBuilding("house", 38, 26, 0).building, builder = w.units.find(o => o.job === "builder") || u;
+  w.pickUpUnit(builder); r = w.dropUnit(builder, 38, 26);                  // 공사장 칸에 놓으면 문 앞에서 공사를 맡음
+  assert.equal(r.ok, true); assert.equal(builder.committed, b.id); assert.ok(["build"].includes(r.act.kind));
+  // 아무것도 없는 곳: 그냥 내려놓기
+  const v = w.units[1]; w.pickUpUnit(v);
+  for (let x = 20; x < 44; x++) for (let z = 20; z < 44; z++) {
+    if (!w.grid.isWalkable(x, z)) continue; v.x = x + 0.5; v.z = z + 0.5;
+    const busy = [...w.trees, ...w.ores, ...w.spots, ...w.plots].some(t => Math.hypot(t.x - x, t.z - z) < 4) || w.units.some(o => o !== v && Math.hypot(o.x - x, o.z - z) < 4)
+      || [...w.buildings.values()].some(bb => Math.hypot(bb.door.x - x, bb.door.z - z) < 4) || w.seeds.some(s => Math.hypot(s.x - x, s.z - z) < 4) || (w.stall && Math.hypot(w.stall.standX - x, w.stall.standZ - z) < 4);
+    if (busy) continue;
+    assert.deepEqual(w.dropUnit(v, x, z), { ok: true }); return;
+  }
+  assert.fail("빈 땅을 못 찾음");
 });
 
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {

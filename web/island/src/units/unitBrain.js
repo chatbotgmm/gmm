@@ -251,6 +251,38 @@ function startActivityInner(u, kind, world, rnd) {
   return false;
 }
 
+/** 끌어다 놓은 갈매미: 놓은 자리 가까이(R칸 안) 있는 것 중 가장 가까운 것과 바로 상호작용한다.
+ *  나무→벌목, 광석→채광, 낚시 자리→낚시, 짓는 중인 건물→공사(지을 수 있는 등급일 때), 밭→밭일(직업 무관, 직접 시킨 일이라),
+ *  가판대→장사(상인만), 씨앗→줍기, 다른 갈매미→놀러 가기. 할 게 없으면 null. prefer: 먼저 고를 대상(놓은 칸의 공사장 등). */
+export function interactNear(u, world, rnd = Math.random, R = 2.6, prefer = null) {
+  const g = world.grid, cands = [];
+  const add = (kind, obj, x, z, label) => { const d = Math.hypot(x - u.x, z - u.z); if (d <= R || obj === prefer) cands.push({ kind, obj, d: obj === prefer ? -1 : d, label }); };
+  for (const t of world.trees) if (t.alive && !t.claimed) add("chop", t, t.x + 0.5, t.z + 0.5, "나무를 베러 가요");
+  for (const t of world.ores) if (t.alive && !t.claimed) add("mine", t, t.x + 0.5, t.z + 0.5, "광석을 캐러 가요");
+  for (const s of world.spots) if (!s.claimed && g.isWalkable(s.x, s.z)) add("fish", s, s.x + 0.5, s.z + 0.5, "낚시하러 가요");
+  for (const b of world.buildings.values()) if (!world.isDone(b) && (!b.busy || b.busy === u.unitId) && J.canBuild(u, BUILDINGS[b.defId])) add("build", b, b.door.x + 0.5, b.door.z + 0.5, "공사를 도우러 가요");
+  for (const p of world.plots) if (!p.claimed && (p.stage === "empty" || p.stage === "ripe")) add("farm", p, p.x + 0.5, p.z + 0.5, p.stage === "ripe" ? "밭을 거두러 가요" : "씨를 심으러 가요");
+  if (world.stall && u.job === "merchant") add("trade", world.stall, world.stall.standX + 0.5, world.stall.standZ + 0.5, "장사하러 가요");
+  for (const s of world.seeds) if (!s.claimed) add("forage", s, s.x, s.z, "씨앗을 주우러 가요");
+  for (const o of world.units) if (o !== u && visible(o) && o.state !== US.Held) add("visit", o, o.x, o.z, `${o.name}에게 놀러 가요`);
+  cands.sort((a, b) => a.d - b.d);
+  for (const c of cands) {
+    const o = c.obj; let ok = false;
+    switch (c.kind) {
+      case "chop": case "mine":
+        if (pathBeside(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = c.kind === "chop" ? US.GoChop : US.GoMine; ok = true; } break;
+      case "fish": if (startPath(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = US.GoFish; ok = true; } break;
+      case "farm": if (startPath(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = US.GoFarm; ok = true; } break;
+      case "trade": ok = startActivityInner(u, "trade", world, rnd); break;
+      case "forage": if (startPath(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = US.Forage; ok = true; } break;
+      case "build": uncommit(u, world); u.committed = o.id; ok = startActivityInner(u, "build", world, rnd); if (!ok) uncommit(u, world); break;
+      case "visit": { const [fx, fz] = cellOf(o); if (pathBeside(u, world, fx, fz)) { u.focus = o; u.state = US.Visit; ok = true; } break; }
+    }
+    if (ok) { u.activity = c.kind === "build" && u.state !== US.GoBuild ? u.activity : c.kind; emote(u, "!"); return { kind: c.kind, label: c.label }; }
+  }
+  return null;
+}
+
 function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
   if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
