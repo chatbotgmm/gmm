@@ -5,7 +5,7 @@
 #   bash deploy_village3d.sh /village3d/폴더/경로 --rollback # 되돌리기
 #
 # 하는 일: GitHub chatbotgmm/gmm의 BRANCH를 내려받아 web/island를 한 파일(index.html)로 합치고,
-#          그 index.html과 assets/suburban/(건물 모델)만 폴더에 넣는다. models/, assets/nk/, assets/sk/, play.html은 그대로 둔다.
+#          그 index.html과 assets/suburban/(건물 모델)·assets/gulls/(가벼운 갈매미)만 폴더에 넣는다. models/, assets/nk/, assets/sk/, play.html은 그대로 둔다.
 set -euo pipefail
 
 cd /tmp                                   # sudo -u 로 다른 사용자가 실행해도 지금 폴더 권한 문제가 없게
@@ -38,11 +38,12 @@ SRC="$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -n 1)/web/island"
 [ -f "$SRC/tools/bundle.py" ] || { echo "내려받은 파일에 web/island가 없어요"; exit 1; }
 
 python3 "$SRC/tools/bundle.py" "$TMP/index.html" --flat
-mkdir -p "$DIR/assets/suburban"
+mkdir -p "$DIR/assets/suburban" "$DIR/assets/gulls"
 cp -r "$SRC/assets/suburban/." "$DIR/assets/suburban/"
+cp -r "$SRC/assets/gulls/." "$DIR/assets/gulls/"
 cp "$TMP/index.html" "$DIR/index.html"
 
 echo
-echo "바꿨어요: $DIR/index.html (+ assets/suburban/)"
+echo "바꿨어요: $DIR/index.html (+ assets/suburban/, assets/gulls/)"
 echo "1분쯤 뒤(Cloudflare 캐시 60초) https://gmm.dpdns.org/village3d/ 를 새로고침해 보세요."
 echo "되돌리기: bash $0 $DIR --rollback"

@@ -53,7 +53,7 @@ function mount(w) {
   unitViews = new UnitViews(worldRoot, world);
   lifeViews = new LifeViews(worldRoot, world, overlay);
   addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map));
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS), quality.cfg.model); }
+  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model); }
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
 }
 let tools = null, hud = null;

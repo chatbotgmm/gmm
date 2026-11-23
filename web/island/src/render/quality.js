@@ -6,10 +6,10 @@ const IS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coar
 const DPR = typeof devicePixelRatio !== "undefined" ? devicePixelRatio : 1;
 
 export const QUALITY = {
-  // model: 갈매미 모델 삼각형 비율(불러올 때 적용, 바꾸면 다음에 열 때부터)
-  high: { name: "높음", model: 1, maxPR: Math.min(DPR, IS_TOUCH ? 1.5 : 2), minPR: Math.min(DPR, IS_TOUCH ? 1.5 : 2), shadow: 2048, soft: true, terrainSub: 4, dynamic: false },
-  auto: { name: "자동", model: 0.4, maxPR: Math.min(DPR, IS_TOUCH ? 1.5 : 2), minPR: 0.6, shadow: IS_TOUCH ? 1024 : 2048, soft: !IS_TOUCH, terrainSub: IS_TOUCH ? 2 : 4, dynamic: true },
-  low:  { name: "낮음", model: 0.25, maxPR: Math.min(DPR, 1), minPR: 0.6, shadow: 1024, soft: false, terrainSub: 2, dynamic: true },
+  // model: 원본 갈매미 모델(약 3만 삼각형)을 불러올 때 남길 비율, liteModel: 가벼운 모델(assets/gulls, 약 1만)일 때. 바꾸면 다음에 열 때부터
+  high: { name: "높음", model: 1, liteModel: 1, maxPR: Math.min(DPR, IS_TOUCH ? 1.5 : 2), minPR: Math.min(DPR, IS_TOUCH ? 1.5 : 2), shadow: 2048, soft: true, terrainSub: 4, dynamic: false },
+  auto: { name: "자동", model: 0.4, liteModel: 1, maxPR: Math.min(DPR, IS_TOUCH ? 1.5 : 2), minPR: 0.6, shadow: IS_TOUCH ? 1024 : 2048, soft: !IS_TOUCH, terrainSub: IS_TOUCH ? 2 : 4, dynamic: true },
+  low:  { name: "낮음", model: 0.25, liteModel: 0.6, maxPR: Math.min(DPR, 1), minPR: 0.6, shadow: 1024, soft: false, terrainSub: 2, dynamic: true },
 };
 const ORDER = ["auto", "high", "low"];
 const KEY = "galmaemiman-quality";

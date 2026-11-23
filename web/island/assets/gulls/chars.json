@@ -1,0 +1,114 @@
+[
+ {
+  "file": "models/gmm_char1.glb",
+  "name": "기본",
+  "height": 0.91,
+  "scale": 1.0,
+  "walk": 0.168,
+  "run": 0.553,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char2.glb",
+  "name": "미니",
+  "height": 0.933,
+  "scale": 0.2926,
+  "walk": 0.173,
+  "run": 0.572,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char3.glb",
+  "name": "자이언트",
+  "height": 0.725,
+  "scale": 1.8828,
+  "walk": 0.2,
+  "run": 0.625,
+  "hit": 0.4167,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char4.glb",
+  "name": "꽃",
+  "height": 0.862,
+  "scale": 1,
+  "walk": 0.155,
+  "run": 0.512,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char5.glb",
+  "name": "황금",
+  "height": 0.84,
+  "scale": 1,
+  "walk": 0.16,
+  "run": 0.529,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char6.glb",
+  "name": "물방울",
+  "height": 0.668,
+  "scale": 1,
+  "walk": 0.256,
+  "run": 0.856,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char7.glb",
+  "name": "불씨",
+  "height": 0.748,
+  "scale": 1,
+  "walk": 0.155,
+  "run": 0.511,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ },
+ {
+  "file": "models/gmm_char8.glb",
+  "name": "그림자",
+  "height": 0.813,
+  "scale": 1,
+  "walk": 0.15,
+  "run": 0.496,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  }
+ }
+]

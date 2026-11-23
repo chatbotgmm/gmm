@@ -3,7 +3,7 @@
 ## 지금 서버 상태 (2026-11-23, 밖에서 확인한 것)
 - https://gmm.dpdns.org/village3d/ 는 「갈매미 마을」(web/village와 같은 페이지)이다. Cloudflare를 거치고, 캐시는 60초(`cache-control: public, max-age=60`).
 - 섬 버전이 쓰는 파일 중 이미 서버에 있는 것: `models/chars.json`, `models/gmm_char1~8.glb`, `assets/nk/`의 나무·바위·그루터기, `assets/sk/`의 도구(도끼·곡괭이·망치)·광석 바위·건조대·양동이·텍스처.
-- 없는 것: `assets/suburban/` (건물 6채 + 텍스처). 그래서 **`index.html`을 바꾸고 `assets/suburban/` 폴더만 더하면 된다.** `models/`, `assets/nk/`, `play.html`은 그대로 둔다.
+- 없는 것: `assets/suburban/` (건물 6채 + 텍스처), `assets/gulls/` (가벼운 갈매미 8마리, 약 6 MB). 배포 스크립트가 둘 다 넣는다. 그래서 **`index.html`을 바꾸고 `assets/suburban/` 폴더만 더하면 된다.** `models/`, `assets/nk/`, `play.html`은 그대로 둔다.
 - 서버 코드(chatbotgmm/server)는 보지 못했다. 그래서 EC2 안의 폴더 위치와, 바꾼 뒤 서버를 다시 켜야 하는지는 확인하지 못했다.
 
 ## 올릴 파일 만들기

@@ -94,7 +94,7 @@ def main():
     artifact = "--artifact" in sys.argv
     code, n = bundle()
     if "--flat" in sys.argv or artifact:   # ../village/ 경로를 찾지 않고 같은 폴더의 models/, assets/만 씀
-        code = code.replace('["../village/models/", "models/"]', '["models/"]').replace('"../village/assets/', '"assets/')
+        code = code.replace('["assets/gulls/", "../village/models/", "models/"]', '["assets/gulls/", "models/"]').replace('"../village/assets/', '"assets/')
     html = open(os.path.join(ROOT, "index.html"), encoding="utf8").read()
     tag = '<script type="module" src="src/main.js"></script>'
     assert html.count(tag) == 1

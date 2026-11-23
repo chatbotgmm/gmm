@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-export const MODEL_DIRS = ["../village/models/", "models/"];
+// 가벼운 갈매미(assets/gulls: Blender로 삼각형 약 35%·텍스처 1024, tools/lighten_gulls.py)를 먼저 찾고, 없으면 원본
+export const MODEL_DIRS = ["assets/gulls/", "../village/models/", "models/"];
 export const WALK_SCALE = 2.2, RUN_SCALE = 1.5;        // web/village와 같은 애니메이션 속도 배율(발이 미끄러지지 않게 잰 값)
 const loader = new GLTFLoader();
 
