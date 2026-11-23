@@ -13,6 +13,7 @@ export const InteractionType = Object.freeze({ Sit: "Sit", Eat: "Eat", Work: "Wo
 export const UnitState = Object.freeze({
   Idle: "Idle", Wander: "Wander", GoToBuilding: "GoToBuilding", Inside: "Inside",
   GoToFurniture: "GoToFurniture", Interact: "Interact",
+  Held: "Held",                                   // 플레이어가 드래그로 들고 있음(AI 멈춤)
 });
 
 /**

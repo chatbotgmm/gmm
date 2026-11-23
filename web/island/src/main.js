@@ -6,6 +6,7 @@ import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { Tools } from "./systems/tools.js";
+import { UnitControl } from "./systems/unitControl.js";
 import { Hud } from "./ui/hud.js";
 import { findCharacterSet, loadCharacter, playAnim, WALK_SCALE, RUN_SCALE } from "./render/characters.js";
 
@@ -45,7 +46,7 @@ function mount(w) {
   unitViews = new UnitViews(worldRoot, world);
   addModuleViews(worldRoot, world);
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter); }
-  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); }
+  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); }
 }
 let tools = null, hud = null;
 const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
@@ -56,6 +57,9 @@ hud = new Hud({ tools, world,
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
   onReset: () => { mount(World.create(7)); hud.status("새 섬을 만들었어요"); },
 });
+const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
+  onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
+hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 document.getElementById("loading").hidden = true;
 
 // ---------- 매 프레임
@@ -66,6 +70,7 @@ function frame() {
   chunks.sync();                                    // 바뀐 청크만 다시 만듦
   unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE);
   water.userData.tick(simT);
+  unitControl.update(dt);                           // 따라가기
   controls.target.x = THREE.MathUtils.clamp(controls.target.x, -30, 30); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -30, 30);
   controls.update();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);
@@ -76,5 +81,5 @@ addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, inner
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, camera, controls, renderer, scene,
+window.__island = { get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

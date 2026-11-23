@@ -62,7 +62,10 @@ export class UnitViews {
     this.world = world; this.chars = [];
     this.views = world.units.map(u => {
       const g = new THREE.Group(), cap = unitPlaceholder(u.scale || 1); g.add(cap); g.userData.unitId = u.unitId; scene.add(g);
-      return { g, cap, ch: null };
+      // 누르기용 보이지 않는 원기둥(작은 갈매미도 누르기 쉽게 최소 크기를 둠). 크기는 sync에서 몸에 맞춤.
+      const pick = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ visible: false }));
+      pick.userData.unitId = u.unitId; g.add(pick);
+      return { g, cap, ch: null, pick };
     });
   }
   /** 기존 갈매미 모델로 바꾼다(i번째 유닛 ↔ chars[i]). 모델을 못 불러온 유닛은 캡슐 그대로. */
@@ -77,12 +80,13 @@ export class UnitViews {
   }
   sync(dt, playAnim, walkScale = 2.2, runScale = 1.5) {
     this.world.units.forEach((u, i) => {
-      const { g, cap, ch } = this.views[i]; g.visible = !u.insideBuildingId;
+      const { g, cap, ch, pick } = this.views[i]; g.visible = !u.insideBuildingId;
+      const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));
       let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
       const walking = !!u.path && u.pathIndex < u.path.length;
       if (ch) {                                                    // 진짜 모델: Idle / Walk / Run 애니메이션
-        if (!walking) playAnim(ch, "Idle", 1); else if (u.running) playAnim(ch, "Run", runScale); else playAnim(ch, "Walk", walkScale);
+        if (!walking || u.state === "Held") playAnim(ch, "Idle", 1); else if (u.running) playAnim(ch, "Run", runScale); else playAnim(ch, "Walk", walkScale);
         if (g.visible) ch.mixer.update(dt);
       } else {
         cap.position.y = walking ? Math.abs(Math.sin(performance.now() / 110 + i)) * 0.05 : 0;   // 캡슐: 걸을 때 콩콩

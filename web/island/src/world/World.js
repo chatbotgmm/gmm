@@ -5,7 +5,8 @@ import { Grid } from "./Grid.js";
 import { generateIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
 import { nearestWalkable } from "./pathfinding.js";
-import { updateUnit, exitBuilding } from "../units/unitBrain.js";
+import { updateUnit, exitBuilding, enterBuilding, setIdle } from "../units/unitBrain.js";
+import { UnitState } from "../data/types.js";
 import { seededRandom } from "../util.js";
 
 export class World {
@@ -60,6 +61,23 @@ export class World {
     return true;
   }
   buildingAt(x, z) { const c = this.grid.get(x, z); return c && c.occupiedId ? this.buildings.get(c.occupiedId) || null : null; }
+
+  // ---- 갈매미 들어 옮기기(드래그). 건물 안에 있는 갈매미는 보이지 않으므로 들 수 없다.
+  pickUpUnit(u) {
+    if (!u || u.insideBuildingId || u.state === UnitState.Held) return false;
+    u.heldFrom = { x: u.x, z: u.z, y: u.y };
+    u.path = null; u.pathIndex = 0; u.goal = null; u.targetBuildingId = null; u.running = false; u.state = UnitState.Held;
+    return true;
+  }
+  /** 내려놓기. 건물 칸이면 그 건물에 들어가고, 걸을 수 있는 칸이면 거기 서고, 아니면(바다 등) 원래 자리로 돌아간다. */
+  dropUnit(u, x, z) {
+    if (!u || u.state !== UnitState.Held) return { ok: false, reason: "" };
+    const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
+    if (b) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
+    if (this.grid.isWalkable(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.grid.walkHeight(x, z); setIdle(u, this.rnd); return { ok: true }; }
+    u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd);
+    return { ok: false, reason: this.grid.isWater(x, z) ? "바다에는 내려놓을 수 없어요" : "거기에는 내려놓을 수 없어요" };
+  }
 
   update(dt) { for (const u of this.units) updateUnit(u, dt, this, this.rnd); }
 

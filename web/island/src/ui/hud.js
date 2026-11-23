@@ -3,7 +3,7 @@ import { GROUND_TYPES, UnitState } from "../data/types.js";
 import { GROUND_STYLE, BUILDINGS } from "../data/catalog.js";
 
 const STATE_LABEL = { [UnitState.Idle]: "쉬는 중", [UnitState.Wander]: "산책 중", [UnitState.GoToBuilding]: "건물로 가는 중",
-  [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중" };
+  [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중", [UnitState.Held]: "들려 있음" };
 
 const hex = n => "#" + n.toString(16).padStart(6, "0");
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -29,7 +29,8 @@ export class Hud {
   }
   setWorld(world) {
     this.world = world; this.list.innerHTML = "";
-    this.rows = world.units.map(u => { const r = el("div", "row"); r.append(el("span", "nm", u.name), el("span", "act")); this.list.appendChild(r); return r; });
+    this.rows = world.units.map(u => { const r = el("div", "row"); r.append(el("span", "nm", u.name), el("span", "act"));
+      r.onclick = () => this.onUnitClick?.(u); this.list.appendChild(r); return r; });
   }
   showMode(mode, arg) {
     this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
@@ -50,6 +51,7 @@ export class Hud {
       const r = el("button", "", "↻ 돌리기(R)"); r.onclick = () => this.tools.rotate(); this.sub.appendChild(r);
     }
   }
+  showFollow(u) { this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); }
   status(text) { this.msg.textContent = text; this.msg.hidden = !text; }
   update(chunkInfo) {
     const w = this.world, inside = w.units.filter(u => u.insideBuildingId).length;

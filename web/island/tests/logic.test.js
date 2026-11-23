@@ -138,3 +138,17 @@ test("조사: 받침에 따라 을/를", () => {
   assert.equal(josa("우체국", "을", "를"), "우체국을");
   assert.equal(josa("잡화점", "을", "를"), "잡화점을");
 });
+
+test("갈매미 들어 옮기기: 땅에 내려놓기 / 건물에 넣기 / 바다면 제자리", () => {
+  const w = World.create(7, seededRandom(4)), u = w.units[0];
+  const b = w.placeBuilding("house", 38, 26, 0).building;
+  const x0 = u.x, z0 = u.z;
+  assert.equal(w.pickUpUnit(u), true); assert.equal(u.state, UnitState.Held);
+  w.update(1); assert.equal(u.x, x0);                                        // 들려 있는 동안 AI가 움직이지 않음
+  assert.deepEqual(w.dropUnit(u, 40, 40), { ok: true }); assert.equal(u.x, 40.5); assert.equal(u.z, 40.5); assert.equal(u.state, UnitState.Idle);
+  w.pickUpUnit(u); const r = w.dropUnit(u, 38, 26);
+  assert.equal(r.building, b); assert.equal(u.state, UnitState.Inside); assert.deepEqual(b.occupants, [u.unitId]);
+  assert.equal(w.pickUpUnit(u), false);                                      // 건물 안이면 못 듦
+  const v = w.units[1], vx = v.x, vz = v.z; w.pickUpUnit(v);
+  assert.equal(w.dropUnit(v, 0, 0).reason, "바다에는 내려놓을 수 없어요"); assert.equal(v.x, vx); assert.equal(v.z, vz);
+});

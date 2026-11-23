@@ -7,7 +7,7 @@ import { findPath, nearestWalkable } from "../world/pathfinding.js";
 
 const cellOf = u => [Math.floor(u.x), Math.floor(u.z)];
 
-function setIdle(u, rnd) {
+export function setIdle(u, rnd) {
   u.running = false; u.state = UnitState.Idle; u.timer = 1.5 + rnd() * 4; u.path = null; u.pathIndex = 0; u.goal = null; u.targetBuildingId = null;
 }
 
@@ -78,6 +78,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case UnitState.Inside:
       if (u.timer <= 0) exitBuilding(u, world, rnd); break;
+    case UnitState.Held: return;                                          // 들려 있는 동안은 아무것도 안 함(위치는 입력이 정함)
     default: setIdle(u, rnd);
   }
   if (!u.insideBuildingId) {                                            // 서 있는 높이를 부드럽게 따라감(계단·부두)
