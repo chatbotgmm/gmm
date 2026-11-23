@@ -2,6 +2,7 @@
 
   python3 tools/bundle.py 갈매미맨마을.html              # 더블클릭으로 여는 한 파일(모델은 못 읽어 캡슐로 나옴)
   python3 tools/bundle.py page.html --artifact            # claude.ai 아티팩트용: <!doctype>/<head> 없이 내용만
+  python3 tools/bundle.py index.html --flat               # 모델이 같은 폴더의 models/, assets/에 있는 곳(서버 village3d 등)에 올릴 때
 
 규칙: 상대 경로 import만 합치고 "three" / "three/addons/..." import는 맨 위에 한 번씩 남긴다.
 여러 파일에 같은 최상위 이름이 있으면 멈춘다(합치면 충돌하므로).
@@ -56,6 +57,8 @@ def main():
     out = sys.argv[1]
     artifact = "--artifact" in sys.argv
     code, n = bundle()
+    if "--flat" in sys.argv or artifact:   # ../village/ 경로를 찾지 않고 같은 폴더의 models/, assets/만 씀
+        code = code.replace('["../village/models/", "models/"]', '["models/"]').replace('"../village/assets/', '"assets/')
     html = open(os.path.join(ROOT, "index.html"), encoding="utf8").read()
     tag = '<script type="module" src="src/main.js"></script>'
     assert html.count(tag) == 1
