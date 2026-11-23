@@ -52,6 +52,25 @@ export async function simplifyMesh(mesh, ratio) {
   return true;
 }
 
+// 손에 쥐는 방향(손 뼈 propR 좌표): up = 도구 손잡이→머리(+Y)가 향할 방향, side = 도구 +X가 향할 방향.
+// 각 도구를 쓰는 동작(Chop/Mine/Build/FishWait)에서 손 뼈 축이 실제 어디를 보는지 재서 정함(+Y 앞쪽 손바닥 방향은 동작마다 다름).
+//  도끼: 손잡이를 세우고, 날(모델의 -X쪽, 더 넓은 쪽)이 내려치는 앞쪽을 보게
+//  곡괭이: 손잡이를 위-앞으로, 머리는 앞뒤로 / 망치: 손잡이를 세우고 때리는 면(-X)이 앞쪽
+//  낚싯대: 앞쪽으로 약 60° 세움
+export const TOOL_GRIP = {
+  default: { up: [0, 0, 1], side: [1, 0, 0] },
+  axe:     { up: [0, 0, 1], side: [0, -1, 0] },
+  pickaxe: { up: [1, 0, 0], side: [0, 0, 1] },
+  hammer:  { up: [0, 0, 1], side: [-1, 0, 0] },
+  rod:     { up: [0.56, 0.77, 0.29], side: [0, 0, 1] },
+};
+function gripQuaternion(g) {
+  const y = new THREE.Vector3(...g.up).normalize();
+  const x = new THREE.Vector3(...g.side); x.addScaledVector(y, -x.dot(y)).normalize();
+  const z = new THREE.Vector3().crossVectors(x, y);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+
 const KEYS = ["Idle", "Walk", "Run", "Jump", "Attack", "Chop", "Mine", "Build", "FishCast", "FishWait", "FishReel"];
 const ONCE = new Set(["Jump", "Attack", "FishCast", "FishReel"]);
 
@@ -103,9 +122,16 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   }
   let hand = null; root.traverse(o => { if (o.isBone && /^prop.?R$/i.test(o.name)) hand = o; });
   const inHand = {};
-  if (hand && tools) for (const [k, proto] of Object.entries(await tools)) {
-    if (!proto) continue;
-    const t = proto.clone(true); t.visible = false; hand.add(t); inHand[k] = t;            // 마을과 같이 몸 크기에 비례
+  if (hand && tools) {
+    // 손 뼈에는 모델 안에서 따로 붙은 크기가 있어 그대로 붙이면 도구가 아주 작아짐 → 몸 크기 기준으로 되돌림
+    root.updateMatrixWorld(true);
+    const handScale = hand.getWorldScale(new THREE.Vector3()).x / cfg.scale;
+    for (const [k, proto] of Object.entries(await tools)) {
+      if (!proto) continue;
+      const t = proto.clone(true), g = TOOL_GRIP[k] || TOOL_GRIP.default;
+      t.quaternion.copy(gripQuaternion(g)); t.scale.multiplyScalar(1 / handScale);
+      t.visible = false; hand.add(t); inHand[k] = t;                                       // 크기는 몸 크기에 비례(자이언트는 큰 도구)
+    }
   }
   return { root, mixer, acts, cfg, anim: "", clip, inHand, onceRef: null };
 }
