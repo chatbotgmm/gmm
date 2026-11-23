@@ -88,7 +88,7 @@ export class Tools {
     if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) this.world.paint(x, z, this.paintType); }
     else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
-      this.refresh(); this.onStatus(r.ok ? `${josa(def.name, "을", "를")} 지었어요` : r.reason); return;    // 미리보기 문구보다 결과를 보여 줌
+      this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요` : `${def.name} 공사를 시작했어요 · 갈매미가 나무·돌로 지어요`); return;    // 미리보기 문구보다 결과를 보여 줌
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
       if (b) { this.world.removeBuilding(b.id); this.refresh(); this.onStatus(`${josa(BUILDINGS[b.defId].name, "을", "를")} 철거했어요`); return; }

@@ -56,13 +56,49 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
     if ([...used].some(s => { const [ux, uz] = s.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < 4; })) continue;
     modules.push({ id: `rock-${k + 1}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 3 }); used.add(`${x},${z}`); k++;
   }
-  // 나무: 잔디 가장자리(해안 쪽)와 언덕 둘레에 띄엄띄엄. 광장·길·언덕 위·다른 모듈 가까이는 피함.
-  for (let k = 0, tries = 0; k < 16 && tries < 2000; tries++) {
-    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z), r = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
-    if (grid.isWater(x, z) || c.groundType !== GroundType.Grass || c.elevation !== 0 || r < 12) continue;
-    if ([...used].some(s => { const [ux, uz] = s.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < 4; })) continue;
+  const near = (x, z, d) => [...used].some(k => { const [ux, uz] = k.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < d; });
+  const freeGrass = (x, z) => grid.inBounds(x, z) && !grid.isWater(x, z) && grid.get(x, z).groundType === GroundType.Grass && grid.get(x, z).elevation === 0;
+  // 숲: 남서쪽에 나무 11그루를 모아 심음(벌목 장소) + 섬 곳곳에 5그루
+  const forest = { x: 19, z: 41 };
+  for (let k = 0, tries = 0; k < 11 && tries < 3000; tries++) {
+    const a = rnd() * Math.PI * 2, r = 1 + rnd() * 4.2, x = Math.floor(forest.x + Math.cos(a) * r), z = Math.floor(forest.z + Math.sin(a) * r);
+    if (!freeGrass(x, z) || near(x, z, 2)) continue;
     modules.push({ id: `tree-${k + 1}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 5 }); used.add(`${x},${z}`); k++;
   }
+  for (let k = 11, tries = 0; k < 16 && tries < 2000; tries++) {
+    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), r = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
+    if (!freeGrass(x, z) || r < 12 || near(x, z, 4)) continue;
+    modules.push({ id: `tree-${k + 1}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 5 }); used.add(`${x},${z}`); k++;
+  }
+  // 광산: 언덕 남쪽 기슭에 광석 바위 5개
+  const mine = { x: 21, z: 27 };
+  [[18, 26], [20, 27], [22, 26], [24, 27], [21, 29]].forEach(([x, z], k) => {
+    if (!freeGrass(x, z) || used.has(`${x},${z}`)) return;
+    modules.push({ id: `ore-${k + 1}`, defId: "ore", cells: [[x, z]], rot: k % 4, variant: k % 3 }); used.add(`${x},${z}`);
+  });
+  // 낚시터: 부두 끝 두 칸(바다 쪽 +z를 봄) + 해변에서 바다와 맞닿은 모래 칸 몇 곳. 부두 입구 옆에 건조대·양동이.
+  const spots = [];
+  const pierEnd = Math.max(...pier.map(c => c[1]));
+  for (const [x, z] of pier.filter(c => c[1] === pierEnd)) spots.push({ x, z, dir: [0, 1] });
+  const shore = [];
+  for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+    const c = grid.get(x, z);
+    if (grid.isWater(x, z) || c.groundType !== GroundType.Sand || used.has(`${x},${z}`)) continue;
+    const d = [[0, 1], [1, 0], [0, -1], [-1, 0]].find(([dx, dz]) => grid.isWater(x + dx, z + dz) && !used.has(`${x + dx},${z + dz}`));
+    if (d) shore.push({ x, z, dir: d, a: Math.atan2(z + 0.5 - cz, x + 0.5 - cx) });
+  }
+  for (const want of [0.6, 1.4, 2.4, -0.3]) {                         // 섬 둘레 몇 방향(라디안)에서 하나씩
+    const s = shore.filter(p => !spots.some(q => Math.abs(q.x - p.x) + Math.abs(q.z - p.z) < 6) && !near(p.x, p.z, 3))
+      .sort((p, q) => Math.abs(Math.atan2(Math.sin(p.a - want), Math.cos(p.a - want))) - Math.abs(Math.atan2(Math.sin(q.a - want), Math.cos(q.a - want))))[0];
+    if (s) spots.push({ x: s.x, z: s.z, dir: s.dir });
+  }
+  const pierBase = Math.min(...pier.map(c => c[1])) - 1;
+  [["fishStand", 29], ["bucket", 34]].forEach(([defId, x]) => {
+    if (grid.inBounds(x, pierBase) && !grid.isWater(x, pierBase) && !used.has(`${x},${pierBase}`))
+      { modules.push({ id: `${defId}-1`, defId, cells: [[x, pierBase]], rot: 0 }); used.add(`${x},${pierBase}`); }
+  });
+  const zones = [{ id: "forest", label: "🌲 숲", x: forest.x, z: forest.z }, { id: "mine", label: "⛏ 광산", x: mine.x, z: mine.z },
+                 { id: "fishing", label: "🎣 낚시터", x: 32, z: pierEnd - 1 }];
   grid.markAllDirty();
-  return { grid, modules };
+  return { grid, modules, spots, zones };
 }

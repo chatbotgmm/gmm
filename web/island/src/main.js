@@ -1,14 +1,16 @@
 // 시작점: 장면·카메라·빛을 만들고 월드, 뷰, 도구, 화면 UI를 잇는다.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { World } from "./world/World.js";
+import { World, SPEED_BOOST } from "./world/World.js";
 import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
+import { LifeViews } from "./render/life.js";
+import { PROPS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { Hud } from "./ui/hud.js";
-import { findCharacterSet, loadCharacter, playAnim, WALK_SCALE, RUN_SCALE } from "./render/characters.js";
+import { findCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE } from "./render/characters.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -37,16 +39,17 @@ const water = createWater(); scene.add(water);
 const overlay = document.getElementById("overlay");
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
-let world, chunks, buildingViews, unitViews, worldRoot;
+let world, chunks, buildingViews, unitViews, lifeViews, worldRoot;
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; worldRoot = new THREE.Group(); scene.add(worldRoot);
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world);
-  addModuleViews(worldRoot, world);
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter); }
-  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); }
+  lifeViews = new LifeViews(worldRoot, world, overlay);
+  addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map));
+  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS)); }
+  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
 }
 let tools = null, hud = null;
 const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
@@ -60,6 +63,9 @@ hud = new Hud({ tools, world,
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
   onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
+hud.onSeeds = () => { for (let i = 0; i < 10; i++) world.addSeed(); hud.status("씨앗을 뿌렸어요"); };
+hud.onZones = on => { lifeViews.showZones = on; };
+hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };
 document.getElementById("loading").hidden = true;
 
 // ---------- 매 프레임
@@ -68,7 +74,9 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   world.update(dt);
   chunks.sync();                                    // 바뀐 청크만 다시 만듦
-  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE);
+  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT);
+  buildingViews.updateConstruction(dt);
+  lifeViews.update(dt, camera, innerWidth, innerHeight);
   water.userData.tick(simT);
   unitControl.update(dt);                           // 따라가기
   controls.target.x = THREE.MathUtils.clamp(controls.target.x, -30, 30); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -30, 30);

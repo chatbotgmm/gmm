@@ -14,6 +14,9 @@ export const UnitState = Object.freeze({
   Idle: "Idle", Wander: "Wander", GoToBuilding: "GoToBuilding", Inside: "Inside",
   GoToFurniture: "GoToFurniture", Interact: "Interact",
   Held: "Held",                                   // 플레이어가 드래그로 들고 있음(AI 멈춤)
+  // 마을 생활(web/village에서 옮김)
+  Forage: "Forage", Eat: "Eat", Visit: "Visit", Greet: "Greet", Zoomies: "Zoomies", Flee: "Flee", Avoid: "Avoid",
+  GoChop: "GoChop", Chop: "Chop", GoMine: "GoMine", Mine: "Mine", GoFish: "GoFish", Fish: "Fish", GoBuild: "GoBuild", Build: "Build",
 });
 
 /**
