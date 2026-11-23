@@ -1,7 +1,7 @@
 // 도구(입력): 둘러보기 / 바닥 칠하기 / 건물 짓기(고스트 미리보기) / 철거.
 // 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 시야 돌리기, 휠·두 손가락은 확대·축소.
 import * as THREE from "three";
-import { CELL, toWorldX, toWorldZ, toGridX, toGridZ } from "../config.js";
+import { CELL, toWorldX, toWorldZ, toGridX, toGridZ, WATER_Y } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
 import { anchorFor } from "../world/placement.js";
 import { josa } from "../util.js";
@@ -72,6 +72,22 @@ export class Tools {
   }
 
   /** 화면 좌표 → 칸. 바닥 청크 메쉬에 광선을 쏴서 맞은 점을 면 안쪽으로 살짝 밀어 칸을 정한다. */
+  /** 마우스 아래 정확한 점(격자 좌표, 소수). 물 위면 물 표면과 만나는 점. 없으면 null. */
+  pickPoint(clientX, clientY) {
+    const r = this.dom.getBoundingClientRect();
+    this.ndc.set((clientX - r.left) / r.width * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    const hit = this.ray.intersectObjects([...this.chunks.meshes.values()], false)[0];
+    let p = hit ? hit.point.clone() : null;
+    if (!p || p.y < WATER_Y) {                                                    // 물속 바닥 대신 물 표면
+      const q = this.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -WATER_Y), new THREE.Vector3());
+      if (q) p = q;
+    }
+    if (!p) return null;
+    const gx = toGridX(p.x), gz = toGridZ(p.z), x = Math.floor(gx), z = Math.floor(gz);
+    return this.world.grid.inBounds(x, z) ? { gx, gz, x, z } : null;
+  }
+
   pick(clientX, clientY) {
     const r = this.dom.getBoundingClientRect();
     this.ndc.set((clientX - r.left) / r.width * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);

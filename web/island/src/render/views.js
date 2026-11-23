@@ -114,7 +114,12 @@ export class UnitViews {
     v.swimK = THREE.MathUtils.clamp((v.swimK || 0) + (sw ? dt : -dt) * 2.5, 0, 1);       // 들어가고 나올 때 부드럽게
     const k = v.swimK;
     v.blob.visible = k < 0.5;
-    if (body) { body.rotation.x = 0.14 * k; body.rotation.z = Math.sin(time * 1.7 + i) * 0.07 * k; body.position.y = Math.sin(time * 2.4 + i * 1.3) * 0.025 * s * k; }
+    if (body && v.ch?.humanSwim) {                                                       // 사람형: 몸을 앞으로 눕혀 엎드린 자세(자유형), 등이 물 위로 살짝
+      const lean = 1.15, h = u.height ?? 0.8 * s;
+      body.rotation.x = lean * k; body.rotation.z = 0;
+      body.position.z = -Math.sin(lean) * 0.5 * h * k;                                   // 눕히면 몸이 앞으로 가므로 제자리에 오게
+      body.position.y = (0.35 * h - 0.5 * h * Math.cos(lean)) * k + Math.sin(time * 3.9 + i) * 0.012 * s * k;
+    } else if (body) { body.rotation.x = 0.14 * k; body.rotation.z = Math.sin(time * 1.7 + i) * 0.07 * k; body.position.y = Math.sin(time * 2.4 + i * 1.3) * 0.025 * s * k; body.position.z = 0; }
     if (!v.wake && k > 0) {
       v.wake = [0, 1].map(() => { const m = new THREE.Mesh(WAKE_GEO, WAKE_MAT.clone()); m.rotation.x = -Math.PI / 2; m.renderOrder = 2; v.g.add(m); return m; });
     }

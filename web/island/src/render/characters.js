@@ -108,7 +108,7 @@ export function loadTools(props) {
 // ---- 헤엄 동작: 모델에 없어서 기존 동작으로 만든다(뼈 이름이 모델마다 달라도 되게 이름 규칙으로 고름).
 // 다리(leg/thigh/shin/foot)는 걷기 동작을 조금 느리게 되풀이 = 물속에서 발 젓기, 나머지(몸·날개·머리)는 서 있기 동작 = 날개를 접고 떠 있음.
 // 몸이 출렁이고 기우는 것과 물결은 views.js에서 더함.
-const LEG = /^(leg|thigh|shin|foot|toe|calf)\b|^(leg|thigh|shin|foot|toe|calf)[._]/i;
+const LEG = /^(leg|thigh|shin|foot|toe|calf)[._]?[LR]?$/i;                 // three.js가 뼈 이름의 점을 지움(leg.L → legL)
 function tileTrack(t, srcDur, dstDur, slow) {
   const times = [], values = [], n = t.getValueSize(), period = srcDur * slow;
   for (let k = 0; k * period < dstDur + 1e-6; k++) {
@@ -127,6 +127,51 @@ export function makeSwimClip(idle, walk) {
   const tracks = [...idle.tracks.filter(t => !isLeg(t)).map(t => tileTrack(t, idle.duration, dur, 1)),
                   ...walk.tracks.filter(isLeg).map(t => tileTrack(t, walk.duration, dur, 1.4))];
   return tracks.some(isLeg) ? new THREE.AnimationClip("Swim", dur, tracks) : null;
+}
+
+// ---- 사람형(윗팔·아래팔·허벅지가 따로 있는 뼈대, 지금은 자이언트) 헤엄: 자유형.
+// 서 있기 첫 자세에서 시작해 몸 기준 방향으로 계산: 팔은 어깨를 중심으로 번갈아 크게 돌리고(앞→아래로 당기기→뒤→물 위로 넘겨 앞으로),
+// 다리는 팔의 두 배 빠르기로 위아래 차기, 몸통은 팔을 따라 좌우로 구르고, 고개는 들어 앞을 봄(몸을 눕히는 것은 views.js).
+const SWIM_PERIOD = 1.6;
+function makeHumanSwimClip(root, idle) {
+  if (!idle) return null;
+  const bones = {}; root.traverse(o => { if (o.isBone) bones[o.name.replace(/[._]/g, "").toLowerCase()] = o; });
+  const B = n => bones[n];
+  const arm = { L: B("upperarml"), R: B("upperarmr") }, leg = { L: B("thighl"), R: B("thighr") }, head = B("head"), chest = B("chest") || B("spine");
+  if (!arm.L || !arm.R || !leg.L || !leg.R) return null;
+  const saved = new Map(); root.traverse(o => { if (o.isBone) saved.set(o, [o.quaternion.clone(), o.position.clone()]); });
+  for (const t of idle.tracks) {                                                  // 서 있기 첫 자세로
+    const dot = t.name.lastIndexOf("."), o = root.getObjectByName(t.name.slice(0, dot)), prop = t.name.slice(dot + 1);
+    if (o && (prop === "quaternion" || prop === "position")) o[prop].fromArray(t.values, 0);
+  }
+  root.updateMatrixWorld(true);
+  const rootInv = root.matrixWorld.clone().invert(), rootQInv = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const charQ = o => rootQInv.clone().multiply(o.getWorldQuaternion(new THREE.Quaternion()));
+  const charP = o => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(rootInv);
+  const childBone = o => o.children.find(c => c.isBone);
+  // 몸 기준 회전 delta를 그 뼈의 자기 회전으로: 새 local = (부모)⁻¹ · delta · (부모) · 원래 local
+  const toLocal = (o, delta) => { const qp = charQ(o.parent); return qp.clone().invert().multiply(delta).multiply(qp).multiply(o.quaternion); };
+  const N = 24, times = [...Array(N + 1).keys()].map(i => i / N * SWIM_PERIOD), X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
+  const tracks = [], changed = new Set();
+  const addTrack = (o, fn) => { const v = []; times.forEach((t, i) => fn(t, i / N).toArray(v, i * 4)); tracks.push(new THREE.QuaternionKeyframeTrack(o.name + ".quaternion", times, v)); changed.add(o.name); };
+  for (const [s, o] of Object.entries(arm)) {
+    const c = childBone(o); if (!c) continue;
+    const rest = charP(c).sub(charP(o)).normalize(), side = Math.sign(charP(o).x) || (s === "L" ? 1 : -1);
+    addTrack(o, (t, f) => {
+      const th = Math.PI / 2 - f * Math.PI * 2 + (s === "R" ? Math.PI : 0);                    // 앞(π/2) → 아래(0) → 뒤 → 위 → 앞
+      const d = new THREE.Vector3(side * 0.35, -Math.cos(th), Math.sin(th)).normalize();
+      return toLocal(o, new THREE.Quaternion().setFromUnitVectors(rest, d));
+    });
+  }
+  for (const [s, o] of Object.entries(leg)) addTrack(o, (t, f) => toLocal(o, new THREE.Quaternion().setFromAxisAngle(X, 0.32 * Math.sin(f * Math.PI * 4 + (s === "R" ? Math.PI : 0)))));
+  if (head) addTrack(head, () => toLocal(head, new THREE.Quaternion().setFromAxisAngle(X, -0.85)));
+  if (chest) addTrack(chest, (t, f) => toLocal(chest, new THREE.Quaternion().setFromAxisAngle(Z, 0.2 * Math.sin(f * Math.PI * 2))));
+  for (const t of idle.tracks) if (!changed.has(t.name.slice(0, t.name.lastIndexOf(".")))) {          // 나머지 뼈는 서 있기 첫 자세로 고정
+    const n = t.getValueSize(); tracks.push(new t.constructor(t.name, [0], Array.from(t.values.slice(0, n))));
+  }
+  for (const [o, [q, p]] of saved) { o.quaternion.copy(q); o.position.copy(p); }
+  root.updateMatrixWorld(true);
+  return new THREE.AnimationClip("Swim", SWIM_PERIOD, tracks);
 }
 
 /** 캐릭터 하나: 장면 오브젝트, 애니메이션 믹서, 동작들, 손에 붙인 도구, 동작 길이(clip: AI가 타격 시점 계산에 씀). */
@@ -151,7 +196,8 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
     const hit = { Chop: cfg.workHit?.Chop, Mine: cfg.workHit?.Mine, Build: cfg.workHit?.Build, Attack: cfg.hit, FishReel: 0.25, Jump: c.duration / 2 }[key];
     clip[key] = { len: c.duration, hit: hit ?? c.duration };
   }
-  const swim = makeSwimClip(acts.Idle?.getClip(), acts.Walk?.getClip());
+  const human = makeHumanSwimClip(root, acts.Idle?.getClip());              // 사람형 뼈대(팔·다리 마디)면 자유형
+  const swim = human || makeSwimClip(acts.Idle?.getClip(), acts.Walk?.getClip());
   if (swim) { acts.Swim = mixer.clipAction(swim); clip.Swim = { len: swim.duration, hit: swim.duration }; }
   let hand = null; root.traverse(o => { if (o.isBone && /^prop.?R$/i.test(o.name)) hand = o; });
   const inHand = {};
@@ -166,7 +212,7 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
       t.visible = false; hand.add(t); inHand[k] = t;                                       // 크기는 몸 크기에 비례(자이언트는 큰 도구)
     }
   }
-  return { root, mixer, acts, cfg, anim: "", clip, inHand, onceRef: null };
+  return { root, mixer, acts, cfg, anim: "", clip, inHand, onceRef: null, humanSwim: !!human };
 }
 
 export function playAnim(ch, key, speed = 1, fade = 0.2, restart = false) {

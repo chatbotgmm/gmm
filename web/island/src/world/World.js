@@ -15,6 +15,8 @@ import { seededRandom } from "../util.js";
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
 
+const clampIn = (v, a, b) => Math.min(b, Math.max(a, v));
+
 export class World {
   constructor(grid, modules, rnd = Math.random, extra = {}) {
     this.grid = grid; this.modules = modules; this.rnd = rnd; this.time = 0;
@@ -246,7 +248,7 @@ export class World {
   /** 내려놓기. 완공된 건물이면 들어가고, 걸을 수 있는 칸이면 거기 서고(나무·광석·공사장 칸이면 바로 옆 땅에),
    *  가까이 있는 것(나무·광석·낚시 자리·공사장·밭·씨앗·친구)과 바로 상호작용한다. 바다 등은 원래 자리로 돌아간다.
    *  돌려주는 값: { ok, building?, act?: { kind, label } } 또는 { ok: false, reason } */
-  dropUnit(u, x, z) {
+  dropUnit(u, x, z, at = null) {                                             // at: 마우스가 가리킨 정확한 점(그 칸 안이면 거기에)
     if (!u || u.state !== UnitState.Held) return { ok: false, reason: "" };
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
     if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
@@ -254,14 +256,15 @@ export class World {
     if (b) spot = this.grid.isWalkable(b.door.x, b.door.z) ? [b.door.x, b.door.z] : null;                 // 공사장: 문 앞에
     else if (this.grid.inBounds(x, z) && !this.grid.isWater(x, z)) { const s = nearestWalkable(this.grid, x, z, 2); if (s && Math.hypot(s[0] - x, s[1] - z) <= 2.5) spot = s; }   // 나무·광석 칸이면 바로 옆 땅
     if (spot) {
-      u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this);
+      const exact = at && spot[0] === x && spot[1] === z && !b;
+      u.x = exact ? clampIn(at.x, x + 0.15, x + 0.85) : spot[0] + 0.5; u.z = exact ? clampIn(at.z, z + 0.15, z + 0.85) : spot[1] + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this);
       const act = interactNear(u, this, this.rnd, 2.6, b);
       if (!act) { emote(u, "휴…"); this.notice(u.x, u.z, "drop", u); return { ok: true }; }
       return { ok: true, act };
     }
     if (this.grid.inBounds(x, z) && this.grid.isWater(x, z)) {                                          // 물가(땅에서 2칸 안) 물에 놓으면 헤엄
       const land = nearestWalkable(this.grid, x, z, 2);
-      if (land && Math.hypot(land[0] - x, land[1] - z) <= 2.5) { u.x = x + 0.5; u.z = z + 0.5; startSwimHere(u, this, this.rnd, land[0], land[1]); return { ok: true, act: { kind: "swim", label: "헤엄쳐요" } }; }
+      if (land && Math.hypot(land[0] - x, land[1] - z) <= 2.5) { u.x = at ? clampIn(at.x, x + 0.15, x + 0.85) : x + 0.5; u.z = at ? clampIn(at.z, z + 0.15, z + 0.85) : z + 0.5; startSwimHere(u, this, this.rnd, land[0], land[1]); return { ok: true, act: { kind: "swim", label: "헤엄쳐요" } }; }
     }
     u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
     return { ok: false, reason: b ? "공사장 문 앞이 막혀 있어요" : this.grid.isWater(x, z) ? "바다에는 내려놓을 수 없어요" : "거기에는 내려놓을 수 없어요" };

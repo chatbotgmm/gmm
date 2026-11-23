@@ -37,7 +37,7 @@ export class UnitControl {
     if (!this.press) return;
     const u = this.held;
     if (u) { this.getWorld().dropUnit(u, Math.floor(u.heldFrom.x), Math.floor(u.heldFrom.z)); this.onStatus(""); }
-    this.press = null; this.held = null; this.target = null; this.mark.visible = false; this.controls.enabled = true;
+    this.press = null; this.held = null; this.heldGoal = null; this.target = null; this.mark.visible = false; this.controls.enabled = true;
   }
   down(e) {
     // 두 번째 손가락이 닿으면(두 손가락 확대·회전) 갈매미 잡기를 취소하고 시야 조작에 넘긴다
@@ -53,11 +53,14 @@ export class UnitControl {
       if (this.getWorld().pickUpUnit(p.unit)) { this.held = p.unit; this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요 · 내려놓을 곳에서 떼세요`); }
     }
     if (this.held) {
-      const c = this.tools.pick(e.clientX, e.clientY), u = this.held, w = this.getWorld();
+      const c = this.tools.pickPoint(e.clientX, e.clientY), w = this.getWorld();
       if (c) {
-        const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z) || !w.grid.isWater(c.x, c.z) || nearLand(w.grid, c.x, c.z), h = w.grid.walkHeight(c.x, c.z);
-        u.x = c.x + 0.5; u.z = c.z + 0.5; u.y = (b ? b.elevation ?? 0 : Math.max(w.standHeight(c.x + 0.5, c.z + 0.5), -0.18)) + 0.5;      // 살짝 들린 채 따라옴
-        this.mark.visible = true; this.mark.position.set(toWorldX(c.x + 0.5), Math.max(w.standHeight(c.x + 0.5, c.z + 0.5), -0.18) + 0.04, toWorldZ(c.z + 0.5));
+        const b = w.buildingAt(c.x, c.z), ok = !!b || w.grid.isWalkable(c.x, c.z) || !w.grid.isWater(c.x, c.z) || nearLand(w.grid, c.x, c.z);
+        // 갈매미 발이 마우스 끝에 오게: 땅에서 0.5 m 띄운 높이의 평면과 마우스 광선이 만나는 점(update에서 부드럽게 따라감)
+        const ground = b ? b.elevation ?? 0 : Math.max(w.standHeight(c.gx, c.gz), -0.18), lift = ground + 0.5;
+        const q = this.tools.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -lift), new THREE.Vector3());
+        this.heldGoal = q ? { x: c.gx + (q.x - toWorldX(c.gx)), z: c.gz + (q.z - toWorldZ(c.gz)), y: lift, at: { x: c.gx, z: c.gz } } : { x: c.gx, z: c.gz, y: lift, at: { x: c.gx, z: c.gz } };
+        this.mark.visible = true; this.mark.position.set(toWorldX(c.gx), ground + 0.04, toWorldZ(c.gz));   // 내려놓일 자리(마우스 아래 땅)
         this.mark.material.color.setHex(ok ? 0x4fcf78 : 0xe0574f);
         this.target = c;
       }
@@ -69,7 +72,8 @@ export class UnitControl {
     const w = this.getWorld();
     if (this.held) {
       const u = this.held, c = this.target || { x: Math.floor(u.heldFrom.x), z: Math.floor(u.heldFrom.z) }; this.held = null; this.target = null;
-      const r = w.dropUnit(u, c.x, c.z);
+      const g = this.heldGoal; this.heldGoal = null;
+      const r = w.dropUnit(u, c.x, c.z, g?.at && Math.floor(g.at.x) === c.x && Math.floor(g.at.z) === c.z ? g.at : null);
       this.onStatus(r.ok ? (r.building ? `${josa(u.name, "이", "가")} 건물에 들어갔어요` : r.act ? `${u.name}: ${r.act.label}` : `${josa(u.name, "을", "를")} 옮겼어요`) : r.reason);
       return;
     }
@@ -81,6 +85,11 @@ export class UnitControl {
 
   /** 매 프레임: 따라가는 갈매미 쪽으로 카메라 중심을 부드럽게 옮기고 카메라도 같이 옮긴다. */
   update(dt) {
+    const h = this.held, g = this.heldGoal;
+    if (h && g) {                                                                   // 들고 있는 갈매미: 마우스 아래 점을 빠르게, 부드럽게 따라감
+      const a = 1 - Math.exp(-dt * 22);
+      h.x += (g.x - h.x) * a; h.z += (g.z - h.z) * a; h.y += (g.y - h.y) * a;
+    }
     const u = this.follow; if (!u || this.held === u) return;
     if (!this.getWorld().units.includes(u)) { this.setFollow(null); return; }
     const t = new THREE.Vector3(toWorldX(u.x), u.y + (u.height ?? 0.8) * 0.5, toWorldZ(u.z)), d = t.sub(this.controls.target).multiplyScalar(Math.min(1, 6 * dt));
