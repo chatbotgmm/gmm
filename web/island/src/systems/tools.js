@@ -11,7 +11,7 @@ const OK = 0x4fcf78, BAD = 0xe0574f;
 export class Tools {
   constructor({ world, scene, camera, dom, controls, chunks, buildingViews, onStatus }) {
     Object.assign(this, { world, scene, camera, dom, controls, chunks, buildingViews, onStatus });
-    this.mode = "view"; this.paintType = null; this.buildId = null; this.rot = 0; this.hover = null; this.painting = false;
+    this.mode = "view"; this.paintType = null; this.buildId = null; this.rot = 0; this.brush = 1; this.hover = null; this.painting = false;
     this.ray = new THREE.Raycaster(); this.ndc = new THREE.Vector2();
     // 가리킨 칸 표시
     this.cursor = new THREE.Mesh(new THREE.PlaneGeometry(CELL, CELL), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false }));
@@ -28,7 +28,10 @@ export class Tools {
     dom.addEventListener("pointerdown", e => this.down(e), { capture: true });   // OrbitControls보다 먼저 받음
     dom.addEventListener("pointermove", e => this.move(e));
     addEventListener("pointerup", e => this.up(e));
-    addEventListener("keydown", e => { if (e.code === "KeyR") this.rotate(); if (e.code === "Escape") this.setMode("view"); });
+    addEventListener("keydown", e => {
+      if (e.code === "KeyR") this.rotate(); if (e.code === "Escape") this.setMode("view");
+      if (e.code === "BracketLeft") this.setBrush(this.brush - 2); if (e.code === "BracketRight") this.setBrush(this.brush + 2);
+    });
   }
 
   setMode(mode, arg = null) {
@@ -40,6 +43,13 @@ export class Tools {
     this.onStatus(""); this.refresh(); this.onMode?.(mode, arg);
   }
   rotate() { this.rot = (this.rot + 1) % 4; this.refresh(); }
+  /** 붓 크기(한 변 칸 수, 홀수 1·3·5·7). 가리킨 칸이 가운데. */
+  setBrush(n) { this.brush = Math.max(1, Math.min(7, n | 1)); this.refresh(); this.onBrush?.(this.brush); }
+  brushCells(h) {
+    const r = (this.brush - 1) / 2, out = [];
+    for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (this.world.grid.inBounds(h.x + dx, h.z + dz)) out.push([h.x + dx, h.z + dz]);
+    return out;
+  }
 
   /** 화면 좌표 → 칸. 바닥 청크 메쉬에 광선을 쏴서 맞은 점을 면 안쪽으로 살짝 밀어 칸을 정한다. */
   pick(clientX, clientY) {
@@ -75,7 +85,7 @@ export class Tools {
 
   apply() {
     const h = this.hover; if (!h) return;
-    if (this.mode === "paint") { this.world.paint(h.x, h.z, this.paintType); }
+    if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) this.world.paint(x, z, this.paintType); }
     else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
       this.refresh(); this.onStatus(r.ok ? `${josa(def.name, "을", "를")} 지었어요` : r.reason); return;    // 미리보기 문구보다 결과를 보여 줌
@@ -93,8 +103,10 @@ export class Tools {
     if (!h) { this.buildingViews.setHighlight(null); return; }
     const cell = grid.get(h.x, h.z);
     if (this.mode === "paint") {
-      this.cursor.visible = true; this.cursor.position.set(toWorldX(h.x + 0.5), Math.max(cell.elevation, grid.walkHeight(h.x, h.z) ?? -9) + 0.03, toWorldZ(h.z + 0.5));
-      this.cursor.material.color.setHex(this.world.canPaint(h.x, h.z) ? 0xffffff : BAD);
+      const cells = this.brushCells(h), top = Math.max(...cells.map(([x, z]) => Math.max(grid.get(x, z).elevation, grid.walkHeight(x, z) ?? -9)));
+      this.cursor.visible = true; this.cursor.scale.set(this.brush, this.brush, 1);
+      this.cursor.position.set(toWorldX(h.x + 0.5), top + 0.03, toWorldZ(h.z + 0.5));
+      this.cursor.material.color.setHex(cells.some(([x, z]) => this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
     } else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.check(this.buildId, a.x, a.z, this.rot);
       const y = r.ok ? r.elevation : Math.max(0, cell.elevation), col = r.ok ? OK : BAD;
@@ -106,7 +118,7 @@ export class Tools {
       this.onStatus(r.ok ? `${def.name} · 눌러서 짓기 · R 돌리기` : r.reason);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
-      this.cursor.visible = !b; this.cursor.position.set(toWorldX(h.x + 0.5), cell.elevation + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
+      this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), cell.elevation + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
     }
   }
 }

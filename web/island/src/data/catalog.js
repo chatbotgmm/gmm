@@ -1,25 +1,38 @@
 // 카탈로그: 건물·가구·해안 모듈 종류와 바닥 색.
-// asset: Tripo3D에서 뽑은 .glb / .fbx 경로(web/island 기준 상대 경로)를 넣으면 그 모델을 쓰고,
-//        null이면 placeholder 설명대로 임시 도형(상자·원뿔·캡슐)을 만든다. 모델은 바닥 정중앙에 맞추고
-//        footprint 크기(칸 = 1 m)에 맞게 줄이거나 늘린다(render/assets.js).
+// asset: .glb / .fbx 경로(web/island 기준 상대 경로). 있으면 그 모델을 쓰고(바닥 정중앙에 맞추고 footprint 크기
+//        (칸 = 1 m)에 맞게 줄이거나 늘림, render/assets.js), null이거나 못 불러오면 placeholder대로 임시 도형을 만든다.
+//        Tripo3D 에셋이 생기면 이 경로만 바꾸면 된다.
+// 건물 모델: Kenney City Kit (Suburban) 2.0, CC0 (assets/suburban/License.txt). 이 모델들의 정문(차양·화단)은 −z 쪽이라
+// modelYaw: π로 돌려 섬 규칙(문 = +z 쪽)에 맞춘다.
+// roof: 지붕 초록색만 바꿀 색(선형 색공간 HSV의 색상 hue 0~1, 채도 배율 sat). 덤불 같은 아래쪽 초록은 그대로(render/roofTint.js).
 import { GroundType, InteractionType } from "./types.js";
+
+const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, KENNEY_YAW = Math.PI;
 
 export const BUILDINGS = {
   house: {
-    id: "house", name: "작은 집", footprint: { w: 2, d: 2 }, height: 1.5, asset: null,
+    id: "house", name: "작은 집", footprint: { w: 2, d: 2 }, height: 1.3, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },
   },
+  cottage: {
+    id: "cottage", name: "2층집", footprint: { w: 2, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
+  },
   cafe: {
-    id: "cafe", name: "카페", footprint: { w: 3, d: 2 }, height: 1.6, asset: null,
+    id: "cafe", name: "카페", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
+  shop: {
+    id: "shop", name: "잡화점", footprint: { w: 3, d: 2 }, height: 1.7, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
+  },
   post: {
-    id: "post", name: "우체국", footprint: { w: 3, d: 3 }, height: 1.9, asset: null,
+    id: "post", name: "우체국", footprint: { w: 3, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
-  shop: {
-    id: "shop", name: "잡화점", footprint: { w: 2, d: 3 }, height: 1.6, asset: null,
-    placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 6, d: 7 },
+  manor: {
+    id: "manor", name: "큰 집", footprint: { w: 4, d: 3 }, height: 2.2, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
   },
 };
 

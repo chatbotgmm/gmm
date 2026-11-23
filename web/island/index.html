@@ -17,6 +17,7 @@
     right: calc(262px + env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .bar { display: flex; flex-wrap: wrap; gap: 6px; background: var(--panel); padding: 6px; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.1); }
   .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+  .lab { align-self: center; font-size: 12.5px; color: var(--muted); padding: 0 2px 0 8px; }
   #msg { background: var(--panel); border-radius: 10px; padding: 6px 11px; font-size: 13.5px; }
   #panel { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: 236px;
     max-height: calc(100% - 20px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow: auto;
@@ -52,7 +53,7 @@
   <div id="units"></div>
   <div id="files"><button id="save">저장</button><button id="load">불러오기</button><button id="reset">새 섬</button></div>
 </div>
-<div id="help">둘러보기: 드래그로 돌리기 · 오른쪽 드래그로 옮기기 · 휠로 확대 &nbsp;|&nbsp; 도구 켰을 때: 왼쪽 누르기 = 도구, 오른쪽 드래그 = 돌리기 · R 건물 돌리기 · Esc 도구 끄기</div>
+<div id="help">둘러보기: 드래그로 돌리기 · 오른쪽 드래그로 옮기기 · 휠로 확대 &nbsp;|&nbsp; 도구 켰을 때: 왼쪽 누르기 = 도구, 오른쪽 드래그 = 돌리기 · R 건물 돌리기 · [ ] 붓 크기 · Esc 도구 끄기</div>
 <div id="overlay"></div>
 <div id="loading">불러오는 중…</div>
 

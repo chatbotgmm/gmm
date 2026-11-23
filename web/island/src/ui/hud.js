@@ -17,6 +17,7 @@ export class Hud {
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : null); return b; });
     this.sub = sub;
     tools.onMode = (m, arg) => this.showMode(m, arg);
+    tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     document.getElementById("save").onclick = onSave;
     document.getElementById("load").onclick = onLoad;
     document.getElementById("reset").onclick = onReset;
@@ -38,6 +39,9 @@ export class Hud {
       for (const t of GROUND_TYPES) { const b = el("button", t === arg ? "on" : "");
         const sw = el("span", "sw"); sw.style.background = hex(GROUND_STYLE[t].colors[0]); b.append(sw, GROUND_STYLE[t].label);
         b.onclick = () => this.tools.setMode("paint", t); this.sub.appendChild(b); }
+      const lab = el("span", "lab", "붓"); this.sub.appendChild(lab);           // 붓 크기 1×1 · 3×3 · 5×5 · 7×7 ( [ ] 키 )
+      this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
+        b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
     }
     if (mode === "build") {
       this.lastBuild = arg;

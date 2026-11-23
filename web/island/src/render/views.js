@@ -4,6 +4,7 @@ import { toWorldX, toWorldZ } from "../config.js";
 import { BUILDINGS, MODULES } from "../data/catalog.js";
 import { modelFor } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
+import { tintRoofs } from "./roofTint.js";
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -18,15 +19,19 @@ export class BuildingViews {
                         toWorldZ(b.z + (b.rot % 2 ? def.footprint.w : def.footprint.d) / 2));
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
-    const v = { holder, badge, building: b, height: def.height * 1.7 }; this.views.set(b.id, v); this.scene.add(holder);
+    const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
     const model = await modelFor(def, () => buildingPlaceholder(def));
-    if (this.views.get(b.id) === v) holder.add(model);                           // 불러오는 사이 철거됐으면 버림
+    if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
+    if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
+    holder.add(model);
+    v.height = new THREE.Box3().setFromObject(model).max.y + 0.35;                // 🐦 표시는 실제 지붕 위에
   }
   remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); v.badge.remove(); this.views.delete(id); }
   setHighlight(id) {                                                              // 철거 도구가 가리키는 건물을 붉게
     for (const [bid, v] of this.views) v.holder.traverse(o => { if (o.isMesh) {
       if (!o.userData.baseMat) o.userData.baseMat = o.material;
-      o.material = bid === id ? (o.userData.redMat ||= Object.assign(o.userData.baseMat.clone(), { emissive: new THREE.Color(0xd9433a), emissiveIntensity: 0.55 })) : o.userData.baseMat;
+      o.material = bid === id ? (o.userData.redMat ||= Object.assign(o.userData.baseMat.clone(), { emissive: new THREE.Color(0xd9433a), emissiveIntensity: 0.55,
+        onBeforeCompile: o.userData.baseMat.onBeforeCompile, customProgramCacheKey: o.userData.baseMat.customProgramCacheKey })) : o.userData.baseMat;   // 지붕 색 셰이더도 그대로
     } });
   }
   // 건물 위 표시: 안에 있는 갈매미 수(건물 밖에서도 안의 상태가 유지됨을 보여 줌)
