@@ -18,6 +18,7 @@ export class UnitControl {
     dom.addEventListener("pointerdown", e => this.down(e), { capture: true });      // OrbitControls보다 먼저
     addEventListener("pointermove", e => this.move(e));
     addEventListener("pointerup", e => this.up(e));
+    addEventListener("pointercancel", () => this.cancel());                        // 브라우저가 손짓을 가져가면
   }
 
   unitAt(cx, cy) {
@@ -28,7 +29,16 @@ export class UnitControl {
     return hit ? this.getWorld().units.find(u => u.unitId === hit.object.userData.unitId) : null;
   }
 
+  /** 갈매미 잡기를 취소: 들고 있었으면 원래 자리로, 시야 조작은 다시 켬. */
+  cancel() {
+    if (!this.press) return;
+    const u = this.held;
+    if (u) { this.getWorld().dropUnit(u, Math.floor(u.heldFrom.x), Math.floor(u.heldFrom.z)); this.onStatus(""); }
+    this.press = null; this.held = null; this.target = null; this.mark.visible = false; this.controls.enabled = true;
+  }
   down(e) {
+    // 두 번째 손가락이 닿으면(두 손가락 확대·회전) 갈매미 잡기를 취소하고 시야 조작에 넘긴다
+    if (!e.isPrimary) { if (this.press) this.cancel(); return; }
     if (this.tools.mode !== "view" || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     const u = this.unitAt(e.clientX, e.clientY);
     this.press = { x: e.clientX, y: e.clientY, unit: u };
