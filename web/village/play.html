@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>갈매미 3D 테스트</title>
+<style>
+  :root { --bg: #d8e0e6; --ink: #2f3a44; --panel: rgba(255,255,255,0.82); --accent: #e0782b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; }
+  canvas { display: block; }
+  [hidden] { display: none !important; }
+  #hud { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px)); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #hud button { border: 0; border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 15px; cursor: pointer;
+    background: var(--panel); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  #hud button.on { background: var(--accent); color: #fff; }
+  #state { background: var(--panel); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+  #help { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px)); background: var(--panel); border-radius: 10px;
+    padding: 8px 12px; font-size: 14px; line-height: 1.5; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; pointer-events: none; }
+  #lockhint { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); background: var(--panel);
+    border-radius: 12px; padding: 10px 16px; font-size: 15px; pointer-events: none; }
+  /* touch controls (phones / tablets) */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  body.touch #help { display: none; }
+  #stick { position: fixed; left: calc(22px + env(safe-area-inset-left, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+    width: 128px; height: 128px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 6px rgba(0,0,0,.15); touch-action: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+    background: var(--accent); opacity: .9; pointer-events: none; }
+  #tbtns { position: fixed; right: calc(22px + env(safe-area-inset-right, 0px)); bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+    display: flex; gap: 14px; align-items: end; }
+  .tbtn { width: 72px; height: 72px; border: 0; border-radius: 50%; font: inherit; font-size: 15px; font-weight: 600;
+    background: var(--panel); color: var(--ink); box-shadow: 0 1px 6px rgba(0,0,0,.15); touch-action: none; }
+  .tbtn:active { background: var(--accent); color: #fff; }
+  @media (max-width: 640px) { #hud button { padding: 7px 10px; font-size: 13px; } #state { font-size: 13px; } }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span id="state">불러오는 중…</span>
+  <a href="./" style="background:var(--panel);border-radius:10px;padding:8px 12px;font-size:14px;color:var(--accent);text-decoration:none">갈매미 마당 보기 →</a>
+</div>
+<div id="help">WASD 이동 · Shift 달리기 · Space 점프 · J / 클릭 공격 · 마우스 시야 · 휠 확대/축소 · 1~8 캐릭터 바꾸기 · Esc 커서 풀기 · R 상자 다시 놓기</div>
+<div id="loading">불러오는 중…</div>
+<div id="lockhint" hidden>화면을 클릭하면 마우스로 시야를 돌릴 수 있어요</div>
+<div id="touch">
+  <div id="stick" aria-label="이동"><div id="knob"></div></div>
+  <div id="tbtns"><button class="tbtn" id="tjump">점프</button><button class="tbtn" id="tatk">공격</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+// models/chars.json: per character file, display name, model height, game scale
+// (자이언트 = 갈매미맨 x1.5, 미니 = 갈매미맨 x0.3), ground speed (m/s at clip speed 1, measured
+// from the planted foot so the feet do not slide) and the attack hit time.
+const CHARS = await (await fetch("models/chars.json")).json();
+const hud = document.getElementById("hud"), stateEl = document.getElementById("state");
+CHARS.forEach((c, i) => {
+  const b = document.createElement("button"); b.dataset.i = i; b.textContent = `${i + 1} · ${c.name}`;
+  hud.insertBefore(b, stateEl);
+});
+const WALK_SCALE = 2.2, RUN_SCALE = 1.5, FADE = 0.15;
+
+// ---------- scene
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+const TOUCH = matchMedia("(pointer: coarse)").matches;
+if (TOUCH) document.body.classList.add("touch");
+renderer.setPixelRatio(Math.min(devicePixelRatio, TOUCH ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xd8e0e6);
+scene.fog = new THREE.Fog(0xd8e0e6, 8, 22);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 100);
+
+scene.add(new THREE.HemisphereLight(0xf2f6ff, 0x8aa86a, 1.4));
+const sun = new THREE.DirectionalLight(0xfff4e6, 2.2);
+sun.position.set(-3, 6, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(TOUCH ? 1024 : 2048, TOUCH ? 1024 : 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 20 });
+scene.add(sun, sun.target);
+
+const grassTex = (() => {             // soft checker so movement reads clearly
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  g.fillStyle = "#a5d07e"; g.fillRect(0, 0, 128, 128); g.fillStyle = "#9ac874";
+  g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(20, 20);
+  t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+// crates the attack can knock around
+const crates = [];
+const crateMat = new THREE.MeshStandardMaterial({ color: 0xc08a52, roughness: 0.9 });
+function placeCrates() {
+  crates.forEach(c => scene.remove(c.mesh)); crates.length = 0;
+  const spots = [[1.2, -0.6], [-1.4, -1.0], [0.4, -2.2], [-0.6, 1.6], [2.2, 1.2], [-2.4, 0.6], [1.6, -2.8], [-1.8, -2.6]];
+  for (const [x, z] of spots) {
+    const s = 0.22, m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
+    m.position.set(x, s / 2, z); m.castShadow = m.receiveShadow = true; scene.add(m);
+    crates.push({ mesh: m, v: new THREE.Vector3(), spin: new THREE.Vector3(), s });
+  }
+}
+placeCrates();
+
+// ---------- characters
+const loader = new GLTFLoader();
+// Load the .glb files directly. (The claude.ai artifact copy stored each one as base64 inside .glb.json.)
+async function loadGLB(url) {
+  const res = await fetch(url); if (!res.ok) throw new Error("model not found: " + url);
+  return loader.parseAsync(await res.arrayBuffer(), url.slice(0, url.lastIndexOf("/") + 1));
+}
+
+const loaded = [];
+let cur = null, curIdx = -1;
+
+async function loadChar(i) {
+  if (loaded[i]) return loaded[i];
+  const g = await loadGLB(CHARS[i].file);
+  const root = g.scene;
+  root.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false;
+      for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; m.needsUpdate = true; }
+    }
+  });
+  root.scale.setScalar(CHARS[i].scale);
+  const mixer = new THREE.AnimationMixer(root);
+  const acts = {};
+  for (const src of g.animations) {
+    const key = ["Idle", "Walk", "Run", "Jump", "Attack"].find(k => src.name.endsWith(k));
+    const clip = src.clone();          // glTF tracks can share one time array; copy before shifting
+    if (!key) continue;
+    // Blender keys start at frame 1 (t = 1/24): shift to 0 so loops wrap without a held frame
+    const t0 = Math.min(...clip.tracks.map(t => t.times[0]));
+    clip.tracks.forEach(t => t.shift(-t0)); clip.resetDuration();
+    const a = mixer.clipAction(clip);
+    if (key === "Jump" || key === "Attack") { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+    acts[key] = a;
+  }
+  const c = { root, mixer, acts, cfg: CHARS[i], state: "", action: "", actionT: 0, hitDone: false };
+  mixer.addEventListener("finished", e => { if (e.action === acts[c.action]) { c.action = ""; } });
+  loaded[i] = c; return c;
+}
+
+let wanted = 0;
+async function select(i) {
+  wanted = i;
+  if (i === curIdx) return;
+  document.getElementById("loading").hidden = false;
+  let c;
+  try { c = await loadChar(i); } finally { document.getElementById("loading").hidden = true; }
+  if (i === curIdx || i !== wanted) return;       // a newer request wins over a slow download
+  const pos = cur ? cur.root.position.clone() : new THREE.Vector3();
+  const rotY = cur ? cur.root.rotation.y : 0;          // start facing the camera
+  if (cur) scene.remove(cur.root);
+  cur = c; curIdx = i; scene.add(c.root);
+  c.root.position.copy(pos); c.root.rotation.y = rotY; c.state = ""; c.action = "";
+  play("Idle", 1);
+  const tall = c.cfg.height * c.cfg.scale;                 // keep the camera framing similar for every size
+  camDist = THREE.MathUtils.clamp(2.6 * tall / 0.91, 0.8, 6);
+  document.querySelectorAll("#hud button").forEach(b => b.classList.toggle("on", +b.dataset.i === i));
+  document.getElementById("loading").hidden = true;
+}
+
+function play(key, speed, fade = FADE) {
+  const c = cur, a = c.acts[key]; if (!a) return;
+  a.timeScale = speed;
+  if (c.state === key) return;
+  const prev = c.acts[c.state];
+  a.reset().play();
+  if (prev) a.crossFadeFrom(prev, fade, false);
+  c.state = key;
+}
+
+function startAction(key) {
+  const c = cur; if (!c.acts[key]) return;
+  c.action = key; c.actionT = 0; c.hitDone = false;
+  c.state = "";              // force a fresh start even if repeated
+  play(key, 1, 0.08);
+}
+
+// ---------- input
+const keys = new Set();
+let camYaw = 0, camPitch = 0.42, camDist = 2.6, lockClickAt = 0;
+addEventListener("keydown", e => {
+  if (e.repeat) return;
+  keys.add(e.code);
+  if (!cur) return;
+  if (e.code === "Space") { e.preventDefault(); if (!cur.action) startAction("Jump"); }
+  if (e.code === "KeyJ" && !cur.action) startAction("Attack");
+  const d = /^Digit([1-8])$/.exec(e.code); if (d && +d[1] <= CHARS.length) select(+d[1] - 1);
+  if (e.code === "KeyR") placeCrates();
+});
+addEventListener("keyup", e => keys.delete(e.code));
+addEventListener("blur", () => keys.clear());
+const canvas = renderer.domElement;
+canvas.addEventListener("mousedown", e => {
+  if (TOUCH) return;                                         // phones use the on-screen controls
+  if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); lockClickAt = performance.now(); return; }
+  if (e.button === 0 && cur && !cur.action) startAction("Attack");
+});
+document.addEventListener("pointerlockchange", () => {
+  document.getElementById("lockhint").hidden = document.pointerLockElement === canvas;
+});
+addEventListener("mousemove", e => {
+  if (document.pointerLockElement !== canvas) return;
+  camYaw -= e.movementX * 0.004;
+  camPitch = THREE.MathUtils.clamp(camPitch + e.movementY * 0.004, 0.06, 1.25);
+});
+addEventListener("wheel", e => { camDist = THREE.MathUtils.clamp(camDist * (e.deltaY > 0 ? 1.1 : 0.9), 0.5, 8); }, { passive: true });
+document.getElementById("lockhint").hidden = TOUCH;
+
+// ---------- touch: stick to move (push to the rim to run), drag the view to look, pinch to zoom
+const stick = { x: 0, y: 0, id: null }, stickEl = document.getElementById("stick"), knob = document.getElementById("knob");
+function stickMove(e) {
+  const r = stickEl.getBoundingClientRect(), R = r.width/2 - 20;
+  let dx = e.clientX - (r.left + r.width/2), dy = e.clientY - (r.top + r.height/2); const m = Math.hypot(dx, dy);
+  if (m > R) { dx *= R/m; dy *= R/m; }
+  stick.x = dx/R; stick.y = dy/R; knob.style.transform = `translate(${dx}px, ${dy}px)`;
+}
+stickEl.addEventListener("pointerdown", e => { stick.id = e.pointerId; stickEl.setPointerCapture(e.pointerId); stickMove(e); });
+stickEl.addEventListener("pointermove", e => { if (e.pointerId === stick.id) stickMove(e); });
+const stickEnd = e => { if (e.pointerId !== stick.id) return; stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; };
+stickEl.addEventListener("pointerup", stickEnd); stickEl.addEventListener("pointercancel", stickEnd);
+document.getElementById("tjump").addEventListener("pointerdown", e => { e.preventDefault(); if (cur && !cur.action) startAction("Jump"); });
+document.getElementById("tatk").addEventListener("pointerdown", e => { e.preventDefault(); if (cur && !cur.action) startAction("Attack"); });
+const looks = new Map();                                     // fingers on the 3D view
+canvas.style.touchAction = "none";
+canvas.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") { looks.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId); } });
+canvas.addEventListener("pointermove", e => {
+  const p = looks.get(e.pointerId); if (!p) return;
+  if (looks.size === 1) { camYaw -= (e.clientX - p.x)*0.006; camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - p.y)*0.004, 0.06, 1.25); }
+  else if (looks.size === 2) {
+    const [a, b] = [...looks.entries()].map(([id, q]) => id === e.pointerId ? { x: e.clientX, y: e.clientY } : q);
+    const [a0, b0] = [...looks.values()];
+    const d0 = Math.hypot(a0.x - b0.x, a0.y - b0.y), d1 = Math.hypot(a.x - b.x, a.y - b.y);
+    if (d0 > 0 && d1 > 0) camDist = THREE.MathUtils.clamp(camDist*d0/d1, 0.5, 8);
+  }
+  p.x = e.clientX; p.y = e.clientY;
+});
+const lookEnd = e => looks.delete(e.pointerId);
+canvas.addEventListener("pointerup", lookEnd); canvas.addEventListener("pointercancel", lookEnd);
+
+// ---------- loop
+const clock = new THREE.Clock();
+const tmp = new THREE.Vector3(), camTarget = new THREE.Vector3();
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (cur) {
+    const c = cur, r = c.root;
+    let ix = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
+    let iz = (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) - (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0);
+    const stickMag = Math.hypot(stick.x, stick.y);
+    if (stickMag > 0.15) { ix = stick.x; iz = stick.y; }
+    const dir = new THREE.Vector3(ix, 0, iz);
+    if (dir.lengthSq() > 1) dir.normalize();
+    dir.applyAxisAngle(THREE.Object3D.DEFAULT_UP, camYaw);             // camera-relative: W = away from the camera
+    const running = keys.has("ShiftLeft") || keys.has("ShiftRight") || stickMag > 0.85;
+    let speed = (running ? c.cfg.run * RUN_SCALE : c.cfg.walk * WALK_SCALE) * c.cfg.scale;   // bigger body, longer stride
+    if (c.action === "Attack") speed = 0;
+    if (c.action === "Jump") speed *= 0.8;
+    if (dir.lengthSq() > 0.0025) {
+      r.position.addScaledVector(dir, speed * dt);
+      r.position.x = THREE.MathUtils.clamp(r.position.x, -18, 18);
+      r.position.z = THREE.MathUtils.clamp(r.position.z, -18, 18);
+      const target = Math.atan2(dir.x, dir.z);                         // the model faces +Z
+      let d = target - r.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+      r.rotation.y += d * Math.min(1, 12 * dt);
+    }
+    if (c.action) {
+      c.actionT += dt;
+      if (c.action === "Attack" && !c.hitDone && c.actionT >= c.cfg.hit) { c.hitDone = true; hitCrates(r); }
+    } else if (dir.lengthSq() > 0.0025) {
+      play(running ? "Run" : "Walk", running ? RUN_SCALE : WALK_SCALE);
+    } else {
+      play("Idle", 1);
+    }
+    c.mixer.update(dt);
+    camTarget.lerp(tmp.set(r.position.x, r.position.y + 0.5 * c.cfg.height * c.cfg.scale, r.position.z), Math.min(1, 10 * dt));
+    sun.position.set(r.position.x - 3, 6, r.position.z + 4); sun.target.position.copy(r.position);
+    document.getElementById("state").textContent = `${c.cfg.name} · ${c.action || c.state}`;
+  }
+  // crates
+  for (const k of crates) {
+    if (k.v.lengthSq() < 1e-6 && k.mesh.position.y <= k.s / 2 + 1e-4) continue;
+    k.v.y -= 9.8 * dt; k.mesh.position.addScaledVector(k.v, dt);
+    k.mesh.rotation.x += k.spin.x * dt; k.mesh.rotation.z += k.spin.z * dt;
+    if (k.mesh.position.y < k.s / 2) {
+      k.mesh.position.y = k.s / 2; k.v.y = Math.abs(k.v.y) > 0.6 ? -k.v.y * 0.35 : 0;
+      k.v.x *= 0.82; k.v.z *= 0.82; k.spin.multiplyScalar(0.8);
+    }
+  }
+  const off = new THREE.Vector3(0, Math.sin(camPitch) * camDist, Math.cos(camPitch) * camDist)
+    .applyAxisAngle(THREE.Object3D.DEFAULT_UP, camYaw);
+  camera.position.copy(camTarget).add(off);
+  camera.lookAt(camTarget);
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+function hitCrates(r) {
+  const fwd = new THREE.Vector3(Math.sin(r.rotation.y), 0, Math.cos(r.rotation.y));
+  let n = 0;
+  for (const k of crates) {
+    tmp.subVectors(k.mesh.position, r.position); tmp.y = 0;
+    if (tmp.length() < 0.9 * Math.max(0.5, cur.cfg.scale) && tmp.normalize().dot(fwd) > 0.2) {
+      k.v.copy(tmp.add(fwd).normalize().multiplyScalar(2.2)); k.v.y = 1.6;
+      k.spin.set((Math.random() - 0.5) * 12, 0, (Math.random() - 0.5) * 12); n++;
+    }
+  }
+  window.__lastHits = n;
+}
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+});
+
+// test hook for automated checks
+window.__test = { get cur() { return cur; }, keys, select, startAction, get camYaw() { return camYaw; }, set camYaw(v) { camYaw = v; } };
+select(0).then(() => { camTarget.set(0, 0.45, 0); requestAnimationFrame(tick); });
+document.querySelectorAll("#hud button").forEach(b => b.addEventListener("click", ev => { ev.stopPropagation(); select(+b.dataset.i); }));
+</script>
+</body>
+</html>

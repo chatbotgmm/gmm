@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>갈매미 마을</title>
+<style>
+  :root { --bg: #d8e0e6; --ink: #2f3a44; --panel: rgba(255,255,255,0.86); --accent: #e0782b; --muted: #6b7783; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; }
+  canvas { display: block; }
+  [hidden] { display: none !important; }
+  #panel { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px));
+    width: 236px; max-height: calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow: auto;
+    background: var(--panel); border-radius: 12px; padding: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.12); font-size: 14px; }
+  #panel h1 { font-size: 16px; margin: 0 0 6px; }
+  #res { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; margin: 4px 0 8px; font-size: 13px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+  .row:hover { background: rgba(0,0,0,.05); }
+  .row.on { background: var(--accent); color: #fff; }
+  .row .nm { font-weight: 600; min-width: 52px; }
+  .row .act { color: var(--muted); font-size: 12.5px; }
+  .row.on .act { color: #fff; }
+  #ctrl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #ctrl button { border: 0; border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 12.5px; cursor: pointer;
+    background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  #ctrl button.on { background: var(--accent); color: #fff; }
+  #help { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    margin-right: calc(12px + env(safe-area-inset-right, 0px)); background: var(--panel); border-radius: 10px; padding: 7px 12px; font-size: 13px; }
+  #fold { display: none; border: 0; background: none; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; padding: 0 0 0 6px; }
+  .emote { position: fixed; transform: translate(-50%, -100%); font-size: 21px; pointer-events: none;
+    text-shadow: 0 1px 2px rgba(255,255,255,.9); transition: opacity .3s; white-space: nowrap; }
+  .zone { position: fixed; transform: translate(-50%, -50%); font-size: 13px; padding: 2px 8px; border-radius: 8px;
+    background: rgba(255,255,255,.7); pointer-events: none; white-space: nowrap; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; pointer-events: none; }
+  @media (max-width: 640px) { #panel { width: 196px; font-size: 12px; } #fold { display: inline; } #panel.folded #list, #panel.folded #ctrl { display: none; }
+    #help { font-size: 12px; } }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>갈매미 마을 <a href="play.html" style="font-size:12px;font-weight:400;color:var(--accent)">직접 조작하기 →</a><button id="fold">접기</button></h1>
+  <div id="res"></div>
+  <div id="list"></div>
+  <div id="ctrl">
+    <button data-speed="1" class="on">1배</button><button data-speed="2">2배</button><button data-speed="4">4배</button>
+    <button id="pause">일시정지</button><button id="seeds">씨앗 뿌리기</button><button id="labels">구역 이름</button>
+  </div>
+</div>
+<div id="help">드래그: 시야 돌리기 · 휠/두 손가락: 확대·축소 · 캐릭터 누르기: 따라가기 · 빈 땅 누르기: 끄기
+  <span style="color:var(--muted)"> · 에셋: Kenney Nature/Survival Kit, Quaternius minecart (CC0)</span></div>
+<div id="loading">불러오는 중…</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// Free assets: Kenney Nature Kit + Survival Kit (CC0, kenney.nl), "minecart" by Quaternius (CC0, poly.pizza)
+const NK = "assets/nk/", SK = "assets/sk/";
+const CHARS = await (await fetch("models/chars.json")).json();
+const WALK_SCALE = 2.2, RUN_SCALE = 1.5, FADE = 0.2, HALF = 7;           // village is 14 m square
+let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647)/2147483647;  // repeatable layout
+const rand = (a, b) => a + Math.random()*(b - a), pick = a => a[Math.floor(Math.random()*a.length)];
+
+// how often each character picks each activity when free (relative weights)
+const PERSONA = {
+  "기본":    { rest: 3, wander: 3, forage: 2, visit: 3, zoomies: 1, chop: 3, mine: 1, fish: 2, build: 4 },
+  "미니":    { rest: 2, wander: 3, forage: 5, visit: 2, zoomies: 2, chop: 0, mine: 0, fish: 4, build: 1, timid: true },
+  "자이언트": { rest: 4, wander: 2, forage: 1, visit: 1, zoomies: 0, chop: 5, mine: 5, fish: 1, build: 3 },
+  "꽃":      { rest: 5, wander: 3, forage: 4, visit: 2, zoomies: 1, chop: 0, mine: 0, fish: 4, build: 1 },
+  "황금":    { rest: 3, wander: 3, forage: 2, visit: 2, zoomies: 1, chop: 2, mine: 3, fish: 1, build: 5 },
+  "물방울":  { rest: 1, wander: 3, forage: 2, visit: 2, zoomies: 4, chop: 1, mine: 0, fish: 5, build: 1 },
+  "불씨":    { rest: 2, wander: 2, forage: 2, visit: 2, zoomies: 3, chop: 2, mine: 4, fish: 0, build: 2 },
+  "그림자":  { rest: 4, wander: 4, forage: 2, visit: 0, zoomies: 0, chop: 2, mine: 4, fish: 2, build: 0, loner: true },
+};
+const LABEL = { rest: "쉬는 중", wander: "산책 중", forage: "씨앗 찾는 중", eat: "냠냠", visit: "친구에게 가는 중", greet: "인사 중",
+  zoomies: "신나서 뛰는 중", flee: "도망치는 중", avoid: "혼자 있고 싶어", go_chop: "숲으로 가는 중", chop: "나무 베는 중",
+  go_mine: "광산으로 가는 중", mine: "광석 캐는 중", go_fish: "연못으로 가는 중", fish: "낚시 중", go_build: "공사장으로 가는 중", build: "집 짓는 중" };
+
+// ---------- renderer / scene
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+const TOUCH = matchMedia("(pointer: coarse)").matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio, TOUCH ? 1.5 : 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xd8e0e6); scene.fog = new THREE.Fog(0xd8e0e6, 18, 38);
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.05, 120); camera.position.set(0, 11, 14);
+function fitView() {                                                   // portrait phones see less width: wider lens, lighter fog
+  const portrait = innerWidth < innerHeight;
+  camera.fov = portrait ? 62 : 45; camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  scene.fog.near = portrait ? 30 : 18; scene.fog.far = portrait ? 62 : 38;
+}
+fitView();
+if (innerWidth < innerHeight) camera.position.set(0, 17, 17);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.3, 0); controls.enableDamping = true; controls.maxPolarAngle = Math.PI*0.47; controls.minDistance = 0.6; controls.maxDistance = 28;
+scene.add(new THREE.HemisphereLight(0xf2f6ff, 0x8aa86a, 1.4));
+const sun = new THREE.DirectionalLight(0xfff4e6, 2.2); sun.position.set(-6, 11, 7); sun.castShadow = true;
+sun.shadow.mapSize.set(TOUCH ? 1024 : 2048, TOUCH ? 1024 : 2048); Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 35 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;           // no self-shadow speckles on the low-poly props
+scene.add(sun);
+const grass = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  g.fillStyle = "#a5d07e"; g.fillRect(0, 0, 128, 128); g.fillStyle = "#9ac874"; g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(22, 22); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(44, 44), new THREE.MeshStandardMaterial({ map: grass, roughness: 1 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ---------- asset loading (each model re-centred: bottom-centre at the origin)
+const loader = new GLTFLoader(), cache = {};
+// Load the .glb files directly. (The claude.ai artifact copy stored each one as base64 inside .glb.json.)
+async function loadGLB(url) {
+  const res = await fetch(url); if (!res.ok) throw new Error("model not found: " + url);
+  return loader.parseAsync(await res.arrayBuffer(), url.slice(0, url.lastIndexOf("/") + 1));
+}
+
+async function asset(file) {
+  if (!cache[file]) cache[file] = loadGLB(file).then(g => {
+    const root = g.scene;
+    root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true;
+      for (const m of [].concat(o.material)) { m.metalness = 0; m.roughness = Math.max(m.roughness, 0.7); } } });   // glTF defaults to metal=1: black without an environment map
+    const box = new THREE.Box3().setFromObject(root), c = box.getCenter(new THREE.Vector3());
+    root.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
+    const wrap = new THREE.Group(); wrap.add(root); wrap.userData.size = box.getSize(new THREE.Vector3()); return wrap;
+  });
+  return (await cache[file]).clone(true);
+}
+async function place(file, x, z, s = 1, ry = 0) {
+  const m = await asset(file); m.position.set(x, 0, z); m.scale.setScalar(s); m.rotation.y = ry; scene.add(m); return m;
+}
+
+// ---------- the village
+const ZONES = { forest: new THREE.Vector3(-4.4, 0, -4.0), mine: new THREE.Vector3(4.4, 0, -4.6),
+                pond: new THREE.Vector3(-4.2, 0, 4.0), build: new THREE.Vector3(4.2, 0, 3.8) };
+const trees = [], ores = [], spots = [], seeds = [];
+const obstacles = [];                                      // static circles agents walk around: {p, r}
+let wood = 0, stone = 0, fishN = 0, eaten = 0; const giveUps = {}, arrivals = {};
+
+// fence
+const fenceMat = new THREE.MeshStandardMaterial({ color: 0xd9b07a, roughness: 0.9 });
+for (const [w, d, x, z] of [[2*HALF + .6, .12, 0, -HALF - .3], [2*HALF + .6, .12, 0, HALF + .3], [.12, 2*HALF + .6, -HALF - .3, 0], [.12, 2*HALF + .6, HALF + .3, 0]]) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, .25, d), fenceMat); m.position.set(x, .125, z); m.castShadow = m.receiveShadow = true; scene.add(m);
+}
+// paths from the centre to each zone
+const pathMat = new THREE.MeshStandardMaterial({ color: 0xcdb98a, roughness: 1 });
+for (const z of Object.values(ZONES)) {
+  const len = z.length() - 1.6, m = new THREE.Mesh(new THREE.PlaneGeometry(0.7, len), pathMat);
+  m.rotation.set(-Math.PI/2, 0, Math.atan2(-z.x, -z.z)); m.position.set(z.x*0.5*len/z.length(), 0.004, z.z*0.5*len/z.length());
+  m.receiveShadow = true; scene.add(m);
+}
+
+const loads = [];
+// forest
+const TREE_FILES = [NK + "tree_oak.glb", NK + "tree_default.glb", NK + "tree_detailed.glb", NK + "tree_fat.glb", NK + "tree_pineRoundA.glb", SK + "tree.glb", SK + "tree-tall.glb"];
+for (let i = 0; i < 10; i++) {
+  const a = rnd()*Math.PI*2, r = 0.6 + rnd()*2.3, x = ZONES.forest.x + Math.cos(a)*r, z = ZONES.forest.z + Math.sin(a)*r;
+  if (trees.some(t => Math.hypot(t.p.x - x, t.p.z - z) < 1.0)) { i--; continue; }
+  const file = TREE_FILES[i % TREE_FILES.length], s = 1.25 + rnd()*0.35;
+  loads.push((async () => {
+    const t = { p: new THREE.Vector3(x, 0, z), r: 0.16*s, hp: 3, alive: true, claimed: null, s, regrow: 0, shake: 0, fall: 0 };
+    t.obj = await place(file, x, z, s, rnd()*6.28); t.stump = await place(NK + "stump_round.glb", x, z, s*0.55); t.stump.visible = false;
+    trees.push(t); obstacles.push({ p: t.p, r: t.r + 0.05 });
+  })());
+}
+loads.push(place(NK + "log_stack.glb", ZONES.forest.x + 2.4, ZONES.forest.z + 1.9, 1.2, 0.6).then(m => obstacles.push({ p: m.position, r: 0.45 })));
+loads.push(place(NK + "stump_old.glb", ZONES.forest.x - 2.6, ZONES.forest.z + 1.4, 1.2));
+for (let i = 0; i < 6; i++) loads.push(place(NK + pick(["plant_bushLarge.glb", "plant_bush.glb", "flower_redA.glb", "flower_yellowA.glb"]), ZONES.forest.x + rand(-3, 3), ZONES.forest.z + rand(-3, 3), 1.3, rand(0, 6)));
+
+// mine: a rocky hill of cliff blocks with a cave arch, ore rocks in front, a minecart
+const M = ZONES.mine, B = 1.1;
+const MOUND = [[-1.35, -0.15, 2.1], [1.35, -0.2, 2.2], [-0.7, -1.0, 2.6], [0.7, -1.05, 2.5], [0, -1.6, 2.9], [-1.9, -0.9, 1.8],
+               [1.9, -1.0, 1.9], [-1.2, -1.8, 2.2], [1.25, -1.8, 2.3], [-2.4, 0.2, 1.3], [2.4, 0.15, 1.4]];
+MOUND.forEach(([dx, dz, s], i) => loads.push(place(NK + ["rock_tallA.glb", "rock_tallB.glb", "rock_tallC.glb", "rock_tallE.glb", "rock_tallG.glb"][i % 5], M.x + dx, M.z + dz, s, rnd()*6.28)));
+loads.push(place(NK + "cliff_cave_rock.glb", M.x, M.z + 0.05, 1.5));
+const caveBack = new THREE.Mesh(new THREE.BoxGeometry(B*0.8, B*0.9, 0.1), new THREE.MeshStandardMaterial({ color: 0x1d1a18 }));
+caveBack.position.set(M.x, 0.6, M.z - 0.3); caveBack.scale.set(1.3, 1.3, 1); scene.add(caveBack);
+obstacles.push({ p: new THREE.Vector3(M.x, 0, M.z - 1.1), r: 1.9 });
+for (let i = 0; i < 5; i++) {
+  const a = -Math.PI/2 + (i - 2)*0.55 + Math.PI, x = M.x + Math.sin(a)*2.1, z = M.z + 0.9 + Math.cos(a)*-0.2 + 0.9;
+  const ox = M.x + (i - 2)*0.95, oz = M.z + 1.5 + (i % 2)*0.55;
+  loads.push((async () => {
+    const o = { p: new THREE.Vector3(ox, 0, oz), r: 0.22, hp: 3, alive: true, claimed: null, regrow: 0, shake: 0 };
+    o.obj = await place(SK + pick(["rock-a.glb", "rock-b.glb", "rock-c.glb"]), ox, oz, 0.75, rnd()*6); ores.push(o); obstacles.push({ p: o.p, r: o.r });
+  })());
+}
+loads.push(place("assets/minecart/minecart.glb", M.x + 2.0, M.z + 0.4, 0.3, -0.5).then(m => obstacles.push({ p: m.position, r: 0.4 })));
+loads.push(place(SK + "resource-stone-large.glb", M.x - 2.0, M.z + 0.6, 1.4));
+loads.push(place(SK + "tool-pickaxe.glb", M.x - 1.7, M.z + 1.0, 1.4, 0.8).then(m => { m.rotation.z = Math.PI/2; m.position.y = 0.03; }));
+
+// pond: water, rocky rim, lilies, fishing stand; five fishing spots on the shore
+const P = ZONES.pond, PR = 1.7;
+const water = new THREE.Mesh(new THREE.CircleGeometry(PR, 48), new THREE.MeshStandardMaterial({ color: 0x5aa7d8, roughness: 0.15, metalness: 0.05, transparent: true, opacity: 0.88 }));
+water.rotation.x = -Math.PI/2; water.position.set(P.x, 0.015, P.z); water.receiveShadow = true; scene.add(water);
+const shore = new THREE.Mesh(new THREE.RingGeometry(PR, PR + 0.18, 48), new THREE.MeshStandardMaterial({ color: 0xc9b98f, roughness: 1 }));
+shore.rotation.x = -Math.PI/2; shore.position.set(P.x, 0.012, P.z); scene.add(shore);
+obstacles.push({ p: P, r: PR + 0.05 });
+for (let i = 0; i < 14; i++) { const a = i/14*Math.PI*2 + 0.2; if (i % 3 === 0) continue;
+  loads.push(place(NK + pick(["rock_smallA.glb", "rock_smallB.glb", "rock_smallC.glb", "stone_smallA.glb"]), P.x + Math.cos(a)*(PR + 0.2), P.z + Math.sin(a)*(PR + 0.2), 1.0, a)); }
+for (let i = 0; i < 5; i++) loads.push(place(NK + pick(["lily_large.glb", "lily_small.glb"]), P.x + rand(-1, 1), P.z + rand(-1, 1), 1.3, rand(0, 6)).then(m => { m.position.y = 0.0; }));
+loads.push(place(SK + "campfire-fishing-stand.glb", P.x + 2.3, P.z - 1.0, 1.4, 1.2));
+loads.push(place(SK + "bucket.glb", P.x + 2.2, P.z + 0.6, 1.4));
+for (let i = 0; i < 6; i++) {                                   // shore spots facing the water
+  const a = Math.PI*(-0.15 + i*0.32), dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+  spots.push({ dir, claimed: null, bob: P.clone().addScaledVector(dir, PR - 0.75) });
+}
+
+// building site: three plots; a house grows floor -> frame -> roof with every hammer hit
+const S = ZONES.build, plots = [];
+const HOUSE_HITS = 30;
+for (const [dx, dz] of [[-0.9, -0.6], [1.0, -0.4], [0.0, 1.0]]) plots.push({ p: new THREE.Vector3(S.x + dx, 0, S.z + dz), hits: 0, parts: null });
+loads.push(place(SK + "workbench.glb", S.x + 2.2, S.z + 1.6, 1.6, -0.8));
+loads.push(place(SK + "resource-planks.glb", S.x - 2.1, S.z + 1.7, 1.5, 0.4));
+loads.push(place(SK + "resource-wood.glb", S.x - 2.3, S.z + 1.2, 1.6, 1.0));
+for (const pl of plots) obstacles.push({ p: pl.p, r: 0.62 });
+async function housePart(pl, file, y = 0) { const m = await place(SK + file, pl.p.x, pl.p.z, 2.2, 0); m.position.y = y; m.scale.y = 0.001; return m; }
+
+// zone labels
+const zoneLabels = [];
+for (const [k, txt] of [["forest", "🌲 숲"], ["mine", "⛏ 광산"], ["pond", "🎣 연못"], ["build", "🔨 공사장"]]) {
+  const el = document.createElement("div"); el.className = "zone"; el.textContent = txt; document.body.appendChild(el); zoneLabels.push([ZONES[k], el]);
+}
+
+// seeds in the meadow
+const seedGeo = new THREE.SphereGeometry(0.035, 12, 8), seedMat = new THREE.MeshStandardMaterial({ color: 0xf2c230, emissive: 0xf2b200, emissiveIntensity: 0.3, roughness: 0.4 });
+function addSeed(x = rand(-2.6, 2.6), z = rand(-2.6, 2.6)) {
+  const m = new THREE.Mesh(seedGeo, seedMat); m.position.set(x, 0.035, z); m.castShadow = true; scene.add(m); seeds.push({ mesh: m, claimed: null });
+}
+for (let i = 0; i < 12; i++) addSeed();
+
+// ---------- tools (Kenney models; a simple rod for fishing)
+async function toolModel(file, len) {               // handle along +Y, grip a little above the handle end
+  const m = await asset(file); const h = m.userData.size.y;
+  const g = new THREE.Group(); m.scale.setScalar(len/h); m.position.y = -0.18*len; g.add(m); return g;
+}
+const TOOL_PROTOS = {};
+async function buildTools() {
+  TOOL_PROTOS.axe = await toolModel(SK + "tool-axe.glb", 0.34);
+  TOOL_PROTOS.pickaxe = await toolModel(SK + "tool-pickaxe.glb", 0.34);
+  TOOL_PROTOS.hammer = await toolModel(SK + "tool-hammer.glb", 0.24);
+  const rod = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.009, 0.62, 6), new THREE.MeshStandardMaterial({ color: 0x8a5a32 }));
+  stick.position.y = 0.25; rod.add(stick);
+  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.02, 10), new THREE.MeshStandardMaterial({ color: 0x777b80 }));
+  reel.rotation.z = Math.PI/2; reel.position.y = 0.02; rod.add(reel);
+  const tip = new THREE.Object3D(); tip.name = "tip"; tip.position.y = 0.56; rod.add(tip);
+  TOOL_PROTOS.rod = rod;
+}
+
+// ---------- characters
+async function loadChar(cfg) {
+  const g = await loadGLB(cfg.file), root = g.scene;
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; } } });
+  root.scale.setScalar(cfg.scale);
+  const mixer = new THREE.AnimationMixer(root), acts = {};
+  for (const src of g.animations) {
+    const key = ["Idle", "Walk", "Run", "Jump", "Attack", "Chop", "Mine", "Build", "FishCast", "FishWait", "FishReel"].find(k => src.name.endsWith("|" + k) || src.name === k);
+    if (!key) continue;
+    const clip = src.clone(); const t0 = Math.min(...clip.tracks.map(t => t.times[0]));
+    clip.tracks.forEach(t => t.shift(-t0)); clip.resetDuration();
+    const a = mixer.clipAction(clip);
+    if (["Jump", "Attack", "FishCast", "FishReel"].includes(key)) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+    acts[key] = a;
+  }
+  let hand = null; root.traverse(o => { if (o.isBone && /^prop.?R$/i.test(o.name)) hand = o; });
+  const tools = {};
+  if (hand) for (const [k, proto] of Object.entries(TOOL_PROTOS)) { const t = proto.clone(true); t.visible = false; hand.add(t); tools[k] = t; }
+  return { root, mixer, acts, tools };
+}
+
+const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+
+class Agent {
+  constructor(cfg, model, i) {
+    Object.assign(this, model); this.cfg = cfg; this.i = i; this.persona = PERSONA[cfg.name] || PERSONA["기본"];
+    this.size = cfg.height*cfg.scale; this.radius = 0.2*cfg.scale + 0.05;
+    this.walkSpeed = cfg.walk*WALK_SCALE*cfg.scale; this.runSpeed = cfg.run*RUN_SCALE*cfg.scale;
+    this.pos = this.root.position; this.heading = rand(-Math.PI, Math.PI);
+    this.anim = ""; this.oneShot = null; this.oneShotT = 0; this.onHit = null; this.onDone = null; this.moveT = 0;
+    this.state = "rest"; this.timer = rand(0.5, 2.5); this.target = null; this.focus = null; this.running = false;
+    this.emoteEl = document.createElement("div"); this.emoteEl.className = "emote"; this.emoteEl.style.opacity = 0; document.body.appendChild(this.emoteEl); this.emoteT = 0;
+    const pk = new THREE.Mesh(new THREE.CylinderGeometry(this.radius + 0.05, this.radius + 0.05, this.size, 10), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    pk.position.y = this.size/2/cfg.scale; pk.scale.setScalar(1/cfg.scale); pk.userData.agent = this; this.root.add(pk); this.pick = pk;
+    const bob = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe0402b })); bob.visible = false; scene.add(bob); this.bobber = bob;
+    this.line = line.clone(); this.line.geometry = line.geometry.clone(); this.line.visible = false; scene.add(this.line);
+    this.play("Idle", 1);
+  }
+  play(key, speed = 1, fade = FADE) {
+    const a = this.acts[key]; if (!a) return; a.timeScale = speed; if (this.anim === key) return;
+    const prev = this.acts[this.anim]; a.reset().play(); if (prev) a.crossFadeFrom(prev, fade, false); this.anim = key;
+  }
+  doOnce(key, onHit, onDone, hitAt) {
+    this.anim = ""; this.play(key, 1, 0.1); this.oneShot = key; this.oneShotT = 0; this.onHit = onHit; this.onDone = onDone; this.hitAt = hitAt ?? this.cfg.hit;
+  }
+  tool(k) { for (const [n, t] of Object.entries(this.tools)) t.visible = n === k; }
+  emote(ch, secs = 1.6) { this.emoteEl.textContent = ch; this.emoteT = secs; }
+  set(state, timer = 0) { this.state = state; this.timer = timer; this.target = null; this.focus = null; this.moveT = 0; }
+  choose() {
+    const opts = Object.entries(this.persona).filter(([k, w]) => typeof w === "number" && w > 0);
+    let r = Math.random()*opts.reduce((s, [, w]) => s + w, 0);
+    for (const [k, w] of opts) if ((r -= w) <= 0) return this.start(k);
+    this.start("rest");
+  }
+  standPoint(center, r) {                                   // a free point on a circle around `center`, on my side
+    const d = new THREE.Vector3(this.pos.x - center.x, 0, this.pos.z - center.z); if (d.lengthSq() < 1e-6) d.set(0, 0, 1); d.normalize();
+    return center.clone().addScaledVector(d, r + this.radius + 0.06);
+  }
+  start(kind) {
+    const reach = 1.5 + 3.5*Math.sqrt(this.cfg.scale);
+    const far = p => this.pos.distanceTo(p) > 4 && Math.random() < 0.6;
+    switch (kind) {
+      case "rest": this.set("rest", rand(2, 6)); if (Math.random() < 0.3) this.emote(pick(["…", "♪", "z"])); return;
+      case "wander": this.set("wander"); this.running = !!this.persona.timid && Math.random() < 0.6; this.target = this.randomSpot(reach); return;
+      case "zoomies": this.set("zoomies"); this.running = true; this.chain = 3; this.target = this.randomSpot(reach); this.emote("✨"); return;
+      case "forage": {
+        const s = this.nearest(seeds.filter(s => !s.claimed && s.mesh.position.distanceTo(this.pos) < reach*1.6), s => s.mesh.position);
+        if (!s) return this.start("wander");
+        s.claimed = this; this.set("forage"); this.focus = s; this.running = !!this.persona.timid; this.target = s.mesh.position; return;
+      }
+      case "visit": {
+        const f = this.nearest(agents.filter(o => o !== this && !o.persona.loner && ["rest", "wander"].includes(o.state)), o => o.pos);
+        if (!f) return this.start("wander");
+        this.set("visit"); this.focus = f; this.emote("?"); return;
+      }
+      case "chop": {
+        const t = this.nearest(trees.filter(t => t.alive && !t.claimed), t => t.p); if (!t) return this.start("wander");
+        t.claimed = this; this.set("go_chop"); this.focus = t; this.target = this.standPoint(t.p, t.r + 0.08*this.cfg.scale); this.running = far(t.p); return;
+      }
+      case "mine": {
+        const o = this.nearest(ores.filter(o => o.alive && !o.claimed), o => o.p); if (!o) return this.start("wander");
+        o.claimed = this; this.set("go_mine"); this.focus = o; this.target = this.standPoint(o.p, o.r + 0.1*this.cfg.scale); this.running = far(o.p); return;
+      }
+      case "fish": {
+        const s = this.nearest(spots.filter(s => !s.claimed), s => P.clone().addScaledVector(s.dir, PR)); if (!s) return this.start("wander");
+        s.claimed = this; this.set("go_fish"); this.focus = s; this.target = P.clone().addScaledVector(s.dir, PR + this.radius + 0.12); this.running = far(this.target); return;
+      }
+      case "build": {
+        const pl = plots.filter(p => p.hits < HOUSE_HITS && !p.busy).sort((a, b) => b.hits - a.hits)[0];
+        if (!pl || wood < 1 || stone < 1) return this.start(Math.random() < 0.5 ? "chop" : "mine");    // no materials: go fetch some
+        pl.busy = this; wood--; stone--; this.set("go_build"); this.focus = pl; this.target = this.standPoint(pl.p, 0.58); this.running = far(pl.p); return;
+      }
+    }
+    this.start("rest");
+  }
+  randomSpot(r) {
+    for (let k = 0; k < 30; k++) {
+      const p = new THREE.Vector3(this.pos.x + rand(-r, r), 0, this.pos.z + rand(-r, r));
+      if (Math.abs(p.x) < HALF - 0.4 && Math.abs(p.z) < HALF - 0.4 && !obstacles.some(o => o.p.distanceTo(p) < o.r + 0.3)) return p;
+    }
+    return new THREE.Vector3(rand(-2, 2), 0, rand(-2, 2));
+  }
+  nearest(list, posOf) { let b = null, bd = 1e9; for (const it of list) { const d = posOf(it).distanceTo(this.pos); if (d < bd) { bd = d; b = it; } } return b; }
+  face(p, dt, rate = 6) {
+    const want = Math.atan2(p.x - this.pos.x, p.z - this.pos.z); let d = want - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d));
+    this.heading += d*Math.min(1, rate*dt); return Math.abs(d);
+  }
+  steer(target, dt, arrive) {
+    const to = new THREE.Vector3(target.x - this.pos.x, 0, target.z - this.pos.z), dist = to.length();
+    if (dist < arrive) return true;
+    const dir = to.multiplyScalar(1/dist);
+    for (const o of agents) { if (o === this) continue;
+      const away = new THREE.Vector3(this.pos.x - o.pos.x, 0, this.pos.z - o.pos.z), d = away.length(), min = this.radius + o.radius + 0.15;
+      if (d < min*1.8 && d > 1e-4) dir.addScaledVector(away.multiplyScalar(1/d), 0.9*(1 - d/(min*1.8))); }
+    for (const ob of obstacles) {                              // slide around trees, rocks, the pond and the hill
+      const away = new THREE.Vector3(this.pos.x - ob.p.x, 0, this.pos.z - ob.p.z), d = away.length(), min = ob.r + this.radius + 0.25;
+      if (d < min && d > 1e-4 && ob.p.distanceTo(target) > ob.r + 0.05) { away.multiplyScalar(1/d); const side = new THREE.Vector3(-away.z, 0, away.x);
+        if (side.dot(dir) < 0) side.negate(); dir.addScaledVector(away, 0.8*(1 - d/min)).addScaledVector(side, 0.8*(1 - d/min)); }
+    }
+    if (Math.abs(this.pos.x) > HALF - 0.5) dir.x -= Math.sign(this.pos.x)*0.6;
+    if (Math.abs(this.pos.z) > HALF - 0.5) dir.z -= Math.sign(this.pos.z)*0.6;
+    dir.normalize();
+    const turn = this.face(this.pos.clone().add(dir), dt, this.running ? 7 : 5);
+    const fwd = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+    this.pos.addScaledVector(fwd, (this.running ? this.runSpeed : this.walkSpeed)*dt*(turn > 1.6 ? 0.3 : 1));
+    this.play(this.running ? "Run" : "Walk", this.running ? RUN_SCALE : WALK_SCALE);
+    this.moveT += dt; return false;
+  }
+  // a looping work animation: count hits as the loop passes the hit frame
+  workLoop(key, dt, hits, onHit, onEnd) {
+    if (this.anim !== key) { this.play(key, 1, 0.15); this.workT = 0; this.hitsDone = 0; }
+    const len = this.acts[key].getClip().duration, at = this.cfg.workHit[key];
+    this.workT += dt;
+    const n = Math.floor((this.workT - at)/len) + 1;
+    while (this.hitsDone < n) { this.hitsDone++; onHit(this.hitsDone); }
+    if (this.hitsDone >= hits && this.workT >= this.hitsDone*len) onEnd();
+  }
+  update(dt) {
+    this.timer -= dt; this.emoteT -= dt;
+    if (this.oneShot) {
+      this.oneShotT += dt; const len = this.acts[this.oneShot].getClip().duration;
+      if (this.onHit && this.oneShotT >= this.hitAt) { const f = this.onHit; this.onHit = null; f(); }
+      if (this.oneShotT >= len) { this.oneShot = null; const f = this.onDone; this.onDone = null; f && f(); }
+      return this.finish(dt);
+    }
+    if (this.persona.timid && !["flee", "fish"].includes(this.state)) {
+      const g = agents.find(o => o.cfg.scale > 1.5 && o.pos.distanceTo(this.pos) < 1.8);
+      if (g) { this.release(); this.set("flee", 2.2); this.focus = g; this.running = true; this.emote("!"); }
+    }
+    if (this.persona.loner && this.state === "rest" && agents.some(o => o !== this && o.pos.distanceTo(this.pos) < 1.1)) {
+      this.set("avoid"); this.target = this.randomSpot(3); this.emote("…");
+    }
+    if (this.moveT > 25 && this.state !== "rest") { giveUps[this.state] = (giveUps[this.state] || 0) + 1; this.done(); return this.finish(dt); }
+    switch (this.state) {
+      case "rest":
+        this.play("Idle", 1);
+        if (Math.random() < dt*0.25) this.lookAt = this.heading + rand(-1.2, 1.2);
+        if (this.lookAt !== undefined) { let d = this.lookAt - this.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); this.heading += d*Math.min(1, 1.5*dt); }
+        if (this.timer <= 0) this.choose(); break;
+      case "wander": case "avoid": if (this.steer(this.target, dt, 0.08 + this.radius*0.5)) this.done(); break;
+      case "zoomies":
+        if (this.steer(this.target, dt, 0.12 + this.radius*0.5)) {
+          if (--this.chain > 0) this.target = this.randomSpot(1.5 + 3*Math.sqrt(this.cfg.scale));
+          else { this.play("Idle", 1); this.doOnce("Jump", null, () => { this.emote(pick(["♪", "✨"])); this.done(); }); }
+        } break;
+      case "flee": { const away = new THREE.Vector3(this.pos.x - this.focus.pos.x, 0, this.pos.z - this.focus.pos.z).normalize().multiplyScalar(1.5);
+        this.steer(this.pos.clone().add(away), dt, 0.01); if (this.timer <= 0) this.done(); break; }
+      case "forage": { const s = this.focus; if (!seeds.includes(s)) { this.done(); break; }
+        if (this.steer(s.mesh.position, dt, this.radius*0.6 + 0.05)) { this.face(s.mesh.position, 1); this.state = "eat"; this.play("Idle", 1);
+          this.doOnce("Attack", () => { removeSeed(s); this.emote("♥"); }, () => this.done()); } break; }
+      case "visit": { const f = this.focus; if (f.oneShot || ["flee", "greet"].includes(f.state)) { this.done(); break; }
+        if (this.steer(f.pos, dt, this.radius + f.radius + 0.25)) { this.face(f.pos, 1); this.state = "greet"; this.play("Idle", 1); this.emote(pick(["♪", "♥", "안녕!"]));
+          if (["rest", "wander"].includes(f.state)) { f.release(); f.set("greet", 0.35); f.face(this.pos, 1); f.play("Idle", 1); f.emote("!"); }
+          this.doOnce("Jump", null, () => this.done()); } break; }
+      case "greet": if (this.timer <= 0) this.doOnce("Jump", null, () => this.done()); break;
+      // ----- work
+      case "go_chop": { const t = this.focus; if (!t.alive) { this.done(); break; }
+        if (this.steer(this.target, dt, 0.06)) { arrivals.chop = (arrivals.chop || 0) + 1; this.state = "chop"; this.tool("axe"); this.workHits = t.hp; } break; }
+      case "chop": { const t = this.focus; this.face(t.p, dt, 8);
+        this.workLoop("Chop", dt, this.workHits, () => { if (!t.alive) return; t.hp--; t.shake = 0.35; if (t.hp <= 0) fellTree(t, this); },
+          () => { this.emote(t.alive ? "💪" : "나무+2"); this.done(); }); break; }
+      case "go_mine": { const o = this.focus; if (!o.alive) { this.done(); break; }
+        if (this.steer(this.target, dt, 0.06)) { arrivals.mine = (arrivals.mine || 0) + 1; this.state = "mine"; this.tool("pickaxe"); this.workHits = o.hp; } break; }
+      case "mine": { const o = this.focus; this.face(o.p, dt, 8);
+        this.workLoop("Mine", dt, this.workHits, () => { if (!o.alive) return; o.hp--; o.shake = 0.3; sparks(o.p); if (o.hp <= 0) breakOre(o, this); },
+          () => { this.emote(o.alive ? "💪" : "돌+2"); this.done(); }); break; }
+      case "go_build": { const pl = this.focus;
+        if (this.steer(this.target, dt, 0.06)) { arrivals.build = (arrivals.build || 0) + 1; this.state = "build"; this.tool("hammer"); } break; }
+      case "build": { const pl = this.focus; this.face(pl.p, dt, 8);
+        this.workLoop("Build", dt, 3, () => { hammer(pl); }, () => { this.emote(pl.hits >= HOUSE_HITS ? "🏠!" : "🔨"); this.done(); }); break; }
+      case "go_fish": { if (this.steer(this.target, dt, 0.06)) { arrivals.fish = (arrivals.fish || 0) + 1;
+          this.state = "fish"; this.tool("rod"); this.face(P, 1); this.play("Idle", 1);
+          this.doOnce("FishCast", null, () => { this.fishT = rand(3, 7); this.line.visible = this.bobber.visible = true; }, 99); } break; }
+      case "fish": {
+        this.face(P, dt, 6);
+        if (this.fishT === undefined) break;
+        this.play("FishWait", 1); this.fishT -= dt;
+        if (this.fishT <= 0) { this.fishT = undefined;
+          this.doOnce("FishReel", () => { this.line.visible = this.bobber.visible = false;
+            if (Math.random() < 0.7) { fishN++; this.emote("🐟"); } else this.emote("💧"); }, () => this.done(), 0.25); }
+        break; }
+    }
+    this.finish(dt);
+  }
+  finish(dt) {
+    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -HALF + 0.1, HALF - 0.1); this.pos.z = THREE.MathUtils.clamp(this.pos.z, -HALF + 0.1, HALF - 0.1);
+    this.root.rotation.y = this.heading; this.mixer.update(dt);
+  }
+  release() {
+    const f = this.focus;
+    if (f && f.claimed === this) f.claimed = null;
+    if (f && f.busy === this) f.busy = null;
+    if (this.state === "go_build") { wood++; stone++; }          // gave up on the way: hand the materials back
+    this.oneShot = null; this.onHit = null; this.onDone = null; this.fishT = undefined;
+    this.tool(null); this.line.visible = this.bobber.visible = false;
+  }
+  done() { this.release(); this.set("rest", rand(1, 4)); this.lookAt = undefined; }
+}
+
+// ---------- world events
+function removeSeed(s) { const i = seeds.indexOf(s); if (i < 0) return; scene.remove(s.mesh); seeds.splice(i, 1); eaten++; regrow.push({ t: rand(2, 6), f: () => addSeed() }); }
+function fellTree(t, who) {
+  t.alive = false; t.fall = 0.001; t.fallDir = new THREE.Vector3(t.p.x - who.pos.x, 0, t.p.z - who.pos.z).normalize(); wood += 2;
+  regrow.push({ t: rand(25, 40), f: () => { t.alive = true; t.hp = 3; t.fall = 0; t.grow = 0.001; t.obj.rotation.x = t.obj.rotation.z = 0; t.obj.visible = true; t.stump.visible = false; } });
+}
+function breakOre(o) { o.alive = false; o.vanish = 0.001; stone += 2; regrow.push({ t: rand(20, 32), f: () => { o.alive = true; o.hp = 3; o.vanish = 0; o.grow = 0.001; o.obj.visible = true; } }); }
+const sparkGeo = new THREE.SphereGeometry(0.018, 6, 4), sparkMat = new THREE.MeshBasicMaterial({ color: 0xffe08a }), sparkList = [];
+function sparks(p) { for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(sparkGeo, sparkMat); m.position.set(p.x, 0.15, p.z); scene.add(m);
+  sparkList.push({ m, v: new THREE.Vector3(rand(-1, 1), rand(1.2, 2.2), rand(-1, 1)), t: 0.5 }); } }
+async function hammer(pl) {
+  if (pl.hits >= HOUSE_HITS) return;
+  pl.hits++;
+  if (!pl.loading) {                                   // load the three house pieces once; draw them only when all are in
+    pl.loading = Promise.all([housePart(pl, "structure-floor.glb"), housePart(pl, "structure.glb"), housePart(pl, "structure-roof.glb")])
+      .then(([floor, frame, roof]) => { pl.parts = { floor, frame, roof }; });
+  }
+}
+function houseVisual(pl) {
+  if (!pl.parts) return;
+  const f = Math.min(1, pl.hits/10), fr = THREE.MathUtils.clamp((pl.hits - 10)/10, 0, 1), rf = THREE.MathUtils.clamp((pl.hits - 20)/10, 0, 1);
+  pl.parts.floor.scale.y = Math.max(0.001, 2.2*f); pl.parts.frame.scale.y = Math.max(0.001, 2.2*fr); pl.parts.roof.scale.y = Math.max(0.001, 2.2*rf);
+  pl.parts.frame.visible = fr > 0; pl.parts.roof.visible = rf > 0;
+}
+
+// ---------- build everything
+const regrow = [];
+let agents = [], follow = null, speed = 1, paused = false;
+await buildTools();
+await Promise.all(loads);
+const models = await Promise.all(CHARS.map(loadChar));
+agents = CHARS.map((cfg, i) => { const ag = new Agent(cfg, models[i], i); const a = i/CHARS.length*Math.PI*2; ag.pos.set(Math.cos(a)*2.2, 0, Math.sin(a)*2.2); scene.add(ag.root); return ag; });
+wood = 4; stone = 4;
+document.getElementById("loading").hidden = true;
+
+const panel = document.getElementById("panel"), foldBtn = document.getElementById("fold");
+if (innerWidth <= 640) panel.classList.add("folded");                  // phones: start with just the village totals
+foldBtn.textContent = panel.classList.contains("folded") ? "펼치기" : "접기";
+foldBtn.onclick = () => { panel.classList.toggle("folded"); foldBtn.textContent = panel.classList.contains("folded") ? "펼치기" : "접기"; };
+const list = document.getElementById("list");
+for (const a of agents) { const row = document.createElement("div"); row.className = "row"; row.innerHTML = `<span class="nm">${a.cfg.name}</span><span class="act"></span>`;
+  row.onclick = () => setFollow(follow === a ? null : a); list.appendChild(row); a.row = row; }
+function setFollow(a) { follow = a; agents.forEach(o => o.row.classList.toggle("on", o === a)); }
+document.querySelectorAll("#ctrl [data-speed]").forEach(b => b.onclick = () => { speed = +b.dataset.speed; document.querySelectorAll("#ctrl [data-speed]").forEach(x => x.classList.toggle("on", x === b)); });
+document.getElementById("pause").onclick = e => { paused = !paused; e.target.textContent = paused ? "계속" : "일시정지"; e.target.classList.toggle("on", paused); };
+document.getElementById("seeds").onclick = () => { for (let i = 0; i < 10; i++) addSeed(); };
+let showZones = true; document.getElementById("labels").onclick = e => { showZones = !showZones; e.target.classList.toggle("on", !showZones); };
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(); let downAt = null;
+renderer.domElement.addEventListener("pointerdown", e => downAt = [e.clientX, e.clientY]);
+renderer.domElement.addEventListener("pointerup", e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  mouse.set(e.clientX/innerWidth*2 - 1, -(e.clientY/innerHeight)*2 + 1); ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(agents.map(a => a.pick), false)[0]; setFollow(hit ? hit.object.userData.agent : null);
+});
+
+// ---------- simulation
+function step(dt) {
+  for (let i = regrow.length - 1; i >= 0; i--) if ((regrow[i].t -= dt) <= 0) { const f = regrow[i].f; regrow.splice(i, 1); f(); }
+  for (const a of agents) a.update(dt);
+  for (let i = 0; i < agents.length; i++) for (let j = i + 1; j < agents.length; j++) {
+    const A = agents[i], B = agents[j], dx = B.pos.x - A.pos.x, dz = B.pos.z - A.pos.z, d = Math.hypot(dx, dz), min = (A.radius + B.radius)*0.9;
+    if (d < min && d > 1e-5) { const push = (min - d)/d, wa = B.radius/(A.radius + B.radius), wb = 1 - wa;
+      A.pos.x -= dx*push*wa; A.pos.z -= dz*push*wa; B.pos.x += dx*push*wb; B.pos.z += dz*push*wb; }
+  }
+  for (const a of agents) for (const ob of obstacles) {                     // never stand inside a tree, rock or the pond
+    const dx = a.pos.x - ob.p.x, dz = a.pos.z - ob.p.z, d = Math.hypot(dx, dz), min = ob.r + a.radius*0.8;
+    if (d < min && d > 1e-5) { a.pos.x = ob.p.x + dx/d*min; a.pos.z = ob.p.z + dz/d*min; }
+  }
+  for (const t of trees) {
+    if (t.shake > 0) { t.shake -= dt; t.obj.rotation.z = Math.sin(t.shake*40)*0.05*t.shake; }
+    if (t.fall > 0 && t.fall < 1) { t.fall = Math.min(1, t.fall + dt*1.2); const ang = (t.fall**2)*Math.PI/2;
+      t.obj.rotation.set(t.fallDir.z*ang, 0, -t.fallDir.x*ang); if (t.fall >= 1) { t.obj.visible = false; t.stump.visible = true; } }
+    if (t.grow > 0) { t.grow = Math.min(1, t.grow + dt*0.6); t.obj.scale.setScalar(t.s*(0.2 + 0.8*t.grow)); if (t.grow >= 1) t.grow = 0; }
+  }
+  for (const o of ores) {
+    if (o.shake > 0) { o.shake -= dt; o.obj.position.x = o.p.x + Math.sin(o.shake*60)*0.015; }
+    if (o.vanish > 0) { o.vanish = Math.min(1, o.vanish + dt*2.5); o.obj.scale.setScalar(0.75*(1 - o.vanish)); if (o.vanish >= 1) { o.obj.visible = false; o.vanish = 0; } }
+    if (o.grow > 0) { o.grow = Math.min(1, o.grow + dt*0.8); o.obj.scale.setScalar(0.75*o.grow); if (o.grow >= 1) o.grow = 0; }
+    if (o.alive && o.hp < 3 && !o.claimed) o.obj.scale.setScalar(0.75*(0.55 + 0.15*o.hp));
+  }
+  for (let i = sparkList.length - 1; i >= 0; i--) { const s = sparkList[i]; s.t -= dt; s.v.y -= 9.8*dt; s.m.position.addScaledVector(s.v, dt);
+    if (s.t <= 0 || s.m.position.y < 0) { scene.remove(s.m); sparkList.splice(i, 1); } }
+  for (const pl of plots) houseVisual(pl);
+}
+const resEl = document.getElementById("res");
+const clock = new THREE.Clock(), tmp = new THREE.Vector3(); let simT = 0;
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!paused) { let left = dt*speed; while (left > 1e-6) { const h = Math.min(left, 1/60); step(h); simT += h; left -= h; } }
+  if (follow) { tmp.set(follow.pos.x, follow.size*0.5, follow.pos.z); const d = tmp.clone().sub(controls.target); controls.target.add(d.multiplyScalar(Math.min(1, 6*dt))); camera.position.add(d); }
+  controls.update();
+  const houses = plots.filter(p => p.hits >= HOUSE_HITS).length, cur = plots.find(p => p.hits < HOUSE_HITS);
+  resEl.innerHTML = `<span>🌳 나무 ${wood}</span><span>⛰ 돌 ${stone}</span><span>🐟 물고기 ${fishN}</span><span>🏠 집 ${houses}/${plots.length}${cur ? ` (${Math.round(cur.hits/HOUSE_HITS*100)}%)` : ""}</span>`;
+  for (const a of agents) {
+    a.row.querySelector(".act").textContent = LABEL[a.state] || a.state;
+    if (a.line.visible) { const tip = a.tools.rod?.getObjectByName("tip"); if (tip) { tip.getWorldPosition(tmp);
+      const sp = a.focus?.bob || P; a.bobber.position.set(sp.x, 0.03 + Math.sin(simT*5 + a.i)*0.01, sp.z);
+      a.line.geometry.setFromPoints([tmp.clone(), a.bobber.position.clone()]); } }
+    const show = a.emoteT > 0; a.emoteEl.style.opacity = show ? 1 : 0;
+    if (show) { tmp.set(a.pos.x, a.size + 0.08, a.pos.z).project(camera); a.emoteEl.style.left = `${(tmp.x*0.5 + 0.5)*innerWidth}px`;
+      a.emoteEl.style.top = `${(-tmp.y*0.5 + 0.5)*innerHeight}px`; a.emoteEl.style.display = tmp.z < 1 ? "" : "none"; }
+  }
+  for (const [p, el] of zoneLabels) { tmp.set(p.x, 2.6, p.z).project(camera); el.hidden = !showZones || tmp.z > 1;
+    el.style.left = `${(tmp.x*0.5 + 0.5)*innerWidth}px`; el.style.top = `${(-tmp.y*0.5 + 0.5)*innerHeight}px`; }
+  renderer.render(scene, camera); requestAnimationFrame(frame);
+}
+addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
+requestAnimationFrame(frame);
+
+window.__life = {
+  agents, trees, ores, plots, spots,
+  run(seconds) { const n = Math.round(seconds*60); for (let i = 0; i < n; i++) step(1/60); },
+  look(agent, dist = 1.6) {                 // test helper: frame one character from its front-right and draw once
+    const a = agent, h = a.size*0.55, f = new THREE.Vector3(Math.sin(a.heading + 0.7), 0, Math.cos(a.heading + 0.7));
+    controls.target.set(a.pos.x, h, a.pos.z); camera.position.set(a.pos.x + f.x*dist*Math.max(1, a.cfg.scale), h + dist*0.5, a.pos.z + f.z*dist*Math.max(1, a.cfg.scale));
+    camera.lookAt(controls.target); renderer.render(scene, camera);
+  },
+  stats() { return { wood, stone, fish: fishN, eaten, giveUps, arrivals, houses: plots.map(p => p.hits),
+    agents: agents.map(a => ({ name: a.cfg.name, state: a.state, x: +a.pos.x.toFixed(2), z: +a.pos.z.toFixed(2), anim: a.oneShot || a.anim,
+      tools: Object.entries(a.tools).filter(([, t]) => t.visible).map(([k]) => k).join("") })) }; },
+};
+</script>
+</body>
+</html>
