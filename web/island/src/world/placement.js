@@ -1,0 +1,41 @@
+// 건물 배치 규칙(지시서 4-1). 순수 함수: 미리보기(고스트)와 실제 짓기가 같은 판정을 쓴다.
+import { MAX_STEP } from "../config.js";
+
+/** 회전(90° 단위)을 넣은 차지 칸 수. */
+export function rotatedSize(def, rot) { const { w, d } = def.footprint; return rot % 2 ? { w: d, d: w } : { w, d }; }
+
+/** 가리킨 칸이 건물 가운데에 오도록 하는 왼쪽 위(최소) 칸. */
+export function anchorFor(def, hx, hz, rot) { const s = rotatedSize(def, rot); return { x: hx - Math.floor((s.w - 1) / 2), z: hz - Math.floor((s.d - 1) / 2) }; }
+
+/**
+ * 차지 칸과 문 앞 칸. 건물 모델의 문은 회전 전 기준 +z 쪽 면 가운데에 있다.
+ * three.js의 rotation.y = θ와 같은 식으로 돌린다: (x, z) → (x cosθ + z sinθ, −x sinθ + z cosθ).
+ */
+export function footprint(def, ax, az, rot) {
+  const { w, d } = def.footprint, s = rotatedSize(def, rot), cx = ax + s.w / 2, cz = az + s.d / 2;
+  const th = rot * Math.PI / 2, c = Math.round(Math.cos(th)), sn = Math.round(Math.sin(th));
+  const turn = (lx, lz) => [Math.floor(cx + lx * c + lz * sn + 1e-6), Math.floor(cz - lx * sn + lz * c + 1e-6)];
+  const cells = [];
+  for (let lz = 0; lz < d; lz++) for (let lx = 0; lx < w; lx++) cells.push(turn(lx + 0.5 - w / 2, lz + 0.5 - d / 2));
+  const [doorX, doorZ] = turn(Math.floor(w / 2) + 0.5 - w / 2, d / 2 + 0.5);
+  return { cells, door: { x: doorX, z: doorZ }, center: { x: cx, z: cz }, size: s, angle: th };
+}
+
+/**
+ * 지을 수 있는지 판정. units: 유닛 목록(서 있는 칸에는 짓지 않음, 건물 안 유닛은 상관없음).
+ * @returns {{ ok: boolean, reason: string, cells, door, center, size, angle, elevation: number }}
+ */
+export function checkPlacement(grid, def, ax, az, rot, units = []) {
+  const fp = footprint(def, ax, az, rot), fail = reason => ({ ...fp, ok: false, reason, elevation: 0 });
+  if (!fp.cells.every(([x, z]) => grid.inBounds(x, z))) return fail("섬 밖이에요");
+  if (fp.cells.some(([x, z]) => grid.isWater(x, z))) return fail("바다에는 지을 수 없어요");
+  if (fp.cells.some(([x, z]) => grid.get(x, z).occupiedId)) return fail("다른 건물·시설과 겹쳐요");
+  if (fp.cells.some(([x, z]) => grid.doorOwner(x, z))) return fail("다른 건물의 문 앞이에요");
+  const e = grid.get(fp.cells[0][0], fp.cells[0][1]).elevation;
+  if (fp.cells.some(([x, z]) => Math.abs(grid.get(x, z).elevation - e) > 1e-6)) return fail("바닥이 평평하지 않아요");
+  const dh = grid.walkHeight(fp.door.x, fp.door.z);
+  if (dh === null || Math.abs(dh - e) > MAX_STEP + 1e-6) return fail("문 앞이 막혀 있어요");
+  const inFp = new Set(fp.cells.map(([x, z]) => `${x},${z}`));
+  if (units.some(u => !u.insideBuildingId && inFp.has(`${Math.floor(u.x)},${Math.floor(u.z)}`))) return fail("갈매미가 서 있어요");
+  return { ...fp, ok: true, reason: "", elevation: e };
+}

@@ -1,0 +1,57 @@
+// 화면 UI: 도구 막대, 갈매미 목록·통계 판, 알림 줄. DOM만 다루고 월드는 콜백으로 바꾼다.
+import { GROUND_TYPES, UnitState } from "../data/types.js";
+import { GROUND_STYLE, BUILDINGS } from "../data/catalog.js";
+
+const STATE_LABEL = { [UnitState.Idle]: "쉬는 중", [UnitState.Wander]: "산책 중", [UnitState.GoToBuilding]: "건물로 가는 중",
+  [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중" };
+
+const hex = n => "#" + n.toString(16).padStart(6, "0");
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+export class Hud {
+  constructor({ tools, world, onSave, onLoad, onReset }) {
+    this.tools = tools; this.world = world;
+    const bar = document.getElementById("tools"), sub = document.getElementById("sub");
+    const modes = [["view", "👀 둘러보기"], ["paint", "🖌 바닥 칠하기"], ["build", "🏠 건물 짓기"], ["demolish", "🧹 철거"]];
+    this.modeBtns = modes.map(([m, label]) => { const b = el("button", "", label); b.dataset.mode = m; bar.appendChild(b);
+      b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : null); return b; });
+    this.sub = sub;
+    tools.onMode = (m, arg) => this.showMode(m, arg);
+    document.getElementById("save").onclick = onSave;
+    document.getElementById("load").onclick = onLoad;
+    document.getElementById("reset").onclick = onReset;
+    const panel = document.getElementById("panel"), fold = document.getElementById("fold");
+    const setFold = f => { panel.classList.toggle("folded", f); fold.textContent = f ? "펼치기" : "접기"; };
+    fold.onclick = () => setFold(!panel.classList.contains("folded")); setFold(innerWidth <= 640);
+    this.list = document.getElementById("units"); this.stats = document.getElementById("stats"); this.msg = document.getElementById("msg");
+    this.setWorld(world); this.showMode("view");
+  }
+  setWorld(world) {
+    this.world = world; this.list.innerHTML = "";
+    this.rows = world.units.map(u => { const r = el("div", "row"); r.append(el("span", "nm", u.name), el("span", "act")); this.list.appendChild(r); return r; });
+  }
+  showMode(mode, arg) {
+    this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+    this.sub.innerHTML = ""; this.sub.hidden = mode !== "paint" && mode !== "build";
+    if (mode === "paint") {
+      this.lastPaint = arg;
+      for (const t of GROUND_TYPES) { const b = el("button", t === arg ? "on" : "");
+        const sw = el("span", "sw"); sw.style.background = hex(GROUND_STYLE[t].colors[0]); b.append(sw, GROUND_STYLE[t].label);
+        b.onclick = () => this.tools.setMode("paint", t); this.sub.appendChild(b); }
+    }
+    if (mode === "build") {
+      this.lastBuild = arg;
+      for (const def of Object.values(BUILDINGS)) { const b = el("button", def.id === arg ? "on" : "", `${def.name} ${def.footprint.w}×${def.footprint.d}`);
+        b.onclick = () => this.tools.setMode("build", def.id); this.sub.appendChild(b); }
+      const r = el("button", "", "↻ 돌리기(R)"); r.onclick = () => this.tools.rotate(); this.sub.appendChild(r);
+    }
+  }
+  status(text) { this.msg.textContent = text; this.msg.hidden = !text; }
+  update(chunkInfo) {
+    const w = this.world, inside = w.units.filter(u => u.insideBuildingId).length;
+    this.stats.innerHTML = `<span>🏠 건물 ${w.buildings.size}</span><span>🐦 ${w.units.length}마리 · 건물 안 ${inside}</span>` +
+      `<span>🧩 청크 ${chunkInfo.count}개 · 다시 그림 ${chunkInfo.rebuilt}회</span>`;
+    w.units.forEach((u, i) => { const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
+      this.rows[i].querySelector(".act").textContent = b ? `${BUILDINGS[b.defId].name} 안` : STATE_LABEL[u.state] || u.state; });
+  }
+}
