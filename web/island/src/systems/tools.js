@@ -139,12 +139,10 @@ export class Tools {
     const h = this.hover; if (!h) return;
     if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) this.world.paint(x, z, this.paintType); }
     else if (this.mode === "height") {
-      // 부드러운 붓: 가운데는 한 단, 가장자리로 갈수록 적게(코사인 제곱) → 네모난 단 대신 둥근 언덕·구덩이
-      const R = (this.brush - 1) / 2 + 0.5;
+      // 붓 안의 모든 칸을 똑같이(가운데만 솟지 않게)
       for (const [x, z] of this.brushCells(h)) {
         const k = `${x},${z}`; if (this.stroke?.has(k)) continue; this.stroke?.add(k);
-        const d = Math.hypot(x - h.x, z - h.z), amount = this.brush === 1 ? 1 : Math.cos(Math.PI / 2 * Math.min(1, d / R)) ** 2;
-        this.world.reshape(x, z, this.heightOp, this.flatTarget, amount);
+        this.world.reshape(x, z, this.heightOp, this.flatTarget, 1);
       }
     }
     else if (this.mode === "build") {                                            // 누르면 자리만 정함 → 🔨 건설 버튼(또는 Enter)으로 지음

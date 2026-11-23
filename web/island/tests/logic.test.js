@@ -221,18 +221,6 @@ test("소환: 빈 섬에서 시작해 한 마리씩 무작위로(겹치지 않�
   assert.deepEqual(back.units.map(o => o.name).sort(), names.sort());
 });
 
-test("계단: 갈매미는 디딤판 높이를 밟음(비탈처럼 미끄러져 오르지 않음)", async () => {
-  const { stairLayout, treadHeight } = await import("../src/world/terrain.js");
-  const w = World.create(7, seededRandom(1));
-  let found = null;
-  for (let z = 0; z < 64 && !found; z++) for (let x = 0; x < 64 && !found; x++) { const L = stairLayout(w.grid, x, z); if (L) found = [x, z, L]; }
-  assert.ok(found, "섬에 계단이 있음");
-  const [x, z, L] = found, hs = new Set();
-  for (let k = 0; k < 40; k++) { const t = (k + 0.5) / 40, h = w.standHeight(x + (L.alongX ? t : 0.5), z + (L.alongX ? 0.5 : t)); hs.add(h.toFixed(4)); }
-  assert.equal(hs.size, L.n, "디딤판 수만큼의 높이만 나옴(계단식)");
-  for (let i = 0; i < L.n; i++) assert.ok(hs.has(treadHeight(L, i).toFixed(4)));
-});
-
 test("계단 건축물: 뒤가 높아야 놓이고, 다 지으면 앞뒤로만 오르내리며 디딤판을 밟음", async () => {
   const { findPath } = await import("../src/world/pathfinding.js");
   const w = World.create(7, seededRandom(3)), g = w.grid; w.instantBuild = true;

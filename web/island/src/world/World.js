@@ -6,7 +6,7 @@ import { createBuildingData, createUnitAIState, UnitState } from "../data/types.
 import { Grid } from "./Grid.js";
 import { generateIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
-import { terrainHeight, stairHeightAt } from "./terrain.js";
+import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
 import { initMind } from "../units/mind.js";
@@ -180,7 +180,7 @@ export class World {
       return stairStep(r, t);
     }
     if (o && o.walkable) return o.surface;
-    return stairHeightAt(this.grid, x, z, gx - x, gz - z) ?? terrainHeight(this.grid, gx, gz);   // 계단에서는 디딤판 높이(경사면처럼 미끄러져 오르지 않게)
+    return terrainHeight(this.grid, gx, gz);
   }
   isPlot(x, z) { return this.plots.some(p => p.x === x && p.z === z); }
 
@@ -192,7 +192,7 @@ export class World {
   paint(x, z, type) { if (!this.canPaint(x, z)) return false; const ok = this.grid.setGround(x, z, type); if (ok) this.emit("ground", { x, z, type }); return ok; }
 
   // ---- 높이(층·경사·계단·연못): 한 단 = MAX_STEP(0.25 m). 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽. 올리기 한 번 = heightStep(0.5 m = 두 단).
-  //      돌길·데크가 깔린 경사는 계단으로 그려짐. 바다 높이 아래로 파면 물이 차서 연못이 됨.
+  //      오르내리는 계단은 계단 건축물(BUILDINGS.stairs)로. 바다 높이 아래로 파면 물이 차서 연못이 됨.
   canReshape(x, z) { const c = this.grid.get(x, z); return !!c && !c.occupiedId && !this.isPlot(x, z) && !this.grid.doorOwner(x, z); }
   /**
    * op: "raise" | "lower" | "flatten"(target 높이로) | "smooth"(이웃과 비슷하게). amount(0~1): 부드러운 붓의 세기(가운데 1, 가장자리로 갈수록 작게).
