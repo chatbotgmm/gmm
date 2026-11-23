@@ -24,26 +24,44 @@ export class Tools {
     this.ghostFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: OK, transparent: true, opacity: 0.5, depthWrite: false }));
     this.ghostFloor.rotation.x = -Math.PI / 2; this.ghost.add(this.ghostFloor);
     this.doorMark = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
-    this.doorMark.rotation.x = Math.PI;               // 아래를 가리키는 문 앞 표시 scene.add(this.doorMark); this.doorMark.visible = false;
+    this.doorMark.rotation.x = Math.PI;               // 아래를 가리키는 문 앞 표시
+    scene.add(this.doorMark); this.doorMark.visible = false;
+    this.hand = false; this.spaceHeld = false; this.touchIds = new Set();
 
     dom.addEventListener("pointerdown", e => this.down(e), { capture: true });   // OrbitControls보다 먼저 받음
     dom.addEventListener("pointermove", e => this.move(e));
     addEventListener("pointerup", e => this.up(e));
+    addEventListener("pointercancel", e => { this.touchIds.delete(e.pointerId); this.cancelStroke(); });
     addEventListener("keydown", e => {
+      if (e.target?.tagName === "INPUT") return;
       if (e.code === "KeyR") this.rotate(); if (e.code === "Escape") this.setMode("view");
       if (e.code === "BracketLeft") this.setBrush(this.brush - 2); if (e.code === "BracketRight") this.setBrush(this.brush + 2);
+      if (e.code === "Space") { e.preventDefault(); if (!this.spaceHeld) { this.spaceHeld = true; this.cancelStroke(); this.applyControls(); } }   // 스페이스 누른 채 드래그 = 화면 돌리기
     });
+    addEventListener("keyup", e => { if (e.code === "Space") { this.spaceHeld = false; this.applyControls(); } });
+    addEventListener("blur", () => { this.spaceHeld = false; this.applyControls(); });
   }
 
   setMode(mode, arg = null) {
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null;
     this.heightOp = mode === "height" ? (arg || "raise") : null;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
-    const tool = mode !== "view";
-    this.controls.mouseButtons.LEFT = tool ? null : THREE.MOUSE.ROTATE;
-    this.controls.mouseButtons.RIGHT = tool ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+    this.cancelStroke(); this.applyControls();
     this.onStatus(""); this.refresh(); this.onMode?.(mode, arg);
   }
+  /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
+  get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld; }
+  /** 조작 배치: 도구 중에는 한 손가락·왼쪽 = 도구, 두 손가락 = 돌리기·확대, 오른쪽 = 돌리기, 가운데 = 확대.
+   *  둘러보기(또는 ✋)에서는 한 손가락·왼쪽 = 돌리기, 두 손가락 = 확대·옮기기, 오른쪽 = 옮기기. */
+  applyControls() {
+    const t = this.toolActive, M = THREE.MOUSE, T = THREE.TOUCH;
+    this.controls.mouseButtons = { LEFT: t ? null : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t ? M.ROTATE : M.PAN };
+    this.controls.touches = { ONE: t ? null : T.ROTATE, TWO: t ? T.DOLLY_ROTATE : T.DOLLY_PAN };
+    this.dom.style.cursor = this.mode === "view" ? "" : t ? "crosshair" : "grab";
+  }
+  setHand(on) { this.hand = on; this.cancelStroke(); this.applyControls(); this.onHand?.(on); }
+  /** 칠하던·올리던 것을 멈춤(두 번째 손가락이 닿거나 화면 조작으로 바뀔 때). */
+  cancelStroke() { clearTimeout(this.pendingT); this.pending = null; this.painting = false; if (this.press) this.press.multi = true; }
   rotate() { this.rot = (this.rot + 1) % 4; this.refresh(); }
   /** 붓 크기(한 변 칸 수, 홀수 1·3·5·7). 가리킨 칸이 가운데. */
   setBrush(n) { this.brush = Math.max(1, Math.min(7, n | 1)); this.refresh(); this.onBrush?.(this.brush); }
@@ -66,34 +84,51 @@ export class Tools {
   }
 
   down(e) {
-    if (this.mode === "view" || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
-    this.controls.enabled = false;                    // 이번 누름은 도구가 씀
+    if (e.pointerType === "touch") { if (e.isPrimary) this.touchIds.clear(); this.touchIds.add(e.pointerId); }   // 첫 손가락이면 새 손짓(남은 기록 지움)
+    if (this.mode === "view") return;
+    if (e.pointerType === "touch" && this.touchIds.size > 1) { this.cancelStroke(); return; }   // 두 손가락 = 화면 돌리기·확대
+    if (!this.toolActive || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
     this.hover = this.pick(e.clientX, e.clientY); this.refresh();
+    this.press = { x: e.clientX, y: e.clientY, multi: false };
     if (this.mode === "paint" || this.mode === "height") {
-      this.painting = true; this.stroke = new Set();                  // 한 번 끌 때 같은 칸은 한 번만 올리고 내림
-      this.flatTarget = this.hover ? this.world.grid.get(this.hover.x, this.hover.z).elevation : 0;   // 평평하게: 처음 누른 칸 높이로
-      this.apply();
+      const begin = () => {
+        if (!this.press || this.press.multi) return;
+        this.pending = null; this.painting = true; this.stroke = new Set();   // 한 번 끌 때 같은 칸은 한 번만 올리고 내림
+        this.flatTarget = this.hover ? this.world.grid.get(this.hover.x, this.hover.z).elevation : 0;   // 평평하게: 처음 누른 칸 높이로
+        this.apply();
+      };
+      // 손가락은 잠깐 기다렸다 시작(바로 두 번째 손가락이 오면 화면 조작이었던 것)
+      if (e.pointerType === "touch") { this.pending = begin; this.pendingT = setTimeout(begin, 110); } else begin();
     }
   }
   move(e) {
     if (this.mode === "view") return;
+    if (this.pending && this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 8) { clearTimeout(this.pendingT); this.pending(); }
     const h = this.pick(e.clientX, e.clientY);
     if (h?.x === this.hover?.x && h?.z === this.hover?.z) return;
     this.hover = h; this.refresh();
     if (this.painting) this.apply();
   }
   up(e) {
-    if (this.mode !== "view" && !this.controls.enabled && e.isPrimary) {
-      if (this.mode !== "paint") this.apply();
-      this.painting = false; this.controls.enabled = true;
-    }
+    if (e.pointerType === "touch") this.touchIds.delete(e.pointerId);
+    if (!e.isPrimary || !this.press) return;
+    const p = this.press; this.press = null;
+    if (this.pending && !p.multi) { clearTimeout(this.pendingT); const f = this.pending; this.press = p; f(); this.press = null; }   // 짧게 톡: 한 번 칠함
+    if (this.mode !== "view" && this.mode !== "paint" && this.mode !== "height" && !p.multi) this.apply();
+    this.painting = false; this.pending = null;
   }
 
   apply() {
     const h = this.hover; if (!h) return;
     if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) this.world.paint(x, z, this.paintType); }
     else if (this.mode === "height") {
-      for (const [x, z] of this.brushCells(h)) { const k = `${x},${z}`; if (this.stroke?.has(k)) continue; this.stroke?.add(k); this.world.reshape(x, z, this.heightOp, this.flatTarget); }
+      // 부드러운 붓: 가운데는 한 단, 가장자리로 갈수록 적게(코사인 제곱) → 네모난 단 대신 둥근 언덕·구덩이
+      const R = (this.brush - 1) / 2 + 0.5;
+      for (const [x, z] of this.brushCells(h)) {
+        const k = `${x},${z}`; if (this.stroke?.has(k)) continue; this.stroke?.add(k);
+        const d = Math.hypot(x - h.x, z - h.z), amount = this.brush === 1 ? 1 : Math.cos(Math.PI / 2 * Math.min(1, d / R)) ** 2;
+        this.world.reshape(x, z, this.heightOp, this.flatTarget, amount);
+      }
     }
     else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);

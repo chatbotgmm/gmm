@@ -25,6 +25,10 @@ export class Hud {
     this.modeBtns = modes.map(([m, label]) => { const b = el("button", "", label); b.dataset.mode = m; bar.appendChild(b);
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : null); return b; });
     this.sub = sub;
+    // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 돌리고 옮김(도구는 잠시 멈춤)
+    this.handBtn = el("button", "hand", "✋ 화면 이동"); this.handBtn.title = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
+    this.handBtn.onclick = () => tools.setHand(!tools.hand); bar.appendChild(this.handBtn);
+    tools.onHand = on => this.handBtn.classList.toggle("on", on);
     tools.onMode = (m, arg) => this.showMode(m, arg);
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     this.instantBuild = false;
@@ -54,15 +58,16 @@ export class Hud {
   }
   showMode(mode, arg) {
     this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+    this.handBtn.hidden = mode === "view"; if (mode === "view" && this.tools.hand) this.tools.setHand(false);
     this.sub.innerHTML = ""; this.sub.hidden = !["paint", "build", "height"].includes(mode);
     if (mode === "height") {
       this.lastHeight = arg;
-      for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["flatten", "▬ 평평하게"]]) {
+      for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["smooth", "〰 다듬기"], ["flatten", "▬ 평평하게"]]) {
         const b = el("button", op === arg ? "on" : "", label); b.onclick = () => this.tools.setMode("height", op); this.sub.appendChild(b); }
       this.sub.appendChild(el("span", "lab", "붓"));
       this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
         b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
-      this.status("한 번에 한 단(0.25 m) · 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽 · 경사에 돌길·데크를 깔면 계단 · 바다 높이 아래로 파면 연못");
+      this.status("가운데가 한 단(0.25 m)씩, 가장자리는 조금씩 · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 경사에 돌길·데크 = 계단 · 바다 높이 아래로 파면 연못");
     }
     if (mode === "paint") {
       this.lastPaint = arg;

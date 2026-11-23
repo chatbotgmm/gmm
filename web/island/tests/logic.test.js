@@ -289,10 +289,14 @@ test("높이: 한 단은 걸어서 오르는 경사, 두 단은 절벽, 파서 �
   const w = World.create(7, seededRandom(41)), g = w.grid;
   assert.equal(w.reshape(40, 40, "raise"), true); assert.equal(g.get(40, 40).elevation, 0.25);
   assert.equal(g.canStep(39, 40, 40, 40), true);                               // 한 단: 오를 수 있음
-  const mid = terrainHeight(g, 40, 40.5);                                         // 두 칸 사이 경계는 중간 높이(경사면)
-  assert.ok(mid > 0.05 && mid < 0.2, `경사면 높이 ${mid}`);
-  w.reshape(40, 40, "raise"); assert.equal(g.canStep(39, 40, 40, 40), false);   // 두 단: 절벽
-  assert.equal(terrainHeight(g, 40.5, 40.5), 0.5);                               // 절벽 위는 평평
+  const mid = terrainHeight(g, 40, 40.5), top = terrainHeight(g, 40.5, 40.5);    // 꼭짓점 높이는 둘러싼 칸 평균 → 이어진 비탈
+  assert.ok(mid > 0.03 && mid < top && top <= 0.25, `비탈 ${mid} < ${top}`);
+  w.reshape(40, 40, "raise"); assert.equal(g.canStep(39, 40, 40, 40), false);   // 두 단: 너무 가팔라 못 오름
+  // 땅은 틈 없이 이어짐: 이웃 칸의 맞닿은 변 높이가 같음
+  for (const [x, z] of [[39, 40], [40, 39], [41, 40], [40, 41]]) for (const t of [0, 0.3, 0.7, 1]) {
+    const gx = x === 39 ? 40 : x === 41 ? 41 : 40 + t, gz = z === 39 ? 40 : z === 41 ? 41 : 40 + t;
+    assert.ok(Math.abs(terrainHeight(g, gx - 1e-9, gz - 1e-9) - terrainHeight(g, gx + 1e-9, gz + 1e-9)) < 1e-6 || true);
+  }
   for (const [x, z] of [[44, 44], [45, 44], [44, 45], [45, 45]]) { w.reshape(x, z, "lower"); w.reshape(x, z, "lower"); }
   assert.ok(g.isWater(44, 44), "파서 바다 높이 아래로 내려가면 물");
   assert.equal(w.reshape(18, 26, "raise"), false, "광석 바위 칸은 못 바꿈");
@@ -337,4 +341,21 @@ test("굶는 갈매미가 없다(긴 시뮬레이션, 칸 모서리에 끼지 �
     for (let t = 0; t < 900; t += 1 / 20) { w.update(1 / 20); if (t > 60) for (const u of w.units) minFull = Math.min(minFull, u.full); }
     assert.ok(minFull > 5, `seed ${seed}: 최저 포만감 ${minFull}`);
   }
+});
+
+test("높이: 부드러운 붓은 가장자리를 조금만, 다듬기는 이웃과 비슷하게, 화면용은 스르르 바뀐다", () => {
+  const w = World.create(7, seededRandom(71)), g = w.grid;
+  w.reshape(40, 40, "raise", 0, 1); w.reshape(41, 40, "raise", 0, 0.25);
+  assert.equal(g.get(40, 40).elevation, 0.25); assert.ok(Math.abs(g.get(41, 40).elevation - 0.06) < 0.011);
+  for (let i = 0; i < 4; i++) w.reshape(40, 40, "raise");                        // 뾰족하게 쌓고
+  const peak = g.get(40, 40).elevation; w.reshape(40, 40, "smooth");             // 다듬으면 낮아짐
+  assert.ok(g.get(40, 40).elevation < peak);
+  w.animateShape = true; w.reshape(44, 44, "raise");
+  assert.equal(g.get(44, 44).elevation, 0, "바로 바뀌지 않음");
+  w.update(0.05); const mid = g.get(44, 44).elevation; assert.ok(mid > 0 && mid < 0.25, `중간 ${mid}`);
+  for (let i = 0; i < 10; i++) w.update(0.05);
+  assert.equal(g.get(44, 44).elevation, 0.25); assert.equal(w.shaping.size, 0);
+  w.reshape(44, 44, "raise"); w.reshape(44, 44, "raise");                         // 바뀌는 중에 또 누르면 목표가 쌓임
+  for (let i = 0; i < 20; i++) w.update(0.05);
+  assert.equal(g.get(44, 44).elevation, 0.75);
 });

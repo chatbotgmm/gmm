@@ -23,6 +23,7 @@ export class World {
     this.res = { wood: START_WOOD, stone: START_STONE, iron: 0, food: 10, coins: 0, fish: 0, eaten: 0 };
     this.treasures = {}; this.collection = {}; this.items = {};
     this.instantBuild = false;                         // true면 건물을 놓자마자 완공(갈매미 공사 없음)
+    this.animateShape = false; this.shaping = new Map(); // 높이 바꾸기를 스르르(화면에서만 켬)
     this.spots = (extra.spots || []).map(s => ({ ...s, claimed: null }));
     this.zones = extra.zones || [];
     this.plots = (extra.plots || []).map(p => ({ x: p.x, z: p.z, stage: p.stage || "empty", t: p.t || 0, grow: p.grow || 40, claimed: null }));
@@ -157,14 +158,32 @@ export class World {
   // ---- 높이(층·경사·계단·연못): 한 단 = MAX_STEP(0.25 m). 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽.
   //      돌길·데크가 깔린 경사는 계단으로 그려짐. 바다 높이 아래로 파면 물이 차서 연못이 됨.
   canReshape(x, z) { const c = this.grid.get(x, z); return !!c && !c.occupiedId && !this.isPlot(x, z) && !this.grid.doorOwner(x, z); }
-  /** op: "raise" | "lower" | "flatten"(target 높이로). 바뀌면 true. */
-  reshape(x, z, op, target = 0) {
-    if (!this.canReshape(x, z)) return false;
-    const c = this.grid.get(x, z), step = 0.25;
-    let e = op === "raise" ? c.elevation + step : op === "lower" ? c.elevation - step : target;
+  /**
+   * op: "raise" | "lower" | "flatten"(target 높이로) | "smooth"(이웃과 비슷하게). amount(0~1): 부드러운 붓의 세기(가운데 1, 가장자리로 갈수록 작게).
+   * animateShape가 켜져 있으면 높이가 0.2초쯤에 걸쳐 스르르 바뀐다(update). 바뀌면 true.
+   */
+  reshape(x, z, op, target = 0, amount = 1) {
+    if (!this.canReshape(x, z) || amount <= 0) return false;
+    const c = this.grid.get(x, z), idx = this.grid.index(x, z), step = 0.25;
+    const cur = this.shaping.get(idx)?.target ?? c.elevation;
+    let e = cur;
+    if (op === "raise") e = cur + step * amount;
+    else if (op === "lower") e = cur - step * amount;
+    else if (op === "flatten") e = cur + (target - cur) * amount;
+    else if (op === "smooth") {
+      let sum = 0, n = 0;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const o = this.grid.get(x + dx, z + dz); if (o && (dx || dz)) { sum += this.shaping.get(this.grid.index(x + dx, z + dz))?.target ?? o.elevation; n++; } }
+      if (n) e = cur + (sum / n - cur) * 0.6 * amount;
+    }
     e = Math.max(-1, Math.min(2, Math.round(e * 100) / 100));
-    if (op !== "flatten" && c.elevation < 0 && op === "raise" && e > 0 && c.elevation > -step) e = 0;   // 모래사장 비탈(-0.15 등)은 0으로 맞춤
-    const wasWater = this.grid.isWater(x, z);
+    if (op === "raise" && cur < 0 && cur > -step && e > 0 && amount >= 0.99) e = 0;      // 모래사장 비탈(-0.15 등)은 0으로 맞춤
+    if (Math.abs(e - cur) < 0.005) return false;
+    if (this.animateShape) { this.shaping.set(idx, { x, z, target: e }); return true; }
+    return this.applyHeight(x, z, e);
+  }
+  /** 높이를 실제로 바꾸고, 물에 잠긴 씨앗·갈매미를 정리. */
+  applyHeight(x, z, e) {
+    const c = this.grid.get(x, z), wasWater = this.grid.isWater(x, z);
     if (!this.grid.setElevation(x, z, e)) return false;
     if (wasWater && !this.grid.isWater(x, z) && c.groundType !== "Sand") c.groundType = "Sand";
     for (const s of [...this.seeds]) if (s.x === x && s.z === z && this.grid.isWater(x, z)) this.eatSeed(s);   // 물에 잠긴 씨앗은 없앰
@@ -172,6 +191,14 @@ export class World {
       const spot = nearestWalkable(this.grid, x, z); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; } setIdle(u, this.rnd, this);   // 물에 빠지면 가까운 땅으로
     }
     this.emit("ground", { x, z }); return true;
+  }
+  /** 스르르 바뀌는 중인 칸들을 목표 높이 쪽으로 옮김(초당 1.5 m). */
+  stepShaping(dt) {
+    for (const [idx, s] of this.shaping) {
+      const c = this.grid.get(s.x, s.z), d = s.target - c.elevation, mv = Math.sign(d) * Math.min(Math.abs(d), 1.5 * dt);
+      if (Math.abs(d) <= 1.5 * dt + 1e-6) { this.shaping.delete(idx); this.applyHeight(s.x, s.z, s.target); }
+      else this.grid.setElevation(s.x, s.z, Math.round((c.elevation + mv) * 1000) / 1000);
+    }
   }
 
   // ---- 건물(지시서 4-1). 놓으면 공사장이 되고, 갈매미가 나무 1·돌 1을 들고 와서 망치질 3번씩 해서 완공한다.
@@ -228,6 +255,7 @@ export class World {
 
   update(dt) {
     this.time += dt;
+    if (this.shaping.size) this.stepShaping(dt);
     for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);

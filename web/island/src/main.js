@@ -30,8 +30,8 @@ camera.position.set(0, portrait() ? 50 : 34, portrait() ? 44 : 38);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.46; controls.minDistance = 5; controls.maxDistance = 90;
 controls.screenSpacePanning = false; controls.target.set(0, 0, 2);
-scene.add(new THREE.HemisphereLight(0xf2f8ff, 0x9fbf7a, 1.35));
-const sun = new THREE.DirectionalLight(0xfff2e0, 2.3); sun.position.set(-20, 34, 18); sun.castShadow = true;
+scene.add(new THREE.HemisphereLight(0xf2f8ff, 0x8fae6a, 1.05));          // 하늘빛은 조금 줄이고
+const sun = new THREE.DirectionalLight(0xfff0dc, 2.8); sun.position.set(-26, 24, 14); sun.castShadow = true;   // 해를 조금 낮춰 언덕·비탈에 음영
 sun.shadow.mapSize.set(TOUCH ? 2048 : 4096, TOUCH ? 2048 : 4096);
 Object.assign(sun.shadow.camera, { left: -36, right: 36, top: 36, bottom: -36, near: 1, far: 100 });
 sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; scene.add(sun);
@@ -42,7 +42,7 @@ const overlay = document.getElementById("overlay");
 let world, chunks, buildingViews, unitViews, lifeViews, worldRoot;
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
-  world = w; worldRoot = new THREE.Group(); scene.add(worldRoot);
+  world = w; world.animateShape = true; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 화면에서는 높이가 스르르 바뀜
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world);
@@ -69,11 +69,27 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 document.getElementById("loading").hidden = true;
 
 // ---------- 매 프레임
-const clock = new THREE.Clock(); let simT = 0;
+const clock = new THREE.Clock(); let simT = 0, lastSync = 0;
+// 키보드로 화면: Q/E 돌리기, 방향키 옮기기(입력창이 아닐 때)
+const keys = new Set();
+addEventListener("keydown", e => { if (e.target?.tagName !== "INPUT" && /^(KeyQ|KeyE|Arrow(Up|Down|Left|Right))$/.test(e.code)) { keys.add(e.code); if (e.code.startsWith("Arrow")) e.preventDefault(); } });
+addEventListener("keyup", e => keys.delete(e.code)); addEventListener("blur", () => keys.clear());
+function keyCamera(dt) {
+  if (!keys.size) return;
+  const t = controls.target, off = camera.position.clone().sub(t);
+  const turn = (keys.has("KeyQ") ? 1 : 0) - (keys.has("KeyE") ? 1 : 0);
+  if (turn) off.applyAxisAngle(THREE.Object3D.DEFAULT_UP, turn * 1.6 * dt);
+  const fwd = new THREE.Vector3(-off.x, 0, -off.z).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const mv = new THREE.Vector3().addScaledVector(fwd, (keys.has("ArrowUp") ? 1 : 0) - (keys.has("ArrowDown") ? 1 : 0))
+    .addScaledVector(right, (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0)).multiplyScalar(Math.max(4, off.length() * 0.6) * dt);
+  t.add(mv); camera.position.copy(t).add(off);
+}
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   world.update(dt);
-  chunks.sync();                                    // 바뀐 청크만 다시 만듦
+  // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
+  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(); lastSync = now; }
+  keyCamera(dt);
   unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT);
   buildingViews.updateConstruction(dt);
   lifeViews.update(dt, camera, innerWidth, innerHeight);

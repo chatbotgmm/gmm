@@ -41,7 +41,7 @@
   .row .job { margin-right: 3px; } .row .full { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .row .full.hungry { color: #d0453a; font-weight: 600; } .row .full.lazy { color: #9152d0; }
   #info { font-size: 12.5px; background: rgba(0,0,0,.04); border-radius: 8px; padding: 6px 8px; margin: 0 0 6px; line-height: 1.5; }
-  button.locked { opacity: .55; }
+  button.locked { opacity: .55; } button.hand.on { background: #3d8bd9; color: #fff; }
   #dex { position: fixed; inset: 0; z-index: 5; background: rgba(20,30,40,.35); display: grid; place-items: center; padding: 16px; }
   #dex .card { background: #fff; border-radius: 14px; width: min(560px, 100%); max-height: 86vh; overflow: auto; padding: 12px 14px; box-sizing: border-box; }
   #dex .head { display: flex; justify-content: space-between; align-items: center; } #dex h3 { font-size: 14px; margin: 12px 0 6px; }
@@ -70,7 +70,7 @@
   <div id="units"></div>
   <div id="files"><button id="dexBtn">도감·가방</button><button id="seeds">씨앗 뿌리기</button><button id="zones">구역 이름</button><button id="save">저장</button><button id="load">불러오기</button><button id="reset">새 섬</button></div>
 </div>
-<div id="help">갈매미 누르기: 따라가기 · 갈매미 끌기: 옮기기(건물 위에 놓으면 들어감) · 빈 땅 드래그: 시야 돌리기 · 오른쪽 드래그로 옮기기 · 휠로 확대 &nbsp;|&nbsp; 도구 켰을 때: 왼쪽 누르기 = 도구, 오른쪽 드래그 = 돌리기 · R 건물 돌리기 · [ ] 붓 크기 · Esc 도구 끄기</div>
+<div id="help">화면: 드래그 돌리기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기 &nbsp;|&nbsp; 도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기 &nbsp;|&nbsp; 휴대폰: 두 손가락 = 돌리기·확대 &nbsp;|&nbsp; 갈매미: 누르기 = 따라가기, 끌기 = 옮기기</div>
 <div id="overlay"></div>
 <div id="dex" hidden><div class="card"><div class="head"><b>도감 · 가방</b><button id="dexClose">닫기</button></div><div id="dexBody"></div></div></div>
 <div id="loading">불러오는 중…</div>

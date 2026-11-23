@@ -1,14 +1,14 @@
 // 바닥 렌더링(지시서 3-B-2): 칸마다 오브젝트를 만들지 않고 16×16 청크마다 메쉬 하나로 합친다.
 // 바뀐 칸이 속한 청크만(grid.takeDirty) 다시 만든다.
-// 모양: 칸을 3×3 조각으로 나누고, 높이는 꼭짓점 높이(terrain.js)로 부드럽게 잇는다(경사면). 한 단보다 큰 차이만 절벽 벽.
+// 모양: 칸을 4×4 조각으로 나누고, 높이는 꼭짓점 높이(terrain.js)로 부드럽게 잇는다(경사면). 한 단보다 큰 차이만 절벽 벽.
 // 색: 칸 경계에서 이웃 바닥 종류와 둥글게 섞고(체스판 없음), 잔잔한 얼룩 무늬로 단조롭지 않게. 경사진 돌길·데크는 계단.
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
-import { corners, bilinear, terrainHeight } from "../world/terrain.js";
+import { corners as cornersRaw, heightIn } from "../world/terrain.js";
 
-const SUB = 3, STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
+const SUB = 4, STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
 const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
@@ -72,9 +72,22 @@ class Builder {
   }
 }
 
+// 한 번 다시 그릴 때 칸 꼭짓점 높이를 한 번씩만 계산(법선·벽·면이 같은 값을 여러 번 씀)
+let cornerCache = null, cacheGrid = null, pointCache = new Map();
+function cachedCorners(grid, x, z) {
+  const k = z * grid.w + x; let c = cornerCache.get(k);
+  if (!c) { c = cornersRaw(grid, x, z); cornerCache.set(k, c); }
+  return c;
+}
+function chunkHeight(grid, gx, gz) {
+  const x = Math.floor(gx), z = Math.floor(gz);
+  if (!grid.inBounds(x, z)) return LOWEST;
+  return heightIn(cachedCorners(grid, x, z), grid.get(x, z).elevation, gx - x, gz - z);
+}
+
 /** 부드러운 법선: 주변 높이 차로 기울기를 잼(칸 경계를 넘어도 이어짐). */
 function normalAt(grid, gx, gz) {
-  const e = 0.25, dx = terrainHeight(grid, gx + e, gz) - terrainHeight(grid, gx - e, gz), dz = terrainHeight(grid, gx, gz + e) - terrainHeight(grid, gx, gz - e);
+  const e = 0.25, dx = chunkHeight(grid, gx + e, gz) - chunkHeight(grid, gx - e, gz), dz = chunkHeight(grid, gx, gz + e) - chunkHeight(grid, gx, gz - e);
   const n = [-dx / (2 * e * CELL), 1, -dz / (2 * e * CELL)], l = Math.hypot(...n); return [n[0] / l, n[1] / l, n[2] / l];
 }
 const W = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
@@ -95,13 +108,20 @@ function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
 }
 
 function cellSurface(b, grid, x, z, c) {
-  const cell = grid.get(x, z), range = Math.max(...c) - Math.min(...c);
+  const cell = grid.get(x, z), e = cell.elevation, range = Math.max(...c, e) - Math.min(...c, e);
   if (PAVED.has(cell.groundType) && !grid.isWater(x, z) && range > 0.05) return stairs(b, grid, x, z, c);
   const step = 1 / SUB;
   for (let j = 0; j < SUB; j++) for (let i = 0; i < SUB; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
-      const u = a * step, v = d * step, gx = x + u, gz = z + v;
-      return { p: W(gx, bilinear(c, u, v), gz), n: normalAt(grid, gx, gz), c: groundColor(grid, gx, gz, new THREE.Color()) };
+      const u = a * step, v = d * step, gx = x + u, gz = z + v, k = (z * SUB + d) * 4096 + (x * SUB + a);
+      let pc = pointCache.get(k);                                           // 색·법선은 위치만으로 정해지므로 이웃 조각과 나눠 씀
+      if (!pc) {
+        const n = normalAt(grid, gx, gz), col = groundColor(grid, gx, gz, new THREE.Color());
+        const steep = Math.min(1, Math.max(0, (0.86 - n[1]) / 0.2));             // 가파를수록 흙·바위 빛
+        if (steep > 0 && !grid.isWater(Math.floor(gx), Math.floor(gz))) col.lerp(cliffColor(grid, Math.floor(gx), Math.floor(gz), 0, gx, gz), steep * 0.85);
+        pc = { n, c: col }; pointCache.set(k, pc);
+      }
+      return { p: W(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c };
     });
     b.quad(pts);
   }
@@ -109,7 +129,8 @@ function cellSurface(b, grid, x, z, c) {
 
 /** 경사진 돌길·데크: 4×4 조각을 평평한 단으로 만들고 단 사이에 디딤판 벽(계단). */
 function stairs(b, grid, x, z, c) {
-  const n = STAIR_SUB, step = 1 / n, lo = Math.min(...c), hi = Math.max(...c), rise = (hi - lo) / Math.max(2, Math.round((hi - lo) / 0.06));
+  const e = grid.get(x, z).elevation, bilinear = (cc, u, v) => heightIn(cc, e, u, v);
+  const n = STAIR_SUB, step = 1 / n, lo = Math.min(...c, e), hi = Math.max(...c, e), rise = (hi - lo) / Math.max(2, Math.round((hi - lo) / 0.06));
   const flat = [];
   for (let j = 0; j < n; j++) { flat.push([]); for (let i = 0; i < n; i++) flat[j].push(lo + Math.round((bilinear(c, (i + 0.5) * step, (j + 0.5) * step) - lo) / rise) * rise); }
   const up = [0, 1, 0];
@@ -133,15 +154,18 @@ function stairs(b, grid, x, z, c) {
 
 export function buildChunkGeometry(grid, cx, cz) {
   const b = new Builder(), n = grid.chunk;
+  if (cacheGrid !== grid || !cornerCache) { cornerCache = new Map(); cacheGrid = grid; }
+  pointCache = new Map();
   for (let z = cz * n; z < Math.min(grid.h, (cz + 1) * n); z++) for (let x = cx * n; x < Math.min(grid.w, (cx + 1) * n); x++) {
-    const c = corners(grid, x, z);                               // [왼위, 오위, 왼아래, 오아래]
+    const c = cachedCorners(grid, x, z);                               // [왼위, 오위, 왼아래, 오아래]
     cellSurface(b, grid, x, z, c);
     // 네 변: 이웃 칸의 맞닿은 꼭짓점 높이와 비교해 벽
-    const nb = (nx, nz, ci) => grid.inBounds(nx, nz) ? ci.map(([a, d]) => corners(grid, nx, nz)[a + 2 * d]) : [LOWEST, LOWEST];
-    edgeWall(b, grid, x, z, [c[1], c[3]], nb(x + 1, z, [[0, 0], [0, 1]]), x + 1, z, x + 1, z + 1, [1, 0, 0]);
-    edgeWall(b, grid, x, z, [c[0], c[2]], nb(x - 1, z, [[1, 0], [1, 1]]), x, z, x, z + 1, [-1, 0, 0]);
-    edgeWall(b, grid, x, z, [c[2], c[3]], nb(x, z + 1, [[0, 0], [1, 0]]), x, z + 1, x + 1, z + 1, [0, 0, 1]);
-    edgeWall(b, grid, x, z, [c[0], c[1]], nb(x, z - 1, [[0, 1], [1, 1]]), x, z, x + 1, z, [0, 0, -1]);
+    // 땅은 꼭짓점을 이웃과 나눠 써서 틈이 없음 → 벽은 격자 바깥 테두리에만(바다 밑으로 내려가는 면)
+    const out = [LOWEST, LOWEST];
+    if (x === grid.w - 1) edgeWall(b, grid, x, z, [c[1], c[3]], out, x + 1, z, x + 1, z + 1, [1, 0, 0]);
+    if (x === 0) edgeWall(b, grid, x, z, [c[0], c[2]], out, x, z, x, z + 1, [-1, 0, 0]);
+    if (z === grid.h - 1) edgeWall(b, grid, x, z, [c[2], c[3]], out, x, z + 1, x + 1, z + 1, [0, 0, 1]);
+    if (z === 0) edgeWall(b, grid, x, z, [c[0], c[1]], out, x, z, x + 1, z, [0, 0, -1]);
   }
   return b.geometry();
 }
@@ -154,6 +178,7 @@ export class GroundChunks {
   /** 바뀐 청크만 다시 만든다. 다시 만든 청크 수를 돌려준다. */
   sync() {
     const keys = this.grid.takeDirty();
+    if (keys.length) { cornerCache = new Map(); cacheGrid = this.grid; }      // 높이가 바뀌었을 수 있으니 이번 동기화에서 새로 계산
     for (const key of keys) {
       const [cx, cz] = key.split(",").map(Number), geo = buildChunkGeometry(this.grid, cx, cz);
       let m = this.meshes.get(key);
