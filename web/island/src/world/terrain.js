@@ -3,6 +3,8 @@
 // 높이 차가 크면 가파른 비탈이 된다(걷기는 grid.canStep이 따로 판단: 한 단보다 크면 못 오름).
 // 그림(groundChunks)과 갈매미가 서는 높이(유닛 이동)가 같은 함수를 써서 발이 땅에 붙는다.
 import { MAX_STEP } from "../config.js";
+import { GroundType } from "../data/types.js";
+import { connectMask, N, E, S, W } from "./autotile.js";
 
 const EPS = 1e-6;
 const BUMP = 0.55;                 // 칸 가운데 볼록의 세기(1이면 칸 가운데가 정확히 칸 높이, 크면 비탈에 잔물결이 생김)
@@ -39,4 +41,28 @@ export function terrainHeight(grid, gx, gz) {
   const x = Math.floor(gx), z = Math.floor(gz);
   if (!grid.inBounds(x, z)) return -1.5;
   return heightIn(corners(grid, x, z), grid.get(x, z).elevation, gx - x, gz - z);
+}
+
+// ---- 계단(경사진 돌길·데크): 그림(groundChunks)과 갈매미가 서는 높이가 같은 값을 쓰게 여기서 정함
+const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
+/** 이 칸이 계단이면 { alongX, h0, h1, n }(올라가는 축, 양 끝 높이, 단 수), 아니면 null. c: 꼭짓점 높이(없으면 계산). */
+export function stairLayout(grid, x, z, c = corners(grid, x, z)) {
+  const cell = grid.get(x, z);
+  if (!cell || !PAVED.has(cell.groundType) || grid.isWater(x, z)) return null;
+  const gx = (c[1] + c[3] - c[0] - c[2]) / 2, gz = (c[2] + c[3] - c[0] - c[1]) / 2;
+  if (Math.max(Math.abs(gx), Math.abs(gz)) <= 0.06) return null;
+  // 단 방향: 길이 한 방향(남북·동서)으로 이어져 있으면 그 길을 따라, 아니면(넓은 면) 더 많이 기운 쪽
+  const m = connectMask(grid, x, z), ns = (m & (N | S)) && !(m & (E | W)), ew = (m & (E | W)) && !(m & (N | S));
+  const alongX = ew ? true : ns ? false : Math.abs(gx) >= Math.abs(gz);
+  const edge = (t, s) => (alongX ? bilinear(c, t, s) : bilinear(c, s, t));
+  const h0 = (edge(0, 0) + edge(0, 1)) / 2, h1 = (edge(1, 0) + edge(1, 1)) / 2;
+  return { alongX, h0, h1, n: Math.max(2, Math.min(6, Math.round(Math.abs(h1 - h0) / 0.07))) };
+}
+/** 계단 디딤판 i의 높이. */
+export const treadHeight = (L, i) => L.h0 + (L.h1 - L.h0) * (i + 0.5) / L.n;
+/** 칸 안 (u, v)에서 밟는 디딤판 높이(계단이 아니면 null). */
+export function stairHeightAt(grid, x, z, u, v) {
+  const L = stairLayout(grid, x, z); if (!L) return null;
+  const t = L.alongX ? u : v;
+  return treadHeight(L, Math.min(L.n - 1, Math.max(0, Math.floor(t * L.n))));
 }

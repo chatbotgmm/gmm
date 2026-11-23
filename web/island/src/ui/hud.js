@@ -1,6 +1,6 @@
 // 화면 UI: 도구 막대, 갈매미 목록·통계 판, 알림 줄. DOM만 다루고 월드는 콜백으로 바꾼다.
 import { GROUND_TYPES, UnitState } from "../data/types.js";
-import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS } from "../data/catalog.js";
+import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS, UNITS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import * as M from "../units/mind.js";
 import { TRIBES } from "../data/catalog.js";
@@ -33,6 +33,7 @@ export class Hud {
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     this.instantBuild = false;
     document.getElementById("seeds").onclick = () => this.onSeeds?.();
+    this.summonBtn = document.getElementById("summon"); this.summonBtn.onclick = () => this.onSummon?.();
     document.getElementById("dexBtn").onclick = () => this.showDex(true);
     this.qBtn = document.getElementById("quality"); this.qBtn.onclick = () => this.setQualityLabel(this.onQuality?.());
     document.getElementById("dexClose").onclick = () => this.showDex(false);
@@ -81,6 +82,7 @@ export class Hud {
     }
     if (mode === "build") {
       this.lastBuild = arg;
+      if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
       for (const def of Object.values(BUILDINGS)) {
         const locked = !this.world.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
         const b = el("button", (def.id === arg ? "on " : "") + (locked ? "locked" : ""), `${locked ? "🔒 " : ""}${def.name} ${def.footprint.w}×${def.footprint.d}`);
@@ -93,6 +95,8 @@ export class Hud {
       this.sub.appendChild(ib);
     }
   }
+  /** 🥚 소환 버튼: 마을에 있는 수 / 전체, 다 모이면 끔 */
+  setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all; }
   showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); }
   /** 도감(낚은 물고기)·가방(건진 물건) 창 */
   showDex(on) {

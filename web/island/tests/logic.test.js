@@ -203,6 +203,35 @@ test("헤엄: 물가로 가서 얕은 물에서 헤엄치다 땅으로 올라오
   void real;
 });
 
+test("소환: 빈 섬에서 시작해 한 마리씩 무작위로(겹치지 않게) 최대 8마리, 건축 갈매미가 없으면 못 지음, 저장하면 소환한 갈매미만", () => {
+  const w = World.create(7, seededRandom(8), { empty: true });
+  assert.equal(w.units.length, 0);
+  assert.equal(w.placeBuilding("house", 38, 26, 0).ok, false, "갈매미가 없으면 못 지음");
+  const added = []; w.on("unitAdded", u => added.push(u.name));
+  for (let i = 0; i < 8; i++) { const u = w.summon(); assert.ok(u); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z))); }
+  assert.equal(w.summon(), null, "8마리 다 모이면 더 안 옴");
+  assert.equal(new Set(added).size, 8, "겹치지 않음");
+  const w2 = World.create(7, seededRandom(8), { empty: true });
+  let u = w2.summon(); while (u.job === "builder") { w2.units.length = 0; u = w2.summon(); }   // 건축가가 아닌 갈매미 하나
+  assert.equal(w2.placeBuilding("house", 38, 26, 0).reason, "건축 갈매미가 있어야 지을 수 있어요 (🥚 소환)");
+  while (!w2.units.some(o => o.job === "builder")) w2.summon();
+  assert.equal(w2.placeBuilding("house", 38, 26, 0).ok, true, "건축 갈매미가 오면 지을 수 있음");
+  const names = w2.units.map(o => o.name), back = World.fromJSON(JSON.parse(JSON.stringify(w2.serialize())));
+  assert.deepEqual(back.units.map(o => o.name).sort(), names.sort());
+});
+
+test("계단: 갈매미는 디딤판 높이를 밟음(비탈처럼 미끄러져 오르지 않음)", async () => {
+  const { stairLayout, treadHeight } = await import("../src/world/terrain.js");
+  const w = World.create(7, seededRandom(1));
+  let found = null;
+  for (let z = 0; z < 64 && !found; z++) for (let x = 0; x < 64 && !found; x++) { const L = stairLayout(w.grid, x, z); if (L) found = [x, z, L]; }
+  assert.ok(found, "섬에 계단이 있음");
+  const [x, z, L] = found, hs = new Set();
+  for (let k = 0; k < 40; k++) { const t = (k + 0.5) / 40, h = w.standHeight(x + (L.alongX ? t : 0.5), z + (L.alongX ? 0.5 : t)); hs.add(h.toFixed(4)); }
+  assert.equal(hs.size, L.n, "디딤판 수만큼의 높이만 나옴(계단식)");
+  for (let i = 0; i < L.n; i++) assert.ok(hs.has(treadHeight(L, i).toFixed(4)));
+});
+
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
   const w = World.create(7, seededRandom(11));
   w.placeBuilding("house", 38, 26, 0);                       // 공사장(갈매미가 지어야 함)

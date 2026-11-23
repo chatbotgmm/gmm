@@ -174,6 +174,14 @@ function makeHumanSwimClip(root, idle) {
   return new THREE.AnimationClip("Swim", SWIM_PERIOD, tracks);
 }
 
+/** 갈매미 8종 모델을 모두 미리 받아 이름 → 캐릭터 Map으로(못 받은 것은 빠짐 → 캡슐). */
+export async function preloadCharacters(set, tools = null, simplifyRatio = 1) {
+  const res = await Promise.allSettled(set.chars.map(c => loadCharacter(set.dir, c, tools, simplifyRatio)));
+  const map = new Map();
+  res.forEach((r, i) => { if (r.status === "fulfilled") map.set(set.chars[i].name, r.value); else console.warn("갈매미 모델을 못 불러와 캡슐을 씁니다", set.chars[i].name, r.reason); });
+  return map;
+}
+
 /** 캐릭터 하나: 장면 오브젝트, 애니메이션 믹서, 동작들, 손에 붙인 도구, 동작 길이(clip: AI가 타격 시점 계산에 씀). */
 export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   const g = await loadGLB(dir + cfg.file.split("/").pop()), root = g.scene;

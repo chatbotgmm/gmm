@@ -6,13 +6,13 @@ import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
-import { PROPS } from "./data/catalog.js";
+import { PROPS, TRIBES, JOBS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
-import { findCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
+import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -47,13 +47,15 @@ let world, chunks, buildingViews, unitViews, lifeViews, worldRoot;
 const quality = new Quality(renderer, sun, sub => { if (setTerrainDetail(sub) && world) world.grid.markAllDirty(); });
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
-  world = w; world.animateShape = true; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 화면에서는 높이가 스르르 바뀜
+  world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   buildingViews = new BuildingViews(worldRoot, world, overlay);
-  unitViews = new UnitViews(worldRoot, world);
+  unitViews = new UnitViews(worldRoot, world, charPool);
   lifeViews = new LifeViews(worldRoot, world, overlay);
   const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map))];
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(unitViews.useCharacters(charSet, loadCharacter, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model)); }
+  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
+  world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
+    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`); });
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }
@@ -66,22 +68,27 @@ loadProgress.onChange = () => {
   loadBar.style.width = `${Math.round(done / total * 100)}%`; loadText.textContent = `모델 불러오는 중 ${done} / ${total}`;
 };
 const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
-const firstLoad = mount(World.create(7));
+// 갈매미 8종 모델은 처음에 모두 받아 둠(소환하면 바로 나타나게)
+const charPool = charSet ? preloadCharacters(charSet, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model) : null;
+const firstLoad = mount(World.create(7, Math.random, { empty: true }));          // 갈매미 없이 시작 → 🥚 소환
 tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
 hud = new Hud({ tools, world,
   onSave: () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize())); hud.status("저장했어요(이 브라우저에만)"); } catch (e) { hud.status("저장하지 못했어요: " + e.message); } },
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
-  onReset: () => { mount(World.create(7)); hud.status("새 섬을 만들었어요"); },
+  onReset: () => { mount(World.create(7, Math.random, { empty: true })); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
   onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
+hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
+hud.setSummon(world);
 hud.onSeeds = () => { for (let i = 0; i < 10; i++) world.addSeed(); hud.status("씨앗을 뿌렸어요"); };
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };
 // 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
 Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
+  if (!world.units.length) hud.status("갈매미가 아직 없어요 · 🥚 소환을 눌러 불러 보세요");
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`);
   else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)");
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);

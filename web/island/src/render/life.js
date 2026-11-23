@@ -32,7 +32,8 @@ export class LifeViews {
       scene.add(g); return { p, g };
     });
     // 말풍선(유닛마다 하나)과 구역 이름
-    this.emotes = world.units.map(() => { const e = document.createElement("div"); e.className = "emote"; e.hidden = true; overlay.appendChild(e); return e; });
+    this.emotes = [];                                                              // 갈매미마다 말풍선(소환되면 그때 만듦)
+    this.emoteFor = i => this.emotes[i] ||= (() => { const e = document.createElement("div"); e.className = "emote"; e.hidden = true; overlay.appendChild(e); return e; })();
     this.zoneEls = world.zones.map(z => { const e = document.createElement("div"); e.className = "zone"; e.textContent = z.label; overlay.appendChild(e); return { z, e }; });
     this.showZones = true;
   }
@@ -104,7 +105,7 @@ export class LifeViews {
     }
     // 말풍선
     this.world.units.forEach((u, i) => {
-      const e = this.emotes[i], show = u.emoteT > 0 && !u.insideBuildingId; e.hidden = !show; if (!show) return;
+      const e = this.emoteFor(i), show = u.emoteT > 0 && !u.insideBuildingId; e.hidden = !show; if (!show) return;
       tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z)).project(camera);
       if (tmp.z > 1) { e.hidden = true; return; }
       e.textContent = u.emoteText; e.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; e.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;

@@ -6,14 +6,12 @@ import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
-import { connectMask, N, E, S, W as WEST } from "../world/autotile.js";
-import { corners as cornersRaw, heightIn, bilinear } from "../world/terrain.js";
+import { corners as cornersRaw, heightIn, bilinear, stairLayout, treadHeight } from "../world/terrain.js";
 
 let SUB = 4;                                   // 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
 const STAIR_SUB = 4, BLEND_R = 0.42, LOWEST = -1.6;
 export function setTerrainDetail(sub) { const changed = SUB !== sub; SUB = sub; return changed; }
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
-const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
 const BASE = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[0])]));
 const ALT = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[1] ?? v.colors[0])]));
@@ -111,9 +109,8 @@ function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
 }
 
 function cellSurface(b, grid, x, z, c) {
-  const cell = grid.get(x, z), e = cell.elevation, range = Math.max(...c, e) - Math.min(...c, e);
-  const slope = Math.max(Math.abs((c[1] + c[3] - c[0] - c[2]) / 2), Math.abs((c[2] + c[3] - c[0] - c[1]) / 2));
-  if (PAVED.has(cell.groundType) && !grid.isWater(x, z) && slope > 0.06) return stairs(b, grid, x, z, c);
+  const e = grid.get(x, z).elevation;
+  const L = stairLayout(grid, x, z, c); if (L) return stairs(b, grid, x, z, c, L);   // 경사진 돌길·데크 = 계단
   const step = 1 / SUB;
   for (let j = 0; j < SUB; j++) for (let i = 0; i < SUB; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
@@ -136,17 +133,12 @@ function cellSurface(b, grid, x, z, c) {
  * 디딤판 높이는 올라가는 방향으로 고르게 나누고, 칸 둘레는 이웃 땅의 실제 가장자리 높이(꼭짓점 쌍선형, 이웃과 같은 값)까지
  * 벽으로 메워 틈이 없다.
  */
-function stairs(b, grid, x, z, c) {
-  const gx = (c[1] + c[3] - c[0] - c[2]) / 2, gz = (c[2] + c[3] - c[0] - c[1]) / 2;
-  // 단 방향: 길이 한 방향(남북·동서)으로 이어져 있으면 그 길을 따라, 아니면(넓은 면) 더 많이 기운 쪽
-  const m = connectMask(grid, x, z), ns = (m & (N | S)) && !(m & (E | WEST)), ew = (m & (E | WEST)) && !(m & (N | S));
-  const alongX = ew ? true : ns ? false : Math.abs(gx) >= Math.abs(gz);
+function stairs(b, grid, x, z, c, L) {
+  const alongX = L.alongX;                                                   // 단 방향·높이는 terrain.js stairLayout(갈매미가 서는 높이와 같음)
   // t: 올라가는 축(0→1), s: 가로 축. P(t, s) → 칸 안 (u, v)
   const uv = (t, s2) => (alongX ? [t, s2] : [s2, t]);
   const edgeH = (t, s2) => { const [u, v] = uv(t, s2); return bilinear(c, u, v); };   // 가장자리 실제 높이(이웃과 같음)
-  const h0 = (edgeH(0, 0) + edgeH(0, 1)) / 2, h1 = (edgeH(1, 0) + edgeH(1, 1)) / 2;
-  const n = Math.max(2, Math.min(6, Math.round(Math.abs(h1 - h0) / 0.07)));
-  const tread = i => h0 + (h1 - h0) * (i + 0.5) / n;
+  const n = L.n, tread = i => treadHeight(L, i);
   const P = (t, s2, h) => { const [u, v] = uv(t, s2); return toW(x + u, h, z + v); };
   const up = [0, 1, 0], col = groundColor(grid, x + 0.5, z + 0.5, new THREE.Color()), dark = col.clone().multiplyScalar(0.7);
   const axisN = sign => (alongX ? [sign, 0, 0] : [0, 0, sign]), sideN = sign => (alongX ? [0, 0, sign] : [sign, 0, 0]);

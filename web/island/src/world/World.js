@@ -6,7 +6,7 @@ import { createBuildingData, createUnitAIState, UnitState } from "../data/types.
 import { Grid } from "./Grid.js";
 import { generateIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
-import { terrainHeight } from "./terrain.js";
+import { terrainHeight, stairHeightAt } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
 import { initMind } from "../units/mind.js";
@@ -39,9 +39,10 @@ export class World {
       if (m.defId === "ore") this.ores.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
     }
   }
-  static create(seed = 7, rnd = Math.random) {
+  /** empty: 갈매미 없이 시작(게임 화면: 🥚 소환으로 한 마리씩). 시험은 기본값(8마리 모두). */
+  static create(seed = 7, rnd = Math.random, { empty = false } = {}) {
     const g = generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
-    w.seed = seed; w.spawnUnits(); for (let i = 0; i < 14; i++) w.addSeed(); return w;
+    w.seed = seed; if (!empty) w.spawnUnits(); for (let i = 0; i < 14; i++) w.addSeed(); return w;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
   emit(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); }
@@ -52,21 +53,44 @@ export class World {
     for (const u of this.units) if (u !== src && !u.insideBuildingId && Math.hypot(u.x - x, u.z - z) < 9 && this.rnd() < chance) u.curious = { x, z, kind };
   }
 
-  spawnUnits() {
+  spawnUnits(names = UNITS.map(u => u.name)) {
     const r = seededRandom(99);
     UNITS.forEach((u, i) => {
+      if (!names.includes(u.name)) return;
       const a = i / UNITS.length * Math.PI * 2, spot = nearestWalkable(this.grid, Math.floor(32 + Math.cos(a) * 5), Math.floor(32 + Math.sin(a) * 5));
-      const s = createUnitAIState(`u${i + 1}`, u.name, spot[0] + 0.5, spot[1] + 0.5, 0.5 + r() * 2); s.scale = u.scale;
-      J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                // 직업·희귀도, 처음 포만감, 욕구·취향·친구
-      this.units.push(s);
+      this.addUnit(u, i, spot[0] + 0.5, spot[1] + 0.5, r);
     });
+  }
+  addUnit(def, i, x, z, r = this.rnd) {
+    const s = createUnitAIState(`u${i + 1}`, def.name, x, z, 0.5 + r() * 2); s.scale = def.scale;
+    J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
+    if (this.profiles) this.applyProfile(s);
+    this.units.push(s); return s;
+  }
+  /** 🥚 소환: 아직 마을에 없는 갈매미 중 하나를 무작위로 광장 근처에 부름. 모두 있으면 null. */
+  summon() {
+    const left = UNITS.map((u, i) => [u, i]).filter(([u]) => !this.units.some(o => o.name === u.name));
+    if (!left.length) return null;
+    const [def, i] = left[Math.floor(this.rnd() * left.length)];
+    let spot = null;
+    for (let k = 0; k < 20 && !spot; k++) { const a = this.rnd() * Math.PI * 2, d = 1 + this.rnd() * 3; spot = nearestWalkable(this.grid, Math.floor(32 + Math.cos(a) * d), Math.floor(32 + Math.sin(a) * d), 4); }
+    if (!spot) return null;
+    const u = this.addUnit(def, i, spot[0] + 0.5, spot[1] + 0.5);
+    u.y = this.standHeight(u.x, u.z); emote(u, "안녕!", 2.2);
+    for (const o of this.units) if (o !== u && !o.insideBuildingId && Math.hypot(o.x - u.x, o.z - u.z) < 9) o.curious = { x: u.x, z: u.z, kind: "drop" };   // 둘레 갈매미가 쳐다봄
+    this.emit("unitAdded", u); return u;
   }
 
   /** 모델 정보(web/village/models/chars.json)로 몸 크기와 걷기·달리기 속도(칸/초)를 맞춘다. */
   applyCharacterProfiles(chars, walkScale, runScale) {
-    this.units.forEach((u, i) => { const c = chars[i % chars.length]; if (!c) return;
-      u.name = c.name; u.scale = c.scale; u.height = c.height * c.scale; J.assignJob(u);
-      u.walkSpeed = c.walk * walkScale * c.scale * SPEED_BOOST; u.runSpeed = c.run * runScale * c.scale * SPEED_BOOST; });
+    this.profiles = { chars, walkScale, runScale };                              // 나중에 소환되는 갈매미에도 씀
+    this.units.forEach(u => this.applyProfile(u));
+  }
+  applyProfile(u) {
+    const { chars, walkScale, runScale } = this.profiles, i = UNITS.findIndex(d => d.name === u.name);
+    const c = chars.find(c => c.name === u.name) || chars[Math.max(0, i) % chars.length]; if (!c) return;
+    u.name = c.name; u.scale = c.scale; u.height = c.height * c.scale; J.assignJob(u);
+    u.walkSpeed = c.walk * walkScale * c.scale * SPEED_BOOST; u.runSpeed = c.run * runScale * c.scale * SPEED_BOOST;
   }
 
   // ---- 씨앗(잔디밭에서 쪼아 먹음)
@@ -146,12 +170,13 @@ export class World {
   /** 격자 좌표(연속)에 서는 높이: 부두처럼 걸을 수 있는 시설 위면 그 높이, 아니면 보이는 땅 높이(경사면 포함). */
   standHeight(gx, gz) {
     const x = Math.floor(gx), z = Math.floor(gz), c = this.grid.get(x, z), o = c?.occupiedId && this.grid.occupants.get(c.occupiedId);
-    return o && o.walkable ? o.surface : terrainHeight(this.grid, gx, gz);
+    if (o && o.walkable) return o.surface;
+    return stairHeightAt(this.grid, x, z, gx - x, gz - z) ?? terrainHeight(this.grid, gx, gz);   // 계단에서는 디딤판 높이(경사면처럼 미끄러져 오르지 않게)
   }
   isPlot(x, z) { return this.plots.some(p => p.x === x && p.z === z); }
 
   /** 이 등급의 건물을 지을 수 있는 건축가가 있나(1등급은 누구나). */
-  builderFor(def) { return this.units.find(u => J.canBuild(u, def)) || null; }
+  builderFor(def) { return this.units.find(u => u.job === "builder" && J.canBuild(u, def)) || null; }   // 건축 갈매미가 있어야 지을 수 있음
 
   // ---- 바닥 칠하기(지시서 3-B): 땅 칸이고 건물·시설이 없을 때만
   canPaint(x, z) { const c = this.grid.get(x, z); return !!c && !this.grid.isWater(x, z) && !c.occupiedId && !this.isPlot(x, z); }
@@ -208,6 +233,7 @@ export class World {
     const def = BUILDINGS[defId], r = checkPlacement(this.grid, def, ax, az, rot, this.units);
     if (!r.ok) return r;
     if (r.cells.some(([x, z]) => this.isPlot(x, z))) return { ...r, ok: false, reason: "밭에는 지을 수 없어요" };
+    if (!this.units.some(u => u.job === "builder")) return { ...r, ok: false, reason: "건축 갈매미가 있어야 지을 수 있어요 (🥚 소환)" };
     if (!this.builderFor(def)) return { ...r, ok: false, reason: `${RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name} 이상 건축가가 있어야 지을 수 있어요` };
     return r;
   }
@@ -299,6 +325,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
+      units: this.units.map(u => u.name),
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -307,6 +334,6 @@ export class World {
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
     for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); } }
-    w.spawnUnits(); for (let i = 0; i < 14; i++) w.addSeed(); w.nextId = j.nextId; return w;
+    w.spawnUnits(j.units); for (let i = 0; i < 14; i++) w.addSeed(); w.nextId = j.nextId; return w;   // 예전 저장(units 없음)은 8마리 모두
   }
 }

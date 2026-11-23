@@ -84,9 +84,14 @@ const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x1d2b14, transparent: tru
 const frustum = new THREE.Frustum(), projView = new THREE.Matrix4(), sphere = new THREE.Sphere();
 
 export class UnitViews {
-  constructor(scene, world) {
-    this.world = world; this.chars = []; this.scene = scene;
-    this.views = world.units.map(u => {
+  /** pool: 이름 → 갈매미 모델(불러오는 중 화면에서 미리 받아 둔 것, Promise<Map>). 없으면 캡슐. */
+  constructor(scene, world, pool = null) {
+    this.world = world; this.chars = []; this.scene = scene; this.pool = pool; this.views = [];
+    for (const u of world.units) this.add(u);
+    world.on("unitAdded", u => this.add(u));                                     // 🥚 소환
+  }
+  add(u) {
+    const scene = this.scene;
       const g = new THREE.Group(), cap = unitPlaceholder(u.scale || 1); g.add(cap); g.userData.unitId = u.unitId; scene.add(g);
       // 누르기용 보이지 않는 원기둥(작은 갈매미도 누르기 쉽게 최소 크기를 둠). 크기는 sync에서 몸에 맞춤.
       const pick = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ visible: false }));
@@ -95,18 +100,14 @@ export class UnitViews {
       // 발밑 둥근 그림자(가벼움)
       const blob = new THREE.Mesh(BLOB_GEO, BLOB_MAT); blob.rotation.x = -Math.PI / 2; blob.position.y = 0.02; blob.renderOrder = 1;
       blob.scale.setScalar(0.32 * (u.scale || 1) + 0.08); g.add(blob);
-      return { g, cap, ch: null, pick, blob };
+      const v = { g, cap, ch: null, pick, blob }; this.views.push(v);
+    this.pool?.then(map => {                                                       // 모델을 붙임(새 섬에서도 같은 모델을 다시 씀)
+      const ch = map.get(u.name); if (!ch || !this.views.includes(v)) return;
+      ch.root.parent?.remove(ch.root); v.g.remove(v.cap); v.g.add(ch.root); v.ch = ch;
+      ch.anim = ""; ch.onceRef = null; for (const t of Object.values(ch.inHand)) t.visible = false;
+      ch.root.rotation.set(0, 0, 0); ch.root.position.set(0, 0, 0);
     });
-  }
-  /** 기존 갈매미 모델로 바꾼다(i번째 유닛 ↔ chars[i]). 모델을 못 불러온 유닛은 캡슐 그대로. */
-  async useCharacters(set, loadCharacter, tools = null, simplifyRatio = 1) {
-    const results = await Promise.allSettled(this.views.map((v, i) => loadCharacter(set.dir, set.chars[i % set.chars.length], tools, simplifyRatio)));
-    results.forEach((r, i) => {
-      const v = this.views[i];
-      if (r.status !== "fulfilled") { console.warn("갈매미 모델을 못 불러와 캡슐을 씁니다", r.reason); return; }
-      v.g.remove(v.cap); v.g.add(r.value.root); v.ch = r.value;
-    });
-    return results.filter(r => r.status === "fulfilled").length;
+    return v;
   }
   /** 헤엄: 몸이 물 위에서 출렁이고 좌우로 살짝 기울며 앞으로 숙임, 발밑 그림자 대신 물결 고리 두 개가 퍼짐. */
   swimLook(v, u, i, dt, time) {
