@@ -4,7 +4,7 @@
 // 할 일이 없으면(Idle) 성격(PERSONA) 비중으로 하나를 고른다:
 //   쉬기 · 산책 · 씨앗 먹기 · 친구에게 가서 인사 · 신나서 뛰기 · 벌목 · 채광 · 낚시 · 집 짓기(공사장) · 건물 들어가기
 // 반사 행동: 겁 많은 갈매미(미니)는 큰 갈매미가 다가오면 도망, 혼자 있고 싶은 갈매미(그림자)는 쉬다가 붐비면 자리를 피함.
-import { UnitState as S } from "../data/types.js";
+import { UnitState as US } from "../data/types.js";
 import { UNIT_SPEED } from "../config.js";
 import { PERSONA } from "../data/catalog.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
@@ -16,7 +16,7 @@ const clip = (u, k) => (u.clip && u.clip[k]) || DEFAULT_CLIP[k];
 const cellOf = u => [Math.floor(u.x), Math.floor(u.z)];
 const GIVE_UP = 40;                                   // 이 시간(초) 넘게 가는 중이면 포기
 const pick = (a, rnd) => a[Math.floor(rnd() * a.length)];
-const visible = u => !u.insideBuildingId && u.state !== S.Held;
+const visible = u => !u.insideBuildingId && u.state !== US.Held;
 
 export function emote(u, text, secs = 1.6) { u.emoteText = text; u.emoteT = secs; }
 
@@ -29,7 +29,7 @@ function release(u) {
 }
 export function setIdle(u, rnd, world = null, secs = null) {
   release(u);
-  u.running = false; u.state = S.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null;
+  u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null;
   u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined;
 }
 
@@ -99,36 +99,36 @@ function startActivity(u, kind, world, rnd) {
       const [sx, sz] = cellOf(u), r = Math.round(reach(u));
       for (let k = 0; k < 12; k++) {
         const gx = sx + Math.round((rnd() * 2 - 1) * r), gz = sz + Math.round((rnd() * 2 - 1) * r);
-        if (g.isWalkable(gx, gz) && startPath(u, world, gx, gz, !!persona.timid && rnd() < 0.6)) { u.state = S.Wander; return true; }
+        if (g.isWalkable(gx, gz) && startPath(u, world, gx, gz, !!persona.timid && rnd() < 0.6)) { u.state = US.Wander; return true; }
       }
       return false;
     }
     case "zoomies": {
       if (!startActivity(u, "wander", world, rnd)) return false;
-      u.state = S.Zoomies; u.running = true; u.chain = 3; emote(u, "✨"); return true;
+      u.state = US.Zoomies; u.running = true; u.chain = 3; emote(u, "✨"); return true;
     }
     case "forage": {
       const s = nearest(u, world.seeds.filter(s => !s.claimed && Math.hypot(s.x - u.x, s.z - u.z) < reach(u) * 1.8), s => [s.x, s.z]);
       if (!s || !startPath(u, world, s.x, s.z, !!persona.timid)) return false;
-      s.claimed = u.unitId; u.focus = s; u.state = S.Forage; return true;
+      s.claimed = u.unitId; u.focus = s; u.state = US.Forage; return true;
     }
     case "visit": {
-      const f = nearest(u, world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [S.Idle, S.Wander].includes(o.state)), o => cellOf(o));
+      const f = nearest(u, world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [US.Idle, US.Wander].includes(o.state)), o => cellOf(o));
       if (!f) return false;
       const [fx, fz] = cellOf(f);
       if (!pathBeside(u, world, fx, fz)) return false;
-      u.focus = f; u.state = S.Visit; emote(u, "?"); return true;
+      u.focus = f; u.state = US.Visit; emote(u, "?"); return true;
     }
     case "chop": case "mine": {
       const list = kind === "chop" ? world.trees : world.ores;
       const t = nearest(u, list.filter(t => t.alive && !t.claimed), t => [t.x, t.z]);
       if (!t || !pathBeside(u, world, t.x, t.z)) return false;
-      t.claimed = u.unitId; u.focus = t; u.state = kind === "chop" ? S.GoChop : S.GoMine; return true;
+      t.claimed = u.unitId; u.focus = t; u.state = kind === "chop" ? US.GoChop : US.GoMine; return true;
     }
     case "fish": {
       const s = nearest(u, world.spots.filter(s => !s.claimed && g.isWalkable(s.x, s.z)), s => [s.x, s.z]);
       if (!s || !startPath(u, world, s.x, s.z)) return false;
-      s.claimed = u.unitId; u.focus = s; u.state = S.GoFish; return true;
+      s.claimed = u.unitId; u.focus = s; u.state = US.GoFish; return true;
     }
     case "build": {
       const b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy).sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
@@ -136,14 +136,14 @@ function startActivity(u, kind, world, rnd) {
       if (world.res.wood < 1 || world.res.stone < 1)                              // 재료가 없으면 구하러 감
         return startActivity(u, world.res.wood <= world.res.stone ? "chop" : "mine", world, rnd);
       if (!startPath(u, world, b.door.x, b.door.z)) return false;
-      b.busy = u.unitId; u.focus = b; u.state = S.GoBuild; return true;
+      b.busy = u.unitId; u.focus = b; u.state = US.GoBuild; return true;
     }
     case "enter": {
       const done = [...world.buildings.values()].filter(b => world.isDone(b));
       if (!done.length) return false;
       const b = pick(done, rnd);
       if (!startPath(u, world, b.door.x, b.door.z)) return false;
-      u.state = S.GoToBuilding; u.targetBuildingId = b.id; return true;
+      u.state = US.GoToBuilding; u.targetBuildingId = b.id; return true;
     }
   }
   return false;
@@ -162,7 +162,7 @@ function chooseNext(u, world, rnd) {
 
 export function enterBuilding(u, b, rnd) {
   release(u);
-  u.state = S.Inside; u.insideBuildingId = b.id; u.timer = 6 + rnd() * 8; u.path = null; u.goal = null; u.running = false;
+  u.state = US.Inside; u.insideBuildingId = b.id; u.timer = 6 + rnd() * 8; u.path = null; u.goal = null; u.running = false;
   if (!b.occupants.includes(u.unitId)) b.occupants.push(u.unitId);
 }
 export function exitBuilding(u, world, rnd) {
@@ -176,7 +176,7 @@ export function exitBuilding(u, world, rnd) {
 // ---------------------------------------------------------------- 매 프레임
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
-  if (u.state === S.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
+  if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
   if (u.once) {                                                         // 한 번 하는 동작이 끝날 때까지 기다림
     const o = u.once; o.t += dt;
     if (o.onHit && o.t >= o.hit) { const f = o.onHit; o.onHit = null; f(); }
@@ -185,80 +185,80 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   }
   const p = PERSONA[u.name] || PERSONA["기본"];
   // 반사 행동
-  if (p.timid && visible(u) && ![S.Flee, S.Fish, S.GoFish, S.Inside, S.GoToBuilding].includes(u.state)) {
+  if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding].includes(u.state)) {
     const big = world.units.find(o => o !== u && visible(o) && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < 1.8);
     if (big) {
       setIdle(u, rnd, world); emote(u, "!");
       const dx = u.x - big.x, dz = u.z - big.z, d = Math.hypot(dx, dz) || 1;
       const spot = nearestWalkable(world.grid, Math.floor(u.x + dx / d * 4), Math.floor(u.z + dz / d * 4), 3);
-      if (spot && startPath(u, world, spot[0], spot[1], true)) { u.state = S.Flee; return settle(u, dt, world); }
+      if (spot && startPath(u, world, spot[0], spot[1], true)) { u.state = US.Flee; return settle(u, dt, world); }
     }
   }
-  if (p.loner && u.state === S.Idle && world.units.some(o => o !== u && visible(o) && Math.hypot(o.x - u.x, o.z - u.z) < 1.1)) {
-    if (startActivity(u, "wander", world, rnd)) { u.state = S.Avoid; emote(u, "…"); }
+  if (p.loner && u.state === US.Idle && world.units.some(o => o !== u && visible(o) && Math.hypot(o.x - u.x, o.z - u.z) < 1.1)) {
+    if (startActivity(u, "wander", world, rnd)) { u.state = US.Avoid; emote(u, "…"); }
   }
   if (moving(u) && u.moveT > GIVE_UP) { setIdle(u, rnd, world); return settle(u, dt, world); }
 
   switch (u.state) {
-    case S.Idle:
+    case US.Idle:
       if (rnd() < dt * 0.25) u.lookAt = u.heading + (rnd() * 2 - 1) * 1.2;          // 두리번
       if (u.lookAt !== undefined) { let d = u.lookAt - u.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); u.heading += d * Math.min(1, 1.5 * dt); }
       if (u.timer <= 0) chooseNext(u, world, rnd);
       break;
-    case S.Wander: case S.Avoid: case S.Flee:
+    case US.Wander: case US.Avoid: case US.Flee:
       if (followPath(u, dt, world, rnd)) setIdle(u, rnd, world); break;
-    case S.Zoomies:
+    case US.Zoomies:
       if (followPath(u, dt, world, rnd)) {
-        if (--u.chain > 0 && startActivity(u, "wander", world, rnd)) { u.state = S.Zoomies; u.running = true; }
-        else { u.state = S.Zoomies; u.path = null; doOnce(u, "Jump", null, () => { emote(u, pick(["♪", "✨"], rnd)); setIdle(u, rnd, world); }); }
+        if (--u.chain > 0 && startActivity(u, "wander", world, rnd)) { u.state = US.Zoomies; u.running = true; }
+        else { u.state = US.Zoomies; u.path = null; doOnce(u, "Jump", null, () => { emote(u, pick(["♪", "✨"], rnd)); setIdle(u, rnd, world); }); }
       }
       break;
-    case S.Forage: {
+    case US.Forage: {
       const s = u.focus;
       if (!world.seeds.includes(s)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        face(u, s.x + s.ox, s.z + s.oz); u.state = S.Eat;
+        face(u, s.x + s.ox, s.z + s.oz); u.state = US.Eat;
         doOnce(u, "Attack", () => { world.eatSeed(s); emote(u, "♥"); }, () => setIdle(u, rnd, world));
       }
       break;
     }
-    case S.Visit: {
+    case US.Visit: {
       const f = u.focus;
-      if (!visible(f) || f.once || [S.Flee, S.Greet].includes(f.state)) { setIdle(u, rnd, world); break; }
+      if (!visible(f) || f.once || [US.Flee, US.Greet].includes(f.state)) { setIdle(u, rnd, world); break; }
       const close = Math.hypot(f.x - u.x, f.z - u.z) < 1.6, arrived = followPath(u, dt, world, rnd);
-      if (u.state !== S.Visit) break;                                         // 길이 막혀 그만둠
+      if (u.state !== US.Visit) break;                                         // 길이 막혀 그만둠
       if (arrived || close) {
         if (!close) { setIdle(u, rnd, world); break; }                        // 가 보니 친구가 떠남
-        u.path = null; face(u, f.x, f.z); u.state = S.Greet; emote(u, pick(["♪", "♥", "안녕!"], rnd));
-        if ([S.Idle, S.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = S.Greet; face(f, u.x, u.z); emote(f, "!");
+        u.path = null; face(u, f.x, f.z); u.state = US.Greet; emote(u, pick(["♪", "♥", "안녕!"], rnd));
+        if ([US.Idle, US.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = US.Greet; face(f, u.x, u.z); emote(f, "!");
           doOnce(f, "Jump", null, () => setIdle(f, rnd, world)); }
         doOnce(u, "Jump", null, () => setIdle(u, rnd, world));
       }
       break;
     }
     // ---- 일
-    case S.GoChop: case S.GoMine: {
+    case US.GoChop: case US.GoMine: {
       const t = u.focus;
       if (!t.alive) { setIdle(u, rnd, world); break; }
-      if (followPath(u, dt, world, rnd)) { u.state = u.state === S.GoChop ? S.Chop : S.Mine; u.tool = u.state === S.Chop ? "axe" : "pickaxe"; u.workHits = t.hp; }
+      if (followPath(u, dt, world, rnd)) { u.state = u.state === US.GoChop ? US.Chop : US.Mine; u.tool = u.state === US.Chop ? "axe" : "pickaxe"; u.workHits = t.hp; }
       break;
     }
-    case S.Chop: case S.Mine: {
-      const t = u.focus, chop = u.state === S.Chop; face(u, t.x + 0.5, t.z + 0.5);
+    case US.Chop: case US.Mine: {
+      const t = u.focus, chop = u.state === US.Chop; face(u, t.x + 0.5, t.z + 0.5);
       workLoop(u, dt, chop ? "Chop" : "Mine", u.workHits,
         () => { if (chop) world.hitTree(t, u); else world.hitOre(t); },
         () => { emote(u, t.alive ? "💪" : chop ? "나무+2" : "돌+2"); setIdle(u, rnd, world); });
       break;
     }
-    case S.GoFish: {
+    case US.GoFish: {
       const s = u.focus;
       if (followPath(u, dt, world, rnd)) {
-        u.state = S.Fish; u.tool = "rod"; face(u, s.x + 0.5 + s.dir[0], s.z + 0.5 + s.dir[1]);
+        u.state = US.Fish; u.tool = "rod"; face(u, s.x + 0.5 + s.dir[0], s.z + 0.5 + s.dir[1]);
         doOnce(u, "FishCast", null, () => { u.fishT = 3 + rnd() * 4; u.fishing = { x: s.x + 0.5 + s.dir[0] * 1.6, z: s.z + 0.5 + s.dir[1] * 1.6 }; }, 99);
       }
       break;
     }
-    case S.Fish: {
+    case US.Fish: {
       if (u.fishT === undefined) break;
       u.anim = "FishWait"; u.fishT -= dt;
       if (u.fishT <= 0) {
@@ -268,32 +268,32 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       }
       break;
     }
-    case S.GoBuild: {
+    case US.GoBuild: {
       const b = u.focus;
       if (!world.buildings.has(b.id) || world.isDone(b)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
         if (world.res.wood < 1 || world.res.stone < 1) { emote(u, "재료가 없어"); setIdle(u, rnd, world); break; }
         world.res.wood--; world.res.stone--;                                   // 도착하면 나무 1·돌 1을 씀
-        u.state = S.Build; u.tool = "hammer";
+        u.state = US.Build; u.tool = "hammer";
       }
       break;
     }
-    case S.Build: {
+    case US.Build: {
       const b = u.focus;
       if (!world.buildings.has(b.id)) { setIdle(u, rnd, world); break; }
       const c = b.cells.reduce((a, [x, z]) => [a[0] + x + 0.5, a[1] + z + 0.5], [0, 0]); face(u, c[0] / b.cells.length, c[1] / b.cells.length);
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => { if (!world.isDone(b)) emote(u, "🔨"); setIdle(u, rnd, world); });
       break;
     }
-    case S.GoToBuilding: {
+    case US.GoToBuilding: {
       const b = world.buildings.get(u.targetBuildingId);
       if (!b) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) enterBuilding(u, b, rnd);
       break;
     }
-    case S.Inside:
+    case US.Inside:
       if (u.timer <= 0) exitBuilding(u, world, rnd); break;
-    case S.Greet: case S.Eat: break;                                        // doOnce가 끝나면 풀림
+    case US.Greet: case US.Eat: break;                                        // doOnce가 끝나면 풀림
     default: setIdle(u, rnd, world);
   }
   settle(u, dt, world);

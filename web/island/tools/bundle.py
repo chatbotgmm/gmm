@@ -16,6 +16,22 @@ IMPORT = re.compile(r'^import\s+(.+?)\s+from\s+"([^"]+)";\s*$', re.M)
 DECL = re.compile(r'^(?:export\s+)?(?:async\s+)?(?:function|class|const|let)\s+([A-Za-z_$][\w$]*)', re.M)
 
 
+def top_names(src):
+    """최상위 const/let/function/class 이름. 한 줄에 여러 개(const a = 1, b = 2)도 찾는다."""
+    names = []
+    for line in src.splitlines():
+        m = re.match(r'(?:export\s+)?(?:async\s+)?(function|class)\s+([A-Za-z_$][\w$]*)', line)
+        if m:
+            names.append(m.group(2)); continue
+        if not re.match(r'(?:export\s+)?(?:const|let)\s', line):
+            continue
+        flat = line.split("//")[0]
+        for _ in range(6):                                  # 괄호 안(함수 인자·배열·객체)은 지움
+            flat = re.sub(r'\([^()]*\)|\[[^\[\]]*\]|\{[^{}]*\}|"[^"]*"|`[^`]*`', "0", flat)
+        names += re.findall(r'(?:const|let|,)\s*([A-Za-z_$][\w$]*)\s*=(?!=)', flat)
+    return names
+
+
 def bundle():
     order, seen = [], set()
 
@@ -33,7 +49,7 @@ def bundle():
     externals, parts, names = [], [], {}
     for p in order:
         src = open(p, encoding="utf8").read()
-        for n in DECL.findall(src):
+        for n in top_names(src) + [b for _, b in re.findall(r"import\s*\{[^}]*?([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)", src)]:
             if n in names:
                 sys.exit(f"이름 충돌: {n} ({names[n]}, {p})")
             names[n] = p
@@ -43,7 +59,12 @@ def bundle():
                 line = m.group(0).strip()
                 if line not in externals:
                     externals.append(line)
-            return ""
+                return ""
+            # 상대 import의 별칭(import { A as B })은 같은 값을 가리키는 const로 바꿈
+            aliases = re.findall(r"([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)", m.group(1))
+            if "*" in m.group(1):
+                sys.exit(f"합칠 수 없는 import * : {p}")
+            return "".join(f"const {b} = {a};\n" for a, b in aliases)
 
         src = IMPORT.sub(drop, src)
         src = re.sub(r'^export\s+(?=(?:async\s+)?(?:function|class|const|let)\b)', "", src, flags=re.M)
