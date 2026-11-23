@@ -267,3 +267,16 @@ test("마을 경제: 오래 돌리면 상인 거래·농사·철 채굴·보물 
   assert.ok(Object.keys(w.collection).length >= 2, JSON.stringify(w.collection));
   assert.ok(w.units.every(u => u.full > 0), "굶어 쓰러진 갈매미가 없어야 함: " + w.units.map(u => u.full.toFixed(0)).join(","));
 });
+
+test("한 파일 빌드(tools/bundle.py --flat)가 성공하고, 합친 코드가 문법상 올바르다", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { mkdtempSync, readFileSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "bundle-")), out = join(dir, "index.html");
+  execFileSync("python3", [new URL("../tools/bundle.py", import.meta.url).pathname, out, "--flat"]);
+  const html = readFileSync(out, "utf8"), code = html.slice(html.indexOf('<script type="module">') + 22, html.lastIndexOf("</script>"));
+  assert.ok(!/["'`]\.\.\/village\//.test(code), "--flat이면 \"../village/…\" 경로 문자열이 없어야 함");
+  // three import를 빼고 모듈로 문법 검사(실행은 안 함)
+  writeFileSync(join(dir, "check.mjs"), code.replace(/^import .* from "three.*";$/gm, ""));
+  execFileSync(process.execPath, ["--check", join(dir, "check.mjs")]);
+});

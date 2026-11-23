@@ -32,6 +32,11 @@ def top_names(src):
     return names
 
 
+def export_names(src):
+    """export가 붙은 최상위 이름들."""
+    return top_names("\n".join(l[len("export "):] for l in src.splitlines() if l.startswith("export ")))
+
+
 def bundle():
     order, seen = [], set()
 
@@ -46,7 +51,7 @@ def bundle():
         order.append(path)
 
     visit(os.path.join(ROOT, "src", "main.js"))
-    externals, parts, names = [], [], {}
+    externals, parts, names, namespaces = [], [], {}, {}
     for p in order:
         src = open(p, encoding="utf8").read()
         for n in top_names(src) + [b for _, b in re.findall(r"import\s*\{[^}]*?([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)", src)]:
@@ -60,10 +65,20 @@ def bundle():
                 if line not in externals:
                     externals.append(line)
                 return ""
+            # import * as NS → 그 파일이 내보내는 이름들을 모은 객체
+            ns = re.match(r"\*\s+as\s+([A-Za-z_$][\w$]*)$", m.group(1).strip())
+            if ns:
+                target, name = os.path.normpath(os.path.join(os.path.dirname(p), m.group(2))), ns.group(1)
+                if name in namespaces:                     # 같은 파일을 같은 이름으로 또 가져오면 한 번만 만듦
+                    if namespaces[name] != target:
+                        sys.exit(f"이름 충돌: import * as {name} ({namespaces[name]}, {target})")
+                    return ""
+                if name in names:
+                    sys.exit(f"이름 충돌: {name} ({names[name]}, import * in {p})")
+                namespaces[name] = target; names[name] = p
+                return f"const {name} = Object.freeze({{ {', '.join(export_names(open(target, encoding='utf8').read()))} }});\n"
             # 상대 import의 별칭(import { A as B })은 같은 값을 가리키는 const로 바꿈
             aliases = re.findall(r"([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)", m.group(1))
-            if "*" in m.group(1):
-                sys.exit(f"합칠 수 없는 import * : {p}")
             return "".join(f"const {b} = {a};\n" for a, b in aliases)
 
         src = IMPORT.sub(drop, src)
