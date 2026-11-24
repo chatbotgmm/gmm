@@ -60,8 +60,17 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
       const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.55 - k * 0.06, 0.6 - k * 0.06, 0.75, 16), mat(k % 2 ? 0xd9574b : 0xf7f2e8));
       seg.position.y = 0.3 + 0.375 + k * 0.75; seg.castShadow = true; t.add(seg);
     }
-    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 12), mat(0xffe08a, { emissive: 0xffc24a, emissiveIntensity: 0.8 }));
+    // 램프: 발광 재질(밤에 세짐, daylight.js). 둘레 유리 기둥 + 빛줄기 두 개(반대 방향, 밤에만 보이며 돎)
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0xffe08a, emissive: 0xffc24a, emissiveIntensity: 0.9, roughness: 0.4 });
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 12), lampMat); lamp.name = "lighthouseLamp";
     lamp.position.y = 3.5; t.add(lamp);
+    const beam = new THREE.Group(); beam.name = "lighthouseBeam"; beam.position.y = 3.5; beam.visible = false; t.add(beam);
+    for (const sgn of [1, -1]) {
+      const bm = new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+      bm.userData.noToon = true;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 16, 20, 1, true).translate(0, -8, 0), bm);
+      cone.rotation.z = sgn * Math.PI / 2; beam.add(cone);
+    }
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; t.add(cap);
   } else if (defId === "cave") {
     // 동굴 입구: 바위 덩이들이 둘러싼 검은 아치(+z 쪽으로 열림)

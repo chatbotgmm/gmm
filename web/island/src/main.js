@@ -5,6 +5,8 @@ import { World, SPEED_BOOST } from "./world/World.js";
 import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
+import { Daylight } from "./render/daylight.js";
+import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
@@ -35,7 +37,7 @@ camera.position.set(0, portrait() ? 70 : 54, portrait() ? 50 : 52);   // 처음�
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.46; controls.minDistance = 5; controls.maxDistance = 110;
 controls.screenSpacePanning = false; controls.target.set(0, 0, 4);
-scene.add(new THREE.HemisphereLight(0xdcefff, 0x8a8f5a, 0.85));          // 하늘빛(위)·땅빛(아래)
+const hemi = new THREE.HemisphereLight(0xdcefff, 0x8a8f5a, 0.85); scene.add(hemi);   // 하늘빛(위)·땅빛(아래)
 const sun = new THREE.DirectionalLight(0xffe2b8, 3.3);   // 따뜻한 햇빛
  sun.position.set(-26, 24, 14); sun.castShadow = true;   // 해를 조금 낮춰 언덕·비탈에 음영
 sun.shadow.mapSize.set(TOUCH ? 2048 : 4096, TOUCH ? 2048 : 4096);
@@ -45,6 +47,9 @@ Object.assign(sun.shadow.camera, { left: -SHADOW_R, right: SHADOW_R, top: SHADOW
 sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; scene.add(sun);
 const water = createWater(); scene.add(water);
 const clouds = createClouds(); scene.add(clouds);
+// 현실 시간대(기기 시계): 해·하늘·안개·바다·구름·등대 / 툰 셰이딩(재질을 단계 명암으로)
+const daylight = new Daylight({ scene, renderer, sun, hemi, water, clouds, skyTex: scene.background });
+const toon = new Toon(scene); let lastToon = 0;
 
 const overlay = document.getElementById("overlay");
 
@@ -129,7 +134,9 @@ function frame() {
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target); lastSync = now; }   // + 거리별 상세도
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
-  if (sun.target.position.x !== sx || sun.target.position.z !== sz) { sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).add(SUN_OFF); }
+  daylight.update(dt, now);
+  sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
+  if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);
   unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt);
@@ -145,10 +152,14 @@ function frame() {
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
+const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
+hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
+hud.onToon = () => { toon.set(!toon.on); return toon.on ? "툰" : "기본"; };
+hud.timeLabel = () => daylight.label();
 hud.onQuality = () => { quality.next(); hud.status(`화질: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.cfg.name; };
 hud.setQualityLabel(quality.cfg.name);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { quality, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { daylight, toon, quality, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

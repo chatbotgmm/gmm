@@ -8,7 +8,7 @@ export function createWater(size = 300) {
   const mat = new THREE.ShaderMaterial({
     transparent: true, fog: true, depthWrite: false,
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
-      uTime: { value: 0 }, uDeep: { value: new THREE.Color(0x1d8fb0) }, uMid: { value: new THREE.Color(0x2fbfc4) }, uShallow: { value: new THREE.Color(0x8ff0de) },
+      uTime: { value: 0 }, uLight: { value: 1 }, uDeep: { value: new THREE.Color(0x1d8fb0) }, uMid: { value: new THREE.Color(0x2fbfc4) }, uShallow: { value: new THREE.Color(0x8ff0de) },
       uDepth: { value: depthTex }, uOrigin: { value: new THREE.Vector2(-48, -48) }, uSize: { value: new THREE.Vector2(96, 96) },
     }]),
     vertexShader: /* glsl */`
@@ -20,7 +20,7 @@ export function createWater(size = 300) {
         #include <fog_vertex>
       }`,
     fragmentShader: /* glsl */`
-      uniform float uTime; uniform vec3 uDeep; uniform vec3 uMid; uniform vec3 uShallow; varying vec3 vWorld;
+      uniform float uTime; uniform float uLight; uniform vec3 uDeep; uniform vec3 uMid; uniform vec3 uShallow; varying vec3 vWorld;
       uniform sampler2D uDepth; uniform vec2 uOrigin; uniform vec2 uSize;
       #include <fog_pars_fragment>
       void main() {
@@ -39,6 +39,7 @@ export function createWater(size = 300) {
         col = mix(col, vec3(1.0), clamp(foam, 0.0, 1.0) * 0.85);
         float sparkle = smoothstep(1.6, 1.95, w) * smoothstep(0.4, 1.5, depth);        // 깊은 곳 물결 반짝임
         col = mix(col, vec3(1.0), sparkle * 0.3);
+        col *= uLight;                                                                   // 밤에는 어둡게(daylight.js)
         gl_FragColor = vec4(col, mix(0.62, 0.9, smoothstep(0.0, 1.0, depth)));
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -47,6 +48,7 @@ export function createWater(size = 300) {
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
   mesh.rotation.x = -Math.PI / 2; mesh.position.y = WATER_Y; mesh.renderOrder = 1; mesh.name = "water";
   mesh.userData.tick = t => { mat.uniforms.uTime.value = t; };
+  mesh.userData.setLight = v => { mat.uniforms.uLight.value = v; };
   /** 섬 높이로 물 깊이 텍스처를 (다시) 만듦. 칸마다 1화소, 선형 보간으로 부드럽게. */
   mesh.userData.setGrid = grid => {
     const W = grid.w, H = grid.h, data = new Uint8Array(W * H);
