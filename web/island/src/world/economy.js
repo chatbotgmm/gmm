@@ -56,3 +56,8 @@ export function foodPriceFor(spareFood, hungryShare, seasonExtra = 0) {
   let p = FOOD_PRICE + (spareFood < 3 ? 1 : spareFood > 15 ? -1 : 0) + (hungryShare > 0.4 ? 1 : 0) + seasonExtra;
   return Math.max(2, Math.min(5, p));
 }
+
+// ---- 저장고(겨울 대비)
+export const GRANARY_BUY = 2;                                                  // 은행이 저장고용으로 음식 1개를 사 주는 값(새 돈)
+export const GRANARY_MAX = 80;                                                 // 저장고에 쌓을 수 있는 음식
+export const RATION_FULL = 25;                                                 // 돈이 없어도 이보다 배고프면 저장고에서 나눠 줌

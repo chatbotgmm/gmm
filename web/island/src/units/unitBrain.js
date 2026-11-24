@@ -242,6 +242,7 @@ function startActivityInner(u, kind, world, rnd) {
       if (world.economy) {                                                         // 경제: 내 가방 → 시장에서 사기 → 물물교환 → 씨앗
         if (E.meals(u) <= 0) {
           // 돈이 있으면 농부·어부에게서 사고, 없으면 자재를 들고 아무에게나 물물교환, 그것도 안 되면 씨앗
+          if (world.granary > 0 && ((u.coins || 0) >= world.foodPrice() || (u.full ?? 80) < E.RATION_FULL) && startActivity(u, "granary", world, rnd)) { emote(u, "저장고로!"); return true; }   // 저장고에 음식이 있으면 먼저(겨울 대비)
           const buy = (u.coins || 0) >= (world.foodPrice?.() ?? E.FOOD_PRICE);
           const host = nearest(u, world.units.filter(o => o !== u && visible(o) && (buy ? E.isProducer(o) && E.meals(o) > E.FOOD_KEEP : E.meals(o) >= E.FOOD_KEEP)), o => [o.x, o.z]);
           if (host && (buy || E.spare(u))) { const [fx, fz] = cellOf(host); if (pathBeside(u, world, fx, fz)) { u.focus = host; u.state = US.Visit; u.wantFood = buy ? "buy" : "barter"; emote(u, buy ? "음식 사러!" : "배고파…"); return true; } }
@@ -276,6 +277,10 @@ function startActivityInner(u, kind, world, rnd) {
       const mk = world.marketB(); if (!mk || u.job !== "merchant" || E.total(u.raw) <= 0) return false;
       if (!startPath(u, world, mk.door.x, mk.door.z)) return false;
       u.state = US.GoMarket; u.shop = { kind: "process" }; return true;
+    }
+    case "stock": case "granary": {                                               // 저장고: 남는 음식 팔기 / 배고플 때 음식 얻기
+      const gr = world.granaryB(); if (!gr || !startPath(u, world, gr.door.x, gr.door.z)) return false;
+      u.state = US.GoMarket; u.shop = { kind: kind }; return true;
     }
     case "market": {                                                              // 시장 문 앞으로(무엇을 살지는 u.shop)
       const mk = world.marketB(); if (!mk) return false;
@@ -363,6 +368,7 @@ function chooseNext(u, world, rnd) {
       if (E.total(u.goods) > 0 && startActivity(u, "deposit", world, rnd)) return;
       if (E.total(u.raw) >= 3 && startActivity(u, "process", world, rnd)) return;
     }
+    if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
     if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼
@@ -603,7 +609,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoShore:                                                              // 바닷가: 물 쪽을 보고 쪼아 먹이를 잡음(쪼기 3번, 포만감 +18)
       if (followPath(u, dt, world, rnd)) {
         const d = u.shoreDir || [0, 1]; face(u, u.x + d[0], u.z + d[1]); u.state = US.Eat;
-        doOnce(u, "Attack", () => { u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 18); emote(u, pick(["🐟 냠", "🦐 냠", "🐚 냠"], rnd)); world.emit("ate", u); }, () => done(u, 0.6, rnd, world));
+        doOnce(u, "Attack", () => { u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 18); const it = world.beachcomb?.(u); emote(u, it ? `✨ ${it.name}!` : pick(["🐟 냠", "🦐 냠", "🐚 냠"], rnd), it ? 2.6 : 1.6); world.emit("ate", u); }, () => done(u, 0.6, rnd, world));
       }
       break;
     case US.GoBank:                                                               // 공식은행: 가방의 물건을 팔고 새 돈을 받음
@@ -620,6 +626,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         const n = E.total(u.raw); u.state = US.Trade; u.processing = true; u.timer = 1.5 + n * 0.6; u.tool = "hammer"; u.anim = "Build"; emote(u, `🔨 가공 중(${n})`);
       } else if (shop.kind === "food") {
         if (world.buyFood(u)) { emote(u, "🛒 음식"); world.eatFood(u); done(u, 0.8, rnd, world); } else { emote(u, "다 팔렸네…"); setIdle(u, rnd, world); }
+      } else if (shop.kind === "stock") {
+        const n = world.stockFood(u); emote(u, n ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고가 꽉 찼네", 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
+      } else if (shop.kind === "granary") {
+        const r = world.takeFood(u); if (r) { world.eatFood(u); emote(u, r === "buy" ? "🏚 저장고 음식 냠" : "🏚 나눠 받았어요", 2.2); done(u, 0.8, rnd, world); } else { emote(u, "저장고가 비었네…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "house") {
         const b = world.buildings.get(shop.b);
         if (b && world.buyHouse(u, b)) { emote(u, "🏠 내 집!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, "놓쳤다…"); setIdle(u, rnd, world); }

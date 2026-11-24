@@ -14,7 +14,8 @@ import { WeatherViews } from "./render/weather.js";
 import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD } from "./world/wishes.js";
-import { PROPS, TRIBES, JOBS } from "./data/catalog.js";
+import { RANK_REWARD } from "./world/rank.js";
+import { PROPS, TRIBES, JOBS, BUILDINGS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { TwoFinger } from "./systems/twoFinger.js";
@@ -99,6 +100,9 @@ function mount(w) {
   world.on("season", s => { tintGround(); hud?.status(`${SEASONS[s].icon} ${SEASONS[s].name}이에요 · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => { const w = WEATHER[e.kind]; hud?.status(`${w.icon} 날씨: ${w.name}${WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""}`); });
   world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${d.text}" (${d.hint})`); });
+  world.on("rank", ({ def }) => { hud?.status(`🏅 마을 등급이 올랐어요: ${def.icon} ${def.name}! ${def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
+  world.on("beachcomb", ({ u, item }) => hud?.status(`✨ ${u.name}이 바닷가에서 ${item.name}을 주웠어요 (📖 도감)`));
+  world.on("fish", ({ u, fish }) => { if (fish.season) hud?.status(`🎣 ${u.name}이 제철 ${fish.name}을 낚았어요! (📖 도감)`); });
   world.on("wishDone", ({ u, def }) => hud?.status(`♥ ${u.name}의 소원 "${def.text}"이 이루어졌어요!${world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""}`));
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
@@ -188,7 +192,7 @@ addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, inner
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 hud.onToon = () => { toon.set(!toon.on); tintGround(); return toon.on ? "툰" : "기본"; };
-hud.timeLabel = () => daylight.label();
+hud.timeLabel = () => daylight.label(); hud.today = () => daylight.now();
 hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}`;
 hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")}`);
 const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];

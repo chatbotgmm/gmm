@@ -22,6 +22,10 @@ export const WISHES = [
     ok: w => !builtAny(w, d => d.id === "stairs"), done: w => builtAny(w, d => d.id === "stairs") },
   { id: "houses", icon: "🏘", text: "집이 더 많은 마을이면 좋겠어요", hint: "집을 하나 더 지어요",
     ok: w => w.units.length >= 3, done: (w, u, wish) => builtCount(w, d => d.house) > wish.base, base: w => builtCount(w, d => d.house) },
+  { id: "storehouse", icon: "🏚", text: "겨울이 오기 전에 음식을 모아 두고 싶어요", hint: "🪚 목수가 저장고를 지어요",
+    ok: w => (w.season === "autumn" || w.season === "winter") && !builtAny(w, d => d.storehouse), done: w => builtAny(w, d => d.storehouse) },
+  { id: "cafe", icon: "☕", text: "친구들과 수다 떨 카페가 있으면 좋겠어요", hint: "마을 등급 🏘 어촌부터",
+    ok: w => w.rank >= 1 && !builtAny(w, d => d.id === "cafe"), done: w => builtAny(w, d => d.id === "cafe") },
   { id: "giant", icon: "🏯", text: "내 몸에 맞는 큰 집이 필요해요", hint: "🔨 자이언트의 집",
     ok: (w, u) => u.name === "자이언트" && !u.home, done: (w, u) => !!u.home },
 ];

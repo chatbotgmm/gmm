@@ -392,11 +392,11 @@ test("종족: 10종족·직업·희귀도(지금은 모두 일반)가 일과 건
   assert.equal(J.stoneYield(by("불씨")), 3); assert.equal(J.hammerPower(by("기본")), 1.3); assert.equal(J.hammerPower(by("물방울")), 1);
   assert.ok(J.canBuild(by("기본"), BUILDINGS.house) && !J.canBuild(by("미니"), BUILDINGS.house) && !J.canBuild(by("기본"), BUILDINGS.cafe), "집은 건축가만");
   assert.ok(!J.canBuild(by("기본"), BUILDINGS.market), "시설은 목수만");
-  assert.equal(w.check("cafe", 38, 26, 0).reason, "희귀 이상 건축가가 있어야 지을 수 있어요");       // 일반뿐이라 2등급부터 잠김
+  assert.match(w.check("cafe", 38, 26, 0).reason, /마을 등급이 🏘 어촌이 되면/);                     // 카페는 마을 등급으로 열림
   assert.equal(w.check("cottage", 38, 26, 0).ok, true);
   // 희귀도가 오르면 배율과 지을 수 있는 건물이 늘어남
   const boss = { ...by("기본"), rarity: "epic" };
-  assert.equal(J.hammerPower(boss), 2); assert.ok(J.canBuild(boss, BUILDINGS.post) && !J.canBuild(boss, BUILDINGS.manor));
+  assert.equal(J.hammerPower(boss), 2); const T3 = { builtBy: "builder", tier: 3 }, T4 = { builtBy: "builder", tier: 4 }; assert.ok(J.canBuild(boss, T3) && !J.canBuild(boss, T4) && !J.canBuild(by("기본"), T3));
   assert.ok(J.catchChance(by("물방울")) > J.catchChance(by("기본")));
   const rnd = seededRandom(5), rare = u => { let n = 0; for (let i = 0; i < 6000; i++) if (J.rollFish(u, rnd).rarity !== "common") n++; return n; };
   assert.ok(rare(by("물방울")) > rare(by("기본")) * 1.1);
@@ -585,4 +585,46 @@ test("가격 변동: 상인 창고에 쌓이면 원자재 값이 내려가고, �
   m.raw.wood = 25; w.updatePrices(); assert.equal(w.prices.wood, 1);
   for (let i = 0; i < 25 * 60; i++) w.update(1 / 60);
   assert.ok(w.priceHist.length >= 1, "20초마다 시세 기록");
+});
+
+test("마을 등급: 점수(갈매미·집·시설·소원)가 기준을 넘으면 오르고, 축하금·새 건물이 열림", async () => {
+  const { RANKS, rankScore } = await import("../src/world/rank.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true;
+  assert.equal(w.rank, 0); assert.equal(rankScore(w).score, 10 + 10, "갈매미 1(10) + 배부름(10)");
+  const spot = (def) => { const c = w.center; for (let r = 4; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check(def, x, z, 0).ok) return [x, z]; } return null; };
+  assert.equal(spot("cafe"), null, "갯마을에선 카페를 못 지음");
+  w.addUnitByName("목수"); w.addUnitByName("미니"); w.addUnitByName("황금");          // 4마리 = 40 + 배부름 10
+  for (const d of ["market", "field"]) { const q = spot(d); w.placeBuilding(d, q[0], q[1], 0, null, 1e9); }   // 시설 2 = 16
+  const coins = w.units.map(u => u.coins || 0); w.stepRank();
+  assert.ok(rankScore(w).score >= RANKS[1].need, `점수 ${rankScore(w).score}`); assert.equal(w.rank, 1, "어촌");
+  w.units.forEach((u, i) => assert.equal(u.coins, coins[i] + 5, "축하금"));
+  assert.ok(spot("cafe"), "어촌부터 카페"); assert.equal(spot("manor"), null, "큰 집은 섬 도시부터");
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.equal(back.rank, 1, "저장됨");
+});
+
+test("저장고: 농부·어부의 남는 음식을 은행이 사서 쌓고, 배고픈 갈매미는 사거나 나눠 받음", async () => {
+  const E = await import("../src/world/economy.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("미니");
+  const mini = w.units.find(u => u.name === "미니"), boss = w.units[0];
+  const c = w.center; let q = null; for (let r = 4; r < 40 && !q; r++) for (let k = 0; k < 64 && !q; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check("storehouse", x, z, 0).ok) q = [x, z]; }
+  assert.equal(w.stockFood(mini), 0, "저장고가 없으면 못 팖");
+  w.placeBuilding("storehouse", q[0], q[1], 0, null, 1e9); mini.inv.food = 10; const issued = w.bank.issued;
+  assert.equal(w.stockFood(mini), 10 - (E.FOOD_KEEP + 2)); assert.equal(w.granary, 6); assert.equal(E.meals(mini), E.FOOD_KEEP + 2);
+  assert.equal(w.bank.issued, issued + 6 * E.GRANARY_BUY);
+  boss.coins = 10; boss.inv.food = 0; assert.equal(w.takeFood(boss), "buy"); assert.equal(boss.coins, 10 - w.foodPrice()); assert.equal(w.granary, 5);
+  boss.coins = 0; boss.full = 60; assert.equal(w.takeFood(boss), null, "돈이 없고 덜 배고프면 못 받음");
+  boss.full = 10; assert.equal(w.takeFood(boss), "free", "아주 배고프면 나눠 받음"); assert.equal(w.granary, 4);
+});
+
+test("계절 한정 수집: 그 계절 물고기·물건만 나오고, 바닷가에서 계절 물건을 주움", async () => {
+  const { FISH, ITEMS } = await import("../src/data/catalog.js"); const J = await import("../src/world/jobs.js");
+  const w = World.create(7, seededRandom(1), { wild: true }), u = w.units[0], rnd = seededRandom(9);
+  for (const season of ["spring", "summer", "autumn", "winter"]) {
+    const seen = new Set(); for (let i = 0; i < 4000; i++) seen.add(J.rollFish({ ...u, rarity: "legend" }, rnd, season).id);
+    for (const f of FISH.filter(f => f.season)) assert.equal(seen.has(f.id), f.season === season, `${season} ${f.name}`);
+    const items = new Set(); for (let i = 0; i < 2000; i++) items.add(J.rollItem(u, rnd, season).id);
+    for (const it of ITEMS.filter(i => i.season)) assert.equal(items.has(it.id), it.season === season, `${season} ${it.name}`);
+  }
+  w.setSeason("winter"); let got = null; for (let i = 0; i < 200 && !got; i++) got = w.beachcomb(u);
+  assert.equal(got?.id, "iceshell"); assert.ok(w.items.iceshell >= 1);
 });

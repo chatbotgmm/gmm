@@ -14,6 +14,7 @@ import { seededRandom } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
 import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
+import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -47,6 +48,8 @@ export class World {
     this.wishes = []; this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
     // 시세: 상인이 사는 원자재 값·음식 값(5초마다 다시 셈) · 지난 값(20초마다 하나, 48개)
     this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = []; this.priceClock = 0; this.histClock = 0;
+    this.rank = extra.rank || 0; this.rankClock = 0;                               // 마을 등급(오르기만 함)
+    this.granary = extra.granary || 0;                                            // 저장고에 쌓인 음식
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -237,11 +240,46 @@ export class World {
   moneySupply() { return this.units.reduce((s, u) => s + (u.coins || 0), 0); }
   avgFull() { return this.units.reduce((a, u) => a + (u.full ?? 80), 0) / Math.max(1, this.units.length); }
 
+  /** 바닷가에서 먹이를 잡다가 가끔 계절 물건을 주움(도감·가방). 주운 물건을 돌려줌 */
+  beachcomb(u) {
+    if (this.rnd() >= 0.2) return null;
+    const list = ITEMS.filter(i => i.season && i.season === this.season); if (!list.length) return null;
+    const it = list[Math.floor(this.rnd() * list.length)]; this.items[it.id] = (this.items[it.id] || 0) + 1;
+    this.emit("beachcomb", { u, item: it }); this.notice(u.x, u.z, "fish", u); return it;
+  }
   // ---- 계절·날씨
   get fx() { return S.effects(this.season, this.weather.kind); }
   setSeason(s) { if (s === this.season) return; this.season = s; this.emit("season", s); }
   setWeather(kind) { this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather); }
   stepWeather(dt) { if ((this.weather.t -= dt) <= 0) this.setWeather(S.pickWeather(this.season || "autumn", this.wrnd, this.weather.kind)); }
+
+  // ---- 마을 등급
+  score() { return rankScore(this); }
+  stepRank() {
+    const s = rankScore(this).score;
+    while (this.rank < RANKS.length - 1 && s >= RANKS[this.rank + 1].need) {
+      this.rank++; if (this.economy) for (const u of this.units) this.issue(u, RANK_REWARD);
+      this.emit("rank", { rank: this.rank, def: RANKS[this.rank] });
+    }
+  }
+
+  // ---- 저장고(겨울 대비): 은행이 남는 음식을 사서 쌓아 두고, 배고픈 갈매미에게 시세대로 팔거나(돈 없고 아주 배고프면) 나눠 줌
+  granaryB() { for (const b of this.buildings.values()) if (BUILDINGS[b.defId].storehouse && this.isDone(b)) return b; return null; }
+  /** 농부·어부: 먹을 것 FOOD_KEEP+2개를 남기고 나머지를 저장고에 팖(1개 🪙GRANARY_BUY, 은행이 새로 찍음) */
+  stockFood(u) {
+    let n = Math.min(E.meals(u) - (E.FOOD_KEEP + 2), E.GRANARY_MAX - this.granary); if (!this.granaryB() || n <= 0) return 0;
+    const sold = n;
+    for (const k of ["fish", "food"]) { const t = Math.min(u.inv[k], n); u.inv[k] -= t; n -= t; }
+    this.granary += sold; this.issue(u, sold * E.GRANARY_BUY); this.emit("granary", { u, kind: "stock", n: sold }); return sold;
+  }
+  /** 저장고에서 음식 하나: 돈이 있으면 시세대로 사고(은행으로 돌아감), 없고 아주 배고프면(포만감 E.RATION_FULL 아래) 나눠 받음 */
+  takeFood(u) {
+    if (!this.granaryB() || this.granary <= 0) return null;
+    const price = this.foodPrice();
+    if ((u.coins || 0) >= price) { u.coins -= price; this.bank.returned += price; this.granary--; u.inv.food++; this.emit("granary", { u, kind: "buy" }); return "buy"; }
+    if ((u.full ?? 80) < E.RATION_FULL) { this.granary--; u.inv.food++; this.emit("granary", { u, kind: "free" }); return "free"; }
+    return null;
+  }
 
   // ---- 시세
   foodPrice() { return this.prices.food; }
@@ -306,11 +344,11 @@ export class World {
   catchFish(u) {
     const fishFx = this.fx.fish; if (fishFx <= 0) return null;                       // 폭풍: 못 낚음
     if (this.rnd() >= Math.min(0.95, J.catchChance(u) * fishFx)) return null;
-    const f = J.rollFish(u, this.rnd); if (!this.economy) this.res.fish++;
+    const f = J.rollFish(u, this.rnd, this.season); if (!this.economy) this.res.fish++;
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
     let item = null;
-    if (this.rnd() < J.itemChance(u)) { item = J.rollItem(u, this.rnd); this.items[item.id] = (this.items[item.id] || 0) + 1; }
+    if (this.rnd() < J.itemChance(u)) { item = J.rollItem(u, this.rnd, this.season); this.items[item.id] = (this.items[item.id] || 0) + 1; }
     this.emit("fish", { u, fish: f, item }); if (f.rarity !== "common" || item) this.notice(u.x, u.z, "fish", u);
     return { fish: f, item };
   }
@@ -406,6 +444,7 @@ export class World {
     if (!r.ok) return r;
     if (r.cells.some(([x, z]) => this.isPlot(x, z))) return { ...r, ok: false, reason: "밭에는 지을 수 없어요" };
     if (def.fixed) return { ...r, ok: false, reason: `${def.name}은 하나뿐이에요` };
+    if (rankNeed(def) > this.rank) return { ...r, ok: false, reason: `🏅 마을 등급이 ${RANKS[rankNeed(def)].icon} ${RANKS[rankNeed(def)].name}이 되면 지을 수 있어요` };
     const job = def.builtBy || "builder", word = { builder: "건축", carpenter: "목수" }[job] || job;
     if (!this.units.some(u => u.job === job)) return { ...r, ok: false, reason: `${word} 갈매미가 있어야 지을 수 있어요 (🥚 소환)` };
     if (!this.builderFor(def)) return { ...r, ok: false, reason: `${RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name} 이상 건축가가 있어야 지을 수 있어요` };
@@ -509,6 +548,7 @@ export class World {
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
     if ((this.histClock += dt) >= 20) { this.histClock = 0; this.priceHist.push({ t: Math.round(this.time), ...this.prices }); if (this.priceHist.length > 48) this.priceHist.shift(); }
     this.stepWishes(dt);
+    if ((this.rankClock += dt) >= 2) { this.rankClock = 0; this.stepRank(); }
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);
     this.separate();
@@ -534,7 +574,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {

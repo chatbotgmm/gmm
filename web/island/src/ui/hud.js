@@ -7,6 +7,8 @@ import { TRIBES } from "../data/catalog.js";
 import * as E from "../world/economy.js";
 import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
 import { WISH_BY_ID, WISH_REWARD } from "../world/wishes.js";
+import { RANKS, RANK_REWARD, rankScore } from "../world/rank.js";
+import { SEASONS } from "../world/season.js";
 
 const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
   [UnitState.Zoomies]: "신나서 뛰는 중", [UnitState.Flee]: "도망치는 중", [UnitState.Avoid]: "혼자 있고 싶어",
@@ -73,6 +75,7 @@ export class Hud {
     this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitClick?.(this.hungry); };
     this.chipMoney = document.getElementById("chipMoney"); this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
     this.chipWeather = document.getElementById("chipWeather"); this.chipWeather.onclick = () => this.onWeatherInfo?.();
+    document.getElementById("chipRank").onclick = () => { this.openPhone(); this.openApp("town"); };
     this.wishBtn = document.getElementById("chipWish"); this.wishBtn.onclick = () => { this.openPhone(); this.openApp("wish"); };
     this.seasonBtn = document.getElementById("seasonMode"); this.seasonBtn.onclick = () => this.setSeasonLabel(this.onSeasonMode?.());
     const tm = document.getElementById("timeMode"); tm.onclick = () => { const l = this.onTimeMode?.(); if (l) tm.textContent = `시간: ${l}`; };
@@ -86,8 +89,8 @@ export class Hud {
   closePhone() { this.phone.hidden = true; this.app = null; }
   openApp(app) {
     this.app = app;
-    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish" };
-    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원" };
+    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown" };
+    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원", town: "🏅 마을" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null;
@@ -114,6 +117,21 @@ export class Hud {
           `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${BUILDINGS[b.defId].price}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
           `<h4>음식(농부·어부에게서 ${this.priceCell("food")})</h4><p class="dim">농부·어부가 내놓을 음식이 모자라거나 배고픈 갈매미가 많으면 비싸지고, 겨울엔 더 비싸요.</p><table class="tbl">${food.map(u => `<tr><td>${JOBS[u.job].icon} ${u.name}</td><td>🍗${u.inv?.food || 0} 🐟${u.inv?.fish || 0}</td></tr>`).join("") || `<tr><td class="dim">농부·어부가 없어요</td><td></td></tr>`}</table>` +
           `<h4>집 주인</h4><table class="tbl">${w.units.filter(u => u.home).map(u => `<tr><td>${u.name}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
+    } else if (this.app === "town") {
+      const { score, parts } = rankScore(w), cur = RANKS[w.rank], nxt = RANKS[w.rank + 1];
+      const pct = nxt ? Math.min(100, Math.round((score - cur.need) / (nxt.need - cur.need) * 100)) : 100;
+      const d = this.today?.() || new Date(), m = d.getMonth() + 1;
+      const toWinter = w.season === "winter" || m === 12 || m <= 2 ? 0 : Math.ceil((new Date(d.getFullYear(), 11, 1) - d) / 86400000);   // 다음 12월 1일까지(기상청 겨울 시작)
+      const gr = w.granaryB(), BN = id => BUILDINGS[id].name;
+      document.getElementById("townBody").innerHTML =
+        `<div class="rankhead"><span class="big">${cur.icon}</span><div><b>${cur.name}</b><div class="dim">점수 ${score}${nxt ? ` / 다음 ${nxt.icon} ${nxt.name} ${nxt.need}` : " · 가장 높은 등급"}</div></div></div>` +
+        `<div class="bar"><i style="width:${pct}%"></i></div>` +
+        (nxt ? `<p class="dim">${nxt.name}이 되면: ${nxt.unlock.map(BN).join(", ")} 건설 · 갈매미마다 축하금 🪙${RANK_REWARD}</p>` : "") +
+        `<table class="tbl">${parts.map(([name, n, per, pts]) => `<tr><td>${name}</td><td>${n} × ${per} = <b>${pts}</b></td></tr>`).join("")}</table>` +
+        `<h4>❄️ 겨울 대비</h4><p>${toWinter > 0 ? `겨울(12월 1일)까지 <b>${toWinter}일</b>` : `<b>지금 겨울이에요</b>`} · ${SEASONS.winter.icon} 겨울엔 밭이 절반 속도로 자라고, 배가 1.25배 빨리 고프고, 음식 값이 올라요.</p>` +
+        (gr ? `<p>🏚 저장고 음식 <b>${w.granary}</b> / ${E.GRANARY_MAX} · 농부·어부가 남는 음식을 🪙${E.GRANARY_BUY}에 팔아 쌓고, 배고픈 갈매미는 시세대로 사 가요(돈이 없고 아주 배고프면 나눠 받아요).</p>`
+          : `<p class="dim">저장고가 없어요. 🪚 목수가 있으면 🏠 건설에서 <b>저장고</b>를 지을 수 있어요.</p>`) +
+        `<h4>등급별 건물</h4><table class="tbl">${RANKS.slice(1).map((r, i) => `<tr><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} (${r.need}점)</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
     } else if (this.app === "wish") {
       const rows = w.wishes.map(x => { const d = WISH_BY_ID[x.id], u = w.units.find(o => o.unitId === x.unitId); return `<tr><td>${d.icon} <b>${u?.name ?? ""}</b>: ${d.text}</td><td class="dim">${d.hint}</td></tr>`; }).join("");
       document.getElementById("wishBody").innerHTML = `<p class="dim">갈매미가 가끔 마을에 바라는 것을 말해요. 들어주면 기뻐하고 ${w.economy ? `공식은행이 축하금 🪙${WISH_REWARD}을 줘요` : "배가 조금 불러요"}.</p>` +
@@ -170,10 +188,10 @@ export class Hud {
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
       for (const def of Object.values(BUILDINGS)) {
         if (def.menu === false) continue;                                           // 은행·예전 건물은 메뉴에서 뺌
-        const locked = !this.world.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
-        const b = el("button", (def.id === arg ? "on " : "") + (locked ? "locked" : ""), `${locked ? "🔒 " : ""}${def.name} ${def.footprint.w}×${def.footprint.d}`);
+        const rankLock = (def.rank || 0) > this.world.rank, locked = rankLock || !this.world.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
+        const b = el("button", (def.id === arg ? "on " : "") + (locked ? "locked" : ""), `${locked ? "🔒 " : ""}${def.name} ${def.footprint.w}×${def.footprint.d}${rankLock ? ` ${RANKS[def.rank].icon}` : ""}`);
         const who = def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가";
-        b.title = `${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${locked ? " (지금은 없음)" : ""}`;
+        b.title = `${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
         b.onclick = () => this.tools.setMode("build", def.id); this.sub.appendChild(b); }
       const r = el("button", "", "↻ 돌리기(R)"); r.onclick = () => this.tools.rotate(); this.sub.appendChild(r);
       const ib = el("button", this.instantBuild ? "on" : "", "⚡ 바로 완공");           // 끄면 갈매미가 나무·돌로 지음
@@ -194,7 +212,9 @@ export class Hud {
       body.append(el("h3", "", title)); const g = el("div", "dexgrid");
       for (const it of list) { const n = count(it), c = el("div", "dexcell" + (n ? "" : " unknown"));
         c.style.borderColor = RARITY[it.rarity].color;
+        const ss = it.season ? SEASONS[it.season] : null, now = it.season && it.season === w.season;
         c.append(el("b", "", n ? it.name : "???"), el("span", "", `${RARITY[it.rarity].name}${n ? ` · ${n}개` : ""}`), el("span", "dim", n ? extra(it) : ""));
+        if (ss) { const t = el("span", "season" + (now ? " now" : ""), `${ss.icon} ${ss.name}에만${now ? " · 지금!" : ""}`); c.append(t); }
         g.append(c); }
       body.append(g);
     };
@@ -202,7 +222,7 @@ export class Hud {
       f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${w.treasures[f.id] ? ` · 보관 ${w.treasures[f.id]}` : ""}`);
     sec(`🎁 가방 (${ITEMS.filter(i => w.items[i.id]).length}/${ITEMS.length})`, ITEMS, i => w.items[i.id] || 0,
       i => i.furniture ? "가구 · 2단계 실내 꾸미기에서 놓기" : `${i.price}🐚`);
-    body.append(el("p", "dim", "다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
+    body.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
   status(text) { this.msg.textContent = text; this.msg.hidden = !text; }
@@ -215,6 +235,7 @@ export class Hud {
       `<span>🧩 땅 ${chunkInfo.tris ? Math.round(chunkInfo.tris / 1000) + "천 삼각형 · " : ""}${chunkInfo.fps ? `${chunkInfo.fps} fps` : ""}</span>`;
     this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.title = "갈매미들이 가진 돈 합계";
     this.chipPop.textContent = `🐦 ${w.units.length} · ${mood} ${avg.toFixed(0)}`;
+    document.getElementById("chipRank").textContent = `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
     if (this.timeLabel) this.chipTime.textContent = this.timeLabel();
     if (this.weatherLabel) this.chipWeather.textContent = this.weatherLabel();
     const nw = this.world.wishes.length; this.wishBtn.hidden = !nw; this.wishBtn.textContent = `💭 소원 ${nw}`;

@@ -57,18 +57,20 @@ export const ironChance = u => (u.job === "miner" ? Math.min(0.9, 0.25 * rarityO
 // ---- 낚시
 export const catchChance = u => Math.min(0.95, 0.6 * skillMult(u, "fish"));
 /** 어떤 물고기를 낚았는지. 낚시꾼은 희귀 이상 물고기 비중이 배율만큼 커진다. */
-export function rollFish(u, rnd) {
+/** season: 지금 계절(그 계절 한정 물고기만 섞임, 없으면 한정 물고기 없음) */
+export const inSeason = (x, season) => !x.season || x.season === season;
+export function rollFish(u, rnd, season = null) {
   const m = skillMult(u, "fish");
-  const ws = FISH.map(f => f.weight * (f.rarity === "common" ? 1 : m));
+  const ws = FISH.map(f => inSeason(f, season) ? f.weight * (f.rarity === "common" ? 1 : m) : 0);
   let r = rnd() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < FISH.length; i++) if ((r -= ws[i]) <= 0) return FISH[i];
   return FISH[0];
 }
 /** 낚시할 때 물건을 건질 확률과 무엇을 건지는지(희귀할수록 드묾). */
 export const itemChance = u => 0.02 * skillMult(u, "fish") ** 2;
-export function rollItem(u, rnd) {
+export function rollItem(u, rnd, season = null) {
   const w = { common: 50, rare: 30, epic: 15, legend: 5 }, m = skillMult(u, "fish");
-  const ws = ITEMS.map(i => w[i.rarity] * (i.rarity === "common" ? 1 : m));
+  const ws = ITEMS.map(i => inSeason(i, season) ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0);
   let r = rnd() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < ITEMS.length; i++) if ((r -= ws[i]) <= 0) return ITEMS[i];
   return ITEMS[0];

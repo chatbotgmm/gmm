@@ -25,15 +25,15 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {
-    id: "cafe", menu: false, tier: 2, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cafe", builtBy: "carpenter", rank: 1, cost: { wood: 2, stone: 1 }, tier: 1, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
   shop: {
-    id: "shop", menu: false, tier: 2, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "shop", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
-    id: "post", menu: false, tier: 3, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 3.3, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "post", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2, iron: 1 }, tier: 1, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 3.3, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
   // 자이언트 전용 집: 몸이 커서(키 약 1.4 m) 일반 집에는 못 들어가고 이 집에만 들어감. 다른 갈매미는 못 들어감.
@@ -59,8 +59,13 @@ export const BUILDINGS = {
     id: "dock", builtBy: "carpenter", dock: true, cost: { wood: 1 }, tier: 1, name: "낚시터", footprint: { w: 1, d: 1 }, work: 1, height: 0.3, asset: null,
     placeholder: { wall: 0xb08050, roof: 0xb08050, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
+  // 저장고(겨울 대비): 농부·어부가 남는 음식을 은행에 팔면 여기 쌓이고, 배고픈 갈매미가 사 가거나(돈이 없고 아주 배고프면 나눠 줌) 겨울을 남
+  storehouse: {
+    id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.2, asset: null,
+    placeholder: { wall: 0xb5794a, roof: 0x7b4b2e, roof_shape: "pyramid" }, interior: { w: 5, d: 5 },
+  },
   manor: {
-    id: "manor", menu: false, tier: 4, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "manor", builtBy: "builder", house: true, price: 80, rank: 3, cost: { wood: 3, stone: 2 }, tier: 1, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
   },
 };
@@ -190,6 +195,15 @@ export const FISH = [
   { id: "tuna",     name: "참치",     rarity: "epic",   weight: 4,  food: 5, price: 25 },
   { id: "seabream", name: "황금 도미", rarity: "epic",  weight: 2,  food: 4, price: 35 },
   { id: "whaleshark", name: "고래상어", rarity: "legend", weight: 1, food: 0, price: 120 },
+  // 계절 한정(그 계절에만 잡힘). 우리나라에서 흔히 말하는 제철 바다 먹거리로 골랐음
+  { id: "doddari",  name: "도다리",   rarity: "rare", weight: 7, food: 3, price: 9,  season: "spring" },
+  { id: "jukkumi",  name: "주꾸미",   rarity: "rare", weight: 6, food: 2, price: 8,  season: "spring" },
+  { id: "minnow",   name: "민어",     rarity: "rare", weight: 6, food: 3, price: 12, season: "summer" },
+  { id: "hamo",     name: "갯장어",   rarity: "epic", weight: 3, food: 3, price: 28, season: "summer" },
+  { id: "jeoneo",   name: "전어",     rarity: "rare", weight: 8, food: 2, price: 8,  season: "autumn" },
+  { id: "crab",     name: "꽃게",     rarity: "rare", weight: 5, food: 3, price: 14, season: "autumn" },
+  { id: "bangeo",   name: "방어",     rarity: "rare", weight: 7, food: 4, price: 14, season: "winter" },
+  { id: "cod",      name: "대구",     rarity: "epic", weight: 3, food: 4, price: 30, season: "winter" },
 ];
 // 낚시로 가끔 건지는 물건(가구는 2단계 실내 꾸미기에서 놓을 수 있게 가방에 모아 둠)
 export const ITEMS = [
@@ -199,6 +213,11 @@ export const ITEMS = [
   { id: "table",   name: "산호 테이블", rarity: "epic",   furniture: "table" },
   { id: "bookshelf", name: "난파선 책장", rarity: "epic", furniture: "bookshelf" },
   { id: "bed",     name: "조개 침대",   rarity: "legend", furniture: "bed" },
+  // 계절 한정 물건(낚시로 건지거나 바닷가에서 주움)
+  { id: "petal",   name: "벚꽃잎 책갈피", rarity: "common", price: 5,  season: "spring" },
+  { id: "conch",   name: "소라 껍데기",   rarity: "common", price: 5,  season: "summer" },
+  { id: "maple",   name: "단풍잎 표본",   rarity: "common", price: 5,  season: "autumn" },
+  { id: "iceshell", name: "얼음 조개",    rarity: "rare",   price: 15, season: "winter" },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };
