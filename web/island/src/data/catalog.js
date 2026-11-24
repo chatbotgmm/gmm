@@ -65,6 +65,13 @@ export const BUILDINGS = {
     asset: "assets/props/street_lamp.glb", liteAsset: "assets/props/street_lamp_lite.glb", fit: { w: 0.56, d: 0.56 },   // 가는 가로등(사용자 제공): 폭 0.56 m → 높이 약 2.6 m
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
+  // 장식(집 근처 6칸 안에 있으면 그 집 갈매미 만족도 +2씩, 최대 +10)
+  bench:     { id: "bench", builtBy: "builder", deco: true, decoShape: "bench", cost: { wood: 1 }, tier: 1, name: "벤치", footprint: { w: 1, d: 1 }, work: 1, height: 0.5, asset: null, placeholder: { wall: 0xb98352, roof: 0xb98352, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  flowerbed: { id: "flowerbed", builtBy: "builder", deco: true, decoShape: "flowerbed", cost: { wood: 1 }, tier: 1, name: "꽃밭", footprint: { w: 1, d: 1 }, work: 1, height: 0.3, asset: null, placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  fountain:  { id: "fountain", builtBy: "carpenter", deco: true, decoShape: "fountain", rank: 1, cost: { stone: 3 }, tier: 1, name: "분수", footprint: { w: 2, d: 2 }, work: 4, height: 1.2, asset: null, placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  snowman:   { id: "snowman", builtBy: "builder", deco: true, decoShape: "snowman", winterOnly: true, cost: {}, tier: 1, name: "눈사람", footprint: { w: 1, d: 1 }, work: 1, height: 1.0, asset: null, placeholder: { wall: 0xffffff, roof: 0xffffff, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  // 풍차 발전소: 둘레 18칸 안의 집에 전기(밤에 창이 밝아지고 만족도 +8)
+  windmill:  { id: "windmill", builtBy: "carpenter", power: true, rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
   bridge: {
     id: "bridge", builtBy: "carpenter", bridge: true, cost: { wood: 1 }, tier: 1, name: "다리", footprint: { w: 1, d: 1 }, work: 1, height: 0.15, asset: null,

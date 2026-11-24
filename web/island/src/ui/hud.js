@@ -109,6 +109,7 @@ export class Hud {
   layout() {
     const top = document.getElementById("top").getBoundingClientRect(), low = top.top > innerHeight / 2, b = low ? `${innerHeight - top.top + 10}px` : "";
     this.phoneBtn.style.bottom = b; this.info.style.bottom = b;
+    const mm = document.getElementById("minimap"); if (mm) mm.style.bottom = low ? `${innerHeight - top.top + 74}px` : "";   // 미니맵은 📱 위
   }
   refreshApp() {
     const w = this.world;

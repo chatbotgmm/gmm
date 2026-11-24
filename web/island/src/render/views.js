@@ -10,7 +10,7 @@ import { terrainHeight } from "../world/terrain.js";
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
-    this.scene = scene; this.views = new Map(); this.overlay = overlay; this.economy = () => world.economy;
+    this.scene = scene; this.world = world; this.views = new Map(); this.overlay = overlay; this.economy = () => world.economy;
     world.on("buildingAdded", b => this.add(b));
     world.on("buildingRemoved", b => this.remove(b.id));
     this.ready = Promise.allSettled([...world.buildings.values()].map(b => this.add(b)));   // 처음 있던 건물들을 다 그렸을 때
@@ -22,7 +22,7 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = def.stairs ? await stairsProp(def, b.ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : await modelFor(def, () => buildingPlaceholder(def));
+    const model = def.stairs ? await stairsProp(def, b.ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
@@ -42,6 +42,16 @@ export class BuildingViews {
         v.scaffold.position.y = Math.max(0.6, v.height - 0.3) / 2; v.holder.add(v.scaffold); void size;
       }
       if (v.scaffold) v.scaffold.visible = p < 1;
+      if (p >= 1) v.model.traverse(o => { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else if (o.name === "fountainWater") o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; });   // 풍차 날개 돌기 · 분수 물
+    }
+    // 전기가 들어온 집: 창가 불빛(밤에만 보임 — daylight.js가 houseGlow 세기를 정함). 2초마다 확인
+    if ((this.glowT = (this.glowT || 0) - dt) > 0) return; this.glowT = 2;
+    for (const v of this.views.values()) {
+      const b = v.building, def = BUILDINGS[b.defId]; if (!def.house || !v.model) continue;
+      const on = this.world.isDone(b) && !!this.world.powered?.(b);
+      if (on && !v.glow) { v.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffd28a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); v.glow.name = "houseGlow"; v.glow.userData.noToon = true; v.glow.renderOrder = 3;
+        v.glow.scale.setScalar(Math.max(def.footprint.w, def.footprint.d) * 1.3); v.glow.position.set(0, Math.min(1.3, v.height * 0.5), def.footprint.d / 2 + 0.05); v.holder.add(v.glow); }
+      if (v.glow) v.glow.userData.on = on;
     }
   }
   remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); v.badge.remove(); this.views.delete(id); }
@@ -112,6 +122,44 @@ function dockModel() {
   return g;
 }
 
+let GLOW = null;
+function glowTex() { if (GLOW) return GLOW; const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.4, "rgba(255,255,255,.4)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return (GLOW = new THREE.CanvasTexture(c)); }
+const DM = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
+const dpart = (g, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
+/** 장식: 벤치·꽃밭·분수·눈사람(상자·원기둥 모양) */
+function decoModel(shape) {
+  const g = new THREE.Group();
+  if (shape === "bench") { const w = DM(0xb98352), iron = DM(0x4a4a4a);
+    for (let i = 0; i < 3; i++) dpart(g, new THREE.BoxGeometry(0.85, 0.04, 0.09), w, 0, 0.38, -0.1 + i * 0.1);
+    for (let i = 0; i < 2; i++) dpart(g, new THREE.BoxGeometry(0.85, 0.08, 0.035), w, 0, 0.55 + i * 0.12, -0.2).rotation.x = -0.15;
+    for (const x of [-0.36, 0.36]) { dpart(g, new THREE.BoxGeometry(0.05, 0.38, 0.3), iron, x, 0.19, 0); dpart(g, new THREE.BoxGeometry(0.05, 0.4, 0.04), iron, x, 0.55, -0.2); } }
+  if (shape === "flowerbed") { dpart(g, new THREE.BoxGeometry(0.9, 0.16, 0.9), DM(0x9a6b45), 0, 0.08, 0); dpart(g, new THREE.BoxGeometry(0.8, 0.04, 0.8), DM(0x5a3d26), 0, 0.17, 0);
+    const cols = [0xff6b8a, 0xffd23f, 0xffffff, 0xb07cff, 0xff9f45], ball = new THREE.SphereGeometry(0.06, 6, 4), stem = DM(0x4f9a3f);
+    for (let i = 0; i < 12; i++) { const x = -0.3 + (i % 4) * 0.2, z = -0.27 + Math.floor(i / 4) * 0.27; dpart(g, new THREE.CylinderGeometry(0.01, 0.01, 0.16, 4), stem, x, 0.27, z); dpart(g, ball, DM(cols[i % cols.length]), x, 0.36, z); } }
+  if (shape === "fountain") { const st = DM(0xc9c2b4);
+    dpart(g, new THREE.CylinderGeometry(0.85, 0.9, 0.35, 20), st, 0, 0.17, 0); dpart(g, new THREE.CylinderGeometry(0.72, 0.72, 0.05, 20), new THREE.MeshStandardMaterial({ color: 0x6fd0e8, roughness: 0.2, emissive: 0x2a7fa0, emissiveIntensity: 0.3 }), 0, 0.34, 0);
+    dpart(g, new THREE.CylinderGeometry(0.12, 0.16, 0.7, 10), st, 0, 0.65, 0); dpart(g, new THREE.CylinderGeometry(0.35, 0.25, 0.12, 14), st, 0, 1.0, 0);
+    const w = dpart(g, new THREE.ConeGeometry(0.28, 0.4, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xbfefff, transparent: true, opacity: 0.6, emissive: 0x6fc8e8, emissiveIntensity: 0.4 }), 0, 1.2, 0); w.name = "fountainWater"; w.rotation.x = Math.PI; }
+  if (shape === "snowman") { const sn = DM(0xf7fbff);
+    dpart(g, new THREE.SphereGeometry(0.3, 12, 10), sn, 0, 0.28, 0); dpart(g, new THREE.SphereGeometry(0.22, 12, 10), sn, 0, 0.68, 0); dpart(g, new THREE.SphereGeometry(0.15, 12, 10), sn, 0, 0.98, 0);
+    dpart(g, new THREE.ConeGeometry(0.03, 0.14, 6), DM(0xff8a2a), 0, 0.98, 0.18).rotation.x = Math.PI / 2;
+    for (const x of [-0.05, 0.05]) dpart(g, new THREE.SphereGeometry(0.018, 6, 4), DM(0x222222), x, 1.03, 0.13);
+    dpart(g, new THREE.CylinderGeometry(0.16, 0.16, 0.04, 12), DM(0xd9574b), 0, 0.84, 0); }
+  return g;
+}
+/** 풍차 발전소: 돌 몸통 + 지붕 + 돌아가는 날개 4장(정면 +z) */
+function windmillModel() {
+  const g = new THREE.Group();
+  dpart(g, new THREE.CylinderGeometry(0.6, 0.85, 3.0, 12), DM(0xf3ead8), 0, 1.5, 0);
+  const roof = dpart(g, new THREE.ConeGeometry(0.75, 0.9, 12), DM(0xb5794a), 0, 3.45, 0); void roof;
+  dpart(g, new THREE.BoxGeometry(0.35, 0.6, 0.06), DM(0x9a6b45), 0, 0.3, 0.8);
+  const hub = new THREE.Group(); hub.name = "windBlades"; hub.position.set(0, 3.0, 0.75); g.add(hub);
+  dpart(hub, new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), DM(0x6b4a2e), 0, 0, 0).rotation.x = Math.PI / 2;
+  for (let k = 0; k < 4; k++) { const arm = new THREE.Group(); arm.rotation.z = k * Math.PI / 2; hub.add(arm);
+    dpart(arm, new THREE.BoxGeometry(0.06, 1.5, 0.04), DM(0x7a5236), 0, 0.8, 0); dpart(arm, new THREE.BoxGeometry(0.34, 1.1, 0.02), DM(0xf6f1e4), 0.18, 0.95, 0.02); }
+  return g;
+}
 /** 다리 한 칸: 판자 + 물속 기둥 */
 function bridgeModel() {
   const g = new THREE.Group();

@@ -10,7 +10,7 @@ export const RANKS = [
   { name: "섬 도시", icon: "🏙", need: 240, unlock: ["manor"] },
 ];
 export const RANK_REWARD = 5;                                                     // 등급이 오르면 갈매미마다 축하금(새 돈)
-const FACILITY = d => d.market || d.field || d.dock || d.storehouse || ["cafe", "shop", "post"].includes(d.id);
+const FACILITY = d => d.market || d.field || d.dock || d.storehouse || d.power || ["cafe", "shop", "post"].includes(d.id);
 
 /** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8, 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 평균 포만감 50 이상 +10 */
 export function rankScore(w) {

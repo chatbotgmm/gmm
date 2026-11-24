@@ -23,6 +23,7 @@ import { TwoFinger } from "./systems/twoFinger.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { RoomView } from "./render/room.js";
+import { Minimap } from "./ui/minimap.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 
@@ -154,6 +155,7 @@ const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls
   onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
+const minimap = new Minimap({ getWorld: () => world, camera, controls });   // 넓은 지도: 미니맵(누르면 그곳으로)
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
@@ -216,6 +218,7 @@ function frame() {
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
+  minimap.update(dt);
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);

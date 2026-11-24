@@ -744,3 +744,20 @@ test("포장도로: 돌길·나무 데크로 집과 시장·은행을 이으면 
   const bk = w.bankB(), p2 = findPath(w.grid, mk.door.x, mk.door.z, bk.door.x, bk.door.z, 30000); for (const [x, z] of p2) w.paint(x, z, "WoodDeck"); w.updateRoads();
   assert.ok(u.satParts.some(p => p[0].includes("집-은행"))); assert.equal(u.sat, Math.min(100, before + 30));
 });
+
+test("장식·전기·카페·우체국: 집 근처 장식·풍차 전기·가까운 카페가 만족도를 올리고, 우체국은 소원 축하금 두 배, 눈사람은 겨울만", () => {
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.rank = 2; w.setSeason("autumn");
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const hq = spot("house", c.x + 10, c.z + 8), h = w.placeBuilding("house", hq[0], hq[1], 0).building, u = w.units[0]; u.home = h.id; h.owner = u.unitId; u.full = 80;
+  w.updateRoads(); const base = u.sat;
+  for (const d of ["bench", "flowerbed", "bench"]) { const q = spot(d, h.door.x, h.door.z + 2); assert.ok(w.placeBuilding(d, q[0], q[1], 0).ok, d); }
+  w.updateRoads(); assert.equal(u.sat, base + 6, "장식 3개 = +6");
+  assert.match(w.check("snowman", ...spot("bench", h.door.x, h.door.z + 3), 0).reason, /겨울에만/); w.setSeason("winter"); assert.equal(w.check("snowman", ...spot("bench", h.door.x, h.door.z + 3), 0).ok, true);
+  const wm = spot("windmill", h.x + 6, h.z); w.placeBuilding("windmill", wm[0], wm[1], 0); assert.equal(w.powered(h), true); w.updateRoads(); assert.equal(u.sat, base + 6 + 8, "전기 +8");
+  const cf = spot("cafe", h.x - 8, h.z); const cafe = w.placeBuilding("cafe", cf[0], cf[1], 0).building; w.updateRoads(); assert.equal(u.sat, base + 6 + 8 + 5, "카페 +5");
+  assert.equal(w.canEnter(w.units[1], cafe), true, "카페는 누구나 들어감");
+  // 우체국: 소원 축하금 두 배
+  const po = spot("post", c.x - 12, c.z + 10); w.placeBuilding("post", po[0], po[1], 0);
+  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0; w.summon(); w.stepWishes(1.1);
+  assert.equal(u.coins - coins, 20, "축하금 10 × 2");
+});

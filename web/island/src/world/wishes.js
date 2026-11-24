@@ -32,6 +32,10 @@ export const WISHES = [
   { id: "bed", icon: "🛏", text: "내 집에 푹신한 침대가 있으면 좋겠어요", hint: "🏠 집 꾸미기에서 침대 놓기(잡화점에서 사요)",
     ok: (w, u) => !!u.home && !owns(w.buildings.get(u.home), "bed") && !owns(w.buildings.get(u.home), "shellBed"),
     done: (w, u) => { const b = u.home && w.buildings.get(u.home); return !!b && allFurniture(b).some(o => o.id === "bed" || o.id === "shellBed"); } },
+  { id: "bench", icon: "🪑", text: "산책하다 앉아 쉴 벤치가 있으면 좋겠어요", hint: "🔨 기본이 벤치를 지어요",
+    ok: w => w.units.length >= 3 && !builtAny(w, d => d.id === "bench"), done: w => builtAny(w, d => d.id === "bench") },
+  { id: "power", icon: "⚡", text: "밤에도 집이 환했으면 좋겠어요", hint: "🪚 목수가 풍차 발전소를 지어요(마을 등급 어촌)",
+    ok: (w, u) => w.rank >= 1 && !!u.home && !builtAny(w, d => d.power), done: w => builtAny(w, d => d.power) },
   { id: "giant", icon: "🏯", text: "내 몸에 맞는 큰 집이 필요해요", hint: "🔨 자이언트의 집",
     ok: (w, u) => u.name === "자이언트" && !u.home, done: (w, u) => !!u.home },
 ];

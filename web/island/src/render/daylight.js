@@ -86,6 +86,7 @@ export class Daylight {
   streetLamps() {
     const n = this.night ?? 0, glow = 0.15 + 2.2 * n, lamps = [];
     this.scene.traverse(o => {
+      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.05; o.material.opacity = 0.75 * n; return; }   // 전기 들어온 집 창가 불빛
       if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m; if (src.name !== "lampBody") return;
       m.emissiveIntensity = glow; src.emissiveIntensity = glow;
       if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임

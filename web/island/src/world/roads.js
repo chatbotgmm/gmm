@@ -45,6 +45,11 @@ export function satisfaction(world, u, net = world.roads?.net) {
       if (hn.size && mk && linked(hn, netsAt(world, net, mk))) parts.push(["🛣 집-시장 포장도로", 15]);
       if (hn.size && bk && linked(hn, netsAt(world, net, bk))) parts.push(["🛣 집-은행 포장도로", 15]);
     }
+    const near = (b, r) => Math.hypot(b.door.x - home.door.x, b.door.z - home.door.z) <= r;
+    const deco = [...world.buildings.values()].filter(b => BUILDINGS[b.defId].deco && world.isDone(b) && near(b, 6)).length;
+    if (deco) parts.push(["🌷 집 근처 장식", Math.min(10, deco * 2)]);
+    if ([...world.buildings.values()].some(b => b.defId === "cafe" && world.isDone(b) && near(b, 30))) parts.push(["☕ 가까운 카페", 5]);
+    if (world.powered?.(home)) parts.push(["⚡ 전기", 8]);
   }
   return { value: Math.max(0, Math.min(100, parts.reduce((s, p) => s + p[1], 0))), parts };
 }

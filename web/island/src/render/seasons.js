@@ -26,7 +26,7 @@ export function seasonalGround(mat) {
       float green = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 5.0, 0.0, 1.0);          // 잔디처럼 초록인 곳
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.92, 1.1, 0.82), uSpring * green);   // 봄: 연두
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.32, 0.98, 0.5), uAutumn * green);   // 가을: 누런 잔디
-      float up = smoothstep(0.55, 0.85, vSeasonN.y), land = smoothstep(${(WATER_Y + 0.02).toFixed(2)}, ${(WATER_Y + 0.14).toFixed(2)}, vSeasonW.y);
+      float up = smoothstep(0.55, 0.85, vSeasonN.y), land = smoothstep(-0.07, -0.015, vSeasonW.y);   // 바닷가 모래(0보다 낮은 비탈)엔 눈이 안 쌓임
       float n = fract(sin(dot(floor(vSeasonW.xz * 1.7), vec2(12.9898, 78.233))) * 43758.5453);              // 칸마다 조금씩 다르게(얼룩진 눈)
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.97, 1.0), clamp(uSnow * up * land * (0.9 + 0.12 * n), 0.0, 1.0));`);
   };

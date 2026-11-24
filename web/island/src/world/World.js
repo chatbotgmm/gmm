@@ -314,6 +314,9 @@ export class World {
     this.emit("furnitureBought", { u, id, b: home }); return true;
   }
 
+  // ---- 전기(풍차 발전소 둘레 18칸)
+  powered(b) { return [...this.buildings.values()].some(p => BUILDINGS[p.defId].power && this.isDone(p) && Math.hypot(p.x + 1 - (b.x + 1), p.z + 1 - (b.z + 1)) <= 18); }
+  postB() { for (const b of this.buildings.values()) if (b.defId === "post" && this.isDone(b)) return b; return null; }
   // ---- 포장도로·만족도(2초마다 다시 셈)
   updateRoads() {
     const net = RD.roadNet(this); this.roads = { net };
@@ -374,7 +377,7 @@ export class World {
     return null;
   }
   stepWishes(dt) {
-    if ((this.wishT -= dt) <= 0) { this.wishT = 80 + this.wrnd() * 70; this.makeWish(); }
+    if ((this.wishT -= dt) <= 0) { this.wishT = (80 + this.wrnd() * 70) * (this.postB() ? 0.6 : 1); this.makeWish(); }   // 우체국: 소원이 더 자주
     if ((this.wishClock += dt) < 1) return; const step = this.wishClock; this.wishClock = 0;
     for (const wish of [...this.wishes]) {
       const u = this.units.find(o => o.unitId === wish.unitId), d = WISH_BY_ID[wish.id];
@@ -382,7 +385,7 @@ export class World {
       wish.age += step;
       if (d.done(this, u, wish)) {
         this.wishes.splice(this.wishes.indexOf(wish), 1); this.wishDone++;
-        if (this.economy) this.issue(u, WISH_REWARD);
+        if (this.economy) this.issue(u, WISH_REWARD * (this.postB() ? 2 : 1));   // 우체국이 있으면 축하 편지와 함께 두 배
         u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘어요!", 3);
         this.emit("wishDone", { wish, u, def: d });
       } else if (Math.floor(wish.age) % 20 === 0) emote(u, `💭 ${d.icon}`, 2.5);   // 20초마다 말풍선으로 다시 알림
@@ -511,6 +514,7 @@ export class World {
     if (!r.ok) return r;
     if (r.cells.some(([x, z]) => this.isPlot(x, z))) return { ...r, ok: false, reason: "밭에는 지을 수 없어요" };
     if (def.fixed) return { ...r, ok: false, reason: `${def.name}은 하나뿐이에요` };
+    if (def.winterOnly && this.season !== "winter") return { ...r, ok: false, reason: `${def.name}은 겨울에만 만들 수 있어요` };
     if (rankNeed(def) > this.rank) return { ...r, ok: false, reason: `🏅 마을 등급이 ${RANKS[rankNeed(def)].icon} ${RANKS[rankNeed(def)].name}이 되면 지을 수 있어요` };
     const job = def.builtBy || "builder", word = { builder: "건축", carpenter: "목수" }[job] || job;
     if (!this.units.some(u => u.job === job)) return { ...r, ok: false, reason: `${word} 갈매미가 있어야 지을 수 있어요 (🥚 소환)` };
@@ -557,6 +561,7 @@ export class World {
   isHouse(b) { const d = BUILDINGS[b.defId]; return this.economy ? !!d.house : !d.stairs && !d.field && !d.dock && !d.deco; }   // 들어가 쉬는 건물(경제가 있으면 집만)
   /** 이 갈매미가 이 건물에 들어갈 수 있나: 전용 집(forUnit)은 그 갈매미만, 전용 집이 있는 갈매미(자이언트)는 그 집에만 */
   canEnter(u, b) {
+    if (b.defId === "cafe" && this.isDone(b)) return true;                          // 카페는 누구나(재미·친구 욕구가 차오름)
     if (!this.isHouse(b) || !this.isDone(b)) return false;
     if (this.economy) return b.owner === u.unitId;                                  // 경제가 있으면 산 집(주인)만
     return this.canFit(u, b);
