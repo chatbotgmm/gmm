@@ -168,6 +168,8 @@ export const RARITY = {
   epic:   { id: "epic",   name: "영웅", rank: 3, mult: 2.0, color: "#9152d0" },
   legend: { id: "legend", name: "전설", rank: 4, mult: 2.5, color: "#d4900f" },
 };
+// 공사 속도(망치질 한 번에 오르는 진행): 희귀도마다 다름. 기본(일반)은 느리게. 다른 일(벌목량·낚시 등)의 배율 mult와는 따로
+export const BUILD_SPEED = { common: 0.8, rare: 1.15, epic: 1.5, legend: 1.9 };
 // skill: 이 직업이 잘하는 활동(PERSONA의 활동 이름). 그 활동을 더 자주 고르고, 할 때 배율이 붙는다.
 export const JOBS = {
   builder:    { id: "builder",    name: "건축가", icon: "🔨", skill: "build", desc: "망치질 한 번이 배율만큼 진행. 희귀도 이상 등급의 건물까지 지을 수 있음" },
@@ -193,7 +195,7 @@ export const TRIBES = {
 export const UNIT_JOBS = {
   "기본": ["태초", "builder", "common"], "미니": ["요정", "farmer", "common"], "자이언트": ["거인", "lumberjack", "common"],
   "꽃": ["수목", "farmer", "common"], "황금": ["천익", "merchant", "common"], "물방울": ["해인", "fisher", "common"],
-  "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"], "목수": ["태초", "carpenter", "common"],
+  "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"], "목수": ["태초", "carpenter", "rare"],   // 목수는 희귀(일반보다 빨리 지음)
 };
 
 // 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중.

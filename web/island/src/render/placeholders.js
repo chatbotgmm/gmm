@@ -65,11 +65,25 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
     const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 12), lampMat); lamp.name = "lighthouseLamp";
     lamp.position.y = 3.5; t.add(lamp);
     const beam = new THREE.Group(); beam.name = "lighthouseBeam"; beam.position.y = 3.5; beam.visible = false; t.add(beam);
+    // 빛줄기: 단단한 원뿔이 아니라 빛 기둥처럼(가장자리는 옆에서 볼수록 사라지고, 램프에서 멀수록 옅어짐). 세기는 uOpacity(daylight.js)
+    const BEAM_LEN = 22;
     for (const sgn of [1, -1]) {
-      const bm = new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+      const bm = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        uniforms: { uOpacity: { value: 0 }, uColor: { value: new THREE.Color(0xfff0c0) }, uLen: { value: BEAM_LEN } },
+        vertexShader: `varying float vAlong; varying vec3 vN; varying vec3 vV; uniform float uLen;
+          void main() { vAlong = clamp(-position.y / uLen, 0.0, 1.0); vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = -mv.xyz; vN = normalMatrix * normal; gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: `varying float vAlong; varying vec3 vN; varying vec3 vV; uniform float uOpacity; uniform vec3 uColor;
+          void main() {
+            float face = abs(dot(normalize(vN), normalize(vV)));            // 정면 1 → 옆(가장자리) 0
+            float core = mix(0.22, 1.0, face);                                   // 정면만 쓰면 빛줄기가 이쪽을 향할 때 사라져서 바탕 밝기를 둠
+            float fade = pow(1.0 - vAlong, 1.3) * smoothstep(0.0, 0.06, vAlong);
+            gl_FragColor = vec4(uColor * core * fade * uOpacity, 1.0);
+          }`,
+      });
       bm.userData.noToon = true;
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 16, 20, 1, true).translate(0, -8, 0), bm);
-      cone.rotation.z = sgn * Math.PI / 2; beam.add(cone);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(2.8, BEAM_LEN, 32, 1, true).translate(0, -BEAM_LEN / 2, 0), bm);
+      cone.rotation.z = sgn * Math.PI / 2; cone.rotation.x = -0.06; cone.renderOrder = 3; beam.add(cone);   // 바다(renderOrder 1)보다 나중에 그려야 가려지지 않음   // 아주 조금 아래(바다 쪽)로
     }
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; t.add(cap);
   } else if (defId === "cave") {

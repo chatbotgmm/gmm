@@ -1,5 +1,5 @@
 // 종족(직업)·희귀도·배고픔 규칙. 순수 함수만 둔다(시험하기 쉽게).
-import { JOBS, RARITY, FISH, ITEMS, UNIT_JOBS, PERSONA } from "../data/catalog.js";
+import { JOBS, RARITY, FISH, ITEMS, UNIT_JOBS, PERSONA, BUILD_SPEED } from "../data/catalog.js";
 
 export const jobOf = u => JOBS[u.job] || null;
 export const rarityOf = u => RARITY[u.rarity] || RARITY.common;
@@ -44,8 +44,8 @@ export function canBuild(u, def) {
   if (tier <= 1) return true;
   return u.job === "builder" && rarityOf(u).rank >= tier;
 }
-/** 망치질 한 번에 오르는 진행(건축가는 희귀도 배율). */
-export const hammerPower = u => skillMult(u, "build");
+/** 망치질 한 번에 오르는 진행: 짓는 직업(건축가·목수)은 희귀도별 공사 속도(일반 0.8 · 희귀 1.15 · 영웅 1.5 · 전설 1.9), 그 밖은 0.6 */
+export const hammerPower = u => (u.job === "builder" || u.job === "carpenter" ? BUILD_SPEED[u.rarity] ?? BUILD_SPEED.common : 0.6);
 
 // ---- 벌목·채광
 export const chopsNeeded = u => Math.max(1, Math.ceil(3 / skillMult(u, "chop")));

@@ -71,6 +71,11 @@ export class Daylight {
     const v = 0.9 + 3.5 * this.night, m = lamp.material; m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
     if (!this.light) { this.light = new THREE.PointLight(0xffd27a, 0, 26, 1.6); lamp.add(this.light); }
     this.light.intensity = 30 * this.night;
+    if (!this.lampHalo) {                                                          // 램프 둘레 빛 번짐(밤에 보임)
+      this.lampHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffd98a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+      this.lampHalo.scale.setScalar(4.5); this.lampHalo.renderOrder = 3; this.lampHalo.userData.noToon = true; lamp.add(this.lampHalo);
+    }
+    this.lampHalo.visible = this.night > 0.05; this.lampHalo.material.opacity = 0.85 * this.night;
   }
   /** 가로등: 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
   /** 가로등 실제 빛 개수(그래픽 설정). 빛 개수가 바뀌면 재질을 다시 만들어야 해서 늘 같은 개수를 두고 안 쓰는 빛은 0으로 */
@@ -103,7 +108,7 @@ export class Daylight {
   beam(dt) {
     const b = this.scene.getObjectByName("lighthouseBeam"); if (!b) return;
     b.rotation.y += dt * 0.9; b.visible = (this.night ?? 0) > 0.05;
-    for (const m of b.children) m.material.opacity = 0.32 * (this.night ?? 0);
+    for (const m of b.children) m.material.uniforms.uOpacity.value = 0.75 * (this.night ?? 0);
   }
   label() {
     const d = this.time || new Date(), hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");

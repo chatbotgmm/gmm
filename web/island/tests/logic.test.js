@@ -352,7 +352,7 @@ test("찜(나무·낚시 자리)은 하던 갈매미를 들어 올리면 풀린�
 test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 100%까지 혼자 끝낸다", async () => {
   const J = await import("../src/world/jobs.js");
   const w = World.create(7, seededRandom(21));
-  const b = w.placeBuilding("cottage", 38, 34, 0).building;     // 2×2 → 망치질 12(건축가는 ×1.3). 나무·돌이 없이 시작
+  const b = w.placeBuilding("cottage", 38, 34, 0).building;     // 망치질 한 번에 0.8(일반 건축가). 나무·돌이 없이 시작
   w.res.wood = 0; w.res.stone = 0;
   const boss = w.units.find(u => u.name === "기본");                 // 건축가
   for (const u of w.units) if (u !== boss) u.timer = 1e9;           // 다른 갈매미는 가만히(재료를 대신 구해 주지 않게)
@@ -367,7 +367,7 @@ test("집 짓기: 공사를 맡은 갈매미는 재료를 구해 와서라도 10
   }
   assert.ok(w.isDone(b), `완공돼야 함: ${b.hits}/${b.need}`);
   assert.deepEqual([...builders], [boss.unitId], "한 갈매미가 끝까지");
-  assert.equal(J.hammerPower(boss), 1.3, "일반 건축가는 망치질 한 번에 1.3씩");
+  assert.equal(J.hammerPower(boss), 0.8, "일반 건축가는 망치질 한 번에 0.8씩(기본은 느리게)");
   assert.ok(gathered, "재료가 모자라 구하러 다녀옴");
   for (let t = 0; t < 2; t += 1 / 20) w.update(1 / 20);          // 마지막 망치질 동작이 끝나면 맡은 일을 내려놓음
   const u = w.units.find(u => u.unitId === first);
@@ -386,17 +386,18 @@ test("종족: 10종족·직업·희귀도(지금은 모두 일반)가 일과 건
   const J = await import("../src/world/jobs.js");
   const { BUILDINGS, TRIBES } = await import("../src/data/catalog.js");
   const w = World.create(7, seededRandom(31)), by = n => w.units.find(u => u.name === n);
-  assert.ok(w.units.every(u => TRIBES[u.tribe] && u.rarity === "common"), "모두 10종족 중 하나, 일반 등급");
+  assert.ok(w.units.every(u => TRIBES[u.tribe] && u.rarity === (u.job === "carpenter" ? "rare" : "common")), "모두 10종족 중 하나, 목수만 희귀 나머지 일반");
   assert.equal(by("자이언트").tribe, "거인"); assert.equal(by("자이언트").job, "lumberjack"); assert.equal(by("물방울").tribe, "해인");
   assert.equal(J.woodYield(by("자이언트")), 3); assert.equal(J.woodYield(by("꽃")), 2);           // 나무꾼 ×1.3
-  assert.equal(J.stoneYield(by("불씨")), 3); assert.equal(J.hammerPower(by("기본")), 1.3); assert.equal(J.hammerPower(by("물방울")), 1);
+  assert.equal(J.stoneYield(by("불씨")), 3); assert.equal(J.hammerPower(by("기본")), 0.8); assert.equal(J.hammerPower(by("물방울")), 0.6);
+  assert.ok(J.hammerPower({ job: "carpenter", rarity: "rare" }) > J.hammerPower(by("기본")), "목수(희귀)는 일반 건축가보다 빨리 지음");
   assert.ok(J.canBuild(by("기본"), BUILDINGS.house) && !J.canBuild(by("미니"), BUILDINGS.house) && !J.canBuild(by("기본"), BUILDINGS.cafe), "집은 건축가만");
   assert.ok(!J.canBuild(by("기본"), BUILDINGS.market), "시설은 목수만");
   assert.match(w.check("cafe", 38, 26, 0).reason, /마을 등급이 🏘 어촌이 되면/);                     // 카페는 마을 등급으로 열림
   assert.equal(w.check("cottage", 38, 26, 0).ok, true);
   // 희귀도가 오르면 배율과 지을 수 있는 건물이 늘어남
   const boss = { ...by("기본"), rarity: "epic" };
-  assert.equal(J.hammerPower(boss), 2); const T3 = { builtBy: "builder", tier: 3 }, T4 = { builtBy: "builder", tier: 4 }; assert.ok(J.canBuild(boss, T3) && !J.canBuild(boss, T4) && !J.canBuild(by("기본"), T3));
+  assert.equal(J.hammerPower(boss), 1.5); const T3 = { builtBy: "builder", tier: 3 }, T4 = { builtBy: "builder", tier: 4 }; assert.ok(J.canBuild(boss, T3) && !J.canBuild(boss, T4) && !J.canBuild(by("기본"), T3));
   assert.ok(J.catchChance(by("물방울")) > J.catchChance(by("기본")));
   const rnd = seededRandom(5), rare = u => { let n = 0; for (let i = 0; i < 6000; i++) if (J.rollFish(u, rnd).rarity !== "common") n++; return n; };
   assert.ok(rare(by("물방울")) > rare(by("기본")) * 1.1);
