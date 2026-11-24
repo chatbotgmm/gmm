@@ -110,5 +110,20 @@
    "Mine": 0.5,
    "Build": 0.25
   }
+ },
+ {
+  "file": "models/gmm_char1.glb",
+  "name": "목수",
+  "height": 0.91,
+  "scale": 1.0,
+  "walk": 0.168,
+  "run": 0.553,
+  "hit": 0.5,
+  "workHit": {
+   "Chop": 0.5,
+   "Mine": 0.5,
+   "Build": 0.25
+  },
+  "tint": "#c99a66"
  }
 ]

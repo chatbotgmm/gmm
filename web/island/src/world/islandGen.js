@@ -110,3 +110,82 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
   grid.markAllDirty();
   return { grid, modules, spots, zones, plots, stall };
 }
+
+// ---------------------------------------------------------------- 넓은 섬(게임 시작용)
+// 처음엔 자연만: 넓은 잔디 평야와 모래사장, 북서쪽 산(층층이 절벽, 남동쪽 한 줄기는 걸어 오르는 비탈), 산기슭 동굴(둘레 광석 바위),
+// 숲 세 곳, 등대, 해변 바위. 가운데는 공식은행 자리로 비워 둠(World.create에서 지음). 시장·밭·낚시터·집은 갈매미가 지음.
+export const WILD = { size: 96, r: 36 };
+export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
+  const rnd = seededRandom(seed), grid = new Grid(w, h);
+  const cx = w / 2, cz = h / 2, ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
+  const R = WILD.r, coast = a => R + 2.4 * Math.sin(3 * a + ph[0]) + 1.6 * Math.sin(5 * a + ph[1]) + 0.9 * Math.sin(9 * a + ph[2]);
+  for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+    const dx = x + 0.5 - cx, dz = z + 0.5 - cz, r = Math.hypot(dx, dz), edge = coast(Math.atan2(dz, dx)), c = grid.get(x, z);
+    if (r < edge - BEACH) { c.groundType = GroundType.Grass; c.elevation = 0; }
+    else if (r < edge) { c.groundType = GroundType.Sand; c.elevation = -Math.round(15 * (r - (edge - BEACH)) / BEACH) / 100; }
+    else { c.groundType = GroundType.Sand; c.elevation = Math.max(SEABED, -0.45 - 0.12 * (r - edge)); }
+  }
+  const modules = [], used = new Set(), key = (x, z) => `${x},${z}`;
+  const near = (x, z, d) => [...used].some(k => { const [ux, uz] = k.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < d; });
+  const freeGrass = (x, z) => grid.inBounds(x, z) && !grid.isWater(x, z) && grid.get(x, z).groundType === GroundType.Grass && !used.has(key(x, z));
+
+  // 산: 층마다 0.5 m(걸어서는 못 오르는 절벽), 남동쪽 비탈 한 줄기만 높이가 칸마다 0.25 m 이하로 바뀜(걸어 오름)
+  const mt = { x: cx - 17, z: cz - 15 }, MR = 12, TOP = 2.5, trailA = Math.PI / 4;   // 비탈 방향: 남동(+x, +z)
+  for (let z = Math.floor(mt.z - MR - 4); z <= mt.z + MR + 4; z++) for (let x = Math.floor(mt.x - MR - 4); x <= mt.x + MR + 4; x++) {
+    if (!grid.inBounds(x, z) || grid.isWater(x, z)) continue;
+    const dx = x + 0.5 - mt.x, dz = z + 0.5 - mt.z, a = Math.atan2(dz, dx), r0 = Math.hypot(dx, dz), r = r0 * (1 + 0.12 * Math.sin(4 * a + ph[3]));
+    const along = dx * Math.cos(trailA) + dz * Math.sin(trailA), across = -dx * Math.sin(trailA) + dz * Math.cos(trailA);
+    const trail = along > 0 && Math.abs(across) < 1.6 && r0 <= MR * 1.15 + 1;      // 폭 약 3칸으로 일정한 비탈(굴곡진 산 가장자리 밖까지)
+    if (r > MR && !trail) continue;
+    // 비탈: 굴곡 없는 반지름으로 0.25 m 단위(이웃 칸끼리 한 단 이하) / 나머지: 0.5 m 단위 층(절벽)
+    const e = trail ? Math.max(0, Math.min(TOP, Math.round(TOP * (1 - r0 / MR) * 4) / 4)) : Math.min(TOP, Math.ceil(TOP * (1 - r / MR) / 0.5 - 1e-6) * 0.5);
+    const c = grid.get(x, z); c.elevation = e; c.groundType = trail && e > 0 && e < TOP ? GroundType.Dirt : GroundType.Grass;
+  }
+  // 동굴: 산 남쪽 기슭(산 밖 첫 평지 칸)에 2×2 입구, 둘레에 광석 바위 6개
+  let cave = null;
+  for (let r = MR - 1; r < MR + 4 && !cave; r += 0.5) {
+    const a = Math.PI * 0.62, x = Math.floor(mt.x + Math.cos(a) * r), z = Math.floor(mt.z + Math.sin(a) * r);
+    const cells = [[x, z], [x + 1, z], [x, z + 1], [x + 1, z + 1]];
+    if (cells.every(([px, pz]) => freeGrass(px, pz) && grid.get(px, pz).elevation === 0)) cave = { x, z, cells };
+  }
+  if (cave) { modules.push({ id: "cave-1", defId: "cave", cells: cave.cells, rot: 0 }); cave.cells.forEach(([x, z]) => used.add(key(x, z))); }
+  const caveAt = cave ? { x: cave.x + 1, z: cave.z + 1 } : { x: mt.x, z: mt.z + MR + 2 };
+  for (let k = 0, tries = 0; k < 6 && tries < 600; tries++) {
+    const a = rnd() * Math.PI * 2, r = 2 + rnd() * 3, x = Math.floor(caveAt.x + Math.cos(a) * r), z = Math.floor(caveAt.z + Math.sin(a) * r);
+    if (!freeGrass(x, z) || grid.get(x, z).elevation !== 0 || near(x, z, 2)) continue;
+    modules.push({ id: `ore-${k + 1}`, defId: "ore", cells: [[x, z]], rot: k % 4, variant: k % 3 }); used.add(key(x, z)); k++;
+  }
+  // 등대: 북동쪽 해변 2×2
+  for (let r = R + 3; r > 12; r -= 0.5) {
+    const a = -Math.PI / 4, x = Math.floor(cx + r * Math.cos(a)), z = Math.floor(cz + r * Math.sin(a));
+    const cells = [[x, z], [x + 1, z], [x, z + 1], [x + 1, z + 1]];
+    if (cells.every(([px, pz]) => grid.inBounds(px, pz) && !grid.isWater(px, pz) && grid.get(px, pz).groundType === GroundType.Sand)) {
+      modules.push({ id: "lighthouse-1", defId: "lighthouse", cells, rot: 0 }); cells.forEach(([px, pz]) => used.add(key(px, pz))); break;
+    }
+  }
+  // 가운데 은행 자리(둘레 4칸)는 비움
+  for (let z = cz - 6; z <= cz + 5; z++) for (let x = cx - 6; x <= cx + 6; x++) used.add(key(x, z));
+  // 숲 세 곳 + 흩어진 나무
+  const forests = [{ x: cx - 20, z: cz + 14, n: 14, r: 5.5 }, { x: cx + 18, z: cz + 12, n: 12, r: 5 }, { x: cx + 14, z: cz - 18, n: 10, r: 4.5 }];
+  let tid = 1;
+  for (const f of forests) for (let k = 0, tries = 0; k < f.n && tries < 4000; tries++) {
+    const a = rnd() * Math.PI * 2, r = 1 + rnd() * f.r, x = Math.floor(f.x + Math.cos(a) * r), z = Math.floor(f.z + Math.sin(a) * r);
+    if (!freeGrass(x, z) || grid.get(x, z).elevation !== 0 || near(x, z, 2)) continue;
+    modules.push({ id: `tree-${tid}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: tid % 5 }); used.add(key(x, z)); tid++; k++;
+  }
+  for (let k = 0, tries = 0; k < 10 && tries < 3000; tries++) {                       // 평야에 드문드문(산 위는 길이 막히지 않게 비움)
+    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h);
+    if (!freeGrass(x, z) || grid.get(x, z).elevation !== 0 || near(x, z, 5)) continue;
+    modules.push({ id: `tree-${tid}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: tid % 5 }); used.add(key(x, z)); tid++; k++;
+  }
+  // 해변 바위
+  for (let k = 0, tries = 0; k < 8 && tries < 800; tries++) {
+    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z);
+    if (grid.isWater(x, z) || c.groundType !== GroundType.Sand || c.elevation > -0.05 || near(x, z, 5)) continue;
+    modules.push({ id: `rock-${k + 1}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 3 }); used.add(key(x, z)); k++;
+  }
+  const zones = [{ id: "mountain", label: "⛰ 산", x: mt.x, z: mt.z }, { id: "cave", label: "🕳 동굴", x: caveAt.x, z: caveAt.z + 1 },
+    ...forests.map((f, i) => ({ id: `forest${i}`, label: "🌲 숲", x: f.x, z: f.z })), { id: "bank", label: "🏦 공식은행", x: cx, z: cz - 3 }];
+  grid.markAllDirty();
+  return { grid, modules, spots: [], zones, plots: [], stall: null, center: { x: cx, z: cz } };
+}

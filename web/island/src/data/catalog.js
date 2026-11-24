@@ -7,42 +7,60 @@
 // roof: 지붕 초록색만 바꿀 색(선형 색공간 HSV의 색상 hue 0~1, 채도 배율 sat). 덤불 같은 아래쪽 초록은 그대로(render/roofTint.js).
 import { GroundType, InteractionType } from "./types.js";
 
-const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, KENNEY_YAW = Math.PI;
+const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, GOLD = { hue: 0.12, sat: 1.2 }, KENNEY_YAW = Math.PI;
 
 // 집 크기: 갈매미(키 약 0.9 m)가 문으로 들어갈 수 있게 처음 크기의 1.5배. work = 망치질 양(처음 크기 기준 칸 수, 3번씩)
 export const BUILDINGS = {
   // 계단: 낮은 칸에 놓고, 문 쪽(앞)이 입구·뒤쪽 칸이 올라갈 곳. 뒤가 0.1~1.5 m 더 높아야 함. 다 지으면 앞뒤로만 오르내림.
   stairs: {
-    id: "stairs", tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true,
+    id: "stairs", builtBy: "builder", cost: { wood: 1 }, tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true,
     placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   house: {
-    id: "house", tier: 1, name: "작은 집", footprint: { w: 3, d: 3 }, work: 4, height: 1.95, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "house", builtBy: "builder", house: true, price: 30, cost: { wood: 1 }, tier: 1, name: "작은 집", footprint: { w: 3, d: 3 }, work: 4, height: 1.95, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },
   },
   cottage: {
-    id: "cottage", tier: 1, name: "2층집", footprint: { w: 3, d: 3 }, work: 4, height: 2.55, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cottage", builtBy: "builder", house: true, price: 50, cost: { wood: 1, stone: 1 }, tier: 1, name: "2층집", footprint: { w: 3, d: 3 }, work: 4, height: 2.55, asset: "assets/suburban/building-type-o.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {
-    id: "cafe", tier: 2, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cafe", menu: false, tier: 2, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
   shop: {
-    id: "shop", tier: 2, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "shop", menu: false, tier: 2, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
-    id: "post", tier: 3, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 3.3, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "post", menu: false, tier: 3, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 3.3, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
   // 자이언트 전용 집: 몸이 커서(키 약 1.4 m) 일반 집에는 못 들어가고 이 집에만 들어감. 다른 갈매미는 못 들어감.
   giantHouse: {
-    id: "giantHouse", tier: 1, name: "자이언트의 집", footprint: { w: 5, d: 5 }, work: 6, forUnit: "자이언트", height: 3.0, asset: "assets/suburban/building-type-a.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "giantHouse", builtBy: "builder", house: true, price: 40, cost: { wood: 2 }, tier: 1, name: "자이언트의 집", footprint: { w: 5, d: 5 }, work: 6, forUnit: "자이언트", height: 3.0, asset: "assets/suburban/building-type-a.glb", roof: SKY, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xefe6d2, roof: 0x9fd3e6, roof_shape: "pyramid", chimney: true }, interior: { w: 8, d: 8 },
   },
+  // 공식은행: 섬 가운데에 처음부터 있음(짓거나 철거 못 함). 갈매미가 물건을 팔면 새 돈을 찍어 주고, 산 물건은 은행 창고(마을 자재)로.
+  bank: {
+    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 3.0, asset: "assets/suburban/building-type-f.glb", roof: GOLD, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xf6efdc, roof: 0xe0b84a, roof_shape: "pyramid" }, interior: { w: 8, d: 6 },
+  },
+  // 목수가 짓는 시설
+  market: {
+    id: "market", builtBy: "carpenter", market: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "시장", footprint: { w: 4, d: 3 }, work: 6, height: 2.4, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "flat", awning: 0x9fd3e6 }, interior: { w: 6, d: 5 },
+  },
+  field: {
+    id: "field", builtBy: "carpenter", field: true, cost: { wood: 1 }, tier: 1, name: "밭", footprint: { w: 3, d: 2 }, work: 2, height: 0.2, asset: null,
+    placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 },
+  },
+  dock: {
+    id: "dock", builtBy: "carpenter", dock: true, cost: { wood: 1 }, tier: 1, name: "낚시터", footprint: { w: 1, d: 1 }, work: 1, height: 0.3, asset: null,
+    placeholder: { wall: 0xb08050, roof: 0xb08050, roof_shape: "flat" }, interior: { w: 1, d: 1 },
+  },
   manor: {
-    id: "manor", tier: 4, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "manor", menu: false, tier: 4, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
   },
 };
@@ -74,6 +92,7 @@ export const MODULES = {
   pier:       { id: "pier", name: "나무 부두", asset: null, walkable: true, surface: 0.0 },
   breakwater: { id: "breakwater", name: "돌 방파제", asset: null, walkable: false },
   lighthouse: { id: "lighthouse", name: "등대", asset: null, walkable: false },
+  cave:       { id: "cave", name: "동굴", asset: null, walkable: false },          // 산기슭 동굴 입구(둘레에 광석 바위)
   // 기존 Kenney Nature Kit 모델(web/village/assets, CC0)을 쓴다. 여러 개면 모듈마다 variant 번호로 고른다.
   beachRock:  { id: "beachRock", name: "해변 바위", walkable: false,
                 assets: ["../village/assets/nk/rock_smallA.glb", "../village/assets/nk/rock_smallB.glb", "../village/assets/nk/rock_smallC.glb"] },
@@ -101,6 +120,7 @@ export const GROUND_STYLE = {
 export const UNITS = [
   { name: "기본", scale: 1.0 }, { name: "미니", scale: 0.6 }, { name: "자이언트", scale: 1.35 }, { name: "꽃", scale: 1.0 },
   { name: "황금", scale: 1.0 }, { name: "물방울", scale: 0.9 }, { name: "불씨", scale: 0.95 }, { name: "그림자", scale: 1.0 },
+  { name: "목수", scale: 1.0 },                                                   // 시설(시장·밭·낚시터)을 짓는 갈매미. 모델은 기본 갈매미를 나무색으로 물들여 씀
 ];
 
 // 그루터기(벤 나무 자리)와 손에 드는 도구 모델
@@ -113,6 +133,7 @@ export const PROPS = {
 // timid: 큰 갈매미(자이언트)가 가까이 오면 도망. loner: 쉬는데 누가 가까이 오면 자리를 피함.
 export const PERSONA = {
   "기본":    { rest: 3, wander: 3, forage: 2, visit: 3, zoomies: 1, chop: 3, mine: 1, fish: 2, build: 4, enter: 2, swim: 1 },
+  "목수":    { rest: 3, wander: 3, forage: 2, visit: 3, zoomies: 1, chop: 3, mine: 1, fish: 2, build: 4, enter: 2, swim: 1 },
   "미니":    { rest: 2, wander: 3, forage: 5, visit: 2, zoomies: 2, chop: 0, mine: 0, fish: 4, build: 1, enter: 2, swim: 1, timid: true },
   "자이언트": { rest: 4, wander: 2, forage: 1, visit: 1, zoomies: 0, chop: 5, mine: 5, fish: 1, build: 3, enter: 1, swim: 1 },
   "꽃":      { rest: 5, wander: 3, forage: 4, visit: 2, zoomies: 1, chop: 0, mine: 0, fish: 4, build: 1, enter: 3, swim: 2 },
@@ -138,6 +159,7 @@ export const JOBS = {
   fisher:     { id: "fisher",     name: "낚시꾼", icon: "🎣", skill: "fish",  desc: "잘 낚고, 희귀한 물고기·보물·가구를 더 자주 얻음" },
   merchant:   { id: "merchant",   name: "상인",   icon: "🐚", skill: "trade", desc: "가판대에서 남는 자재·보물을 팔고, 공사에 모자란 자재를 사 옴" },
   farmer:     { id: "farmer",     name: "농부",   icon: "🌾", skill: "farm",  desc: "밭에 심고 거둬 음식을 만듦" },
+  carpenter:  { id: "carpenter",  name: "목수",   icon: "🪚", skill: "build", desc: "시장·밭·낚시터 같은 시설을 지음(집·계단은 건축가)" },
 };
 // 종족: 갈매미맨 방범대(GameMaker 프로젝트 scr_util.gml의 tribe_of, 방범대 등록증 v10 자료)의 10종족
 export const TRIBES = {
@@ -154,7 +176,7 @@ export const TRIBES = {
 export const UNIT_JOBS = {
   "기본": ["태초", "builder", "common"], "미니": ["요정", "farmer", "common"], "자이언트": ["거인", "lumberjack", "common"],
   "꽃": ["수목", "farmer", "common"], "황금": ["천익", "merchant", "common"], "물방울": ["해인", "fisher", "common"],
-  "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"],
+  "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"], "목수": ["태초", "carpenter", "common"],
 };
 
 // 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중.

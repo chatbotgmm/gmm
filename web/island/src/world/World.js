@@ -4,7 +4,7 @@ import { BUILDINGS, MODULES, UNITS, RARITY, FISH, ITEMS, PRICES } from "../data/
 import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
 import { Grid } from "./Grid.js";
-import { generateIsland } from "./islandGen.js";
+import { generateIsland, generateWildIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
@@ -44,10 +44,22 @@ export class World {
       if (m.defId === "ore") this.ores.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
     }
   }
-  /** empty: 갈매미 없이 시작(게임 화면: 🥚 소환으로 한 마리씩). 시험은 기본값(8마리 모두). */
-  static create(seed = 7, rnd = Math.random, { empty = false } = {}) {
-    const g = generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
-    w.seed = seed; if (!empty) w.spawnUnits(); for (let i = 0; i < 14; i++) w.addSeed(); return w;
+  /** empty: 갈매미 없이 시작. wild: 넓은 섬(자연만 + 가운데 공식은행) + 기본 갈매미 한 마리(게임 화면). 시험은 기본값(예전 섬, 8마리 모두). */
+  static create(seed = 7, rnd = Math.random, { empty = false, wild = false } = {}) {
+    const g = wild ? generateWildIsland(seed) : generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
+    w.seed = seed; w.wild = wild;
+    if (wild) {
+      const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
+      w.addUnitByName("기본");
+    } else if (!empty) w.spawnUnits();
+    for (let i = 0; i < (wild ? 24 : 14); i++) w.addSeed(); return w;
+  }
+  get center() { return { x: this.grid.w / 2, z: this.grid.h / 2 }; }
+  /** 이름으로 갈매미 하나를 가운데(은행 앞) 근처에 부름. */
+  addUnitByName(name) {
+    const i = UNITS.findIndex(u => u.name === name); if (i < 0 || this.units.some(o => o.name === name)) return null;
+    const c = this.center, spot = nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z) + 4, 8) || nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z));
+    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z); return u;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
   emit(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); }
@@ -62,7 +74,7 @@ export class World {
     const r = seededRandom(99);
     UNITS.forEach((u, i) => {
       if (!names.includes(u.name)) return;
-      const a = i / UNITS.length * Math.PI * 2, spot = nearestWalkable(this.grid, Math.floor(32 + Math.cos(a) * 5), Math.floor(32 + Math.sin(a) * 5));
+      const a = i / UNITS.length * Math.PI * 2, c = this.center, spot = nearestWalkable(this.grid, Math.floor(c.x + Math.cos(a) * 5), Math.floor(c.z + Math.sin(a) * 5));
       this.addUnit(u, i, spot[0] + 0.5, spot[1] + 0.5, r);
     });
   }
@@ -78,7 +90,8 @@ export class World {
     if (!left.length) return null;
     const [def, i] = left[Math.floor(this.rnd() * left.length)];
     let spot = null;
-    for (let k = 0; k < 20 && !spot; k++) { const a = this.rnd() * Math.PI * 2, d = 1 + this.rnd() * 3; spot = nearestWalkable(this.grid, Math.floor(32 + Math.cos(a) * d), Math.floor(32 + Math.sin(a) * d), 4); }
+    const c = this.center, d0 = this.wild ? 4 : 1;                                   // 넓은 섬은 은행 앞쪽
+    for (let k = 0; k < 20 && !spot; k++) { const a = this.rnd() * Math.PI * 2, d = d0 + this.rnd() * 3; spot = nearestWalkable(this.grid, Math.floor(c.x + Math.cos(a) * d), Math.floor(c.z + 3 + Math.sin(a) * d), 4); }
     if (!spot) return null;
     const u = this.addUnit(def, i, spot[0] + 0.5, spot[1] + 0.5);
     u.y = this.standHeight(u.x, u.z); emote(u, "안녕!", 2.2);
@@ -101,7 +114,7 @@ export class World {
   // ---- 씨앗(잔디밭에서 쪼아 먹음)
   addSeed(x = null, z = null) {
     for (let k = 0; k < 40 && x === null; k++) {                         // 가운데 평야의 빈 잔디 칸
-      const gx = Math.floor(22 + this.rnd() * 20), gz = Math.floor(22 + this.rnd() * 20), c = this.grid.get(gx, gz);
+      const span = this.grid.w * 0.32, gx = Math.floor(this.grid.w / 2 - span / 2 + this.rnd() * span), gz = Math.floor(this.grid.h / 2 - span / 2 + this.rnd() * span), c = this.grid.get(gx, gz);
       if (c && !c.occupiedId && !this.grid.isWater(gx, gz) && c.elevation === 0 && !this.seeds.some(s => s.x === gx && s.z === gz)) { x = gx; z = gz; }
     }
     if (x === null) return null;

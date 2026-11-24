@@ -63,6 +63,14 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
     const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.4, 12), mat(0xffe08a, { emissive: 0xffc24a, emissiveIntensity: 0.8 }));
     lamp.position.y = 3.5; t.add(lamp);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; t.add(cap);
+  } else if (defId === "cave") {
+    // 동굴 입구: 바위 덩이들이 둘러싼 검은 아치(+z 쪽으로 열림)
+    const cx = cellsWorld.reduce((s, c) => s + c[0], 0) / cellsWorld.length, cz = cellsWorld.reduce((s, c) => s + c[1], 0) / cellsWorld.length;
+    const t = new THREE.Group(); t.position.set(cx, 0, cz); g.add(t);
+    const rock = (r, x, y, z, col) => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat(col)); m.position.set(x, y, z); m.rotation.set(x * 3, z * 5, y * 7); m.castShadow = m.receiveShadow = true; t.add(m); };
+    rock(1.15, 0, 0.75, -0.35, 0x8d8a84); rock(0.75, -0.85, 0.45, 0.2, 0x9b978f); rock(0.7, 0.9, 0.42, 0.15, 0x86827b); rock(0.55, 0.15, 1.45, -0.1, 0xa29e96);
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(0.55, 16, 0, Math.PI), mat(0x15120f)); hole.position.set(0, 0.02, 0.62); t.add(hole);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.5), mat(0x2a2520)); floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0.015, 0.75); t.add(floor);
   } else if (defId === "tree") {
     for (const [x, z] of cellsWorld) {
       g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.6, 8), mat(0x8a5a32)), { castShadow: true }).translateX(x).translateY(0.3).translateZ(z));

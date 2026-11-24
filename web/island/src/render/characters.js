@@ -192,6 +192,10 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
     if (o.isSkinnedMesh) { o.computeBoundingSphere?.(); if (o.boundingSphere) o.boundingSphere.radius *= 1.6; }
     for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; } } });   // 환경맵 없이 검게 보이지 않게
   root.scale.setScalar(cfg.scale);
+  if (cfg.tint) {                                                                   // 같은 모델을 다른 갈매미로 쓸 때(목수): 재질을 복제해 색을 입힘
+    const tint = new THREE.Color(cfg.tint);
+    root.traverse(o => { if (o.isMesh) o.material = [].concat(o.material).map(m => { const c = m.clone(); c.color.multiply(tint); return c; }).reduce((a, m, i, arr) => arr.length === 1 ? m : arr, null); });
+  }
   const mixer = new THREE.AnimationMixer(root), acts = {}, clip = {};
   for (const src of g.animations) {
     const key = KEYS.find(k => src.name.endsWith("|" + k) || src.name === k);

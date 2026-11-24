@@ -8,7 +8,10 @@ import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
 import { corners as cornersRaw, heightIn, joined } from "../world/terrain.js";
 
-let SUB = 4;                                   // 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
+let SUB = 4;                                   // 가까운 땅의 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
+// 거리별 상세도(오픈월드 지형의 LOD와 같은 생각): 보는 곳(화면 중심)에서 가까운 청크만 촘촘히, 멀수록 성기게.
+// 칸 테두리에서는 높이가 직선이라(가운데 볼록은 테두리에서 0) 상세도가 다른 청크끼리도 틈이 생기지 않는다.
+export const LOD_NEAR = 26, LOD_MID = 50, LOD_HYST = 4;   // m: 이 안은 SUB, 그다음은 SUB/2, 더 멀면 1. 경계에서 왔다 갔다 하지 않게 4 m 여유
 const BLEND_R = 0.42, LOWEST = -1.6;
 export function setTerrainDetail(sub) { const changed = SUB !== sub; SUB = sub; return changed; }
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
@@ -111,12 +114,17 @@ function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
   ]);
 }
 
-function cellSurface(b, grid, x, z, c) {
-  const e = grid.get(x, z).elevation;
-  const step = 1 / SUB;
-  for (let j = 0; j < SUB; j++) for (let i = 0; i < SUB; i++) {
+/** 깊은 바다(둘레 칸까지 모두 물이고 깊음)는 안 보이니 칸당 1조각. */
+function deepSea(grid, x, z) {
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const c = grid.get(x + dx, z + dz); if (c && c.elevation > -0.6) return false; }
+  return true;
+}
+function cellSurface(b, grid, x, z, c, sub) {
+  const e = grid.get(x, z).elevation, S = deepSea(grid, x, z) ? 1 : sub;
+  const step = 1 / S;
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
-      const u = a * step, v = d * step, gx = x + u, gz = z + v, k = ((z * SUB + d) * 4096 + (x * SUB + a)) * 4096 + z * 64 + x;
+      const u = a * step, v = d * step, gx = x + u, gz = z + v, k = ((z * S + d) * 4096 + (x * S + a)) * 16384 + z * grid.w + x;
       let pc = pointCache.get(k);                                           // 색·법선(칸마다: 절벽 위·아래가 다름)
       if (!pc) {
         const n = normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color());
@@ -130,13 +138,13 @@ function cellSurface(b, grid, x, z, c) {
   }
 }
 
-export function buildChunkGeometry(grid, cx, cz) {
+export function buildChunkGeometry(grid, cx, cz, sub = SUB) {
   const b = new Builder(), n = grid.chunk;
   if (cacheGrid !== grid || !cornerCache) { cornerCache = new Map(); cacheGrid = grid; }
   pointCache = new Map();
   for (let z = cz * n; z < Math.min(grid.h, (cz + 1) * n); z++) for (let x = cx * n; x < Math.min(grid.w, (cx + 1) * n); x++) {
     const c = cachedCorners(grid, x, z);                               // [왼위, 오위, 왼아래, 오아래]
-    cellSurface(b, grid, x, z, c);
+    cellSurface(b, grid, x, z, c, sub);
     // 네 변: 이웃 칸의 맞닿은 꼭짓점 높이보다 내 변이 높으면 그 사이를 벽(절벽)으로 메움. 이어진 칸끼리는 높이가 같아 벽이 생기지 않음
     const nb = (nx, nz, i, j) => { const k = cachedCorners(grid, nx, nz); return [k[i], k[j]]; };
     if (x < grid.w - 1) edgeWall(b, grid, x, z, [c[1], c[3]], nb(x + 1, z, 0, 2), x + 1, z, x + 1, z + 1, [1, 0, 0]);
@@ -157,17 +165,43 @@ export class GroundChunks {
     this.scene = scene; this.grid = grid; this.meshes = new Map(); this.rebuilt = 0;
     this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });   // 어느 쪽에서 봐도 비치지 않게
   }
-  /** 바뀐 청크만 다시 만든다. 다시 만든 청크 수를 돌려준다. */
-  sync() {
+  /** 이 청크가 보는 곳(focus, 월드 좌표)에서 얼마나 떨어졌는지에 따른 칸당 조각 수. cur: 지금 상세도(경계 여유용) */
+  lodFor(cx, cz, focus, cur = null) {
+    if (!focus) return SUB;
+    const n = this.grid.chunk, wx = toWorldX(cx * n + n / 2), wz = toWorldZ(cz * n + n / 2);
+    const d = Math.max(0, Math.hypot(wx - focus.x, wz - focus.z) - n * 0.7);          // 청크 가장자리까지 대략의 거리
+    const lv = s => (s >= SUB ? 0 : s >= SUB / 2 && SUB > 1 ? 1 : 2), want = d < LOD_NEAR ? 0 : d < LOD_MID ? 1 : 2;
+    let level = want;
+    if (cur !== null) {                                                               // 경계 근처면 지금 상세도를 유지
+      const c = lv(cur), edge = [LOD_NEAR, LOD_MID][Math.min(c, want)];
+      if (c !== want && Math.abs(d - edge) < LOD_HYST) level = c;
+    }
+    return [SUB, Math.max(1, SUB / 2), 1][level];
+  }
+  /** 바뀐 청크는 바로, 보는 곳이 옮겨져 상세도가 바뀐 청크는 한 번에 maxLod개씩(끊김 없게) 다시 만든다. */
+  sync(focus = null, maxLod = 2) {
     const keys = this.grid.takeDirty();
     if (keys.length) { cornerCache = new Map(); cacheGrid = this.grid; }      // 높이가 바뀌었을 수 있으니 이번 동기화에서 새로 계산
-    for (const key of keys) {
-      const [cx, cz] = key.split(",").map(Number), geo = buildChunkGeometry(this.grid, cx, cz);
-      let m = this.meshes.get(key);
-      if (m) { m.geometry.dispose(); m.geometry = geo; }
-      else { m = new THREE.Mesh(geo, this.material); m.receiveShadow = true; m.castShadow = false; m.name = `chunk ${key}`; m.userData.chunk = key; this.scene.add(m); this.meshes.set(key, m); }   // 땅은 그림자를 받기만(그림자용으로 다시 그리지 않음)
+    const todo = new Set(keys);
+    if (focus) {
+      let n = 0;
+      for (let cz = 0; cz < this.grid.chunksZ && n < maxLod; cz++) for (let cx = 0; cx < this.grid.chunksX && n < maxLod; cx++) {
+        const key = `${cx},${cz}`, m = this.meshes.get(key);
+        if (!m || todo.has(key)) continue;
+        if (this.lodFor(cx, cz, focus, m.userData.sub) !== m.userData.sub) { todo.add(key); n++; }
+      }
     }
-    this.rebuilt += keys.length; return keys.length;
+    for (const key of todo) {
+      const [cx, cz] = key.split(",").map(Number), m0 = this.meshes.get(key), sub = this.lodFor(cx, cz, focus, m0?.userData.sub ?? null);
+      const geo = buildChunkGeometry(this.grid, cx, cz, sub);
+      let m = m0;
+      if (m) { m.geometry.dispose(); m.geometry = geo; }                         // 예전 조각은 바로 버림(메모리)
+      else { m = new THREE.Mesh(geo, this.material); m.receiveShadow = true; m.castShadow = false; m.name = `chunk ${key}`; m.userData.chunk = key; this.scene.add(m); this.meshes.set(key, m); }   // 땅은 그림자를 받기만(그림자용으로 다시 그리지 않음)
+      m.userData.sub = sub;
+    }
+    this.rebuilt += todo.size; return todo.size;
   }
+  /** 지금 그리는 땅 삼각형 수(확인용) */
+  get triangles() { let t = 0; for (const m of this.meshes.values()) t += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; return Math.round(t); }
   dispose() { for (const m of this.meshes.values()) { this.scene.remove(m); m.geometry.dispose(); } this.meshes.clear(); }
 }

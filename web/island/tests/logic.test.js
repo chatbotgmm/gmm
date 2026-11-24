@@ -6,7 +6,7 @@ import { GroundType, UnitState } from "../src/data/types.js";
 import { connectMask, tileVariant, tilePieces, N, E, S, W } from "../src/world/autotile.js";
 import { findPath } from "../src/world/pathfinding.js";
 import { footprint, checkPlacement, anchorFor } from "../src/world/placement.js";
-import { BUILDINGS } from "../src/data/catalog.js";
+import { BUILDINGS, UNITS } from "../src/data/catalog.js";
 import { World } from "../src/world/World.js";
 import { generateIsland } from "../src/world/islandGen.js";
 import { seededRandom, josa } from "../src/util.js";
@@ -204,14 +204,15 @@ test("헤엄: 물가로 가서 얕은 물에서 헤엄치다 땅으로 올라오
   void real;
 });
 
-test("소환: 빈 섬에서 시작해 한 마리씩 무작위로(겹치지 않게) 최대 8마리, 건축 갈매미가 없으면 못 지음, 저장하면 소환한 갈매미만", () => {
+test("소환: 빈 섬에서 시작해 한 마리씩 무작위로(겹치지 않게) 종류 수만큼, 건축 갈매미가 없으면 못 지음, 저장하면 소환한 갈매미만", () => {
   const w = World.create(7, seededRandom(8), { empty: true });
   assert.equal(w.units.length, 0);
   assert.equal(w.placeBuilding("house", 38, 26, 0).ok, false, "갈매미가 없으면 못 지음");
   const added = []; w.on("unitAdded", u => added.push(u.name));
-  for (let i = 0; i < 8; i++) { const u = w.summon(); assert.ok(u); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z))); }
-  assert.equal(w.summon(), null, "8마리 다 모이면 더 안 옴");
-  assert.equal(new Set(added).size, 8, "겹치지 않음");
+  const N = UNITS.length;
+  for (let i = 0; i < N; i++) { const u = w.summon(); assert.ok(u); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z))); }
+  assert.equal(w.summon(), null, "다 모이면 더 안 옴");
+  assert.equal(new Set(added).size, N, "겹치지 않음");
   const w2 = World.create(7, seededRandom(8), { empty: true });
   let u = w2.summon(); while (u.job === "builder") { w2.units.length = 0; u = w2.summon(); }   // 건축가가 아닌 갈매미 하나
   assert.equal(w2.placeBuilding("house", 38, 26, 0).reason, "건축 갈매미가 있어야 지을 수 있어요 (🥚 소환)");
@@ -372,7 +373,9 @@ test("상인·농부: 가판대에서 남는 것을 팔고 모자란 자재를 �
   assert.ok(log.sold > 0 && w.res.wood === 20 && w.treasures.tuna === 0);
   assert.ok(w.res.stone >= 4, `돌을 사 왔어야 함: ${w.res.stone}`);
   const p = w.plots[0]; assert.equal(w.farmPlot(p, farmer), "plant"); assert.equal(p.stage, "growing");
+  const crew = w.units.splice(0);                                              // 자라는 동안 갈매미가 먼저 거두지 않게 잠시 빼 둠
   for (let t = 0; t < 60; t += 1) w.update(1);
+  w.units.push(...crew);
   assert.equal(p.stage, "ripe"); const f0 = w.res.food; assert.equal(w.farmPlot(p, farmer), "harvest"); assert.ok(w.res.food > f0);
   assert.equal(w.canPaint(p.x, p.z), false); assert.equal(w.check("house", p.x, p.z, 0).ok, false);
 });
