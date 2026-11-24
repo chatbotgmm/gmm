@@ -39,6 +39,8 @@ export function activityWeights(u) {
 /** 이 갈매미가 이 건물을 지을 수 있나: 1등급은 누구나, 그 위는 그 등급 이상 건축가만. */
 export function canBuild(u, def) {
   const tier = def.tier || 1;
+  if (def.fixed) return false;
+  if (def.builtBy) return u.job === def.builtBy && (tier <= 1 || rarityOf(u).rank >= tier);   // 집·계단 = 건축가, 시설 = 목수
   if (tier <= 1) return true;
   return u.job === "builder" && rarityOf(u).rank >= tier;
 }

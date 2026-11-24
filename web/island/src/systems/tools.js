@@ -149,6 +149,7 @@ export class Tools {
       this.plan = { x: h.x, z: h.z }; this.refresh(); return;
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
+      if (b && BUILDINGS[b.defId].fixed) { this.onStatus(`${BUILDINGS[b.defId].name}은 철거할 수 없어요`); return; }
       if (b) { this.world.removeBuilding(b.id); this.refresh(); this.onStatus(`${josa(BUILDINGS[b.defId].name, "을", "를")} 철거했어요`); return; }
     }
     this.refresh();

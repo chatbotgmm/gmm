@@ -4,13 +4,14 @@ import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS, UNITS } from "../da
 import * as J from "../world/jobs.js";
 import * as M from "../units/mind.js";
 import { TRIBES } from "../data/catalog.js";
+import * as E from "../world/economy.js";
 
 const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
   [UnitState.Zoomies]: "신나서 뛰는 중", [UnitState.Flee]: "도망치는 중", [UnitState.Avoid]: "혼자 있고 싶어",
   [UnitState.GoChop]: "숲으로 가는 중", [UnitState.Chop]: "나무 베는 중", [UnitState.GoMine]: "광산으로 가는 중", [UnitState.Mine]: "광석 캐는 중",
   [UnitState.GoFish]: "낚시터로 가는 중", [UnitState.Fish]: "낚시 중", [UnitState.GoBuild]: "공사장으로 가는 중", [UnitState.Build]: "집 짓는 중",
   [UnitState.Idle]: "쉬는 중", [UnitState.Wander]: "산책 중", [UnitState.GoToBuilding]: "건물로 가는 중",
-  [UnitState.Sleep]: "자는 중", [UnitState.Curious]: "구경하러 가는 중", [UnitState.GoSwim]: "헤엄치러 가는 중", [UnitState.Swim]: "헤엄치는 중",
+  [UnitState.Sleep]: "자는 중", [UnitState.Curious]: "구경하러 가는 중", [UnitState.GoSwim]: "헤엄치러 가는 중", [UnitState.Swim]: "헤엄치는 중", [UnitState.GoBank]: "은행에 팔러 가는 중", [UnitState.GoMarket]: "시장 가는 중",
   [UnitState.GoTrade]: "시장으로 가는 중", [UnitState.Trade]: "장사 중", [UnitState.GoFarm]: "밭으로 가는 중", [UnitState.Farm]: "밭일 중",
   [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중", [UnitState.Held]: "들려 있음" };
 
@@ -49,14 +50,62 @@ export class Hud {
     document.getElementById("dexClose").onclick = () => this.showDex(false);
     this.info = document.getElementById("info");
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
-    document.getElementById("save").onclick = onSave;
-    document.getElementById("load").onclick = onLoad;
-    document.getElementById("reset").onclick = onReset;
-    const panel = document.getElementById("panel"), fold = document.getElementById("fold");
-    const setFold = f => { panel.classList.toggle("folded", f); fold.textContent = f ? "펼치기" : "접기"; };
-    fold.onclick = () => setFold(!panel.classList.contains("folded")); setFold(innerWidth <= 640);
+    document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
+    document.getElementById("load").onclick = () => { onLoad(); this.closePhone(); };
+    document.getElementById("reset").onclick = () => { onReset(); this.closePhone(); };
     this.list = document.getElementById("units"); this.stats = document.getElementById("stats"); this.msg = document.getElementById("msg");
-    this.setWorld(world); this.showMode("view");
+    // ---- 갈매폰: 📱 → 앱 메뉴(갈매미·은행·시장·건설·소환·도감·저장·설정·도움말)
+    this.phone = document.getElementById("phone"); this.phoneBtn = document.getElementById("phoneBtn");
+    this.phoneBtn.onclick = () => this.openPhone();
+    document.getElementById("phoneClose").onclick = () => this.closePhone();
+    document.getElementById("phoneBack").onclick = () => this.openApp(null);
+    this.phone.addEventListener("pointerdown", e => { if (e.target === this.phone) this.closePhone(); });
+    for (const b of document.querySelectorAll(".apps button")) b.onclick = () => {
+      const app = b.dataset.app;
+      if (app === "build") { this.closePhone(); tools.setMode("build", this.lastBuild || "house"); return; }
+      if (app === "dex") { this.closePhone(); this.showDex(true); return; }
+      this.openApp(app);
+    };
+    // 배고픈 갈매미 알림: 누르면 그 갈매미를 따라감
+    this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitClick?.(this.hungry); };
+    this.chipMoney = document.getElementById("chipMoney"); this.chipPop = document.getElementById("chipPop");
+    addEventListener("resize", () => this.layout());
+    this.setWorld(world); this.showMode("view"); this.layout();
+  }
+  // ---- 갈매폰
+  openPhone() { this.phone.hidden = false; this.openApp(null); }
+  closePhone() { this.phone.hidden = true; this.app = null; }
+  openApp(app) {
+    this.app = app;
+    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp" };
+    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말" };
+    for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
+    document.getElementById("phoneTitle").textContent = titles[app];
+    document.getElementById("phoneBack").hidden = app === null;
+    this.refreshApp();
+  }
+  /** 휴대폰: 도구 막대가 아래에 있으면 📱·따라가기 카드를 그 위로 */
+  layout() {
+    const top = document.getElementById("top").getBoundingClientRect(), low = top.top > innerHeight / 2, b = low ? `${innerHeight - top.top + 10}px` : "";
+    this.phoneBtn.style.bottom = b; this.info.style.bottom = b;
+  }
+  refreshApp() {
+    const w = this.world;
+    if (this.app === "bank") {
+      const r = w.res, rows = E.ITEMS_ORDER.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>${r[k] || 0}개</td><td>🪙${E.BANK_BUY[k]}</td></tr>`).join("");
+      document.getElementById("bankBody").innerHTML = w.economy ? `<table class="tbl"><tr><td>찍어 낸 돈(발행)</td><td></td><td>🪙${w.bank.issued}</td></tr><tr><td>시장에서 돌아온 돈(회수)</td><td></td><td>🪙${w.bank.returned}</td></tr>` +
+        `<tr><td><b>갈매미들이 가진 돈</b></td><td></td><td><b>🪙${w.moneySupply()}</b></td></tr></table>` +
+        `<h4>창고(공사 재료) · 1개당 사 주는 값</h4><table class="tbl">${rows}</table><p class="dim">갈매미는 가방에 ${E.CARRY}개가 모이면 은행에 팔아요. 건축가·목수는 공사 한 바퀴마다 품삯 🪙${E.WAGE}을 받아요.</p>`
+        : `<p class="dim">이 섬에는 공식은행이 없어요(예전 섬).</p>`;
+    } else if (this.app === "market") {
+      const mk = w.marketB(), sale = w.housesForSale();
+      document.getElementById("marketBody").innerHTML = !mk ? `<p>아직 시장이 없어요. <b>🪚 목수</b>가 있으면 🏠 건설에서 <b>시장</b>을 지을 수 있어요.</p>`
+        : `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${BUILDINGS[b.defId].price}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
+          `<h4>음식</h4><table class="tbl"><tr><td>🍗 음식 · 🐟 물고기 (은행 창고)</td><td>${(w.res.food || 0) + (w.res.fish || 0)}개 · 🪙${E.MARKET_FOOD}</td></tr></table>` +
+          `<h4>집 주인</h4><table class="tbl">${w.units.filter(u => u.home).map(u => `<tr><td>${u.name}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
+    } else if (this.app === "summon") {
+      this.setSummon(w);
+    }
   }
   setWorld(world) {
     this.world = world; this.list.innerHTML = "";
@@ -64,8 +113,8 @@ export class Hud {
     this.rows = world.units.map(u => { const r = el("div", "row"), nm = el("span", "nm");
       nm.append(el("span", "job", JOBS[u.job]?.icon ?? ""), u.name); nm.style.color = RARITY[u.rarity]?.color;
       nm.title = `${RARITY[u.rarity]?.name} ${JOBS[u.job]?.name}: ${JOBS[u.job]?.desc}`;
-      r.append(nm, el("span", "act"), el("span", "full"));
-      r.onclick = () => this.onUnitClick?.(u); this.list.appendChild(r); return r; });
+      r.append(nm, el("span", "act"), el("span", "coins"), el("span", "full"));
+      r.onclick = () => { this.onUnitClick?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });
     this.follow = null;
   }
   showMode(mode, arg) {
@@ -94,9 +143,11 @@ export class Hud {
       this.lastBuild = arg;
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
       for (const def of Object.values(BUILDINGS)) {
+        if (def.menu === false) continue;                                           // 은행·예전 건물은 메뉴에서 뺌
         const locked = !this.world.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
         const b = el("button", (def.id === arg ? "on " : "") + (locked ? "locked" : ""), `${locked ? "🔒 " : ""}${def.name} ${def.footprint.w}×${def.footprint.d}`);
-        b.title = def.tier > 1 ? `${tierName} 이상 건축가가 지을 수 있어요${locked ? " (지금은 없음)" : ""}` : "누구나 지을 수 있어요";
+        const who = def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가";
+        b.title = `${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${locked ? " (지금은 없음)" : ""}`;
         b.onclick = () => this.tools.setMode("build", def.id); this.sub.appendChild(b); }
       const r = el("button", "", "↻ 돌리기(R)"); r.onclick = () => this.tools.rotate(); this.sub.appendChild(r);
       const ib = el("button", this.instantBuild ? "on" : "", "⚡ 바로 완공");           // 끄면 갈매미가 나무·돌로 지음
@@ -106,7 +157,8 @@ export class Hud {
     }
   }
   /** 🥚 소환 버튼: 마을에 있는 수 / 전체, 다 모이면 끔 */
-  setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all; }
+  setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all;
+    const left = UNITS.filter(d => !world.units.some(u => u.name === d.name)).map(d => d.name); document.getElementById("summonLast").textContent = left.length ? `아직 안 온 갈매미: ${left.join(", ")}` : ""; }
   showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); }
   /** 도감(낚은 물고기)·가방(건진 물건) 창 */
   showDex(on) {
@@ -132,13 +184,19 @@ export class Hud {
     const w = this.world, inside = w.units.filter(u => u.insideBuildingId).length;
     const building = [...w.buildings.values()].filter(b => b.hits < b.need).length;
     const avg = w.avgFull(), mood = avg < J.HUNGRY ? "😫" : avg > J.OVERFULL ? "😴" : avg >= 60 ? "😋" : "🙂";
-    this.stats.innerHTML = `<span>🌳 나무 ${w.res.wood}</span><span>⛰ 돌 ${w.res.stone}</span><span>⚙ 철 ${w.res.iron}</span>` +
-      `<span>🍗 음식 ${w.res.food}</span><span>🐚 조개 ${w.res.coins}</span><span>${mood} 포만감 ${avg.toFixed(0)}</span>` +
-      `<span>🏠 건물 ${w.buildings.size}${building ? ` (공사 ${building})` : ""}</span><span>🐦 ${w.units.length}마리 · 건물 안 ${inside}</span>` +
-      `<span class="dim">🧩 청크 ${chunkInfo.count}개 · 다시 그림 ${chunkInfo.rebuilt}회${chunkInfo.fps ? ` · ${chunkInfo.fps} fps` : ""}</span>`;
+    this.stats.innerHTML = `<span>${mood} 포만감 ${avg.toFixed(0)}</span><span>🏠 건물 ${w.buildings.size}${building ? ` (공사 ${building})` : ""}</span><span>🐦 ${w.units.length}마리 · 건물 안 ${inside}</span>` +
+      (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🐚 ${w.res.coins}</span>`) +
+      `<span>🧩 땅 ${chunkInfo.tris ? Math.round(chunkInfo.tris / 1000) + "천 삼각형 · " : ""}${chunkInfo.fps ? `${chunkInfo.fps} fps` : ""}</span>`;
+    this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.title = "갈매미들이 가진 돈 합계";
+    this.chipPop.textContent = `🐦 ${w.units.length} · ${mood} ${avg.toFixed(0)}`;
+    const hungry = w.units.filter(u => (u.full ?? 80) < J.HUNGRY).sort((a, b) => a.full - b.full)[0];
+    this.hungry = hungry; this.alertBtn.hidden = !hungry; if (hungry) this.alertBtn.textContent = `😣 ${hungry.name} 배고파요`;
+    if (!this.phone.hidden && this.app && this.app !== "gulls") this.refreshApp();
+    this.layout();                                                                   // 도구 막대 높이가 바뀌어도 📱·카드가 그 위에
     w.units.forEach((u, i) => { const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
       this.rows[i].querySelector(".act").textContent = b ? `${BUILDINGS[b.defId].name} 안` : STATE_LABEL[u.state] || u.state;
-      const f = this.rows[i].querySelector(".full"); f.textContent = Math.round(u.full ?? 0);
+      this.rows[i].querySelector(".coins").textContent = w.economy ? `🪙${u.coins || 0}${u.home ? " 🏠" : ""}` : "";
+      const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
     // 따라가는 갈매미 정보
     const u = this.follow; this.info.hidden = !u;
@@ -147,6 +205,7 @@ export class Hud {
       this.info.innerHTML = `<b style="color:${r.color}">${job.icon} ${u.name}</b> · ${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} ${job.name} (특기 ×${r.mult})<br>` +
         `🍗 ${Math.round(u.full)} · ⚡기력 ${Math.round(n.energy ?? 0)} · 💬친구 ${Math.round(n.social ?? 0)} · 🎈재미 ${Math.round(n.fun ?? 0)} · 능률 ×${(u.eff ?? 1).toFixed(2)}` +
         `${J.isLazy(u) ? " · 배불러 게으름" : (u.full < J.HUNGRY ? " · 배고픔" : "")}<br>` +
+        (w.economy ? `🪙 ${u.coins || 0} · 가방 ${E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => E.ITEM_ICON[k] + u.inv[k]).join(" ") || "비었음"} · ${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") + " 주인" : "집 없음"}<br>` : "") +
         `좋아하게 된 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · 단짝: ${bf.name} ♥${Math.round(M.affinity(u, bf))}` : ""}<br><span class="dim">${job.desc}</span>`; }
   }
 }

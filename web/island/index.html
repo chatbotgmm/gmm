@@ -20,24 +20,37 @@
     background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); white-space: nowrap; }
   button.on { background: var(--accent); color: #fff; }
   #top { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px));
-    right: calc(262px + env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+    right: calc(120px + env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .bar { display: flex; flex-wrap: wrap; gap: 6px; background: var(--panel); padding: 6px; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.1); }
   .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
   .lab { align-self: center; font-size: 12.5px; color: var(--muted); padding: 0 2px 0 8px; }
   #msg { background: var(--panel); border-radius: 10px; padding: 6px 11px; font-size: 13.5px; }
-  #panel { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: 236px;
-    max-height: calc(100% - 20px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow: auto;
-    background: var(--panel); border-radius: 12px; padding: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.12); font-size: 13.5px; box-sizing: border-box; }
-  #panel h1 { font-size: 16px; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
-  #fold { display: none; background: none; box-shadow: none; padding: 0 0 0 4px; color: var(--accent); margin-left: auto; }
-  #stats { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 12.5px; margin-bottom: 6px; } #stats span { white-space: nowrap; }
-  .row { display: flex; gap: 8px; padding: 3px 6px; border-radius: 8px; cursor: pointer; } .row:hover { background: rgba(0,0,0,.05); }
+  .row { display: flex; gap: 8px; padding: 6px; border-radius: 8px; cursor: pointer; align-items: center; } .row .coins { font-size: 12px; font-variant-numeric: tabular-nums; } .row:hover { background: rgba(0,0,0,.05); }
   .row.on { background: var(--accent); color: #fff; } .row.on .act { color: #fff; } .row .nm { font-weight: 600; min-width: 54px; } .row .act { color: var(--muted); font-size: 12.5px; }
-  #files { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; } #files button { font-size: 12.5px; padding: 6px 9px; }
-  #help { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    margin-right: calc(10px + env(safe-area-inset-right, 0px)); background: var(--panel); border-radius: 10px; padding: 6px 11px; font-size: 12.5px; }
+  #help { font-size: 13px; line-height: 1.7; }
+  #chips { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); z-index: 2;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  #chips > span { background: var(--panel); border-radius: 10px; padding: 5px 10px; font-size: 13.5px; box-shadow: 0 1px 4px rgba(0,0,0,.1); font-variant-numeric: tabular-nums; }
+  #alert { background: #fde3dd; color: #a8322a; font-weight: 600; }
+  #phoneBtn { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 3;
+    width: 54px; height: 54px; border-radius: 18px; font-size: 26px; padding: 0; background: var(--accent); box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+  #phoneBtn .dot { position: absolute; top: 4px; right: 4px; width: 12px; height: 12px; border-radius: 50%; background: #d63b30; border: 2px solid #fff; }
+  #phone { position: fixed; inset: 0; z-index: 6; background: rgba(20,30,40,.3); display: grid; place-items: center; padding: 16px; }
+  #phone .card { background: #fffaf2; border-radius: 22px; width: min(420px, 100%); max-height: 84vh; overflow: auto; padding: 12px 14px 16px; box-sizing: border-box;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  #phone .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; } #phone .head b { font-size: 16px; }
+  .apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 6px 0 10px; }
+  .apps button { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; box-shadow: none; font-size: 12.5px; padding: 4px; }
+  .apps button span { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-size: 25px; background: #fbe3cf; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .col { display: flex; flex-direction: column; gap: 8px; } .col button { text-align: left; }
+  button.go { background: var(--accent); color: #fff; font-weight: 700; }
+  #stats { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 12.5px; } #stats span { white-space: nowrap; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; } .tbl td { padding: 4px 2px; border-bottom: 1px dashed #eadfcb; }
+  .tbl td:last-child { text-align: right; } h4 { margin: 10px 0 4px; font-size: 13.5px; }
+  #info { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 2; width: min(330px, calc(100% - 100px));
+    background: var(--panel); border-radius: 12px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; box-shadow: 0 1px 6px rgba(0,0,0,.12); box-sizing: border-box; }
   #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-  #top, #panel, #help { z-index: 2; }
+  #top { z-index: 2; }
   .badge { position: absolute; transform: translate(-50%, -100%); background: #fff; border-radius: 10px; padding: 2px 7px; font-size: 13px;
     box-shadow: 0 1px 3px rgba(0,0,0,.18); white-space: nowrap; }
   .emote { position: absolute; transform: translate(-50%, -100%); font-size: 20px; white-space: nowrap; text-shadow: 0 1px 2px rgba(255,255,255,.9); }
@@ -45,7 +58,6 @@
   #zones.off { opacity: .55; } .dim { color: var(--muted); }
   .row .job { margin-right: 3px; } .row .full { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .row .full.hungry { color: #d0453a; font-weight: 600; } .row .full.lazy { color: #9152d0; }
-  #info { font-size: 12.5px; background: rgba(0,0,0,.04); border-radius: 8px; padding: 6px 8px; margin: 0 0 6px; line-height: 1.5; }
   button.locked { opacity: .55; } button.hand.on { background: #3d8bd9; color: #fff; }
   #dex { position: fixed; inset: 0; z-index: 5; background: rgba(20,30,40,.35); display: grid; place-items: center; padding: 16px; }
   #dex .card { background: #fff; border-radius: 14px; width: min(560px, 100%); max-height: 86vh; overflow: auto; padding: 12px 14px; box-sizing: border-box; }
@@ -64,8 +76,6 @@
   @media (max-width: 640px) {
     #top { right: calc(10px + env(safe-area-inset-right, 0px)); top: auto; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
     button { font-size: 12.5px; padding: 6px 8px; }
-    #panel { width: 178px; font-size: 12px; } #fold { display: inline; } #panel.folded #units, #panel.folded #files { display: none; }
-    #help { display: none; }
     #confirm { left: 50%; }   /* 휴대폰: 아래 도구 막대 바로 위(높이는 hud.js에서 막대 위치로 맞춤) */
   }
 </style>
@@ -76,14 +86,27 @@
   <div class="bar" id="sub" hidden></div>
   <div id="msg" hidden></div>
 </div>
-<div id="panel">
-  <h1>갈매미맨 마을 <button id="fold">접기</button></h1>
-  <div id="stats"></div>
-  <div id="info" hidden></div>
-  <div id="units"></div>
-  <div id="files"><button id="summon" title="아직 마을에 없는 갈매미 하나가 무작위로 와요">🥚 소환</button><button id="dexBtn">도감·가방</button><button id="quality" title="자동: 느리면 해상도를 낮춤 · 높음 · 낮음(지형·그림자 가볍게)">화질: 자동</button><button id="seeds">씨앗 뿌리기</button><button id="zones">구역 이름</button><button id="save">저장</button><button id="load">불러오기</button><button id="reset">새 섬</button></div>
+<!-- 갈매폰 UI: 평소엔 오른쪽 위 칩(돈·마릿수)과 배고픈 갈매미 알림만, 📱를 누르면 앱 메뉴 -->
+<div id="chips"><span id="chipMoney">🪙 0</span><span id="chipPop">🐦 0</span><button id="alert" hidden></button></div>
+<div id="info" hidden></div>
+<button id="phoneBtn" title="갈매폰: 갈매미·은행·시장·건설·소환·도감·저장·설정">📱</button>
+<div id="phone" hidden>
+  <div class="card">
+    <div class="head"><button id="phoneBack" hidden>‹ 뒤로</button><b id="phoneTitle">📱 갈매폰</b><button id="phoneClose">닫기</button></div>
+    <div id="pageHome" class="page"><div class="apps">
+      <button data-app="gulls"><span>🐦</span>갈매미</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button>
+      <button data-app="build"><span>🏠</span>건설</button><button data-app="summon"><span>🥚</span>소환</button><button data-app="dex"><span>📖</span>도감</button>
+      <button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button>
+    </div><div id="stats" class="dim"></div></div>
+    <div id="pageGulls" class="page" hidden><div id="units"></div></div>
+    <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
+    <div id="pageMarket" class="page" hidden><div id="marketBody"></div></div>
+    <div id="pageSummon" class="page" hidden><p class="dim">아직 마을에 없는 갈매미 하나가 무작위로 와요.</p><button id="summon" class="go">🥚 소환</button><div id="summonLast" class="dim"></div></div>
+    <div id="pageFiles" class="page" hidden><div class="col"><button id="save">💾 저장(이 브라우저)</button><button id="load">📂 불러오기</button><button id="reset">🏝 새 섬</button></div></div>
+    <div id="pageSettings" class="page" hidden><div class="col"><button id="quality" title="자동: 느리면 해상도를 낮춤 · 높음 · 낮음(지형·그림자 가볍게)">화질: 자동</button><button id="zones">구역 이름 보이기</button><button id="seeds">씨앗 뿌리기</button><button id="dexBtn" hidden>도감</button></div></div>
+    <div id="pageHelp" class="page" hidden><div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기<br>도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기<br>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 벌리기 = 확대<br>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)<br>경제: 갈매미는 일해서 얻은 물건을 🏦 공식은행에 팔아 돈을 벌고, 🐚 시장(목수가 지음)에서 집과 음식을 사요. 먹을 게 없으면 만난 갈매미와 물물교환해요.</div></div>
+  </div>
 </div>
-<div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기 &nbsp;|&nbsp; 도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기 &nbsp;|&nbsp; 휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 벌리기 = 확대 &nbsp;|&nbsp; 갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)</div>
 <div id="confirm" hidden><button id="cfBuild" class="go">🔨 건설</button><button id="cfRot">↻ 돌리기</button><button id="cfCancel">✕ 취소</button></div>
 <div id="overlay"></div>
 <div id="dex" hidden><div class="card"><div class="head"><b>도감 · 가방</b><button id="dexClose">닫기</button></div><div id="dexBody"></div></div></div>

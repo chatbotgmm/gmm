@@ -10,7 +10,7 @@ import { terrainHeight } from "../world/terrain.js";
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
-    this.scene = scene; this.views = new Map(); this.overlay = overlay;
+    this.scene = scene; this.views = new Map(); this.overlay = overlay; this.economy = () => world.economy;
     world.on("buildingAdded", b => this.add(b));
     world.on("buildingRemoved", b => this.remove(b.id));
     this.ready = Promise.allSettled([...world.buildings.values()].map(b => this.add(b)));   // 처음 있던 건물들을 다 그렸을 때
@@ -22,7 +22,7 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = def.stairs ? stairsModel(b.ramp) : await modelFor(def, () => buildingPlaceholder(def));
+    const model = def.stairs ? stairsModel(b.ramp) : def.field ? fieldModel(def) : def.dock ? dockModel() : await modelFor(def, () => buildingPlaceholder(def));
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
@@ -55,10 +55,11 @@ export class BuildingViews {
   // 건물 위 표시: 안에 있는 갈매미 수(건물 밖에서도 안의 상태가 유지됨을 보여 줌)
   updateBadges(camera, w, h, tmp = new THREE.Vector3()) {
     for (const v of this.views.values()) {
-      const b = v.building, n = b.occupants.length, building = b.hits < b.need;
-      v.badge.hidden = n === 0 && !building; if (v.badge.hidden) continue;
+      const b = v.building, n = b.occupants.length, building = b.hits < b.need, def = BUILDINGS[b.defId];
+      const forSale = !building && def.house && !b.owner && this.economy?.();         // 다 지었는데 주인이 없는 집 = 시장 매물
+      v.badge.hidden = n === 0 && !building && !forSale; if (v.badge.hidden) continue;
       tmp.set(v.holder.position.x, v.holder.position.y + v.height, v.holder.position.z).project(camera);
-      v.badge.textContent = building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : `🐦 ${n}`; v.badge.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; v.badge.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
+      v.badge.textContent = building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${def.price}`; v.badge.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; v.badge.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
       if (tmp.z > 1) v.badge.hidden = true;
     }
   }
@@ -73,6 +74,24 @@ function stairsModel(r) {
     const top = H * (i + 1) / n, depth = 1 / n, m = new THREE.Mesh(new THREE.BoxGeometry(0.96, top + 0.02, depth + 0.002), i % 2 ? STONE2 : STONE);
     m.position.set(0, (top - 0.02) / 2, 0.5 - (i + 0.5) * depth); m.castShadow = m.receiveShadow = true; g.add(m);
   }
+  return g;
+}
+
+/** 밭: 낮은 나무 울타리 테두리(땅은 흙, 작물은 life.js) */
+const FENCE = new THREE.MeshStandardMaterial({ color: 0xa0784e, roughness: 0.9 });
+function fieldModel(def) {
+  const g = new THREE.Group(), W = def.footprint.w, D = def.footprint.d, h = 0.18;
+  for (const [w, d, x, z] of [[W, 0.06, 0, -D / 2], [W, 0.06, 0, D / 2], [0.06, D, -W / 2, 0], [0.06, D, W / 2, 0]]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), FENCE); m.position.set(x, h / 2, z); m.castShadow = true; g.add(m);
+  }
+  return g;
+}
+/** 낚시터: 물 쪽(-z, 문 반대)으로 뻗은 나무 데크와 기둥 */
+const PLANK = new THREE.MeshStandardMaterial({ color: 0xc8955a, roughness: 0.85 }), POST = new THREE.MeshStandardMaterial({ color: 0x7d5634, roughness: 0.9 });
+function dockModel() {
+  const g = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 1.9), PLANK); deck.position.set(0, 0.06, -0.45); deck.castShadow = deck.receiveShadow = true; g.add(deck);
+  for (const [x, z] of [[-0.4, -1.3], [0.4, -1.3], [-0.4, -0.5], [0.4, -0.5]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.0, 0.1), POST); p.position.set(x, -0.45, z); g.add(p); }
   return g;
 }
 

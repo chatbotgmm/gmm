@@ -48,6 +48,10 @@ export function checkPlacement(grid, def, ax, az, rot, units = []) {
     if (top - e > 1.5 + 1e-6) return fail("너무 높아요(계단 하나로 1.5 m까지)");
     ramp = { dx: bx - sx, dz: bz - sz, bx, bz, h0: e, h1: top };
   }
+  if (def.dock) {                                                            // 낚시터: 문 반대쪽 칸이 물이어야 함(물 쪽을 보고 낚시)
+    const [sx, sz] = fp.cells[0], bx = 2 * sx - fp.door.x, bz = 2 * sz - fp.door.z;
+    if (!grid.inBounds(bx, bz) || !grid.isWater(bx, bz)) return fail("낚시터 앞(문 반대쪽)이 물이어야 해요(R로 방향 돌리기)");
+  }
   const inFp = new Set(fp.cells.map(([x, z]) => `${x},${z}`));
   if (units.some(u => !u.insideBuildingId && inFp.has(`${Math.floor(u.x)},${Math.floor(u.z)}`))) return fail("갈매미가 서 있어요");
   return { ...fp, ok: true, reason: "", elevation: e, ramp };

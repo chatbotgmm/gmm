@@ -270,6 +270,57 @@ test("계단 이어 놓기: 아래 계단 위쪽 칸에 같은 방향으로 놓�
   assert.equal(g.canStep(44, 40, 44, 39), true);
 });
 
+test("넓은 섬 경제: 은행에 팔면 새 돈, 목수만 시설, 시장에서 집 사기(주인만 들어감), 물물교환, 밭·낚시터", async () => {
+  const E = await import("../src/world/economy.js");
+  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true;
+  assert.deepEqual(w.units.map(u => u.name), ["기본"], "기본 한 마리로 시작");
+  assert.ok(w.economy && w.bankB(), "가운데 공식은행");
+  const boss = w.units[0], c = w.center;
+  const spot = def => { for (let r = 3; r < 30; r++) for (let k = 0; k < 48; k++) { const a = k / 48 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + 6 + Math.sin(a) * r); if (w.check(def, x, z, 0).ok) return [x, z]; } return null; };
+  // 은행: 가방의 나무 6 → 12🪙 발행, 창고로
+  boss.inv.wood = 6; const r = w.sellToBank(boss);
+  assert.equal(r.coins, 12); assert.equal(boss.coins, 12); assert.equal(w.bank.issued, 12); assert.equal(w.res.wood, 6); assert.equal(boss.inv.wood, 0);
+  // 시설은 목수만: 목수가 없으면 시장을 못 놓음
+  const m0 = spot("house"); assert.match(w.check("market", m0[0], m0[1], 0).reason, /목수 갈매미/);
+  w.addUnitByName("목수"); w.addUnitByName("미니");
+  const mk = spot("market"); assert.ok(w.placeBuilding("market", mk[0], mk[1], 0).ok); assert.ok(w.marketB());
+  // 집: 다 지어도 주인이 없으면 아무도 못 들어감 → 돈 모아 사면 주인만
+  const hs = spot("house"), h = w.placeBuilding("house", hs[0], hs[1], 0).building, mini = w.units.find(u => u.name === "미니");
+  assert.equal(w.canEnter(mini, h), false); assert.equal(w.housesForSale(mini).length, 1);
+  mini.coins = 29; assert.equal(w.buyHouse(mini, h), false, "돈이 모자라면 못 삼");
+  mini.coins = 40; assert.equal(w.buyHouse(mini, h), true); assert.equal(h.owner, mini.unitId); assert.equal(mini.home, h.id); assert.equal(mini.coins, 10);
+  assert.equal(w.canEnter(mini, h), true); assert.equal(w.canEnter(boss, h), false); assert.equal(w.bank.returned, 30);
+  // 물물교환: 배고프고 먹을 게 없는 쪽이 나무를 주고 음식을 받음
+  boss.full = 30; boss.inv.wood = 3; mini.inv.food = 4; const msg = w.barter(boss, mini);
+  assert.ok(msg && boss.inv.food === 1 && mini.inv.food === 3 && boss.inv.wood === 2 && mini.inv.wood === 1, msg);
+  // 시장 음식: 창고에 있으면 3🪙에 삼
+  w.res.food = 2; boss.inv.food = 0; boss.inv.fish = 0; boss.coins = 5; assert.equal(w.buyFood(boss), true); assert.equal(boss.inv.food, 1); assert.equal(boss.coins, 2);
+  // 밭: 다 지으면 칸마다 밭 / 낚시터: 물 쪽을 보는 낚시 자리
+  const fd = spot("field"), f = w.placeBuilding("field", fd[0], fd[1], 0).building;
+  assert.equal(w.plots.filter(p => p.field === f.id).length, 6);
+  let dock = null; for (let z = 0; z < 96 && !dock; z++) for (let x = 0; x < 96 && !dock; x++) for (const rot of [0, 1, 2, 3]) if (!dock && w.check("dock", x, z, rot).ok) dock = w.placeBuilding("dock", x, z, rot).building;
+  assert.ok(dock); const sp = w.spots.find(s => s.dock === dock.id); assert.ok(sp && w.grid.isWater(sp.x + sp.dir[0], sp.z + sp.dir[1]));
+  // 저장/불러오기: 돈·가방·집 주인·은행 기록 유지
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())));
+  const m2 = back.units.find(u => u.name === "미니");
+  assert.equal(m2.coins, mini.coins); assert.equal(m2.home, h.id); assert.equal(back.buildings.get(h.id).owner, mini.unitId); assert.deepEqual(back.bank, w.bank);
+  void E;
+});
+
+test("넓은 섬: 기본 혼자 첫 집을 짓고(나무는 직접 벰), 모두 소환해 오래 돌려도 굶지 않고 집이 팔린다", () => {
+  const w = World.create(7, seededRandom(3), { wild: true }), c = w.center;
+  const spot = (def, cx, cz) => { for (let r = 3; r < 30; r++) for (let k = 0; k < 48; k++) { const a = k / 48 * 6.28, x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r); if (w.check(def, x, z, 0).ok) return [x, z]; } return null; };
+  const p = spot("house", c.x - 8, c.z + 8); const first = w.placeBuilding("house", p[0], p[1], 0).building;
+  for (let t = 0; t < 120; t += 0.1) w.update(0.1);
+  assert.ok(w.isDone(first), "기본 혼자 첫 집 완공");
+  while (w.summon());
+  for (const d of ["market", "field", "house", "house"]) { const q = spot(d, c.x + 6, c.z + 8); w.placeBuilding(d, q[0], q[1], 0); }
+  let minFull = 999, sold = 0; w.on("market", e => { if (e.kind === "house") sold++; });
+  for (let t = 0; t < 900; t += 0.1) { w.update(0.1); if (t > 30) for (const u of w.units) minFull = Math.min(minFull, u.full); }
+  assert.ok(w.marketB(), "목수가 시장을 지음"); assert.ok(sold >= 1, `집이 팔림: ${sold}`); assert.ok(w.bank.issued > 0);
+  assert.ok(minFull > 3, `굶지 않음: ${minFull}`);
+});
+
 test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
   const w = World.create(7, seededRandom(11));
   w.placeBuilding("house", 38, 26, 0);                       // 공사장(갈매미가 지어야 함)
@@ -340,7 +391,8 @@ test("종족: 10종족·직업·희귀도(지금은 모두 일반)가 일과 건
   assert.equal(by("자이언트").tribe, "거인"); assert.equal(by("자이언트").job, "lumberjack"); assert.equal(by("물방울").tribe, "해인");
   assert.equal(J.woodYield(by("자이언트")), 3); assert.equal(J.woodYield(by("꽃")), 2);           // 나무꾼 ×1.3
   assert.equal(J.stoneYield(by("불씨")), 3); assert.equal(J.hammerPower(by("기본")), 1.3); assert.equal(J.hammerPower(by("물방울")), 1);
-  assert.ok(J.canBuild(by("미니"), BUILDINGS.house) && !J.canBuild(by("기본"), BUILDINGS.cafe));
+  assert.ok(J.canBuild(by("기본"), BUILDINGS.house) && !J.canBuild(by("미니"), BUILDINGS.house) && !J.canBuild(by("기본"), BUILDINGS.cafe), "집은 건축가만");
+  assert.ok(!J.canBuild(by("기본"), BUILDINGS.market), "시설은 목수만");
   assert.equal(w.check("cafe", 38, 26, 0).reason, "희귀 이상 건축가가 있어야 지을 수 있어요");       // 일반뿐이라 2등급부터 잠김
   assert.equal(w.check("cottage", 38, 26, 0).ok, true);
   // 희귀도가 오르면 배율과 지을 수 있는 건물이 늘어남

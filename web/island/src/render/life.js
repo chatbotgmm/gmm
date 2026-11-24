@@ -25,12 +25,16 @@ export class LifeViews {
     this.cropGreen = new THREE.MeshStandardMaterial({ color: 0x6fbf55, roughness: 0.8 });
     this.cropRipe = new THREE.MeshStandardMaterial({ color: 0xe8b830, roughness: 0.7 });
     this.cropGeo = new THREE.ConeGeometry(0.07, 0.32, 6).translate(0, 0.16, 0);
-    this.crops = world.plots.map(p => {
-      const g = new THREE.Group(); g.position.set(toWorldX(p.x + 0.5), terrainHeight(world.grid, p.x + 0.5, p.z + 0.5) + 0.01, toWorldZ(p.z + 0.5));
+    this.crops = [];
+    const addCrop = p => {
+      const g = new THREE.Group(); g.position.set(toWorldX(p.x + 0.5), world.standHeight(p.x + 0.5, p.z + 0.5) + 0.01, toWorldZ(p.z + 0.5));
       for (const [dx, dz] of [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]]) {
         const m = new THREE.Mesh(this.cropGeo, this.cropGreen); m.position.set(dx, 0, dz); m.castShadow = true; g.add(m); }
-      scene.add(g); return { p, g };
-    });
+      scene.add(g); this.crops.push({ p, g });
+    };
+    world.plots.forEach(addCrop);
+    world.on("plotAdded", addCrop);                                                  // 목수가 지은 밭
+    world.on("plotRemoved", p => { const i = this.crops.findIndex(c => c.p === p); if (i >= 0) { scene.remove(this.crops[i].g); this.crops.splice(i, 1); } });
     // 말풍선(유닛마다 하나)과 구역 이름
     this.emotes = [];                                                              // 갈매미마다 말풍선(소환되면 그때 만듦)
     this.emoteFor = i => this.emotes[i] ||= (() => { const e = document.createElement("div"); e.className = "emote"; e.hidden = true; overlay.appendChild(e); return e; })();

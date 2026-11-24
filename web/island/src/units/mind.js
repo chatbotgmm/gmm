@@ -6,7 +6,7 @@
 // 친구: 인사하면 서로 호감이 오르고, 친구를 찾아갈 때 호감 높은 쪽을 더 자주 고른다.
 export const NEED_KEYS = ["energy", "social", "fun"];
 export const LEARN_RATE = 0.15;
-const ACTIVITIES = ["rest", "wander", "forage", "visit", "zoomies", "chop", "mine", "fish", "build", "enter", "eat", "trade", "farm", "swim"];
+const ACTIVITIES = ["rest", "wander", "forage", "visit", "zoomies", "chop", "mine", "fish", "build", "enter", "eat", "trade", "farm", "swim", "deposit", "market"];
 const WORK = new Set(["chop", "mine", "fish", "build", "trade", "farm"]);
 
 export function initMind(u, rnd) {
@@ -64,4 +64,4 @@ export function bestFriend(u, units) {
 }
 
 export const ACTIVITY_NAME = { rest: "쉬기", wander: "산책", forage: "씨앗 찾기", visit: "친구 만나기", zoomies: "뛰어놀기", chop: "벌목", mine: "채광",
-  fish: "낚시", build: "집 짓기", enter: "집 구경", eat: "먹기", trade: "장사", farm: "밭일", swim: "헤엄" };
+  fish: "낚시", build: "집 짓기", enter: "집 구경", eat: "먹기", trade: "장사", farm: "밭일", swim: "헤엄", deposit: "은행에 팔기", market: "시장 보기" };

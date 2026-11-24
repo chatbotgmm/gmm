@@ -93,7 +93,8 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 // 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
 Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
-  if (!world.units.length) hud.status("갈매미가 아직 없어요 · 🥚 소환을 눌러 불러 보세요");
+  if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요");
+  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 🏠 건물 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)");
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`);
   else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)");
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
@@ -132,7 +133,7 @@ function frame() {
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);
-  if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps }); }   // 글자판은 1초에 5번만
+  if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   quality.frame(dt, now);
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }

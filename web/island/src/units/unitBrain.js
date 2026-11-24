@@ -10,6 +10,7 @@ import { PERSONA, BUILDINGS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
 import * as M from "./mind.js";
+import * as E from "../world/economy.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
@@ -22,14 +23,19 @@ const visible = u => !u.insideBuildingId && u.state !== US.Held;
 
 export function emote(u, text, secs = 1.6) { u.emoteText = text; u.emoteT = secs; }
 
-// 공사 한 번(망치질 3번)에 드는 재료: 나무 1·돌 1, 3등급 이상 건물은 철 1도
+// 공사 한 번(망치질 3번)에 드는 재료: 건물마다 cost(없으면 나무 1·돌 1), 3등급 이상 건물은 철 1도.
+// 짓는 갈매미 가방에 있는 것부터 쓰고, 모자라면 은행 창고(마을 자재)에서.
 const needsIron = b => (BUILDINGS[b.defId].tier || 1) >= 3;
-const hasMaterials = (world, b) => world.res.wood >= 1 && world.res.stone >= 1 && (!needsIron(b) || world.res.iron >= 1);
-function useMaterials(world, b) { world.res.wood--; world.res.stone--; if (needsIron(b)) world.res.iron--; }
+const costOf = b => { const c = { ...(BUILDINGS[b.defId].cost || { wood: 1, stone: 1 }) }; if (needsIron(b)) c.iron = (c.iron || 0) + 1; return c; };
+const have = (world, u, k) => (u?.inv?.[k] || 0) + (world.res[k] || 0);
+const hasMaterials = (world, b, u = null) => Object.entries(costOf(b)).every(([k, n]) => have(world, u, k) >= n);
+function useMaterials(world, b, u = null) {
+  for (const [k, n] of Object.entries(costOf(b))) { let left = n; const mine = Math.min(left, u?.inv?.[k] || 0); if (mine) { u.inv[k] -= mine; left -= mine; } world.res[k] -= left; }
+}
 /** 모자란 재료를 구하러 감: 나무가 모자라면 벌목, 돌·철이 모자라면 채광. */
 function gatherFor(u, world, b, rnd) {
-  const r = world.res, first = r.wood < 1 ? "chop" : "mine", second = first === "chop" ? "mine" : "chop";
-  if (startActivity(u, first, world, rnd) || startActivity(u, second, world, rnd)) { emote(u, "재료 구하러!"); return true; }
+  const c = costOf(b), lackWood = have(world, u, "wood") < (c.wood || 0), first = lackWood ? "chop" : "mine", second = first === "chop" ? "mine" : "chop";
+  if (startActivity(u, first, world, rnd) || (!lackWood || (c.stone || c.iron)) && startActivity(u, second, world, rnd)) { emote(u, "재료 구하러!"); return true; }
   return false;
 }
 
@@ -89,6 +95,8 @@ function startPath(u, world, gx, gz, run = null) {
   if (Math.hypot(u.x - (sx + 0.5), u.z - (sz + 0.5)) > 0.2) path.unshift([sx, sz]);   // 칸 모서리에 서 있으면 먼저 칸 가운데로
   u.path = path; u.pathIndex = 0; u.goal = { x: gx, z: gz }; u.moveT = 0;
   u.running = run ?? (!!u.runSpeed && raw.length > 7);            // 먼 길은 달림
+  const speed = (u.running ? u.runSpeed : u.walkSpeed) || UNIT_SPEED;
+  u.giveUp = Math.max(GIVE_UP, raw.length / speed * 1.6 + 5);    // 먼 길·느린 갈매미(미니)는 그만큼 오래 기다림
   return true;
 }
 /** (tx,tz) 칸 바로 옆의 걸을 수 있는 칸으로 가는 길. 가까운 칸부터 시도. */
@@ -108,7 +116,7 @@ function face(u, x, z) { u.heading = Math.atan2(x - u.x, z - u.z); }
 
 /** 경로를 따라 한 프레임 이동. 도착하면 true. 앞 칸이 막히면 같은 목적지로 다시 길을 찾는다. */
 function followPath(u, dt, world, rnd) {
-  const grid = world.grid; let move = (u.running ? u.runSpeed : u.walkSpeed ?? UNIT_SPEED) * dt;
+  const grid = world.grid; let move = (u.running ? u.runSpeed ?? UNIT_SPEED * 1.6 : u.walkSpeed ?? UNIT_SPEED) * dt;   // 모델 정보가 없으면(시험) 기본 속도
   u.moveT = (u.moveT || 0) + dt;
   const want = move, x0 = u.x, z0 = u.z;
   let guard = 0;
@@ -118,6 +126,11 @@ function followPath(u, dt, world, rnd) {
     const stepLen = Math.min(d, move, 0.45), ex = d > 1e-6 ? u.x + dx / d * stepLen : tx, ez = d > 1e-6 ? u.z + dz / d * stepLen : tz;
     const [ncx, ncz] = [Math.floor(ex), Math.floor(ez)];
     if ((ncx !== cx || ncz !== cz) && !(grid.canStep(cx, cz, ncx, ncz) && (ncx === cx || ncz === cz || (grid.canStep(cx, cz, ncx, cz) && grid.canStep(cx, cz, cx, ncz))))) {
+      // 대각선 다음 칸으로 가다 모서리(한쪽 옆이 턱)에서 막힘: 지나갈 수 있는 옆 칸을 거쳐 감(제자리 왔다 갔다 방지)
+      if (Math.abs(nx - cx) === 1 && Math.abs(nz - cz) === 1) {
+        const via = [[nx, cz], [cx, nz]].find(([ox, oz]) => grid.canStep(cx, cz, ox, oz) && grid.canStep(ox, oz, nx, nz));
+        if (via) { u.path.splice(u.pathIndex, 0, via); continue; }
+      }
       // 앞이 막힘(새 건물·물 등) → 같은 목적지로 다시 길 찾기. 계속 막히면 포기.
       u.repaths = (u.repaths || 0) + 1;
       const tries = u.repaths, t0 = u.moveT;
@@ -187,7 +200,8 @@ function startActivityInner(u, kind, world, rnd) {
       u.state = US.Zoomies; u.running = true; u.chain = 3; emote(u, "✨"); return true;
     }
     case "forage": {
-      const s = nearest(u, world.seeds.filter(s => !s.claimed && Math.hypot(s.x - u.x, s.z - u.z) < reach(u) * 1.8), s => [s.x, s.z]);
+      const far = (u.full ?? 80) < J.HUNGRY ? 999 : reach(u) * 1.8;                 // 배고프면 멀어도 감
+      const s = nearest(u, world.seeds.filter(s => !s.claimed && Math.hypot(s.x - u.x, s.z - u.z) < far), s => [s.x, s.z]);
       if (!s || !startPath(u, world, s.x, s.z, !!persona.timid)) return false;
       s.claimed = u.unitId; u.focus = s; u.state = US.Forage; return true;
     }
@@ -219,17 +233,38 @@ function startActivityInner(u, kind, world, rnd) {
         .sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
       if (!b) return false;
       u.committed = b.id; b.busy = u.unitId;
-      if (!hasMaterials(world, b)) return gatherFor(u, world, b, rnd);             // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
+      if (!hasMaterials(world, b, u)) return gatherFor(u, world, b, rnd);          // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
       if (!startPath(u, world, b.door.x, b.door.z)) return false;
       u.focus = b; u.state = US.GoBuild; return true;
     }
     case "eat": {                                                                 // 음식이 있으면 그 자리에서 먹고, 없으면 씨앗을 찾음
-      if (world.res.food < 1) return startActivity(u, "forage", world, rnd);
+      if (world.economy) {                                                         // 경제: 내 가방 → 시장에서 사기 → 물물교환 → 씨앗
+        if (E.meals(u) <= 0) {
+          if (world.canBuyFood(u) && startActivityInner(u, "market", world, rnd)) { u.shop = { kind: "food" }; return true; }
+          const host = nearest(u, world.units.filter(o => o !== u && visible(o) && E.meals(o) >= E.FOOD_KEEP && Math.hypot(o.x - u.x, o.z - u.z) < 30), o => [o.x, o.z]);
+          if (host && (E.spare(u) || (u.coins || 0) >= E.MARKET_FOOD)) { const [fx, fz] = cellOf(host); if (pathBeside(u, world, fx, fz)) { u.focus = host; u.state = US.Visit; emote(u, "배고파…"); return true; } }
+          return startActivity(u, "forage", world, rnd);
+        }
+      } else if (world.res.food < 1) return startActivity(u, "forage", world, rnd);
       setIdle(u, rnd, world); u.state = US.Eat;
       doOnce(u, "Attack", () => { if (world.eatFood(u)) emote(u, J.isLazy(u) ? "배불러…" : "냠냠"); }, () => done(u, 1, rnd, world));
       return true;
     }
+    case "deposit": {                                                             // 공식은행에 팔러(가방에 팔 것이 있을 때)
+      const bk = world.bankB(); if (!bk || E.count(E.sellable(u)) <= 0) return false;
+      if (!startPath(u, world, bk.door.x, bk.door.z)) return false;
+      u.state = US.GoBank; return true;
+    }
+    case "market": {                                                              // 시장 문 앞으로(무엇을 살지는 u.shop)
+      const mk = world.marketB(); if (!mk) return false;
+      if (!startPath(u, world, mk.door.x, mk.door.z)) return false;
+      u.state = US.GoMarket; return true;
+    }
     case "trade": {                                                               // 상인: 가판대 앞으로
+      if (world.economy) {                                                         // 경제: 시장 문 앞에서 장사(팔릴 때마다 몫)
+        const mk = world.marketB(); if (!mk || u.job !== "merchant" || !startPath(u, world, mk.door.x, mk.door.z)) return false;
+        u.state = US.GoTrade; return true;
+      }
       const st = world.stall; if (!st || u.job !== "merchant") return false;
       if (!startPath(u, world, st.standX, st.standZ)) return false;
       u.state = US.GoTrade; return true;
@@ -300,6 +335,14 @@ function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
   if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
+  if (world.economy) {
+    const n = E.count(E.sellable(u));
+    if ((n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "deposit", world, rnd)) return;   // 가방이 차면 은행에 팖
+    if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼
+      const h = world.housesForSale(u).filter(b => (u.coins || 0) >= (BUILDINGS[b.defId].price || 30)).sort((a, c) => BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
+      if (h && startActivity(u, "market", world, rnd)) { u.shop = { kind: "house", b: h.id }; emote(u, "집 사러!"); return; }
+    }
+  }
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy < 20 && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠
   // 성격 + 직업 특기 × 욕구(급한 욕구를 채우는 일) × 배운 취향(해 보니 좋았던 일)
@@ -332,7 +375,7 @@ export function exitBuilding(u, world, rnd) {
 // ---------------------------------------------------------------- 매 프레임
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
-  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
+  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
@@ -346,6 +389,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     return settle(u, dt, world);
   }
   const p = PERSONA[u.name] || PERSONA["기본"];
+  // 너무 배고프면 하던 일(공사·벌목·채광·낚시·밭일·장사)을 멈추고 먼저 먹으러(맡은 공사는 유지)
+  if ((u.full ?? 80) < 12 && [US.Build, US.Chop, US.Mine, US.Fish, US.Farm, US.Trade, US.GoBuild, US.GoChop, US.GoMine].includes(u.state) && !u.once) {
+    emote(u, "배고파…"); setIdle(u, rnd, world, 0); return settle(u, dt, world);
+  }
   // 반사 행동
   if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding, US.Swim].includes(u.state)) {
     const big = world.units.find(o => o !== u && visible(o) && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < 1.8);
@@ -359,7 +406,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   if (p.loner && u.state === US.Idle && world.units.some(o => o !== u && visible(o) && Math.hypot(o.x - u.x, o.z - u.z) < 1.1)) {
     if (startActivity(u, "wander", world, rnd)) { u.state = US.Avoid; emote(u, "…"); }
   }
-  if (moving(u) && u.moveT > GIVE_UP) { setIdle(u, rnd, world); return settle(u, dt, world); }
+  if (moving(u) && u.moveT > (u.giveUp || GIVE_UP)) { setIdle(u, rnd, world); return settle(u, dt, world); }
   // 호기심: 근처에서 무슨 일이 생기면(집 완성·나무 쓰러짐·희귀 물고기·누가 옮겨짐) 쳐다보고, 가끔 가서 구경
   if (u.curious && [US.Idle, US.Wander].includes(u.state)) {
     const c = u.curious; u.curious = null;
@@ -412,8 +459,9 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (arrived || close) {
         if (!close) { setIdle(u, rnd, world); break; }                        // 가 보니 친구가 떠남
         u.path = null; face(u, f.x, f.z); u.state = US.Greet; M.befriend(u, f, 1);         // 인사하면 서로 친해짐
-        emote(u, M.affinity(u, f) >= 4 ? pick(["♥♥", "보고 싶었어!", "단짝!"], rnd) : pick(["♪", "♥", "안녕!"], rnd));
-        if ([US.Idle, US.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = US.Greet; face(f, u.x, u.z); emote(f, "!");
+        const swap = world.economy && world.barter(u, f);                       // 배고픈 쪽이 있으면 물물교환
+        if (swap) emote(u, swap, 2.4); else emote(u, M.affinity(u, f) >= 4 ? pick(["♥♥", "보고 싶었어!", "단짝!"], rnd) : pick(["♪", "♥", "안녕!"], rnd));
+        if ([US.Idle, US.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = US.Greet; face(f, u.x, u.z); emote(f, swap ? "🤝" : "!");
           doOnce(f, "Jump", null, () => setIdle(f, rnd, world)); }
         doOnce(u, "Jump", null, () => done(u, 0.8 + (100 - (u.needs?.social ?? 100)) / 120, rnd, world));
         if (u.needs) u.needs.social = Math.min(100, u.needs.social + 35); if (f.needs) f.needs.social = Math.min(100, f.needs.social + 25);
@@ -463,8 +511,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = u.focus;
       if (!world.buildings.has(b.id) || world.isDone(b)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        if (!hasMaterials(world, b)) { setIdle(u, rnd, world, 0.2); break; }  // 그새 재료가 떨어짐 → 구하러 감(맡은 건 유지)
-        useMaterials(world, b);                                                // 도착하면 나무 1·돌 1(+철 1)을 씀
+        if (!hasMaterials(world, b, u)) { setIdle(u, rnd, world, 0.2); break; }  // 그새 재료가 떨어짐 → 구하러 감(맡은 건 유지)
+        useMaterials(world, b, u);                                             // 도착하면 재료를 씀(가방 → 은행 창고 순)
         u.state = US.Build; u.tool = "hammer";
       }
       break;
@@ -475,9 +523,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const c = b.cells.reduce((a, [x, z]) => [a[0] + x + 0.5, a[1] + z + 0.5], [0, 0]); face(u, c[0] / b.cells.length, c[1] / b.cells.length);
       // 망치질 3번마다 나무 1·돌 1을 더 써서 그 자리에서 계속. 재료가 없으면 구하러 갔다가 돌아옴. 100%가 되면 끝.
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
-        if (world.isDone(b)) { uncommit(u, world); done(u, 2, rnd, world); return; }
+        if (world.isDone(b)) { world.payWage(u); uncommit(u, world); done(u, 2, rnd, world); return; }
         M.learn(u, "build", 0.8);                                               // 한 바퀴 지을 때마다 보람
-        if (hasMaterials(world, b)) { useMaterials(world, b); return; }         // u.work가 비었으니 다음 바퀴부터 다시
+        world.payWage(u);                                                       // 한 바퀴 품삯(은행이 찍어 줌)
+        if (hasMaterials(world, b, u)) { useMaterials(world, b, u); return; }         // u.work가 비었으니 다음 바퀴부터 다시
         u.activity = null;
         emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);
       });
@@ -496,6 +545,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.Inside:
       if (u.timer <= 0) exitBuilding(u, world, rnd); break;
     case US.GoTrade:
+      if (world.economy && followPath(u, dt, world, rnd)) {                         // 경제: 시장 앞에서 한동안 손님을 기다림
+        u.state = US.Trade; u.timer = 8 + rnd() * 6; emote(u, "어서 오세요!"); u.tradeStart = u.coins || 0; break;
+      }
+      if (world.economy) break;
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Trade; face(u, world.stall.x + 0.5, world.stall.z + 0.5);
         doOnce(u, "Attack", () => { const l = world.trade(u); u.lastReward = l.sold > 0 ? 1 + Math.min(1, l.sold / 50) : l.bought > 0 ? 0.7 : 0.1;
@@ -513,7 +566,26 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       }
       break;
     }
-    case US.Greet: case US.Eat: case US.Trade: case US.Farm: break;          // doOnce가 끝나면 풀림
+    case US.Trade:                                                                // 경제: 시장 앞에서 시간이 다 되면 번 만큼 보람
+      if (world.economy && !u.once && u.timer <= 0) { const got = (u.coins || 0) - (u.tradeStart || 0); emote(u, got > 0 ? `🪙+${got}` : "오늘은 한산하네"); done(u, 0.4 + got / 4, rnd, world); }
+      break;
+    case US.GoBank:                                                               // 공식은행: 가방의 물건을 팔고 새 돈을 받음
+      if (followPath(u, dt, world, rnd)) {
+        const r = world.sellToBank(u); emote(u, r.coins ? `🏦 🪙+${r.coins}` : "팔 게 없네", 2.2); done(u, 0.4 + r.coins / 20, rnd, world);
+      }
+      break;
+    case US.GoMarket: {                                                           // 시장: 음식 또는 집을 삼
+      if (!followPath(u, dt, world, rnd)) break;
+      const shop = u.shop || {}; u.shop = null;
+      if (shop.kind === "food") {
+        if (world.buyFood(u)) { emote(u, "🛒 음식"); world.eatFood(u); done(u, 0.8, rnd, world); } else { emote(u, "다 팔렸네…"); setIdle(u, rnd, world); }
+      } else if (shop.kind === "house") {
+        const b = world.buildings.get(shop.b);
+        if (b && world.buyHouse(u, b)) { emote(u, "🏠 내 집!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, "놓쳤다…"); setIdle(u, rnd, world); }
+      } else setIdle(u, rnd, world);
+      break;
+    }
+    case US.Greet: case US.Eat: case US.Farm: break;          // doOnce가 끝나면 풀림
     default: setIdle(u, rnd, world);
   }
   settle(u, dt, world);
