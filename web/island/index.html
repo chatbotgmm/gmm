@@ -47,6 +47,15 @@
   #stats { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 12.5px; } #stats span { white-space: nowrap; }
   .tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; } .tbl td { padding: 4px 2px; border-bottom: 1px dashed #eadfcb; }
   .tbl td:last-child { text-align: right; } h4 { margin: 10px 0 4px; font-size: 13.5px; }
+  #info .ihead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; } #info .ihead b { font-size: 15px; }
+  #info .jobtag { background: #fbe3cf; border-radius: 8px; padding: 1px 7px; font-size: 12px; }
+  #info .doing { margin: 3px 0 6px; font-size: 13px; } #info .warn { color: #c0392b; font-weight: 600; }
+  #info .needs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-bottom: 6px; }
+  #info .need { display: grid; grid-template-columns: 42px 1fr 24px; align-items: center; gap: 6px; font-size: 12px; }
+  #info .need i { height: 7px; border-radius: 4px; background: rgba(0,0,0,.08); overflow: hidden; } #info .need i b { display: block; height: 100%; background: #6cb85a; border-radius: 4px; }
+  #info .need i.low b { background: #e0573e; } #info .need em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  #info .ichips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; } #info .ichips span { background: rgba(0,0,0,.05); border-radius: 8px; padding: 2px 7px; font-size: 12.5px; }
+  #info .small { font-size: 11.5px; }
   #info { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 2; width: min(330px, calc(100% - 100px));
     background: var(--panel); border-radius: 12px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; box-shadow: 0 1px 6px rgba(0,0,0,.12); box-sizing: border-box; }
   #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
@@ -103,8 +112,8 @@
     <div id="pageMarket" class="page" hidden><div id="marketBody"></div></div>
     <div id="pageSummon" class="page" hidden><p class="dim">아직 마을에 없는 갈매미 하나가 무작위로 와요.</p><button id="summon" class="go">🥚 소환</button><div id="summonLast" class="dim"></div></div>
     <div id="pageFiles" class="page" hidden><div class="col"><button id="save">💾 저장(이 브라우저)</button><button id="load">📂 불러오기</button><button id="reset">🏝 새 섬</button></div></div>
-    <div id="pageSettings" class="page" hidden><div class="col"><button id="quality" title="자동: 느리면 해상도를 낮춤 · 높음 · 낮음(지형·그림자 가볍게)">화질: 자동</button><button id="zones">구역 이름 보이기</button><button id="seeds">씨앗 뿌리기</button><button id="timeMode" title="실제 시간(기기 시계) · 낮 고정 · 빠르게">시간: 실제 시간</button><button id="toonBtn" title="툰(단계 명암) · 기본(부드러운 명암)">그림체: 툰</button><button id="dexBtn" hidden>도감</button></div></div>
-    <div id="pageHelp" class="page" hidden><div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기<br>도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기<br>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 벌리기 = 확대<br>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)<br>경제: 갈매미는 일해서 얻은 물건을 🏦 공식은행에 팔아 돈을 벌고, 🐚 시장(목수가 지음)에서 집과 음식을 사요. 먹을 게 없으면 만난 갈매미와 물물교환해요.</div></div>
+    <div id="pageSettings" class="page" hidden><div class="col"><button id="quality" title="자동: 느리면 해상도를 낮춤 · 높음 · 낮음(지형·그림자 가볍게)">화질: 자동</button><button id="zones">구역 이름 보이기</button><button id="timeMode" title="실제 시간(기기 시계) · 낮 고정 · 빠르게">시간: 실제 시간</button><button id="toonBtn" title="툰(단계 명암) · 기본(부드러운 명암)">그림체: 툰</button><button id="dexBtn" hidden>도감</button></div></div>
+    <div id="pageHelp" class="page" hidden><div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기<br>도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기<br>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 벌리기 = 확대<br>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)<br>경제: 🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼·광부는 원자재를 🐚 시장의 상인에게 팔고, 상인은 가공(목재·석재·철괴)해서 은행에 팔아 돈을 벌어요. 번 돈으로 농부·어부에게서 음식을 사고, 시장에서 집을 사요. 돈이 없으면 물물교환해요.</div></div>
   </div>
 </div>
 <div id="confirm" hidden><button id="cfBuild" class="go">🔨 건설</button><button id="cfRot">↻ 돌리기</button><button id="cfCancel">✕ 취소</button></div>

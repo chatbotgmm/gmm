@@ -56,7 +56,8 @@ export class World {
       const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
       w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
-    for (let i = 0; i < (wild ? 60 : 14); i++) w.addSeed(); return w;
+    if (!wild) for (let i = 0; i < 14; i++) w.addSeed();                         // 넓은 섬엔 씨앗을 뿌리지 않음(음식은 농부·어부·바닷가)
+    return w;
   }
   get center() { return { x: this.grid.w / 2, z: this.grid.h / 2 }; }
   /** 이름으로 갈매미 하나를 가운데(은행 앞) 근처에 부름. */
@@ -86,6 +87,8 @@ export class World {
     const s = createUnitAIState(`u${i + 1}`, def.name, x, z, 0.5 + r() * 2); s.scale = def.scale;
     J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
     s.coins = 0; s.inv = E.newBag(); s.home = null;                            // 돈·가방·내 집
+    s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
+    if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(은행)
     if (this.profiles) this.applyProfile(s);
     this.units.push(s); return s;
   }
@@ -118,6 +121,7 @@ export class World {
 
   // ---- 씨앗(잔디밭에서 쪼아 먹음)
   addSeed(x = null, z = null) {
+    if (this.wild) return null;                                                   // 넓은 섬은 씨앗 없음
     for (let k = 0; k < 40 && x === null; k++) {                         // 가운데 평야의 빈 잔디 칸
       const span = this.grid.w * (this.wild ? 0.8 : 0.32), gx = Math.floor(this.grid.w / 2 - span / 2 + this.rnd() * span), gz = Math.floor(this.grid.h / 2 - span / 2 + this.rnd() * span), c = this.grid.get(gx, gz);   // 넓은 섬은 섬 전체 잔디밭
       if (c && !c.occupiedId && !this.grid.isWater(gx, gz) && c.elevation === 0 && !this.seeds.some(s => s.x === gx && s.z === gz)) { x = gx; z = gz; }
@@ -150,7 +154,34 @@ export class World {
   /** 얻은 물건: 경제가 있으면 그 갈매미 가방, 없으면(예전 섬) 마을 창고 */
   gain(u, item, n) { if (this.economy && u && u.inv) u.inv[item] = (u.inv[item] || 0) + n; else this.res[item] = (this.res[item] || 0) + n; }
   issue(u, coins) { u.coins = (u.coins || 0) + coins; this.bank.issued += coins; }
-  /** 공식은행에 팔기: 자재 전부 + 남는 먹을 것 → 새 돈, 물건은 은행 창고로 */
+  merchantU() { return this.units.find(u => u.job === "merchant") || null; }
+  /** 시장: 원자재(나무·돌·철)를 상인에게 팖. 상인 돈이 허락하는 만큼. */
+  sellToMarket(u) {
+    const m = this.merchantU(), items = { wood: 0, stone: 0, iron: 0 }; let coins = 0;
+    if (!this.marketB() || !m || m === u) return { items, coins };
+    for (const k of E.RAW) {
+      const n = Math.min(u.inv[k] || 0, Math.floor((m.coins || 0) / E.MARKET_BUY[k])); if (!n) continue;
+      const c = n * E.MARKET_BUY[k]; u.inv[k] -= n; m.raw[k] += n; m.coins -= c; u.coins = (u.coins || 0) + c; items[k] = n; coins += c;
+    }
+    this.emit("market", { u, kind: "sell", items, coins }); return { items, coins };
+  }
+  /** 상인: 사 들인 원자재를 가공(목재·석재·철괴). 가공한 개수를 돌려줌. */
+  processRaw(m) { let n = 0; for (const k of E.RAW) { const c = m.raw[k] || 0; m.raw[k] = 0; m.goods[k] = (m.goods[k] || 0) + c; n += c; } return n; }
+  /** 상인: 가공품을 공식은행에 팖 → 새 돈, 은행 창고(공사 재료)로 */
+  sellProcessed(m) {
+    let coins = 0; const items = { ...m.goods };
+    for (const k of E.RAW) { const n = m.goods[k] || 0; if (!n) continue; coins += n * E.BANK_PROCESSED[k]; this.res[k] = (this.res[k] || 0) + n; m.goods[k] = 0; }
+    if (coins) this.issue(m, coins);
+    this.emit("bank", { u: m, items, coins }); return { items, coins };
+  }
+  /** 농부·어부에게서 음식 1개 사기(파는 쪽은 먹을 것 FOOD_KEEP개는 남김) */
+  buyFoodFrom(buyer, seller) {
+    if (!E.isProducer(seller) || seller === buyer || E.meals(seller) <= E.FOOD_KEEP || (buyer.coins || 0) < E.FOOD_PRICE) return false;
+    const k = seller.inv.food > 0 ? "food" : "fish"; seller.inv[k]--; buyer.inv[k]++;
+    buyer.coins -= E.FOOD_PRICE; seller.coins = (seller.coins || 0) + E.FOOD_PRICE;
+    this.emit("foodSale", { buyer, seller, k }); return true;
+  }
+  /** (예전 방식) 공식은행에 팔기: 자재 전부 + 남는 먹을 것 → 새 돈, 물건은 은행 창고로 */
   sellToBank(u) {
     const items = E.sellable(u), coins = E.valueOf(items);
     for (const k of E.ITEMS_ORDER) { if (!items[k]) continue; u.inv[k] -= items[k]; this.res[k] = (this.res[k] || 0) + items[k]; }
@@ -165,7 +196,7 @@ export class World {
     const cut = m && m !== u ? Math.min(price, E.COMMISSION) : 0; if (cut) m.coins = (m.coins || 0) + cut;
     this.bank.returned += price - cut;
   }
-  canBuyFood(u) { return !!this.marketB() && (u.coins || 0) >= E.MARKET_FOOD && (this.res.food || 0) + (this.res.fish || 0) > 0; }
+  canBuyFood() { return false; }                                                   // 음식은 이제 농부·어부에게서 삼(buyFoodFrom)
   buyFood(u) {
     if (!this.canBuyFood(u)) return false;
     const k = (this.res.food || 0) > 0 ? "food" : "fish"; this.res[k]--; u.inv[k]++; this.pay(u, E.MARKET_FOOD);
@@ -441,7 +472,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null })), bank: this.bank, wild: !!this.wild,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -450,10 +481,11 @@ export class World {
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
     for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; } }
-    if (j.bank) Object.assign(w.bank, j.bank); w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.6; w.seedFood = 20; }
+    w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.6; w.seedFood = 20; }
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
-    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; }
-    for (let i = 0; i < 14; i++) w.addSeed(); w.nextId = j.nextId; return w;
+    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; }
+    if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
+    if (!w.wild) for (let i = 0; i < 14; i++) w.addSeed(); w.nextId = j.nextId; return w;
   }
 }

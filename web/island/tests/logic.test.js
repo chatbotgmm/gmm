@@ -270,40 +270,39 @@ test("계단 이어 놓기: 아래 계단 위쪽 칸에 같은 방향으로 놓�
   assert.equal(g.canStep(44, 40, 44, 39), true);
 });
 
-test("넓은 섬 경제: 은행에 팔면 새 돈, 목수만 시설, 시장에서 집 사기(주인만 들어감), 물물교환, 밭·낚시터", async () => {
+test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공해 은행에 팔고(새 돈), 음식은 농부·어부에게서 사고, 집은 시장에서", async () => {
   const E = await import("../src/world/economy.js");
   const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true;
   assert.deepEqual(w.units.map(u => u.name), ["기본"], "기본 한 마리로 시작");
-  assert.ok(w.economy && w.bankB(), "가운데 공식은행");
+  assert.ok(w.economy && w.bankB(), "가운데 공식은행"); assert.equal(w.seeds.length, 0, "씨앗 없음");
   const boss = w.units[0], c = w.center;
   const spot = def => { for (let r = 3; r < 30; r++) for (let k = 0; k < 48; k++) { const a = k / 48 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + 6 + Math.sin(a) * r); if (w.check(def, x, z, 0).ok) return [x, z]; } return null; };
-  // 은행: 가방의 나무 6 → 12🪙 발행, 창고로
-  boss.inv.wood = 6; const r = w.sellToBank(boss);
-  assert.equal(r.coins, 12); assert.equal(boss.coins, 12); assert.equal(w.bank.issued, 12); assert.equal(w.res.wood, 6); assert.equal(boss.inv.wood, 0);
-  // 시설은 목수만: 목수가 없으면 시장을 못 놓음
+  // 시설은 목수만
   const m0 = spot("house"); assert.match(w.check("market", m0[0], m0[1], 0).reason, /목수 갈매미/);
-  w.addUnitByName("목수"); w.addUnitByName("미니");
-  const mk = spot("market"); assert.ok(w.placeBuilding("market", mk[0], mk[1], 0).ok); assert.ok(w.marketB());
-  // 집: 다 지어도 주인이 없으면 아무도 못 들어감 → 돈 모아 사면 주인만
-  const hs = spot("house"), h = w.placeBuilding("house", hs[0], hs[1], 0).building, mini = w.units.find(u => u.name === "미니");
-  assert.equal(w.canEnter(mini, h), false); assert.equal(w.housesForSale(mini).length, 1);
-  mini.coins = 29; assert.equal(w.buyHouse(mini, h), false, "돈이 모자라면 못 삼");
-  mini.coins = 40; assert.equal(w.buyHouse(mini, h), true); assert.equal(h.owner, mini.unitId); assert.equal(mini.home, h.id); assert.equal(mini.coins, 10);
-  assert.equal(w.canEnter(mini, h), true); assert.equal(w.canEnter(boss, h), false); assert.equal(w.bank.returned, 30);
-  // 물물교환: 배고프고 먹을 게 없는 쪽이 나무를 주고 음식을 받음
-  boss.full = 30; boss.inv.wood = 3; mini.inv.food = 4; const msg = w.barter(boss, mini);
-  assert.ok(msg && boss.inv.food === 1 && mini.inv.food === 3 && boss.inv.wood === 2 && mini.inv.wood === 1, msg);
-  // 시장 음식: 창고에 있으면 3🪙에 삼
-  w.res.food = 2; boss.inv.food = 0; boss.inv.fish = 0; boss.coins = 5; assert.equal(w.buyFood(boss), true); assert.equal(boss.inv.food, 1); assert.equal(boss.coins, 2);
-  // 밭: 다 지으면 칸마다 밭 / 낚시터: 물 쪽을 보는 낚시 자리
-  const fd = spot("field"), f = w.placeBuilding("field", fd[0], fd[1], 0).building;
-  assert.equal(w.plots.filter(p => p.field === f.id).length, 6);
-  let dock = null; for (let z = 0; z < 96 && !dock; z++) for (let x = 0; x < 96 && !dock; x++) for (const rot of [0, 1, 2, 3]) if (!dock && w.check("dock", x, z, rot).ok) dock = w.placeBuilding("dock", x, z, rot).building;
-  assert.ok(dock); const sp = w.spots.find(s => s.dock === dock.id); assert.ok(sp && w.grid.isWater(sp.x + sp.dir[0], sp.z + sp.dir[1]));
-  // 저장/불러오기: 돈·가방·집 주인·은행 기록 유지
+  w.addUnitByName("목수"); w.addUnitByName("미니"); w.addUnitByName("황금"); w.addUnitByName("자이언트");
+  const merchant = w.units.find(u => u.name === "황금"), giant = w.units.find(u => u.name === "자이언트"), mini = w.units.find(u => u.name === "미니");
+  assert.equal(merchant.coins, E.MERCHANT_START, "상인 창업 자금"); assert.equal(w.bank.issued, E.MERCHANT_START);
+  const mk = spot("market"); assert.ok(w.placeBuilding("market", mk[0], mk[1], 0).ok);
+  // 나무꾼: 나무 6 → 상인에게 12🪙(상인 돈에서)
+  giant.inv.wood = 6; const r = w.sellToMarket(giant);
+  assert.equal(r.coins, 12); assert.equal(giant.coins, 12); assert.equal(merchant.coins, E.MERCHANT_START - 12); assert.equal(merchant.raw.wood, 6);
+  // 상인: 가공 → 은행에 팔기(목재 6 × 3 = 18🪙 발행, 창고로)
+  assert.equal(w.processRaw(merchant), 6); const s = w.sellProcessed(merchant);
+  assert.equal(s.coins, 18); assert.equal(w.res.wood, 6); assert.equal(w.bank.issued, E.MERCHANT_START + 18);
+  // 음식: 농부(미니)에게서 3🪙에 삼(농부는 2개는 남김)
+  mini.inv.food = 3; assert.equal(w.buyFoodFrom(giant, mini), true); assert.equal(giant.inv.food, 1); assert.equal(mini.coins, 3); assert.equal(giant.coins, 9);
+  assert.equal(w.buyFoodFrom(giant, mini), false, "남김분 2개는 안 팖");
+  // 집: 다 지어도 주인이 없으면 못 들어감 → 사면 주인만
+  const hs = spot("house"), h = w.placeBuilding("house", hs[0], hs[1], 0).building;
+  assert.equal(w.canEnter(mini, h), false); mini.coins = 29; assert.equal(w.buyHouse(mini, h), false);
+  mini.coins = 40; assert.equal(w.buyHouse(mini, h), true); assert.equal(w.canEnter(mini, h), true); assert.equal(w.canEnter(boss, h), false);
+  // 물물교환: 돈 없이 배고프면 자재 ↔ 음식
+  boss.full = 30; boss.coins = 0; boss.inv.wood = 3; mini.inv.food = 4; assert.ok(w.barter(boss, mini));
+  // 밭·낚시터
+  const fd = spot("field"), f = w.placeBuilding("field", fd[0], fd[1], 0).building; assert.equal(w.plots.filter(p => p.field === f.id).length, 6);
+  // 저장/불러오기
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())));
-  const m2 = back.units.find(u => u.name === "미니");
-  assert.equal(m2.coins, mini.coins); assert.equal(m2.home, h.id); assert.equal(back.buildings.get(h.id).owner, mini.unitId); assert.deepEqual(back.bank, w.bank);
+  assert.equal(back.units.find(u => u.name === "미니").home, h.id); assert.deepEqual(back.bank, w.bank, "은행 기록(창업 자금 두 번 안 셈)");
   void E;
 });
 

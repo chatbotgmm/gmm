@@ -11,7 +11,7 @@ const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: 
   [UnitState.GoChop]: "숲으로 가는 중", [UnitState.Chop]: "나무 베는 중", [UnitState.GoMine]: "광산으로 가는 중", [UnitState.Mine]: "광석 캐는 중",
   [UnitState.GoFish]: "낚시터로 가는 중", [UnitState.Fish]: "낚시 중", [UnitState.GoBuild]: "공사장으로 가는 중", [UnitState.Build]: "집 짓는 중",
   [UnitState.Idle]: "쉬는 중", [UnitState.Wander]: "산책 중", [UnitState.GoToBuilding]: "건물로 가는 중",
-  [UnitState.Sleep]: "자는 중", [UnitState.Curious]: "구경하러 가는 중", [UnitState.GoSwim]: "헤엄치러 가는 중", [UnitState.Swim]: "헤엄치는 중", [UnitState.GoBank]: "은행에 팔러 가는 중", [UnitState.GoMarket]: "시장 가는 중",
+  [UnitState.Sleep]: "자는 중", [UnitState.Curious]: "구경하러 가는 중", [UnitState.GoSwim]: "헤엄치러 가는 중", [UnitState.Swim]: "헤엄치는 중", [UnitState.GoBank]: "은행에 팔러 가는 중", [UnitState.GoMarket]: "시장 가는 중", [UnitState.GoShore]: "바닷가로 먹이 잡으러",
   [UnitState.GoTrade]: "시장으로 가는 중", [UnitState.Trade]: "장사 중", [UnitState.GoFarm]: "밭으로 가는 중", [UnitState.Farm]: "밭일 중",
   [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중", [UnitState.Held]: "들려 있음" };
 
@@ -43,7 +43,6 @@ export class Hud {
     document.getElementById("cfCancel").onclick = () => tools.clearPlan();
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     this.instantBuild = false;
-    document.getElementById("seeds").onclick = () => this.onSeeds?.();
     this.summonBtn = document.getElementById("summon"); this.summonBtn.onclick = () => this.onSummon?.();
     document.getElementById("dexBtn").onclick = () => this.showDex(true);
     this.qBtn = document.getElementById("quality"); this.qBtn.onclick = () => this.setQualityLabel(this.onQuality?.());
@@ -94,16 +93,18 @@ export class Hud {
   refreshApp() {
     const w = this.world;
     if (this.app === "bank") {
-      const r = w.res, rows = E.ITEMS_ORDER.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>${r[k] || 0}개</td><td>🪙${E.BANK_BUY[k]}</td></tr>`).join("");
-      document.getElementById("bankBody").innerHTML = w.economy ? `<table class="tbl"><tr><td>찍어 낸 돈(발행)</td><td></td><td>🪙${w.bank.issued}</td></tr><tr><td>시장에서 돌아온 돈(회수)</td><td></td><td>🪙${w.bank.returned}</td></tr>` +
-        `<tr><td><b>갈매미들이 가진 돈</b></td><td></td><td><b>🪙${w.moneySupply()}</b></td></tr></table>` +
-        `<h4>창고(공사 재료) · 1개당 사 주는 값</h4><table class="tbl">${rows}</table><p class="dim">갈매미는 가방에 ${E.CARRY}개가 모이면 은행에 팔아요. 건축가·목수는 공사 한 바퀴마다 품삯 🪙${E.WAGE}을 받아요.</p>`
+      const r = w.res;
+      document.getElementById("bankBody").innerHTML = w.economy ? `<table class="tbl"><tr><td>찍어 낸 돈(발행)</td><td>🪙${w.bank.issued}</td></tr><tr><td>집값으로 돌아온 돈(회수)</td><td>🪙${w.bank.returned}</td></tr>` +
+        `<tr><td><b>갈매미들이 가진 돈</b></td><td><b>🪙${w.moneySupply()}</b></td></tr></table>` +
+        `<h4>은행이 사는 가공품(상인이 가져옴)</h4><table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.PROCESSED_NAME[k]}</td><td>창고 ${r[k] || 0}개 · 🪙${E.BANK_PROCESSED[k]}</td></tr>`).join("")}</table>` +
+        `<p class="dim">돈이 생기는 곳: 🔨 공사 한 바퀴 품삯 🪙${E.WAGE}(건축가·목수) · 🐚 상인이 가공품을 팔 때 · 상인 창업 자금 🪙${E.MERCHANT_START}. 창고의 가공품은 공사 재료로 써요.</p>`
         : `<p class="dim">이 섬에는 공식은행이 없어요(예전 섬).</p>`;
     } else if (this.app === "market") {
-      const mk = w.marketB(), sale = w.housesForSale();
+      const mk = w.marketB(), sale = w.housesForSale(), m = w.merchantU(), food = w.units.filter(u => E.isProducer(u));
       document.getElementById("marketBody").innerHTML = !mk ? `<p>아직 시장이 없어요. <b>🪚 목수</b>가 있으면 🏠 건설에서 <b>시장</b>을 지을 수 있어요.</p>`
-        : `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${BUILDINGS[b.defId].price}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
-          `<h4>음식</h4><table class="tbl"><tr><td>🍗 음식 · 🐟 물고기 (은행 창고)</td><td>${(w.res.food || 0) + (w.res.fish || 0)}개 · 🪙${E.MARKET_FOOD}</td></tr></table>` +
+        : `<h4>상인이 사는 원자재</h4>${m ? `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>🪙${E.MARKET_BUY[k]} · 상인 창고 ${(m.raw[k] || 0) + (m.goods[k] || 0)}</td></tr>`).join("")}<tr><td>상인(${m.name}) 돈</td><td>🪙${m.coins || 0}</td></tr></table>` : `<p class="dim">상인 🐚 갈매미가 없어요(소환하면 와요).</p>`}` +
+          `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${BUILDINGS[b.defId].price}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
+          `<h4>음식(농부·어부에게서 🪙${E.FOOD_PRICE})</h4><table class="tbl">${food.map(u => `<tr><td>${JOBS[u.job].icon} ${u.name}</td><td>🍗${u.inv?.food || 0} 🐟${u.inv?.fish || 0}</td></tr>`).join("") || `<tr><td class="dim">농부·어부가 없어요</td><td></td></tr>`}</table>` +
           `<h4>집 주인</h4><table class="tbl">${w.units.filter(u => u.home).map(u => `<tr><td>${u.name}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
     } else if (this.app === "summon") {
       this.setSummon(w);
@@ -205,10 +206,15 @@ export class Hud {
     const u = this.follow; this.info.hidden = !u;
     if (u) { const job = JOBS[u.job], r = RARITY[u.rarity];
       const n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
-      this.info.innerHTML = `<b style="color:${r.color}">${job.icon} ${u.name}</b> · ${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} ${job.name} (특기 ×${r.mult})<br>` +
-        `🍗 ${Math.round(u.full)} · ⚡기력 ${Math.round(n.energy ?? 0)} · 💬친구 ${Math.round(n.social ?? 0)} · 🎈재미 ${Math.round(n.fun ?? 0)} · 능률 ×${(u.eff ?? 1).toFixed(2)}` +
-        `${J.isLazy(u) ? " · 배불러 게으름" : (u.full < J.HUNGRY ? " · 배고픔" : "")}<br>` +
-        (w.economy ? `🪙 ${u.coins || 0} · 가방 ${E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => E.ITEM_ICON[k] + u.inv[k]).join(" ") || "비었음"} · ${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") + " 주인" : "집 없음"}<br>` : "") +
-        `좋아하게 된 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · 단짝: ${bf.name} ♥${Math.round(M.affinity(u, bf))}` : ""}<br><span class="dim">${job.desc}</span>`; }
+      // 따라가기 카드: 이름·직업 배지 / 지금 하는 일 / 욕구 막대 4개 / 돈·가방·집 칩 (긴 설명은 뺌)
+      const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : STATE_LABEL[u.state] || u.state;
+      const bar = (label, v, cls = "") => `<div class="need"><span>${label}</span><i class="${cls}"><b style="width:${Math.max(0, Math.min(100, v))}%"></b></i><em>${Math.round(v)}</em></div>`;
+      const full = u.full ?? 80, note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
+      const bag = E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${E.ITEM_ICON[k]}${u.inv[k]}`).join(" ");
+      this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}</span></div>` +
+        `<div class="doing">${doing}${note ? ` · <span class="warn">${note}</span>` : ""}</div>` +
+        `<div class="needs">${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("기력", n.energy ?? 0)}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
+        (w.economy ? `<div class="ichips"><span>🪙 ${u.coins || 0}</span><span>${bag ? "🎒 " + bag : "🎒 비었음"}</span><span>${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") : "🏠 집 없음"}</span></div>` : "") +
+        `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · 단짝: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)}</div>`; }
   }
 }

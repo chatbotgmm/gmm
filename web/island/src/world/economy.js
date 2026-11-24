@@ -31,3 +31,16 @@ export function spare(u) {
   for (const k of ["wood", "stone", "iron"]) if (b[k] > 0 && (!best || b[k] > b[best])) best = k;
   return best;
 }
+
+// ---- 시장·가공·식량(2단계 흐름)
+//  나무꾼·광부 → (원자재를 시장에서 상인에게 팖: 상인 돈) → 상인이 가공(목재·석재·철괴) → 공식은행에 팖(새 돈, 은행 창고 = 공사 재료)
+//  → 번 돈으로 농부·어부에게서 음식을 삼. 건축가·목수는 공사 품삯을 은행에서 받음.
+export const RAW = ["wood", "stone", "iron"];
+export const MARKET_BUY = { wood: 2, stone: 3, iron: 6 };                       // 상인이 원자재 1개를 사 주는 값(상인 돈)
+export const BANK_PROCESSED = { wood: 3, stone: 4, iron: 8 };                   // 은행이 가공품 1개를 사 주는 값(새로 찍는 돈)
+export const PROCESSED_NAME = { wood: "목재", stone: "석재", iron: "철괴" };
+export const FOOD_PRICE = 3;                                                   // 농부·어부에게서 음식 1개 값
+export const MERCHANT_START = 40;                                              // 상인 창업 자금(은행이 소환 때 찍어 줌)
+export const rawOf = u => ({ wood: u.inv?.wood || 0, stone: u.inv?.stone || 0, iron: u.inv?.iron || 0 });
+export const isProducer = u => u.job === "farmer" || u.job === "fisher";
+export const total = o => Object.values(o || {}).reduce((s, n) => s + (n || 0), 0);

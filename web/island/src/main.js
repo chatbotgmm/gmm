@@ -98,7 +98,6 @@ const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
 hud.setSummon(world);
-hud.onSeeds = () => { for (let i = 0; i < 10; i++) world.addSeed(); hud.status("씨앗을 뿌렸어요"); };
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };
 // 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
