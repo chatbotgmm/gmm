@@ -84,6 +84,7 @@ function applyAssetTier(c) {
 let decor = null;
 const quality = new Quality(renderer, sun, c => {
   applyAssetTier(c);
+  daylight?.setLampLights(c.lampLights);
   if (setTerrainDetail(c.terrainSub, c.lodScale, c.farDrop) && world) world.grid.markAllDirty();
   unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
   if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); seasonLook?.applyDecor(decor, world.season); }
@@ -175,7 +176,7 @@ function frame() {
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 2, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
-  daylight.update(dt, now);
+  daylight.focus = controls.target; daylight.update(dt, now);
   weatherViews.update(dt, world.weather.kind, controls.target);
   seasonLook.update(dt, world.season, world.weather.kind); leaves.update(dt, world.season, world.weather.kind, controls.target);
   if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); }

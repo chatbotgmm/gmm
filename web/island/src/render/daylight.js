@@ -73,21 +73,32 @@ export class Daylight {
     this.light.intensity = 30 * this.night;
   }
   /** 가로등: 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
+  /** 가로등 실제 빛 개수(그래픽 설정). 빛 개수가 바뀌면 재질을 다시 만들어야 해서 늘 같은 개수를 두고 안 쓰는 빛은 0으로 */
+  setLampLights(k) {
+    for (const l of this.lampLights || []) l.parent?.remove(l);
+    this.lampLights = Array.from({ length: k }, () => { const l = new THREE.PointLight(0xffb060, 0, 7, 2); l.castShadow = false; this.scene.add(l); return l; });
+  }
   streetLamps() {
-    const n = this.night ?? 0, glow = 0.12 + 2.6 * n;
+    const n = this.night ?? 0, glow = 0.15 + 3.4 * n, lamps = [];
     this.scene.traverse(o => {
       if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m; if (src.name !== "lampBody") return;
       m.emissiveIntensity = glow; src.emissiveIntensity = glow;
       if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
         o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
-        halo.position.set(0, bb.min.y + hgt * 0.78, 0); halo.scale.setScalar(1.3 / s); halo.userData.noToon = true; o.add(halo);
-        const pool = new THREE.Mesh(new THREE.CircleGeometry(2.2 / s, 24), new THREE.MeshBasicMaterial({ map: haloTex(), color: 0xffb860, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+        halo.position.set(0, bb.min.y + hgt * 0.78, 0); halo.scale.setScalar(2.0 / s); halo.userData.noToon = true; o.add(halo);
+        const pool = new THREE.Mesh(new THREE.CircleGeometry(3.2 / s, 32), new THREE.MeshBasicMaterial({ map: haloTex(), color: 0xffb860, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
         pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);
         o.userData.halo = [halo, pool];
       }
-      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = n > 0.05; halo.material.opacity = 0.75 * n; pool.material.opacity = 0.45 * n;
+      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = n > 0.05; halo.material.opacity = 0.95 * n; pool.material.opacity = 0.35 * n;
+      lamps.push(halo);
     });
+    // 실제 빛: 화면 중심(보는 곳)에서 가까운 가로등부터 빛을 하나씩 옮겨 붙임
+    const L = this.lampLights || []; if (!L.length) return;
+    const c = this.focus || new THREE.Vector3(), p = new THREE.Vector3();
+    const near = lamps.map(h => { h.getWorldPosition(p); return [p.clone(), p.distanceToSquared(c)]; }).sort((a, b) => a[1] - b[1]);
+    L.forEach((l, i) => { const it = near[i]; if (it && n > 0.05) { l.position.copy(it[0]); l.intensity = 3.2 * n; } else l.intensity = 0; });
   }
   beam(dt) {
     const b = this.scene.getObjectByName("lighthouseBeam"); if (!b) return;
