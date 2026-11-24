@@ -13,6 +13,7 @@ import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
 import { WeatherViews } from "./render/weather.js";
 import { SeasonLook, FallingLeaves } from "./render/seasons.js";
+import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD } from "./world/wishes.js";
 import { RANK_REWARD } from "./world/rank.js";
@@ -62,7 +63,7 @@ const toon = new Toon(scene); let lastToon = 0;
 const weatherViews = new WeatherViews(scene, daylight);
 let seasonPick = null;                                                            // null = 실제 날짜
 const seasonNow = () => seasonPick || seasonOf(daylight.now());
-const seasonLook = new SeasonLook(toon), leaves = new FallingLeaves(scene);
+const seasonLook = new SeasonLook(toon), leaves = new FallingLeaves(scene), footprints = new Footprints(scene);   // 눈·모래 위 발자국
 let moduleObjs = null;                                                            // 나무 등 모듈 물체(계절 잎 색)
 function tintGround() {                                                           // 나무 잎·덤불을 지금 계절로(땅은 셰이더가 천천히 바꿈)
   if (!world?.season) return;
@@ -92,9 +93,9 @@ const quality = new Quality(renderer, sun, c => {
   if (setTerrainDetail(c.terrainSub, c.lodScale, c.farDrop) && world) world.grid.markAllDirty();
   unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
   if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); seasonLook?.applyDecor(decor, world.season); }
-  weatherViews?.setAmount(c.decor.density); leaves?.setAmount(c.decor.density);
+  weatherViews?.setAmount(c.decor.density); leaves?.setAmount(c.decor.density); footprints?.setCapacity(c.footprints);
 });
-weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density);
+weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
@@ -207,7 +208,7 @@ function frame() {
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   daylight.focus = controls.target; daylight.update(dt, now);
   weatherViews.update(dt, world.weather.kind, controls.target);
-  seasonLook.update(dt, world.season, world.weather.kind); leaves.update(dt, world.season, world.weather.kind, controls.target);
+  seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
   if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); }
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
@@ -218,7 +219,7 @@ function frame() {
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
-  minimap.update(dt);
+  minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);

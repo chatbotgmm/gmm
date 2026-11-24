@@ -761,3 +761,12 @@ test("장식·전기·카페·우체국: 집 근처 장식·풍차 전기·가�
   w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0; w.summon(); w.stepWishes(1.1);
   assert.equal(u.coins - coins, 20, "축하금 10 × 2");
 });
+
+test("눈 깊이: 겨울 눈 오는 날 쌓이고(약 80초에 가득), 맑은 겨울은 0.55까지, 봄엔 녹고, 저장됨", () => {
+  const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("winter"); w.setWeather("snow"); w.weather.t = 1e9;
+  for (let i = 0; i < 400; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - 0.5) < 0.01, `40초 ${w.snow}`);
+  for (let i = 0; i < 600; i++) w.stepSnow(0.1); assert.equal(w.snow, 1);
+  w.setWeather("clear"); w.weather.t = 1e9; for (let i = 0; i < 3000; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - 0.55) < 1e-9, "맑은 겨울은 0.55로 천천히");
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.ok(Math.abs(back.snow - w.snow) < 1e-9);
+  w.setSeason("spring"); for (let i = 0; i < 600; i++) w.stepSnow(0.1); assert.equal(w.snow, 0, "봄엔 60초 안에 다 녹음");
+});

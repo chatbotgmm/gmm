@@ -6,6 +6,7 @@
 //  · 갈매미 실제 그림자를 드리우는 거리(그 밖은 발밑 원판)
 //  · 덤불·꽃·자갈 양과 모양(단순한 모양 = 삼각형 1/4)
 //  · 프레임 상한(성능 우선 30fps)
+//  · 발자국 개수(눈·모래 위, 성능 우선은 0)
 //  · 가로등 실제 빛(가까운 것 N개만 주변 갈매미·건물·땅을 밝힘, 성능 우선은 0)
 //  · 갈매미 모델 정밀도(liteModel: 남길 삼각형 비율, 다음에 열 때부터). 나중에 단계별 모델 파일을 만들면 여기서 고르게 연결
 import * as THREE from "three";
@@ -16,15 +17,15 @@ const pr = (pc, touch) => Math.min(DPR, IS_TOUCH ? touch : pc);
 
 export const QUALITY = {
   ultra: { name: "최고 품질", maxPR: pr(2, 2), minPR: pr(2, 2), dynamic: false, shadows: true, shadow: 4096, soft: true, shadowEvery: 1,
-    terrainSub: 4, lodScale: 1.7, farDrop: false, gullShadowDist: 999, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 8, fpsCap: 0, model: 1, liteModel: 1 },
+    terrainSub: 4, lodScale: 1.7, farDrop: false, gullShadowDist: 999, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 8, footprints: 500, fpsCap: 0, model: 1, liteModel: 1 },
   high:  { name: "높음", maxPR: pr(2, 1.5), minPR: pr(2, 1.5), dynamic: false, shadows: true, shadow: 2048, soft: true, shadowEvery: 1,
-    terrainSub: 4, lodScale: 1.2, farDrop: false, gullShadowDist: 45, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 6, fpsCap: 0, model: 1, liteModel: 1 },
+    terrainSub: 4, lodScale: 1.2, farDrop: false, gullShadowDist: 45, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 6, footprints: 400, fpsCap: 0, model: 1, liteModel: 1 },
   medium: { name: "보통", maxPR: pr(1.75, 1.5), minPR: pr(0.85, 0.85), dynamic: true, shadows: true, shadow: IS_TOUCH ? 1024 : 2048, soft: !IS_TOUCH, shadowEvery: 2,
-    terrainSub: IS_TOUCH ? 2 : 4, lodScale: 1, farDrop: true, gullShadowDist: 28, decor: { density: 0.8, simple: true, bushShadow: true }, lampLights: 4, fpsCap: 0, model: 0.4, liteModel: 1 },
+    terrainSub: IS_TOUCH ? 2 : 4, lodScale: 1, farDrop: true, gullShadowDist: 28, decor: { density: 0.8, simple: true, bushShadow: true }, lampLights: 4, footprints: 200, fpsCap: 0, model: 0.4, liteModel: 1 },
   low:   { name: "낮음", maxPR: pr(1, 1), minPR: pr(0.75, 0.75), dynamic: true, shadows: true, shadow: 1024, soft: false, shadowEvery: 3,
-    terrainSub: 2, lodScale: 0.7, farDrop: true, gullShadowDist: 0, decor: { density: 0.5, simple: true, bushShadow: false }, lampLights: 2, fpsCap: 0, model: 0.25, liteModel: 0.6 },
+    terrainSub: 2, lodScale: 0.7, farDrop: true, gullShadowDist: 0, decor: { density: 0.5, simple: true, bushShadow: false }, lampLights: 2, footprints: 80, fpsCap: 0, model: 0.25, liteModel: 0.6 },
   perf:  { name: "성능 우선", maxPR: pr(0.7, 0.6), minPR: pr(0.7, 0.6), dynamic: false, shadows: false, shadow: 512, soft: false, shadowEvery: 4,
-    terrainSub: 1, lodScale: 0.5, farDrop: true, gullShadowDist: 0, decor: { density: 0.25, simple: true, bushShadow: false }, lampLights: 0, fpsCap: 30, model: 0.2, liteModel: 0.4 },
+    terrainSub: 1, lodScale: 0.5, farDrop: true, gullShadowDist: 0, decor: { density: 0.25, simple: true, bushShadow: false }, lampLights: 0, footprints: 0, fpsCap: 30, model: 0.2, liteModel: 0.4 },
 };
 export const ORDER = ["ultra", "high", "medium", "low", "perf"];
 export const QUALITY_NOTE = {

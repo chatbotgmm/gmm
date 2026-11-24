@@ -51,6 +51,7 @@ export class World {
     this.wishes = (extra.wishes || []).map(x => ({ ...x })); this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
     // 시세: 상인이 사는 원자재 값·음식 값(5초마다 다시 셈) · 지난 값(20초마다 하나, 48개)
     this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = extra.priceHist || []; this.priceClock = 0; this.histClock = 0;
+    this.snow = extra.snow || 0;                                                  // 쌓인 눈(0~1): 겨울에 눈이 오면 늘고 봄·비에 녹음
     this.rank = extra.rank || 0; this.rankClock = 0;                               // 마을 등급(오르기만 함)
     this.granary = extra.granary || 0;                                            // 저장고에 쌓인 음식
     for (const m of modules) {
@@ -254,6 +255,13 @@ export class World {
   get fx() { return S.effects(this.season, this.weather.kind); }
   setSeason(s) { if (s === this.season) return; this.season = s; this.emit("season", s); }
   setWeather(kind) { this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather); }
+  /** 눈 깊이: 겨울 눈 오는 날 약 80초에 가득, 겨울 맑은 날은 0.55까지 천천히, 비·다른 계절엔 녹음 */
+  stepSnow(dt) {
+    const k = this.weather.kind, winter = this.season === "winter";
+    const goal = winter ? (k === "snow" ? 1 : k === "rain" ? 0.15 : k === "storm" ? 0.7 : 0.55) : 0;
+    const rate = goal > this.snow ? (k === "snow" ? 1 / 80 : 1 / 400) : (winter ? 1 / 300 : k === "rain" ? 1 / 30 : 1 / 60);
+    this.snow += Math.sign(goal - this.snow) * Math.min(Math.abs(goal - this.snow), rate * dt);
+  }
   stepWeather(dt) { if ((this.weather.t -= dt) <= 0) this.setWeather(S.pickWeather(this.season || "autumn", this.wrnd, this.weather.kind)); }
 
   // ---- 다리·선착장·배
@@ -616,7 +624,7 @@ export class World {
   update(dt) {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
-    this.stepWeather(dt);
+    this.stepWeather(dt); this.stepSnow(dt);
     const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람
     for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt * grow) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
@@ -648,7 +656,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {

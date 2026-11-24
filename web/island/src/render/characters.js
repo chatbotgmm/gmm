@@ -190,7 +190,7 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = true;   // 갈매미도 실제 그림자를 드리움(화질 낮음이면 views.js가 끄고 발밑 원판)
     if (o.geometry) { o.geometry.computeBoundingSphere(); if (o.geometry.boundingSphere) o.geometry.boundingSphere.radius *= 1.6; }
     if (o.isSkinnedMesh) { o.computeBoundingSphere?.(); if (o.boundingSphere) o.boundingSphere.radius *= 1.6; }
-    for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; } } });   // 환경맵 없이 검게 보이지 않게
+    for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; m.userData.noSnow = true; } } });   // 갈매미 몸엔 눈을 안 얹음   // 환경맵 없이 검게 보이지 않게
   root.scale.setScalar(cfg.scale);
   if (cfg.tint) {                                                                   // 같은 모델을 다른 갈매미로 쓸 때(목수): 재질을 복제해 색을 입힘
     const tint = new THREE.Color(cfg.tint);

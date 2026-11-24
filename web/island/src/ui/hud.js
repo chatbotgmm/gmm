@@ -26,6 +26,11 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 export class Hud {
   constructor({ tools, world, onSave, onLoad, onReset }) {
     this.tools = tools; this.world = world;
+    tools.onHistory = () => { if (this.undoBtns) { this.undoBtns[0].disabled = !tools.history.length; this.undoBtns[1].disabled = !tools.redoStack.length; } };
+    const crossUI = document.getElementById("cross"), crossGo = document.getElementById("crossGo");
+    tools.onCross = on => { crossUI.hidden = !on; crossGo.hidden = !on; };
+    crossGo.addEventListener("pointerdown", e => { e.preventDefault(); crossGo.setPointerCapture(e.pointerId); tools.crossPress(true); });
+    for (const ev of ["pointerup", "pointercancel"]) crossGo.addEventListener(ev, () => tools.crossPress(false));
     const bar = document.getElementById("tools"), sub = document.getElementById("sub");
     const modes = [["view", "👀 둘러보기"], ["paint", "🖌 바닥 칠하기"], ["height", "⛰ 높이"], ["build", "🏠 건물 짓기"], ["demolish", "🧹 철거"]];
     this.modeBtns = modes.map(([m, label]) => { const b = el("button", "", label); b.dataset.mode = m; bar.appendChild(b);
@@ -183,18 +188,28 @@ export class Hud {
       r.onclick = () => { this.onUnitClick?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });
     this.follow = null;
   }
+  /** 칠하기·높이 공통: 모양(붓·길·네모) · 🎯 십자선 · ↶ ↷ */
+  addEditTools() {
+    const t = this.tools; this.sub.appendChild(el("span", "lab", "모양"));
+    for (const [s, label] of [["brush", "🖌 붓"], ["line", "〰 길"], ["rect", "▭ 네모"]]) { const b = el("button", t.shape === s ? "on" : "", label); b.onclick = () => { t.setShape(s); this.showMode(t.mode, t.mode === "paint" ? t.paintType : t.heightOp); }; this.sub.appendChild(b); }
+    const c = el("button", t.cross ? "on" : "", "🎯 십자선"); c.title = "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요"; c.onclick = () => { t.setCross(!t.cross); c.classList.toggle("on", t.cross); }; this.sub.appendChild(c);
+    const u = el("button", "", "↶"), r = el("button", "", "↷"); u.title = "되돌리기(Ctrl+Z)"; r.title = "다시하기(Ctrl+Shift+Z)"; u.onclick = () => t.undo(); r.onclick = () => t.redo();
+    u.disabled = !t.history.length; r.disabled = !t.redoStack.length; this.undoBtns = [u, r]; this.sub.append(u, r);
+  }
   showMode(mode, arg) {
     this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
     this.handBtn.hidden = mode === "view"; if (mode === "view" && this.tools.hand) this.tools.setHand(false);
     this.sub.innerHTML = ""; this.sub.hidden = !["paint", "build", "height"].includes(mode);
     if (mode === "height") {
       this.lastHeight = arg;
-      for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["smooth", "〰 다듬기"], ["flatten", "▬ 평평하게"]]) {
+      for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["smooth", "〰 다듬기"], ["flatten", "▬ 평평하게"], ["level", "🎚 단 맞추기"]]) {
         const b = el("button", op === arg ? "on" : "", label); b.onclick = () => this.tools.setMode("height", op); this.sub.appendChild(b); }
+      if (arg === "level") { this.sub.appendChild(el("span", "lab", "높이")); for (const hgt of [0, 0.5, 1, 1.5, 2]) { const b = el("button", this.tools.levelH === hgt ? "on" : "", `${hgt} m`); b.onclick = () => { this.tools.levelH = hgt; this.showMode("height", "level"); }; this.sub.appendChild(b); } }
       this.sub.appendChild(el("span", "lab", "붓"));
       this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
         b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
-      this.status("붓 안 전체가 한 번에 0.5 m씩(옆과 턱이 생김 · 오르내리려면 🏠 계단) · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 바다 높이 아래로 파면 연못");
+      this.addEditTools();
+      this.status(arg === "level" ? `🎚 단 맞추기: 문지른 곳을 ${this.tools.levelH} m 높이로 맞춰요(한 번에 여러 번 눌러 올릴 필요 없음)` : "붓 안 전체가 한 번에 0.5 m씩(옆과 턱이 생김 · 오르내리려면 🏠 계단) · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 바다 높이 아래로 파면 연못");
     }
     if (mode === "paint") {
       this.lastPaint = arg;
@@ -204,6 +219,7 @@ export class Hud {
       const lab = el("span", "lab", "붓"); this.sub.appendChild(lab);           // 붓 크기 1×1 · 3×3 · 5×5 · 7×7 ( [ ] 키 )
       this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
         b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
+      this.addEditTools();
     }
     if (mode === "build") {
       this.lastBuild = arg;

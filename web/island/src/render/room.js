@@ -22,7 +22,7 @@ export class RoomView {
     const sun = this.sun = new THREE.DirectionalLight(0xfff0d8, 1.6); sun.position.set(4, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
     Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 0.5, far: 30 }); sun.shadow.bias = -0.0008; s.add(sun);
     this.root = new THREE.Group(); s.add(this.root);
-    this.toon = new Toon(s);
+    this.toon = new Toon(s, { snow: false });                                   // 방 안 가구엔 눈이 안 쌓임
     this.touch = document.getElementById("roomTouch"); this.ui = document.getElementById("room");
     const c = this.controls = new OrbitControls(this.camera, this.touch);
     Object.assign(c, { enablePan: false, enableDamping: true, minPolarAngle: 0.45, maxPolarAngle: 1.2, minAzimuthAngle: -0.25, maxAzimuthAngle: 1.45, minDistance: 4, maxDistance: 16 });

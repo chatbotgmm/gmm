@@ -1,7 +1,7 @@
 // 계절 그림: 나무 잎 색(봄 연두·벚꽃 / 여름 그대로 / 가을 단풍 / 겨울 눈 덮임), 땅(봄 연두, 가을 누런 잔디, 겨울 눈 쌓임),
 // 덤불 색, 그리고 봄 꽃잎·가을 낙엽이 흩날리는 입자. 계절은 world.season(기기 날짜 또는 설정에서 고른 값).
 import * as THREE from "three";
-import { WATER_Y } from "../config.js";
+import { OBJ_SNOW } from "./toon.js";
 
 // 땅 셰이더 값(모든 땅 재질·툰 재질이 같은 값을 씀). 계절이 바뀌면 몇 초에 걸쳐 바뀜
 const U = { uSnow: { value: 0 }, uAutumn: { value: 0 }, uSpring: { value: 0 } };
@@ -30,16 +30,17 @@ export function seasonalGround(mat) {
       float n = fract(sin(dot(floor(vSeasonW.xz * 1.7), vec2(12.9898, 78.233))) * 43758.5453);              // 칸마다 조금씩 다르게(얼룩진 눈)
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.97, 1.0), clamp(uSnow * up * land * (0.9 + 0.12 * n), 0.0, 1.0));`);
   };
-  mat.customProgramCacheKey = () => "seasonGround";
+  mat.customProgramCacheKey = () => "seasonGround"; mat.userData.noSnow = true;   // 땅은 자체 눈
   return mat;
 }
 
 export class SeasonLook {
   constructor(toon) { this.toon = toon; this.cache = new Map(); this.season = null; }
   /** 매 프레임: 땅 값을 목표로 천천히(눈 오는 날엔 눈이 더 쌓임) */
-  update(dt, season, weather) {
+  update(dt, season, weather, snow = null) {
     const t = TARGET[season] || TARGET.summer, k = Math.min(1, dt * 0.6);
-    for (const key of Object.keys(U)) { let goal = t[key]; if (key === "uSnow" && weather === "snow") goal = Math.max(goal, 1); U[key].value += (goal - U[key].value) * k; }
+    for (const key of Object.keys(U)) { const goal = key === "uSnow" && snow !== null ? snow : t[key]; U[key].value += (goal - U[key].value) * k; }   // 땅 눈 = 쌓인 눈 깊이
+    OBJ_SNOW.value += (Math.max(0, (snow ?? 0) - 0.1) / 0.9 - OBJ_SNOW.value) * k;   // 물체 위 눈은 조금 쌓인 뒤부터
   }
   /** 잎 재질 하나를 이 계절 색으로 바꾼 복사본(계절·색마다 한 번만 만듦) */
   leafMat(base, season, i, pine) {

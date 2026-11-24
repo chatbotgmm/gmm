@@ -8,9 +8,19 @@ function gradient(steps = [0.42, 0.62, 0.82, 1.0]) {
   const t = new THREE.DataTexture(data, steps.length, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
 }
 const GRAD = gradient();
+// 물체 위 눈: 위를 향한 면에 눈 깊이만큼 흰색(지붕·나무·바위·소품). 땅(자체 계절 셰이더)과 갈매미(noSnow)는 빼고. 값은 seasons.js가 world.snow로 정함
+export const OBJ_SNOW = { value: 0 };
+function addSnow(sh) {
+  sh.uniforms.uObjSnow = OBJ_SNOW;
+  sh.vertexShader = "varying vec3 vObjSnowN; varying vec3 vObjSnowW;\n" + sh.vertexShader.replace("#include <begin_vertex>",
+    "#include <begin_vertex>\n vObjSnowN = normalize(mat3(modelMatrix) * objectNormal); vObjSnowW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+  sh.fragmentShader = "uniform float uObjSnow; varying vec3 vObjSnowN; varying vec3 vObjSnowW;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+    float snowUp = smoothstep(0.45, 0.8, vObjSnowN.y), snowN = fract(sin(dot(floor(vObjSnowW.xz * 3.0), vec2(12.9898, 78.233))) * 43758.5453);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.97, 1.0), clamp(uObjSnow * snowUp * (0.75 + 0.3 * snowN), 0.0, 1.0));`);
+}
 
 export class Toon {
-  constructor(scene) { this.scene = scene; this.on = true; this.toToon = new Map(); this.toStd = new Map(); }
+  constructor(scene, { snow = true } = {}) { this.scene = scene; this.on = true; this.snow = snow; this.toToon = new Map(); this.toStd = new Map(); }   // snow: 물체 위 눈(방 안은 끔)
   convert(m) {
     if (!m || !(m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial) || m.userData.noToon) return m;
     let t = this.toToon.get(m);
@@ -19,7 +29,8 @@ export class Toon {
         color: m.color, map: m.map, vertexColors: m.vertexColors, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap,
         transparent: m.transparent, opacity: m.opacity, side: m.side, alphaTest: m.alphaTest, depthWrite: m.depthWrite, gradientMap: GRAD, name: m.name,
       });
-      if (Object.prototype.hasOwnProperty.call(m, "onBeforeCompile")) { t.onBeforeCompile = m.onBeforeCompile; t.customProgramCacheKey = () => "toon-" + m.customProgramCacheKey(); }   // 지붕 색 바꾸기 같은 셰이더 수정도 옮김
+      const own = Object.prototype.hasOwnProperty.call(m, "onBeforeCompile") ? m.onBeforeCompile : null, snow = this.snow && !m.userData.noSnow;   // 지붕 색 바꾸기 같은 셰이더 수정도 옮김 + 눈
+      if (own || snow) { t.onBeforeCompile = (sh, r) => { own?.call(t, sh, r); if (snow) addSnow(sh); }; t.customProgramCacheKey = () => `toon-${snow ? "snow-" : ""}${own ? m.customProgramCacheKey() : ""}`; }
       t.userData.src = m; this.toToon.set(m, t); this.toStd.set(t, m);
     }
     return t;

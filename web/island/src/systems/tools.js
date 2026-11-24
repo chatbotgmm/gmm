@@ -6,6 +6,8 @@ import { BUILDINGS } from "../data/catalog.js";
 import { anchorFor } from "../world/placement.js";
 import { josa } from "../util.js";
 import { terrainHeight } from "../world/terrain.js";
+import { findPath } from "../world/pathfinding.js";
+const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
 const OK = 0x4fcf78, BAD = 0xe0574f;
 
@@ -27,6 +29,8 @@ export class Tools {
     this.doorMark.rotation.x = Math.PI;               // 아래를 가리키는 문 앞 표시
     scene.add(this.doorMark); this.doorMark.visible = false;
     this.hand = false; this.spaceHeld = false; this.touchIds = new Set();
+    // 모바일 편집: 모양(붓·길·네모), 십자선 모드, 되돌리기·다시하기, 단 높이 맞추기
+    this.shape = "brush"; this.shapeStart = null; this.cross = false; this.history = []; this.redoStack = []; this.diff = null; this.levelH = 0.5;
 
     dom.addEventListener("pointerdown", e => this.down(e), { capture: true });   // OrbitControls보다 먼저 받음
     dom.addEventListener("pointermove", e => this.move(e));
@@ -34,6 +38,8 @@ export class Tools {
     addEventListener("pointercancel", e => { this.touchIds.delete(e.pointerId); this.cancelStroke(); });
     addEventListener("keydown", e => {
       if (e.target?.tagName === "INPUT") return;
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") { e.preventDefault(); this.redo(); return; }
       if (e.code === "KeyR") this.rotate(); if (e.code === "Enter" && this.plan) this.confirmBuild();
       if (e.code === "Escape") { if (this.plan) this.clearPlan(); else this.setMode("view"); }   // Esc: 정해 둔 자리 취소 → 한 번 더 누르면 도구 끄기
       if (e.code === "BracketLeft") this.setBrush(this.brush - 2); if (e.code === "BracketRight") this.setBrush(this.brush + 2);
@@ -45,13 +51,13 @@ export class Tools {
 
   setMode(mode, arg = null) {
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null; this.plan = null;
-    this.heightOp = mode === "height" ? (arg || "raise") : null;
+    this.heightOp = mode === "height" ? (arg || "raise") : null; this.shapeStart = null; this.commitStroke?.();
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
     this.onStatus(""); this.refresh(); this.onMode?.(mode, arg);
   }
   /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
-  get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld; }
+  get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld && !this.cross; }   // 십자선 모드: 한 손가락은 화면 옮기기, 칠하기는 버튼으로
   /** 조작 배치: 도구 중에는 한 손가락·왼쪽 = 도구, 두 손가락 = 돌리기·확대, 오른쪽 = 돌리기, 가운데 = 확대.
    *  둘러보기(또는 ✋)에서는 한 손가락 = 화면 옮기기, 두 손가락 = 돌리기·확대 / 마우스 왼쪽 = 돌리기, 오른쪽 = 옮기기. */
   applyControls() {
@@ -62,7 +68,52 @@ export class Tools {
   }
   setHand(on) { this.hand = on; this.cancelStroke(); this.applyControls(); this.onHand?.(on); }
   /** 칠하던·올리던 것을 멈춤(두 번째 손가락이 닿거나 화면 조작으로 바뀔 때). */
-  cancelStroke() { clearTimeout(this.pendingT); this.pending = null; this.painting = false; if (this.press) this.press.multi = true; }
+  cancelStroke() { clearTimeout(this.pendingT); this.pending = null; this.painting = false; if (this.press) this.press.multi = true; this.commitStroke(); }
+  // ---- 되돌리기·다시하기: 한 획(또는 길·네모 한 번)에 바뀐 칸들의 전·후(바닥 종류·높이)
+  record(x, z) {
+    const g = this.world.grid, c = g.get(x, z); if (!c) return; this.diff ||= new Map(); const k = `${x},${z}`; if (this.diff.has(k)) return;
+    this.diff.set(k, { x, z, g0: c.groundType, e0: this.world.shaping.get(g.index(x, z))?.target ?? c.elevation });
+  }
+  commitStroke() {
+    if (!this.diff || !this.diff.size) { this.diff = null; return; }
+    const g = this.world.grid, cells = [...this.diff.values()].map(d => ({ ...d, g1: g.get(d.x, d.z).groundType, e1: this.world.shaping.get(g.index(d.x, d.z))?.target ?? g.get(d.x, d.z).elevation }))
+      .filter(d => d.g0 !== d.g1 || Math.abs(d.e0 - d.e1) > 1e-6);
+    this.diff = null; if (!cells.length) return;
+    this.history.push(cells); if (this.history.length > 60) this.history.shift(); this.redoStack = []; this.onHistory?.();
+  }
+  setCell(d, g, e) {
+    const w = this.world, c = w.grid.get(d.x, d.z); w.shaping.delete(w.grid.index(d.x, d.z));
+    if (Math.abs(c.elevation - e) > 1e-6) w.applyHeight(d.x, d.z, e);
+    if (c.groundType !== g) { w.grid.setGround(d.x, d.z, g); w.emit("ground", { x: d.x, z: d.z, type: g }); }
+  }
+  undo() { this.commitStroke(); const s = this.history.pop(); if (!s) return this.onStatus("되돌릴 게 없어요"); for (const d of s) this.setCell(d, d.g0, d.e0); this.redoStack.push(s); this.onStatus(`↶ 되돌렸어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
+  redo() { const s = this.redoStack.pop(); if (!s) return this.onStatus("다시 할 게 없어요"); for (const d of s) this.setCell(d, d.g1, d.e1); this.history.push(s); this.onStatus(`↷ 다시 했어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
+  /** 모양: brush(붓) · line(길: 두 칸을 누르면 걸어가는 길을 따라) · rect(네모 채우기) */
+  setShape(s) { this.shape = s; this.shapeStart = null; this.refresh(); this.onStatus(s === "line" ? "길: 시작 칸 → 끝 칸을 누르면 걸어가는 길을 따라 칠해요" : s === "rect" ? "네모: 두 모서리 칸을 누르면 그 안을 채워요" : ""); }
+  shapeCells(a, b) {
+    if (this.shape === "rect") { const out = []; for (let z = Math.min(a.z, b.z); z <= Math.max(a.z, b.z); z++) for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) out.push([x, z]); return out; }
+    const p = findPath(this.world.grid, a.x, a.z, b.x, b.z, 30000);              // 길: 걸어갈 수 있는 길을 따라(못 찾으면 ㄱ자로 곧게)
+    if (p) return [[a.x, a.z], ...p];
+    const out = []; for (let x = a.x; x !== b.x; x += Math.sign(b.x - a.x)) out.push([x, a.z]); for (let z = a.z; z !== b.z + Math.sign(b.z - a.z || 1); z += Math.sign(b.z - a.z || 1)) { out.push([b.x, z]); if (z === b.z) break; } return out;
+  }
+  editCell(x, z) {                                                               // 칠하기·높이 바꾸기 한 칸(되돌리기 기록)
+    this.record(x, z);
+    if (this.mode === "paint") this.world.paint(x, z, this.paintType);
+    else if (this.heightOp === "level") this.world.reshape(x, z, "flatten", this.levelH, 1);
+    else this.world.reshape(x, z, this.heightOp, this.flatTarget, 1);
+  }
+  buzz() { if (TOOLS_TOUCH && navigator.vibrate) { const t = performance.now(); if (t - (this.lastBuzz || 0) > 60) { this.lastBuzz = t; navigator.vibrate(6); } } }
+  // ---- 십자선 모드: 화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함
+  setCross(on) { this.cross = on; this.cancelStroke(); this.applyControls(); this.onCross?.(on); this.refresh(); }
+  tick() {
+    if (!this.cross || (this.mode !== "paint" && this.mode !== "height")) return;
+    const r = this.dom.getBoundingClientRect(), h = this.pick(r.left + r.width / 2, r.top + r.height / 2);
+    if (h?.x !== this.hover?.x || h?.z !== this.hover?.z) { this.hover = h; this.refresh(); if (this.crossHeld) this.apply(); }
+  }
+  crossPress(on) {
+    if (on) { this.crossHeld = true; this.stroke = new Set(); this.flatTarget = this.hover ? this.world.grid.get(this.hover.x, this.hover.z).elevation : 0; this.apply(); this.crossT = setInterval(() => { this.stroke = new Set(); this.apply(); }, 220); }
+    else { this.crossHeld = false; clearInterval(this.crossT); this.commitStroke(); }
+  }
   rotate() { this.rot = (this.rot + 1) % 4; this.refresh(); }
   /** 붓 크기(한 변 칸 수, 홀수 1·3·5·7). 가리킨 칸이 가운데. */
   setBrush(n) { this.brush = Math.max(1, Math.min(7, n | 1)); this.refresh(); this.onBrush?.(this.brush); }
@@ -107,7 +158,7 @@ export class Tools {
     if (!this.toolActive || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
     this.hover = this.pick(e.clientX, e.clientY); this.refresh();
     this.press = { x: e.clientX, y: e.clientY, multi: false };
-    if (this.mode === "paint" || this.mode === "height") {
+    if ((this.mode === "paint" || this.mode === "height") && this.shape === "brush") {
       const begin = () => {
         if (!this.press || this.press.multi) return;
         this.pending = null; this.painting = true; this.stroke = new Set();   // 한 번 끌 때 같은 칸은 한 번만 올리고 내림
@@ -131,19 +182,26 @@ export class Tools {
     if (!e.isPrimary || !this.press) return;
     const p = this.press; this.press = null;
     if (this.pending && !p.multi) { clearTimeout(this.pendingT); const f = this.pending; this.press = p; f(); this.press = null; }   // 짧게 톡: 한 번 칠함
-    if (this.mode !== "view" && this.mode !== "paint" && this.mode !== "height" && !p.multi) this.apply();
-    this.painting = false; this.pending = null;
+    if (this.mode !== "view" && ((this.mode !== "paint" && this.mode !== "height") || this.shape !== "brush") && !p.multi) this.apply();
+    this.painting = false; this.pending = null; this.commitStroke();
   }
 
   apply() {
     const h = this.hover; if (!h) return;
-    if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) this.world.paint(x, z, this.paintType); }
+    if ((this.mode === "paint" || this.mode === "height") && this.shape !== "brush") {   // 길·네모: 첫 칸 → 둘째 칸
+      if (!this.shapeStart) { this.shapeStart = { x: h.x, z: h.z }; this.onStatus(`${this.shape === "line" ? "길" : "네모"}: 끝 칸을 누르세요`); this.refresh(); return; }
+      const cells = this.shapeCells(this.shapeStart, h); if (this.mode === "height") this.flatTarget = this.world.grid.get(this.shapeStart.x, this.shapeStart.z).elevation;
+      for (const [x, z] of cells) this.editCell(x, z);
+      this.commitStroke(); this.shapeStart = null; this.buzz(); this.onStatus(`${cells.length}칸을 바꿨어요 · ↶ 되돌리기`); this.refresh(); return;
+    }
+    if (this.mode === "paint") { for (const [x, z] of this.brushCells(h)) { this.editCell(x, z); } this.buzz(); }
     else if (this.mode === "height") {
       // 붓 안의 모든 칸을 똑같이(가운데만 솟지 않게)
       for (const [x, z] of this.brushCells(h)) {
         const k = `${x},${z}`; if (this.stroke?.has(k)) continue; this.stroke?.add(k);
-        this.world.reshape(x, z, this.heightOp, this.flatTarget, 1);
+        this.editCell(x, z);
       }
+      this.buzz();
     }
     else if (this.mode === "build") {                                            // 누르면 자리만 정함 → 🔨 건설 버튼(또는 Enter)으로 지음
       if (BUILDINGS[this.buildId].bridge) {                                       // 다리: 처음 누른 칸 → 끝 칸(곧은 줄, 가로나 세로)
@@ -195,6 +253,9 @@ export class Tools {
       this.cursor.visible = true; this.cursor.scale.set(this.brush, this.brush, 1);
       this.cursor.position.set(toWorldX(h.x + 0.5), top + 0.03, toWorldZ(h.z + 0.5));
       this.cursor.material.color.setHex(cells.some(([x, z]) => this.mode === "height" ? this.world.canReshape(x, z) : this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
+      if (this.shape !== "brush") { this.cursor.scale.set(1, 1, 1); this.cursor.material.color.setHex(0xffd36b); }
+      const a = this.shapeStart;
+      if (a && this.shape === "rect") { const w = Math.abs(h.x - a.x) + 1, d = Math.abs(h.z - a.z) + 1; this.cursor.scale.set(w, d, 1); this.cursor.position.set(toWorldX(Math.min(a.x, h.x) + w / 2), top + 0.03, toWorldZ(Math.min(a.z, h.z) + d / 2)); }
     } else if (this.mode === "build" && plan?.bridge) {                           // 다리 줄 미리보기: 줄 전체를 한 상자로
       const L = this.bridgeLine(plan.done ? plan : { ...plan, x1: this.hover?.x ?? plan.x, z1: this.hover?.z ?? plan.z }), [ax, az] = L.cells[0], [bx, bz] = L.cells[L.cells.length - 1];
       const len = L.cells.length, horiz = az === bz, col = L.ok.length && L.ok.length === L.water.length ? OK : L.ok.length ? 0xffc04a : BAD;
