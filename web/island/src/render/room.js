@@ -34,6 +34,7 @@ export class RoomView {
     this.root = new THREE.Group(); s.add(this.root); this.gulls = new Map(); this.chars = null;   // chars: 갈매미 모델(main이 넣어 줌)
     this.toon = new Toon(s, { snow: false });                                   // 방 안 가구엔 눈이 안 쌓임
     this.touch = document.getElementById("roomTouch"); this.ui = document.getElementById("room");
+    this.bubbleBox = document.createElement("div"); this.bubbleBox.className = "roomBubbles"; this.bubbleBox.hidden = true; document.body.appendChild(this.bubbleBox); this.bubbles = new Map();   // 방 안 갈매미 말풍선(섬과 같은 모양)
     const c = this.controls = new OrbitControls(this.camera, this.touch);
     Object.assign(c, { enablePan: false, enableDamping: true, minPolarAngle: 0.45, maxPolarAngle: 1.2, minDistance: 4, maxDistance: 16 });
     this.ray = new THREE.Raycaster(); this.ndc = new THREE.Vector2(); this.floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -52,7 +53,7 @@ export class RoomView {
     F.room(b); this.build();
     const it = this.L, span = Math.max(it.w, it.d);
     this.controls.target.set(0, 0.4, 0); this.camera.position.set(span * 0.55, span * 0.95, span * 1.15); this.fit(); this.controls.update();
-    this.onSound?.("doorIn"); this.touch.hidden = false; this.ui.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
+    this.onSound?.("doorIn"); this.touch.hidden = false; this.ui.hidden = false; this.bubbleBox.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
     this.offFurn = () => {}; this.status(`${BUILDINGS[b.defId].name}에 들어왔어요 · 가구를 골라 방에 놓아 보세요`);
   }
   /** 화면 모양에 맞춰 방 전체가 보이게: 세로 화면은 렌즈를 넓히고 더 멀리서 */
@@ -65,7 +66,7 @@ export class RoomView {
     this.controls.maxDistance = Math.max(16, dist * 1.4); this.lastAspect = a;
   }
   close() {
-    if (!this.isOpen) return; this.isOpen = false; this.onSound?.("doorOut"); this.touch.hidden = true; this.ui.hidden = true; document.body.classList.remove("inroom");
+    if (!this.isOpen) return; this.isOpen = false; this.onSound?.("doorOut"); this.touch.hidden = true; this.ui.hidden = true; this.bubbleBox.hidden = true; document.body.classList.remove("inroom");
     this.root.clear(); this.onExit?.();
   }
   status(t) { this.ui.querySelector(".rmsg").textContent = t; }
@@ -258,9 +259,29 @@ export class RoomView {
       }
     }
   }
+  /** 방 안 갈매미 말풍선: 이 방에 보이는 갈매미의 말(u.emoteText)을 머리 위에. 누워 자면 머리(베개) 쪽 위 */
+  drawBubbles() {
+    const W = innerWidth, H = innerHeight, seen = new Set(), p = new THREE.Vector3();
+    for (const [id, v] of this.gulls) {
+      const u = this.world.units.find(x => x.unitId === id), e = this.bubbleFor(id); seen.add(id);
+      const show = !!(v.root?.parent && u && u.insideBuildingId === this.b.id && u.emoteT > 0 && u.emoteText); e.hidden = !show; if (!show) { e.dataset.t = ""; continue; }
+      const lying = Math.abs(v.root.rotation.x) > 0.5; v.root.getWorldPosition(p);
+      if (lying) { p.y += 0.55; p.addScaledVector(new THREE.Vector3(-Math.sin(v.root.rotation.y), 0, -Math.cos(v.root.rotation.y)), 0.35); } else p.y += (v.root.rotation.x ? 0.9 : 1.05) + (v.cur === "Sit" ? 0 : 0.05);
+      const dist = this.camera.position.distanceTo(p); p.project(this.camera); if (p.z > 1) { e.hidden = true; continue; }
+      if (e.dataset.t !== u.emoteText) {
+        e.dataset.t = u.emoteText; e.textContent = u.emoteText; const t = u.emoteText, think = t.startsWith("💭"), icon = [...t].length <= 2 || /^(…|zZ…|!\?)$/.test(t);
+        e.className = "emote" + (think ? " think" : icon ? " icon" : ""); void e.offsetWidth; e.classList.add("pop");
+      }
+      e.style.left = `${(p.x * 0.5 + 0.5) * W}px`; e.style.top = `${(-p.y * 0.5 + 0.5) * H}px`;
+      e.style.setProperty("--s", THREE.MathUtils.clamp(1.35 - dist / 25, 0.8, 1.2).toFixed(2)); e.style.opacity = Math.min(1, u.emoteT / 0.3).toFixed(2);
+    }
+    for (const [id, e] of this.bubbles) if (!seen.has(id)) e.hidden = true;
+  }
+  bubbleFor(id) { let e = this.bubbles.get(id); if (!e) { e = document.createElement("div"); e.className = "emote"; e.hidden = true; this.bubbleBox.appendChild(e); this.bubbles.set(id, e); } return e; }
   update(dt) {
     if (!this.isOpen) return; this.controls.update(); this.cutWalls();
     for (const v of this.gulls.values()) if (v.root?.parent) v.mixer.update(dt);
+    this.drawBubbles();
     if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = 1; this.syncGulls(); }
     if (Math.abs(innerWidth / innerHeight - (this.lastAspect || 0)) > 0.01) this.fit();   // 화면을 돌리면 다시 맞춤
     if (this.whoT === undefined || (this.whoT -= dt) <= 0) { this.whoT = 1; const inside = this.world.units.filter(u => u.insideBuildingId === this.b.id); this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : ""; }

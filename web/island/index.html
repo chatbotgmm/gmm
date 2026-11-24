@@ -96,6 +96,7 @@
   .emote.icon { font-size: 18px; padding: 2px 7px; border-radius: 50%; min-width: 22px; text-align: center; }
   .emote.think { border-radius: 18px; }
   .emote.think::after { border: 0; width: 8px; height: 8px; border-radius: 50%; background: #fffdf8; bottom: -11px; margin-left: -10px; box-shadow: 6px 7px 0 -2px #fffdf8; }
+  .roomBubbles { position: fixed; inset: 0; pointer-events: none; z-index: 2; }   /* 방 그림(1) 위, 방 화면 판(3) 아래 */
   .emote.pop { animation: bubblePop .28s cubic-bezier(.3, 1.6, .5, 1); }
   @keyframes bubblePop { from { transform: translate(-50%, calc(-100% - 4px)) scale(calc(var(--s) * .4)); } to { transform: translate(-50%, calc(-100% - 10px)) scale(var(--s)); } }
   .zone { position: absolute; transform: translate(-50%, -50%); font-size: 13px; padding: 2px 8px; border-radius: 8px; background: rgba(255,255,255,.75); white-space: nowrap; }
