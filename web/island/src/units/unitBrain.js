@@ -497,8 +497,19 @@ export function exitBuilding(u, world, rnd) {
 }
 
 // ---------------------------------------------------------------- 매 프레임
+/** 기분 말풍선: 20~40초마다(갈매미마다 엇갈리게), 다른 말풍선이 없을 때 지금 기분을 보여 줌. 난수(rnd)는 안 씀(마을 진행에 영향 없음) */
+const MOODS = { sleep: ["💤", "zZ…"], hungry: ["😫 배고파", "🐟 먹고 싶다…"], tired: ["😮‍💨 피곤해", "🥱 쉬고 싶다"], happy: ["😊", "♪", "☺️ 좋다", "🌸 기분 좋아"], sad: ["😞", "😟 별로야…"], cold: ["🥶 추워", "❄️ 으슬으슬"] };
+export function moodBubble(u, dt, world) {
+  if ((u.moodT = (u.moodT ?? 8 + (u.unitId * 7) % 20) - dt) > 0 || u.emoteT > 0 || u.state === US.Held) return;
+  u.moodT = 20 + ((u.unitId * 13 + Math.floor(world.time || 0)) % 21);
+  const n = u.needs, sat = u.sat ?? 50, k = u.state === US.Sleep || u.sleeping || u.useFurni && FURNITURE[u.useFurni.id]?.use === "sleep" ? "sleep"
+    : (u.full ?? 80) < J.HUNGRY ? "hungry" : n && n.energy < 20 ? "tired" : world.season === "winter" && (world.snow ?? 0) > 0.3 && !u.insideBuildingId && (u.unitId + Math.floor(world.time || 0)) % 3 === 0 ? "cold"
+    : sat >= 80 ? "happy" : sat < 30 ? "sad" : null;
+  if (!k) return; const list = MOODS[k]; emote(u, list[(u.unitId + Math.floor((world.time || 0) / 7)) % list.length], 2.4);
+}
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
+  moodBubble(u, dt, world);
   u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * (world.fx?.hunger ?? 1) * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
   if (u.useFurni && u.insideBuildingId && u.needs) {                              // 집 가구 쓰기: 침대 = 기력 회복 두 배, 앉기 = 조금 더, 책장 = 재미

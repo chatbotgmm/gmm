@@ -130,10 +130,18 @@ export class LifeViews {
     }
     // 말풍선
     this.world.units.forEach((u, i) => {
-      const e = this.emoteFor(i), show = u.emoteT > 0 && !u.insideBuildingId; e.hidden = !show; if (!show) return;
-      tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z)).project(camera);
-      if (tmp.z > 1) { e.hidden = true; return; }
-      e.textContent = u.emoteText; e.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; e.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
+      const e = this.emoteFor(i), show = u.emoteT > 0 && !u.insideBuildingId; e.hidden = !show; if (!show) { e.dataset.t = ""; return; }
+      tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z));
+      const dist = camera.position.distanceTo(tmp); tmp.project(camera);
+      if (tmp.z > 1 || dist > 75) { e.hidden = true; return; }                    // 너무 멀면 숨김(화면이 어지럽지 않게)
+      if (e.dataset.t !== u.emoteText) {                                          // 새 말: 모양 고르고 톡 튀어나오게
+        e.dataset.t = u.emoteText; e.textContent = u.emoteText;
+        const t = u.emoteText, think = t.startsWith("💭"), icon = [...t].length <= 2 || /^(…|zZ…|!\?)$/.test(t);
+        e.className = "emote" + (think ? " think" : icon ? " icon" : ""); void e.offsetWidth; e.classList.add("pop");
+      }
+      const sc = THREE.MathUtils.clamp(1.15 - dist / 90, 0.6, 1.1);                // 멀수록 작게
+      e.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; e.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
+      e.style.setProperty("--s", sc.toFixed(2)); e.style.opacity = Math.min(1, u.emoteT / 0.3).toFixed(2);   // 끝날 때 살짝 사라짐
     });
     for (const { z, e } of this.zoneEls) {
       tmp.set(toWorldX(z.x + 0.5), 2.6, toWorldZ(z.z + 0.5)).project(camera);
