@@ -13,7 +13,7 @@ const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, GOLD
 export const BUILDINGS = {
   // 계단: 낮은 칸에 놓고, 문 쪽(앞)이 입구·뒤쪽 칸이 올라갈 곳. 뒤가 0.1~1.5 m 더 높아야 함. 다 지으면 앞뒤로만 오르내림.
   stairs: {
-    id: "stairs", builtBy: "builder", cost: { wood: 1 }, tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true, prop: "assets/props/stairs_stone.glb",   // 돌계단 모델(사용자 제공)
+    id: "stairs", builtBy: "builder", cost: { wood: 1 }, tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true, prop: "assets/props/stairs_stone_{T}.glb",   // 돌계단 모델(사용자 제공)
     placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   house: {
@@ -43,7 +43,7 @@ export const BUILDINGS = {
   },
   // 공식은행: 섬 가운데에 처음부터 있음(짓거나 철거 못 함). 갈매미가 물건을 팔면 새 돈을 찍어 주고, 산 물건은 은행 창고(마을 자재)로.
   bank: {
-    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 3.6, asset: "assets/props/bank.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·동전 은행(사용자 제공)
+    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 3.6, asset: "assets/props/bank_{T}.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·동전 은행(사용자 제공)
     placeholder: { wall: 0xf6efdc, roof: 0xe0b84a, roof_shape: "pyramid" }, interior: { w: 8, d: 6 },
   },
   // 목수가 짓는 시설
@@ -52,7 +52,7 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "flat", awning: 0x9fd3e6 }, interior: { w: 6, d: 5 },
   },
   field: {
-    id: "field", builtBy: "carpenter", field: true, cost: { wood: 1 }, tier: 1, name: "밭", footprint: { w: 3, d: 2 }, work: 2, height: 0.2, asset: null, prop: "assets/props/field_plot.glb",   // 칸마다 밭 틀(사용자 제공)
+    id: "field", builtBy: "carpenter", field: true, cost: { wood: 1 }, tier: 1, name: "밭", footprint: { w: 3, d: 2 }, work: 2, height: 0.2, asset: null, prop: "assets/props/field_plot_{T}.glb",   // 칸마다 밭 틀(사용자 제공)
     placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   dock: {
@@ -62,12 +62,12 @@ export const BUILDINGS = {
   // 가로등(장식): 밤에 유리가 빛나고 둘레를 밝힘. 마을 등급 점수(장식)에 들어감
   streetlamp: {
     id: "streetlamp", builtBy: "builder", deco: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 2.6,
-    asset: "assets/props/street_lamp.glb", fit: { w: 0.56, d: 0.56 },   // 가는 가로등(사용자 제공): 폭 0.56 m → 높이 약 2.6 m
+    asset: "assets/props/street_lamp_{T}.glb", fit: { w: 0.56, d: 0.56 },   // 가는 가로등(사용자 제공): 폭 0.56 m → 높이 약 2.6 m
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   // 장식(집 근처 6칸 안에 있으면 그 집 갈매미 만족도 +2씩, 최대 +10)
-  bench:     { id: "bench", builtBy: "builder", deco: true, asset: "assets/props/bench.glb", modelYaw: -Math.PI / 2, fit: { w: 0.85, d: 0.85 }, cost: { wood: 1 }, tier: 1, name: "벤치", footprint: { w: 1, d: 1 }, work: 1, height: 0.6, placeholder: { wall: 0xb98352, roof: 0xb98352, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
-  flowerbed: { id: "flowerbed", builtBy: "builder", deco: true, cost: { wood: 1 }, tier: 1, name: "화단", footprint: { w: 1, d: 1 }, work: 1, height: 0.45, asset: "assets/props/flower_box.glb", fit: { w: 0.9, d: 0.9 }, placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  bench:     { id: "bench", builtBy: "builder", deco: true, asset: "assets/props/bench_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 0.85, d: 0.85 }, cost: { wood: 1 }, tier: 1, name: "벤치", footprint: { w: 1, d: 1 }, work: 1, height: 0.6, placeholder: { wall: 0xb98352, roof: 0xb98352, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  flowerbed: { id: "flowerbed", builtBy: "builder", deco: true, cost: { wood: 1 }, tier: 1, name: "화단", footprint: { w: 1, d: 1 }, work: 1, height: 0.45, asset: "assets/props/flower_box_{T}.glb", fit: { w: 0.9, d: 0.9 }, placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   fountain:  { id: "fountain", builtBy: "carpenter", deco: true, decoShape: "fountain", rank: 1, cost: { stone: 3 }, tier: 1, name: "분수", footprint: { w: 2, d: 2 }, work: 4, height: 1.2, asset: null, placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   snowman:   { id: "snowman", builtBy: "builder", deco: true, decoShape: "snowman", winterOnly: true, cost: {}, tier: 1, name: "눈사람", footprint: { w: 1, d: 1 }, work: 1, height: 1.0, asset: null, placeholder: { wall: 0xffffff, roof: 0xffffff, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 풍차 발전소: 둘레 18칸 안의 집에 전기(밤에 창이 밝아지고 만족도 +8)
@@ -84,7 +84,7 @@ export const BUILDINGS = {
   },
   // 저장고(겨울 대비): 농부·어부가 남는 음식을 은행에 팔면 여기 쌓이고, 배고픈 갈매미가 사 가거나(돈이 없고 아주 배고프면 나눠 줌) 겨울을 남
   storehouse: {
-    id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.6, asset: "assets/props/storehouse.glb", modelYaw: -Math.PI / 2,   // 돌집 저장고(사용자 제공)
+    id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.6, asset: "assets/props/storehouse_{T}.glb", modelYaw: -Math.PI / 2,   // 돌집 저장고(사용자 제공)
     placeholder: { wall: 0xb5794a, roof: 0x7b4b2e, roof_shape: "pyramid" }, interior: { w: 5, d: 5 },
   },
   manor: {
@@ -134,10 +134,10 @@ export const MODULES = {
   stall:      { id: "stall", name: "시장 가판대", walkable: false, viewSize: 1.3, assets: ["../village/assets/sk/workbench.glb"] },
   bucket:     { id: "bucket", name: "양동이", walkable: false, viewSize: 0.45, assets: ["../village/assets/sk/bucket.glb"] },
   palm:       { id: "palm", name: "야자수", walkable: false, viewSize: 1.5,           // 바닷가 모래(나무처럼 벨 수 있음). 사용자 제공 모델
-                assets: ["assets/props/palm.glb"] },
-  // 나무(사용자 제공 Tripo 모델, 원본 47,208면 → 단계별 7,080 / 4,034 / 1,765 / 1,031면). 나무마다 크기·방향을 조금씩 다르게
+                assets: ["assets/props/palm_{T}.glb"] },
+  // 나무(사용자 제공 Tripo 모델, 원본 47,208면 → 최고·높음 7,080면, 그 아래 4,034면. 텍스처는 4096/2048/1024px). 나무마다 크기·방향을 조금씩 다르게
   tree:       { id: "tree", name: "나무", walkable: false, viewSize: 1.7, vary: true,   // 잎이 옆 칸까지 퍼져 보이게(차지는 1칸)
-                assets: ["assets/props/tree_{L}.glb"] },
+                assets: ["assets/props/tree_{T}.glb"] },
 };
 
 // 바닥 색(두 색을 칸마다 번갈아 칠함)과 이름. asset: 오토타일 조각 모델을 쓸 때 경로(1단계는 도형으로 그림).
