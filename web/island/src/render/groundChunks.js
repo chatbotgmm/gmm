@@ -3,6 +3,7 @@
 // 모양: 칸을 4×4 조각으로 나누고, 높이는 꼭짓점 높이(terrain.js)로 부드럽게 잇는다(경사면). 한 단보다 큰 차이만 절벽 벽.
 // 색: 칸 경계에서 이웃 바닥 종류와 둥글게 섞고(체스판 없음), 잔잔한 얼룩 무늬로 단조롭지 않게.
 import * as THREE from "three";
+import { seasonalGround } from "./seasons.js";
 import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
@@ -176,7 +177,7 @@ export function buildChunkGeometry(grid, cx, cz, sub = SUB) {
 export class GroundChunks {
   constructor(scene, grid) {
     this.scene = scene; this.grid = grid; this.meshes = new Map(); this.rebuilt = 0;
-    this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });   // 어느 쪽에서 봐도 비치지 않게
+    this.material = seasonalGround(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }));   // 계절(봄 연두·가을 누런 잔디·겨울 눈)   // 어느 쪽에서 봐도 비치지 않게
   }
   /** 이 청크가 보는 곳(focus, 월드 좌표)에서 얼마나 떨어졌는지에 따른 칸당 조각 수. cur: 지금 상세도(경계 여유용) */
   lodFor(cx, cz, focus, cur = null) {

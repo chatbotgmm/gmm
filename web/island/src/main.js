@@ -10,7 +10,8 @@ import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
-import { WeatherViews, SEASON_TINT } from "./render/weather.js";
+import { WeatherViews } from "./render/weather.js";
+import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD } from "./world/wishes.js";
 import { PROPS, TRIBES, JOBS } from "./data/catalog.js";
@@ -57,9 +58,12 @@ const toon = new Toon(scene); let lastToon = 0;
 const weatherViews = new WeatherViews(scene, daylight);
 let seasonPick = null;                                                            // null = 실제 날짜
 const seasonNow = () => seasonPick || seasonOf(daylight.now());
-function tintGround() {
-  if (!chunks || !world?.season) return; const c = SEASON_TINT[world.season] ?? 0xffffff;
-  chunks.material.color.setHex(c); const t = toon.toToon.get(chunks.material); if (t) t.color.setHex(c);
+const seasonLook = new SeasonLook(toon), leaves = new FallingLeaves(scene);
+let moduleObjs = null;                                                            // 나무 등 모듈 물체(계절 잎 색)
+function tintGround() {                                                           // 나무 잎·덤불을 지금 계절로(땅은 셰이더가 천천히 바꿈)
+  if (!world?.season) return;
+  if (moduleObjs) seasonLook.applyTrees(world, moduleObjs, world.season);
+  seasonLook.applyDecor(decor, world.season);
 }
 const SEASON_NOTE = { spring: "밭이 빨리 자라요", summer: "밭이 조금 빨리 자라요", autumn: "거둘 때 곡식이 하나 더", winter: "밭이 느리게 자라고, 배가 빨리 고프고, 음식 값이 올라요" };
 const WEATHER_NOTE = { clear: "", cloudy: "", rain: "밭이 빨리 자라고 물고기가 잘 잡혀요", storm: "낚시를 못 하고 배가 빨리 고파요", snow: "밭이 천천히 자라요" };
@@ -74,10 +78,10 @@ let decor = null;
 const quality = new Quality(renderer, sun, c => {
   if (setTerrainDetail(c.terrainSub, c.lodScale, c.farDrop) && world) world.grid.markAllDirty();
   unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
-  if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); }
-  weatherViews?.setAmount(c.decor.density);
+  if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); seasonLook?.applyDecor(decor, world.season); }
+  weatherViews?.setAmount(c.decor.density); leaves?.setAmount(c.decor.density);
 });
-weatherViews.setAmount(quality.cfg.decor.density);
+weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density);
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
@@ -86,8 +90,8 @@ function mount(w) {
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world, charPool); unitViews.setShadowDist(quality.cfg.shadows ? quality.cfg.gullShadowDist : 0);
   lifeViews = new LifeViews(worldRoot, world, overlay);
-  decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정)
-  const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map))];
+  moduleObjs = null; decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정)
+  const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => { lifeViews.attachModules(map); moduleObjs = map; tintGround(); })];
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`); });
@@ -162,6 +166,7 @@ function frame() {
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   daylight.update(dt, now);
   weatherViews.update(dt, world.weather.kind, controls.target);
+  seasonLook.update(dt, world.season, world.weather.kind); leaves.update(dt, world.season, world.weather.kind, controls.target);
   if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); }
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
@@ -182,7 +187,7 @@ function frame() {
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
-hud.onToon = () => { toon.set(!toon.on); return toon.on ? "툰" : "기본"; };
+hud.onToon = () => { toon.set(!toon.on); tintGround(); return toon.on ? "툰" : "기본"; };
 hud.timeLabel = () => daylight.label();
 hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}`;
 hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")}`);
@@ -195,5 +200,5 @@ hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { daylight, toon, quality, weatherViews, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { daylight, toon, quality, weatherViews, seasonLook, setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

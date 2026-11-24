@@ -4,8 +4,6 @@ import * as THREE from "three";
 import { WEATHER } from "../world/season.js";
 
 const BOX = 70, TOP = 32, RAIN_MAX = 2400, SNOW_MAX = 1800;
-// 계절별 땅 색 곱하기(봄·여름은 그대로, 가을은 누렇게, 겨울은 차갑게)
-export const SEASON_TINT = { spring: 0xffffff, summer: 0xf6ffec, autumn: 0xfff0c4, winter: 0xe9f0fa };
 
 export class WeatherViews {
   constructor(scene, daylight) {
