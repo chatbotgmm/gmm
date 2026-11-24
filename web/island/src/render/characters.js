@@ -70,6 +70,7 @@ export const TOOL_GRIP = {
   pickaxe: { up: [1, 0, 0], side: [0, 0, 1] },
   hammer:  { up: [0, 0, 1], side: [-1, 0, 0] },
   rod:     { up: [0.56, 0.77, 0.29], side: [0, 0, 1] },
+  hoe:     { up: [0, 0, 1], side: [0, -1, 0] },                                   // 괭이: 도끼처럼 쥠(날은 자루 끝에 앞으로)
 };
 function gripQuaternion(g) {
   const y = new THREE.Vector3(...g.up).normalize();
@@ -80,6 +81,7 @@ function gripQuaternion(g) {
 
 const KEYS = ["Idle", "Walk", "Run", "Jump", "Attack", "Chop", "Mine", "Build", "FishCast", "FishWait", "FishReel"];
 const ONCE = new Set(["Jump", "Attack", "FishCast", "FishReel"]);
+export const POSE_PERIOD = { Sit: 3.0, Hoe: 1.1, Pave: 0.9 }, POSE_HIT = { Sit: 3.0, Hoe: 0.62, Pave: 0.45 };   // 새로 만든 동작(초)
 
 // ---- 손에 드는 도구(도끼·곡괭이·망치: Kenney Survival Kit, 낚싯대: 도형). web/village와 같은 크기·잡는 위치.
 let toolProtos = null;
@@ -91,6 +93,13 @@ async function toolModel(url, len) {                   // 손잡이가 +Y, 손�
   const m = new THREE.Group(); m.add(root); m.scale.setScalar(len / h); m.position.y = -0.18 * len;
   const g = new THREE.Group(); g.add(m); return g;
 }
+/** 괭이(직접 만듦): 나무 자루 + 끝의 납작한 쇠날 */
+function hoeModel() {
+  const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.9 }), iron = new THREE.MeshStandardMaterial({ color: 0x8d949b, roughness: 0.6 });
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.42, 6), wood); stick.position.y = 0.17; g.add(stick);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.012, 0.07), iron); blade.position.set(0.035, 0.37, 0); blade.rotation.z = -0.25; g.add(blade);
+  return g;
+}
 export function loadTools(props) {
   if (toolProtos) return toolProtos;
   const rod = new THREE.Group();
@@ -101,7 +110,7 @@ export function loadTools(props) {
   const tip = new THREE.Object3D(); tip.name = "tip"; tip.position.y = 0.56; rod.add(tip);
   const tryTool = (url, len) => toolModel(url, len).catch(e => { console.warn("도구 모델을 못 불러옴", url, e); return null; });
   toolProtos = Promise.all([tryTool(props.axe, 0.34), tryTool(props.pickaxe, 0.34), tryTool(props.hammer, 0.24)])
-    .then(([axe, pickaxe, hammer]) => ({ axe, pickaxe, hammer, rod }));
+    .then(([axe, pickaxe, hammer]) => ({ axe, pickaxe, hammer, rod, hoe: hoeModel() }));
   return toolProtos;
 }
 
@@ -174,6 +183,61 @@ function makeHumanSwimClip(root, idle) {
   return new THREE.AnimationClip("Swim", SWIM_PERIOD, tracks);
 }
 
+// ---- 새로 만든 동작 3개(앉기·괭이질·길 깔기): 서 있기 첫 자세에서 뼈를 몸 기준으로 돌려 만듦. 갈매미 뼈대와 사람형(자이언트) 뼈대 둘 다.
+//  · Sit: 엉덩이를 낮추고 다리를 앞으로 뻗어 앉음(숨 쉬듯 몸이 살짝)  · Hoe: 두 팔을 머리 위로 들었다가 몸을 숙이며 내리찍음
+//  · Pave: 쪼그려 앉아 앞에 돌을 놓고 톡톡 두드림
+const ease = t => t * t * (3 - 2 * t);
+const seg = (f, a, b) => ease(Math.min(1, Math.max(0, (f - a) / (b - a))));
+function makePoseClips(root, idle) {
+  if (!idle) return {};
+  const bones = {}; root.traverse(o => { if (o.isBone) bones[o.name.replace(/[._]/g, "").toLowerCase()] = o; });
+  const pick = (...ns) => ns.map(n => bones[n]).find(Boolean);
+  const hips = pick("hips", "pelvis"), spine = pick("spine", "chest", "spine001"), head = pick("head");
+  const arm = { L: pick("wingupperl", "upperarml"), R: pick("wingupperr", "upperarmr") }, leg = { L: pick("legl", "thighl"), R: pick("legr", "thighr") };
+  if (!hips || !arm.L || !arm.R || !leg.L || !leg.R) return {};
+  const saved = new Map(); root.traverse(o => { if (o.isBone) saved.set(o, [o.quaternion.clone(), o.position.clone()]); });
+  for (const t of idle.tracks) { const dot = t.name.lastIndexOf("."), o = root.getObjectByName(t.name.slice(0, dot)), prop = t.name.slice(dot + 1); if (o && (prop === "quaternion" || prop === "position")) o[prop].fromArray(t.values, 0); }
+  root.updateMatrixWorld(true);
+  const rootInv = root.matrixWorld.clone().invert(), rootQInv = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const charQ = o => rootQInv.clone().multiply(o.getWorldQuaternion(new THREE.Quaternion()));
+  const charP = o => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(rootInv);
+  const childBone = o => o.children.find(c => c.isBone);
+  const toLocal = (o, delta) => { const qp = charQ(o.parent); return qp.clone().invert().multiply(delta).multiply(qp).multiply(o.quaternion); };
+  const X = new THREE.Vector3(1, 0, 0);
+  const knee = { L: childBone(leg.L), R: childBone(leg.R) };
+  const foot = s => { let o = leg[s], last = o; while (o) { last = o; o = childBone(o); } return last; };
+  const legLen = Math.max(0.02, charP(leg.L).y - charP(foot("L")).y);
+  const hipLocal = d => { const w = charP(hips).add(new THREE.Vector3(0, -d, 0)).applyMatrix4(root.matrixWorld); return hips.parent.worldToLocal(w); };
+  const out = {}, B = { hips, spine, head, armL: arm.L, armR: arm.R, legL: leg.L, legR: leg.R, kneeL: knee.L, kneeR: knee.R };
+  const build = (name, fn) => {
+    const P = POSE_PERIOD[name], N = 30, times = [...Array(N + 1).keys()].map(i => i / N * P), tracks = [], changed = new Set(), rot = {}, pos = [];
+    for (let i = 0; i <= N; i++) { const r = fn(i / N); for (const [k, q] of Object.entries(r.rot)) (rot[k] ||= []).push(q); pos.push(r.hip || 0); }
+    for (const [k, qs] of Object.entries(rot)) { const o = B[k]; if (!o || changed.has(o.name)) continue;
+      const v = []; qs.forEach((q, i) => toLocal(o, q).toArray(v, i * 4)); tracks.push(new THREE.QuaternionKeyframeTrack(o.name + ".quaternion", times, v)); changed.add(o.name); }
+    { const v = []; pos.forEach((d, i) => hipLocal(d).toArray(v, i * 3)); tracks.push(new THREE.VectorKeyframeTrack(hips.name + ".position", times, v)); }
+    for (const t of idle.tracks) { const bn = t.name.slice(0, t.name.lastIndexOf(".")), prop = t.name.slice(t.name.lastIndexOf(".") + 1);
+      if ((prop === "quaternion" && changed.has(bn)) || (prop === "position" && bn === hips.name)) continue;
+      const n = t.getValueSize(); tracks.push(new t.constructor(t.name, [0], Array.from(t.values.slice(0, n)))); }
+    out[name] = new THREE.AnimationClip(name, P, tracks);
+  };
+  const ax = (v, a) => new THREE.Quaternion().setFromAxisAngle(v, a);
+  const armRest = s => { const c = childBone(arm[s]); return c ? charP(c).sub(charP(arm[s])).normalize() : new THREE.Vector3(s === "L" ? 1 : -1, 0, 0); };
+  const point = (s, dir) => new THREE.Quaternion().setFromUnitVectors(armRest(s), dir.clone().normalize());
+  const side = s => Math.sign(charP(arm[s]).x) || (s === "L" ? 1 : -1);
+  build("Sit", f => { const br = Math.sin(f * Math.PI * 2) * 0.03;
+    return { hip: legLen * 0.62, rot: { legL: ax(X, -1.35), legR: ax(X, -1.35), kneeL: ax(X, 1.0), kneeR: ax(X, 1.0), spine: ax(X, -0.08 + br), head: ax(X, 0.05 - br),
+      armL: point("L", new THREE.Vector3(side("L") * 0.55, -0.8, 0.15)), armR: point("R", new THREE.Vector3(side("R") * 0.55, -0.8, 0.15)) } }; });
+  build("Hoe", f => { const up = seg(f, 0, 0.45) * (1 - seg(f, 0.45, 0.62)), down = seg(f, 0.45, 0.62) * (1 - seg(f, 0.8, 1));
+    const dir = s => new THREE.Vector3(side(s) * (0.25 - 0.1 * down), 0.2 + 0.75 * up - 0.95 * down, 0.35 + 0.1 * up + 0.55 * down);
+    return { hip: legLen * 0.12 * down, rot: { armL: point("L", dir("L")), armR: point("R", dir("R")), spine: ax(X, -0.18 * up + 0.5 * down), head: ax(X, 0.2 * down), legL: ax(X, -0.15 * down), legR: ax(X, -0.15 * down), kneeL: ax(X, 0.3 * down), kneeR: ax(X, 0.3 * down) } }; });
+  build("Pave", f => { const tap = Math.sin(f * Math.PI * 2) * 0.5 + 0.5;
+    return { hip: legLen * 0.45, rot: { legL: ax(X, -0.75), legR: ax(X, -0.75), kneeL: ax(X, 1.25), kneeR: ax(X, 1.25), spine: ax(X, 0.65), head: ax(X, 0.25),
+      armR: point("R", new THREE.Vector3(side("R") * 0.25, -0.2 - 0.6 * (1 - tap), 0.95)), armL: point("L", new THREE.Vector3(side("L") * 0.45, -0.7, 0.5)) } }; });
+  for (const [o, [q, p]] of saved) { o.quaternion.copy(q); o.position.copy(p); }
+  root.updateMatrixWorld(true);
+  return out;
+}
+
 /** 갈매미 8종 모델을 모두 미리 받아 이름 → 캐릭터 Map으로(못 받은 것은 빠짐 → 캡슐). */
 export async function preloadCharacters(set, tools = null, simplifyRatio = 1) {
   const res = await Promise.allSettled(set.chars.map(c => loadCharacter(set.dir, c, tools, simplifyRatio)));
@@ -211,6 +275,7 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   const human = makeHumanSwimClip(root, acts.Idle?.getClip());              // 사람형 뼈대(팔·다리 마디)면 자유형
   const swim = human || makeSwimClip(acts.Idle?.getClip(), acts.Walk?.getClip());
   if (swim) { acts.Swim = mixer.clipAction(swim); clip.Swim = { len: swim.duration, hit: swim.duration }; }
+  for (const [k, c] of Object.entries(makePoseClips(root, acts.Idle?.getClip()))) { acts[k] = mixer.clipAction(c); clip[k] = { len: c.duration, hit: POSE_HIT[k] }; }   // 앉기·괭이질·길 깔기
   let hand = null; root.traverse(o => { if (o.isBone && /^prop.?R$/i.test(o.name)) hand = o; });
   const inHand = {};
   if (hand && tools) {

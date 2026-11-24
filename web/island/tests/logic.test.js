@@ -795,3 +795,12 @@ test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고�
   for (let t = 0; t < 900 && !IM.yardFlat(w2, h2); t += 0.1) { u2.full = 90; w2.update(0.1); }
   assert.ok(yard, "마당 고르기"); assert.equal(IM.yardFlat(w2, h2), true, "마당이 문 높이로 평평해짐");
 });
+
+test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리만), 기력이 차오르고, 시간이 지나면 일어남", () => {
+  const w = World.create(7, seededRandom(8), { wild: true }); w.instantBuild = true;
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const q = spot("bench", c.x + 3, c.z + 6), b = w.placeBuilding("bench", q[0], q[1], 0).building, u = w.units[0];
+  let sat = false, stood = false, e0 = null;
+  for (let t = 0; t < 900 && !stood; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sit") { if (!sat) e0 = u.needs.energy; sat = true; assert.equal(b.sitter, u.unitId); } else if (sat) stood = true; }
+  assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null);
+});

@@ -17,7 +17,8 @@ import { FURNITURE } from "../data/catalog.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
-  FishCast: { len: 1.2, hit: 1.2 }, FishReel: { len: 1, hit: 0.25 }, Jump: { len: 0.8, hit: 0.4 }, Attack: { len: 0.8, hit: 0.5 } };
+  FishCast: { len: 1.2, hit: 1.2 }, FishReel: { len: 1, hit: 0.25 }, Jump: { len: 0.8, hit: 0.4 }, Attack: { len: 0.8, hit: 0.5 },
+  Hoe: { len: 1.1, hit: 0.62 }, Pave: { len: 0.9, hit: 0.45 }, Sit: { len: 3, hit: 3 } };   // 새로 만든 동작(모델이 없을 때 길이)
 const clip = (u, k) => (u.clip && u.clip[k]) || DEFAULT_CLIP[k];
 const cellOf = u => [Math.floor(u.x), Math.floor(u.z)];
 const GIVE_UP = 40;                                   // 이 시간(초) 넘게 가는 중이면 포기
@@ -59,6 +60,7 @@ export function setIdle(u, rnd, world = null, secs = null) {
   if (u.activity) { M.learn(u, u.activity, -0.2); u.activity = null; }   // 끝내지 못하고 그만둔 일 = 조금 나쁜 경험
   release(u);
   if (u.improve && world) { for (const [x, z] of u.improve.cells) world.improveClaims?.delete(`${x},${z}`); u.improve = null; }   // 고치던 일을 그만두면 찜 풀기
+  if (u.sitOn && world) standUp(u, world);                                // 앉아 있다가 다른 일을 하면 일어남
   u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null; if (!u.sailing) u.ferry = null;
   u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined; u.swimming = false; u.swimGoal = null;   // 물속에서 그만두면 다음 프레임에 가까운 땅으로 올라옴
 }
@@ -215,7 +217,7 @@ function startActivity(u, kind, world, rnd) {
 function startActivityInner(u, kind, world, rnd) {
   const g = world.grid, persona = PERSONA[u.name] || PERSONA["기본"];
   switch (kind) {
-    case "rest": setIdle(u, rnd, world, 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
+    case "rest": if (rnd() < 0.6 && sitBench(u, world)) return true; setIdle(u, rnd, world, 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
     case "sleep": {                                                               // 지치면: 가까운 완성된 집에 들어가 자거나, 그 자리에서 잠
       const home = nearest(u, [...world.buildings.values()].filter(b => world.canEnter(u, b) && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 14), b => [b.door.x, b.door.z]);
       if (home && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, "졸려…"); return true; }
@@ -417,6 +419,17 @@ function improveCell(u, world) {
     world.paint(x, z, "Cobble"); im.paved++;
   } else if (im.kind === "yard" && world.canReshape(x, z)) { world.reshape(x, z, "flatten", im.target, 1); }
   world.emit("improve", { u, kind: im.kind, x, z }); return true;
+}
+/** 쉴 때 가까운(16칸 안) 빈 벤치에 가서 앉음. 몸이 너무 큰 갈매미(자이언트)는 안 앉음 */
+function sitBench(u, world) {
+  if ((u.scale || 1) > 1.5) return false;
+  const b = nearest(u, [...world.buildings.values()].filter(b => b.defId === "bench" && world.isDone(b) && !b.sitter && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 16), b => [b.door.x, b.door.z]);
+  if (!b || !startPath(u, world, b.door.x, b.door.z)) return false;
+  b.sitter = u.unitId; u.sitOn = b.id; u.state = US.GoSit; u.activity = "rest"; return true;
+}
+function standUp(u, world) {
+  const b = u.sitOn && world.buildings.get(u.sitOn); if (b) { if (b.sitter === u.unitId) b.sitter = null; if (u.state === US.Sit) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; } }
+  u.sitOn = null; u.sitY = null;
 }
 function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
@@ -670,10 +683,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoFarm: {
       const pl = u.focus;
       if (followPath(u, dt, world, rnd)) {
-        u.state = US.Farm;
-        doOnce(u, "Attack", () => { const r = world.farmPlot(pl, u); u.lastReward = r === "harvest" ? 1.3 : r === "plant" ? 0.6 : 0;
+        u.state = US.Farm; const planting = pl.stage === "empty"; if (planting) u.tool = "hoe";   // 심을 땐 괭이질, 거둘 땐 쪼기
+        doOnce(u, planting ? "Hoe" : "Attack", () => { const r = world.farmPlot(pl, u); u.lastReward = r === "harvest" ? 1.3 : r === "plant" ? 0.6 : 0;
             emote(u, r === "plant" ? "🌱" : r === "harvest" ? `🌾+${pl.lastYield}` : "…"); },
-          () => done(u, u.lastReward ?? 0.5, rnd, world));
+          () => { u.tool = null; done(u, u.lastReward ?? 0.5, rnd, world); });
       }
       break;
     }
@@ -713,13 +726,28 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       } else setIdle(u, rnd, world);
       break;
     }
+    case US.GoSit: {
+      const b = world.buildings.get(u.sitOn); if (!b) { standUp(u, world); setIdle(u, rnd, world); break; }
+      if (followPath(u, dt, world, rnd)) {
+        const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = 7 + rnd() * 7; u.path = null;
+        u.x = cx + 0.5 + (b.door.x - cx) * 0.12; u.z = cz + 0.5 + (b.door.z - cz) * 0.12;   // 벤치 위(앞쪽으로 살짝)
+        u.heading = Math.atan2(b.door.x - cx, b.door.z - cz); u.sitY = (b.elevation ?? 0) + 0.27 * Math.min(1, u.scale || 1) + 0.02; u.anim = "Sit"; emote(u, pick(["후~", "♪", "좋다"], rnd));
+      }
+      break;
+    }
+    case US.Sit:
+      u.anim = "Sit";
+      if (u.needs) { u.needs.energy = Math.min(100, u.needs.energy + 1.2 * dt); u.needs.fun = Math.min(100, u.needs.fun + 0.6 * dt);
+        if (world.units.some(o => o !== u && o.state === US.Sit && Math.hypot(o.x - u.x, o.z - u.z) < 2.5)) u.needs.social = Math.min(100, u.needs.social + 1.5 * dt); }   // 옆 벤치 친구와 수다
+      if (u.timer <= 0) { u.anim = null; standUp(u, world); done(u, 0.9, rnd, world); }
+      break;
     case US.GoImprove:
       if (!u.improve) { setIdle(u, rnd, world); break; }
-      if (followPath(u, dt, world, rnd)) { const [x, z] = u.improve.cells[u.improve.i]; face(u, x + 0.5, z + 0.5); u.state = US.Improve; u.tool = u.improve.kind === "pave" ? "hammer" : "pickaxe"; }
+      if (followPath(u, dt, world, rnd)) { const [x, z] = u.improve.cells[u.improve.i]; face(u, x + 0.5, z + 0.5); u.state = US.Improve; u.tool = u.improve.kind === "pave" ? "hammer" : "hoe"; }
       break;
     case US.Improve:
       if (!u.improve) { setIdle(u, rnd, world); break; }
-      workLoop(u, dt, u.improve.kind === "pave" ? "Build" : "Mine", 2, () => {}, () => {
+      workLoop(u, dt, u.improve.kind === "pave" ? "Pave" : "Hoe", 2, () => {}, () => {   // 길 = 쪼그려 톡톡, 마당 = 괭이질
         const ok = improveCell(u, world); u.improve.i++;
         if (!ok || u.improve.i >= u.improve.cells.length || !improveNext(u, world)) { const kind = u.improve.kind; endImprove(u, world); emote(u, kind === "pave" ? "🛣 길 완성!" : "🏡 마당 끝!", 2.2); M.learn(u, "build", 0.8); done(u, 1.4, rnd, world); }
       });
@@ -774,6 +802,7 @@ function swimStep(u, dt, world, rnd) {
 function settle(u, dt, world) {
   if (u.insideBuildingId) return;
   if (u.swimming) { u.y += (swimY(u) - u.y) * Math.min(1, dt * 6); return; }   // 물에 몸이 반쯤 잠김
+  if (u.state === US.Sit && u.sitY != null) { u.y += (u.sitY - u.y) * Math.min(1, dt * 10); return; }   // 벤치 위
   const h = world.standHeight ? world.standHeight(u.x, u.z) : world.grid.walkHeight(...cellOf(u));
   if (h !== null) u.y += (h - u.y) * Math.min(1, dt * 12);              // 경사면·계단을 따라 부드럽게
 }
