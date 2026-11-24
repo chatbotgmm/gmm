@@ -320,7 +320,7 @@ test("넓은 섬: 기본 혼자 첫 집을 짓고(나무는 직접 벰), 모두 
   assert.ok(minFull > 3, `굶지 않음: ${minFull}`);
 });
 
-test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
+test("마을 생활: 오래 돌리면 낚시·벌목·채광·인사·공사가 실제로 일어나고, 아무도 바다에 빠지지 않는다", () => {
   const w = World.create(7, seededRandom(11));
   w.placeBuilding("house", 38, 26, 0);                       // 공사장(갈매미가 지어야 함)
   const seen = new Set(), events = { treeFell: 0, oreBroke: 0, fish: 0, buildingDone: 0 };
@@ -335,7 +335,7 @@ test("마을 생활: 오래 돌리면 낚시·벌목·채광·씨앗·인사·�
   }
   for (const st of ["Chop", "Mine", "Fish", "Eat", "Greet", "Build", "Zoomies"]) assert.ok(seen.has(st), `상태 ${st}를 한 번도 안 함: ${[...seen].join(",")}`);
   assert.ok(events.treeFell > 0 && events.oreBroke > 0 && events.fish > 0, JSON.stringify(events));
-  assert.ok(w.res.eaten > 0);
+  assert.equal(w.seeds.length, 0);                                               // 씨앗은 없앰
   assert.equal(events.buildingDone, 1, "갈매미가 공사장을 완공해야 함");
   assert.ok(w.trees.every(t => t.claimed === null || w.units.some(u => u.unitId === t.claimed)), "찜한 나무는 실제 갈매미 것");
   assert.ok(wood0 >= 0);

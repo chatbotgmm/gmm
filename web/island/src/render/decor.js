@@ -27,7 +27,7 @@ export class Decor {
         const kb = keep() < opt.density, kf = keep() < opt.density, kp = keep() < opt.density;   // 양 줄이기(같은 자리는 늘 같은 결과)
         if (rnd() < p && kb) cells.bush.push([x, z]);
         const patch = Math.sin(x * 0.37 + z * 0.21) * Math.cos(x * 0.13 - z * 0.29);
-        if (((patch > 0.55 && rnd() < 0.5) || rnd() < 0.02) && kf) cells.flower.push([x, z]);
+        if (((patch > 0.55 && rnd() < 0.5) || rnd() < 0.02) && kf) void 0;              // 꽃(작은 점)은 씨앗처럼 보여서 없앰(난수 순서는 그대로)
         void kp;
       } else if (c.groundType === "Sand" && rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]);
       else if (c.groundType === "Rock" && rnd() < 0.3 && keep() < opt.density) cells.pebble.push([x, z]);

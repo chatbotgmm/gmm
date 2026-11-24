@@ -56,7 +56,6 @@ export class World {
       const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
       w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
-    if (!wild) for (let i = 0; i < 14; i++) w.addSeed();                         // 넓은 섬엔 씨앗을 뿌리지 않음(음식은 농부·어부·바닷가)
     return w;
   }
   get center() { return { x: this.grid.w / 2, z: this.grid.h / 2 }; }
@@ -121,7 +120,7 @@ export class World {
 
   // ---- 씨앗(잔디밭에서 쪼아 먹음)
   addSeed(x = null, z = null) {
-    if (this.wild) return null;                                                   // 넓은 섬은 씨앗 없음
+    return null;                                                                  // 씨앗은 없앰(음식은 농부·어부·바닷가). 아래는 예전 코드
     for (let k = 0; k < 40 && x === null; k++) {                         // 가운데 평야의 빈 잔디 칸
       const span = this.grid.w * (this.wild ? 0.8 : 0.32), gx = Math.floor(this.grid.w / 2 - span / 2 + this.rnd() * span), gz = Math.floor(this.grid.h / 2 - span / 2 + this.rnd() * span), c = this.grid.get(gx, gz);   // 넓은 섬은 섬 전체 잔디밭
       if (c && !c.occupiedId && !this.grid.isWater(gx, gz) && c.elevation === 0 && !this.seeds.some(s => s.x === gx && s.z === gz)) { x = gx; z = gz; }
@@ -133,7 +132,7 @@ export class World {
   eatSeed(s, u = null) {
     const i = this.seeds.indexOf(s); if (i < 0) return false;
     if (u) u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + (this.seedFood ?? 12));
-    this.seeds.splice(i, 1); this.res.eaten++; this.emit("seedRemoved", s); this.after(2 + this.rnd() * 4, () => this.addSeed());
+    this.seeds.splice(i, 1); this.res.eaten++; this.emit("seedRemoved", s);
     return true;
   }
 
@@ -486,6 +485,6 @@ export class World {
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; }
     if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
-    if (!w.wild) for (let i = 0; i < 14; i++) w.addSeed(); w.nextId = j.nextId; return w;
+    w.nextId = j.nextId; return w;
   }
 }
