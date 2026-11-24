@@ -54,7 +54,7 @@ export class World {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
       const [x, z] = m.cells[0];
-      if (m.defId === "tree") this.trees.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
+      if (m.defId === "tree" || m.defId === "palm") this.trees.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
       if (m.defId === "ore") this.ores.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
     }
   }
@@ -485,7 +485,7 @@ export class World {
   }
   /** 다 지은 계단을 걸을 수 있게(길찾기 다시) */
   openStairs(b) { const o = b.ramp && this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; } }
-  isHouse(b) { const d = BUILDINGS[b.defId]; return this.economy ? !!d.house : !d.stairs && !d.field && !d.dock; }   // 들어가 쉬는 건물(경제가 있으면 집만)
+  isHouse(b) { const d = BUILDINGS[b.defId]; return this.economy ? !!d.house : !d.stairs && !d.field && !d.dock && !d.deco; }   // 들어가 쉬는 건물(경제가 있으면 집만)
   /** 이 갈매미가 이 건물에 들어갈 수 있나: 전용 집(forUnit)은 그 갈매미만, 전용 집이 있는 갈매미(자이언트)는 그 집에만 */
   canEnter(u, b) {
     if (!this.isHouse(b) || !this.isDone(b)) return false;

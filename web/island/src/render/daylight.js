@@ -5,6 +5,12 @@ import * as THREE from "three";
 import { sunPosition } from "../world/sun.js";
 const DEG = Math.PI / 180;
 const C = (h) => new THREE.Color(h);
+let HALO = null;                                                                  // 가운데가 밝고 가장자리로 사라지는 둥근 빛(한 번만 만듦)
+function haloTex() {
+  if (HALO) return HALO; const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.35, "rgba(255,255,255,.45)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return (HALO = new THREE.CanvasTexture(c));
+}
 // 해 높이(도)별 색 표: 밤 · 해질녘 · 낮
 const SKY_KEYS = [
   { e: -12, top: C(0x0a1430), hor: C(0x1e2c55), sun: C(0x9fb6ff), sunI: 0.35, hemiSky: C(0x3a4f8a), hemiGround: C(0x1b2233), hemiI: 0.35, water: 0.45, exp: 0.95 },
@@ -54,7 +60,7 @@ export class Daylight {
     this.water.userData.setLight?.(k.water * (0.75 + 0.25 * wl));
     this.clouds.traverse(o => { if (o.isSprite) o.material.color.copy(k.hor).lerp(C(0xffffff), 0.55); });
     this.night = Math.max(0, Math.min(1, (2 - elev) / 8));                          // 0 낮 ~ 1 밤(해 높이 2° → -6°)
-    this.lamp();
+    this.lamp(); this.streetLamps();
     this.beam(dt);
   }
   /** 날씨 밝기(0.45~1). 0.5초마다 하는 다시 계산 때 반영 */
@@ -65,6 +71,23 @@ export class Daylight {
     const v = 0.9 + 3.5 * this.night, m = lamp.material; m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
     if (!this.light) { this.light = new THREE.PointLight(0xffd27a, 0, 26, 1.6); lamp.add(this.light); }
     this.light.intensity = 30 * this.night;
+  }
+  /** 가로등: 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
+  streetLamps() {
+    const n = this.night ?? 0, glow = 0.12 + 2.6 * n;
+    this.scene.traverse(o => {
+      if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m; if (src.name !== "lampBody") return;
+      m.emissiveIntensity = glow; src.emissiveIntensity = glow;
+      if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;
+        const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
+        halo.position.set(0, bb.min.y + hgt * 0.78, 0); halo.scale.setScalar(1.3 / s); halo.userData.noToon = true; o.add(halo);
+        const pool = new THREE.Mesh(new THREE.CircleGeometry(2.2 / s, 24), new THREE.MeshBasicMaterial({ map: haloTex(), color: 0xffb860, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+        pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);
+        o.userData.halo = [halo, pool];
+      }
+      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = n > 0.05; halo.material.opacity = 0.75 * n; pool.material.opacity = 0.45 * n;
+    });
   }
   beam(dt) {
     const b = this.scene.getObjectByName("lighthouseBeam"); if (!b) return;

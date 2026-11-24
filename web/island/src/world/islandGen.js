@@ -296,6 +296,14 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     if (grid.isWater(x, z) || c.groundType !== GroundType.Sand || c.elevation > -0.05 || near(x, z, 5)) continue;
     modules.push({ id: `rock-${k + 1}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 3 }); used.add(key(x, z)); k++;
   }
+  // 야자수: 바닷가 모래(물에서 3칸 안), 서로 3칸 넘게 떨어뜨려 12그루. 다른 것을 다 놓은 뒤에 놓아 섬 모양·나무 자리는 그대로
+  for (let k = 0, tries = 0; k < 12 && tries < 4000; tries++) {
+    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z);
+    if (!c || grid.isWater(x, z) || c.groundType !== GroundType.Sand || used.has(key(x, z)) || near(x, z, 3)) continue;
+    let wet = false; for (let dz = -3; dz <= 3 && !wet; dz++) for (let dx = -3; dx <= 3; dx++) if (grid.inBounds(x + dx, z + dz) && grid.isWater(x + dx, z + dz)) { wet = true; break; }
+    if (!wet) continue;
+    modules.push({ id: `palm-${k + 1}`, defId: "palm", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: 0 }); used.add(key(x, z)); k++;
+  }
   const zones = [{ id: "highland", label: "⛰ 고지대", x: hl.x, z: hl.z }, { id: "cave", label: "🕳 동굴", x: caveAt.x, z: caveAt.z + 1 },
     ...forests.map((f, i) => ({ id: `forest${i}`, label: "🌲 숲", x: f.x, z: f.z })), { id: "bank", label: "🏦 공식은행", x: cx, z: cz - 3 }];
   if (typeof pondAt !== "undefined") zones.push({ id: "pond", label: "💧 연못", x: pondAt.x, z: pondAt.z });

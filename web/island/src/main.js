@@ -15,7 +15,7 @@ import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD } from "./world/wishes.js";
 import { RANK_REWARD } from "./world/rank.js";
-import { PROPS, TRIBES, JOBS, BUILDINGS } from "./data/catalog.js";
+import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { TwoFinger } from "./systems/twoFinger.js";
@@ -74,9 +74,16 @@ const overlay = document.getElementById("overlay");
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
 let world, chunks, buildingViews, unitViews, lifeViews, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
+// 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)
+function applyAssetTier(c) {
+  const lite = c.model < 1;
+  for (const d of Object.values(BUILDINGS)) if (d.liteAsset) { d.fullAsset ??= d.asset; d.asset = lite ? d.liteAsset : d.fullAsset; }
+  for (const d of Object.values(MODULES)) if (d.liteAssets) { d.fullAssets ??= d.assets; d.assets = lite ? d.liteAssets : d.fullAssets; }
+}
 // 그래픽 설정 5단계: 바뀌면 땅 상세도·소품·갈매미 그림자 거리를 다시 맞춤
 let decor = null;
 const quality = new Quality(renderer, sun, c => {
+  applyAssetTier(c);
   if (setTerrainDetail(c.terrainSub, c.lodScale, c.farDrop) && world) world.grid.markAllDirty();
   unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
   if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); seasonLook?.applyDecor(decor, world.season); }
