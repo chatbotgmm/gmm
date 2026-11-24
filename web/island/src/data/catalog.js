@@ -13,7 +13,7 @@ const TERRACOTTA = { hue: 0.03, sat: 1.1 }, SKY = { hue: 0.57, sat: 0.75 }, GOLD
 export const BUILDINGS = {
   // 계단: 낮은 칸에 놓고, 문 쪽(앞)이 입구·뒤쪽 칸이 올라갈 곳. 뒤가 0.1~1.5 m 더 높아야 함. 다 지으면 앞뒤로만 오르내림.
   stairs: {
-    id: "stairs", builtBy: "builder", cost: { wood: 1 }, tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true,
+    id: "stairs", builtBy: "builder", cost: { wood: 1 }, tier: 1, name: "계단", footprint: { w: 1, d: 1 }, height: 0.6, asset: null, stairs: true, prop: "assets/props/stairs_stone.glb", liteProp: "assets/props/stairs_stone_lite.glb",   // 돌계단 모델(사용자 제공)
     placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   house: {
@@ -52,7 +52,7 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "flat", awning: 0x9fd3e6 }, interior: { w: 6, d: 5 },
   },
   field: {
-    id: "field", builtBy: "carpenter", field: true, cost: { wood: 1 }, tier: 1, name: "밭", footprint: { w: 3, d: 2 }, work: 2, height: 0.2, asset: null,
+    id: "field", builtBy: "carpenter", field: true, cost: { wood: 1 }, tier: 1, name: "밭", footprint: { w: 3, d: 2 }, work: 2, height: 0.2, asset: null, prop: "assets/props/field_plot.glb",   // 칸마다 밭 틀(사용자 제공)
     placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   dock: {
@@ -61,8 +61,8 @@ export const BUILDINGS = {
   },
   // 가로등(장식): 밤에 유리가 빛나고 둘레를 밝힘. 마을 등급 점수(장식)에 들어감
   streetlamp: {
-    id: "streetlamp", builtBy: "builder", deco: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 2.3,
-    asset: "assets/props/street_lamp.glb", liteAsset: "assets/props/street_lamp_lite.glb", fit: { w: 0.72, d: 0.72 },   // 폭 0.72 m → 높이 약 2.3 m(갈매미 약 3배)
+    id: "streetlamp", builtBy: "builder", deco: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 2.6,
+    asset: "assets/props/street_lamp.glb", liteAsset: "assets/props/street_lamp_lite.glb", fit: { w: 0.56, d: 0.56 },   // 가는 가로등(사용자 제공): 폭 0.56 m → 높이 약 2.6 m
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로

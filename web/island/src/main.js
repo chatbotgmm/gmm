@@ -80,6 +80,7 @@ let world, chunks, buildingViews, unitViews, lifeViews, worldRoot, waterDirty = 
 function applyAssetTier(c) {
   const lite = c.model < 1;
   for (const d of Object.values(BUILDINGS)) if (d.liteAsset) { d.fullAsset ??= d.asset; d.asset = lite ? d.liteAsset : d.fullAsset; }
+  for (const d of Object.values(BUILDINGS)) if (d.liteProp) { d.fullProp ??= d.prop; d.prop = lite ? d.liteProp : d.fullProp; }
   for (const d of Object.values(MODULES)) if (d.liteAssets) { d.fullAssets ??= d.assets; d.assets = lite ? d.liteAssets : d.fullAssets; }
 }
 // 그래픽 설정 5단계: 바뀌면 땅 상세도·소품·갈매미 그림자 거리를 다시 맞춤

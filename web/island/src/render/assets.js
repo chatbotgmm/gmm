@@ -33,6 +33,12 @@ export function normalize(obj, w, d) {
   return wrap;
 }
 
+/** 크기를 바꾸지 않은 모델 복사본(그림자 켬, 금속도 0). 계단·밭 틀·작물처럼 직접 맞출 때 */
+export async function rawModel(url) {
+  const o = (await load(url)).clone(true);
+  o.traverse(m => { if (m.isMesh) { m.castShadow = m.receiveShadow = true; for (const mt of [].concat(m.material)) if ("metalness" in mt) mt.metalness = 0; } });
+  return o;
+}
 /** def.asset이 있으면 그 모델, 없으면 makePlaceholder(). 항상 Promise<Object3D>. */
 export async function modelFor(def, makePlaceholder, asset = def.asset) {
   if (!asset) return makePlaceholder();

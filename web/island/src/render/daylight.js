@@ -91,7 +91,7 @@ export class Daylight {
       if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
         o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
-        halo.position.set(0, bb.min.y + hgt * 0.78, 0); halo.scale.setScalar(1.6 / s); halo.userData.noToon = true; o.add(halo);
+        halo.position.set(0, bb.min.y + hgt * 0.88, 0);   // 등불 유리 높이(가는 가로등) halo.scale.setScalar(1.6 / s); halo.userData.noToon = true; o.add(halo);
         const pool = new THREE.Mesh(new THREE.CircleGeometry(5.5 / s, 40), new THREE.MeshBasicMaterial({ map: haloTex(), color: 0xffb860, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
         pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);
         o.userData.halo = [halo, pool];

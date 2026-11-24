@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 import { PROPS } from "../data/catalog.js";
-import { modelFor } from "./assets.js";
+import { modelFor, rawModel } from "./assets.js";
 import { terrainHeight } from "../world/terrain.js";
 
 export class LifeViews {
@@ -30,8 +30,12 @@ export class LifeViews {
       const g = new THREE.Group(); g.position.set(toWorldX(p.x + 0.5), world.standHeight(p.x + 0.5, p.z + 0.5) + 0.01, toWorldZ(p.z + 0.5));
       for (const [dx, dz] of [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]]) {
         const m = new THREE.Mesh(this.cropGeo, this.cropGreen); m.position.set(dx, 0, dz); m.castShadow = true; g.add(m); }
-      scene.add(g); this.crops.push({ p, g });
+      scene.add(g); const c = { p, g }; this.crops.push(c); this.swapCrop?.(c);
     };
+    // 작물 모델(사용자 제공 당근·양배추): 받으면 싹 4개 대신 칸마다 하나(칸 위치로 번갈아)
+    const swap = c => { if (!this.cropModels || c.g.userData.model) return; c.g.clear(); const k = (c.p.x + c.p.z) % 2, src = this.cropModels[k], m = src.clone(true); m.scale.setScalar(k ? 0.6 : 0.62); c.g.add(m); c.g.userData.model = true; };
+    Promise.all(["assets/props/carrot.glb", "assets/props/cabbage.glb"].map(u => rawModel(u))).then(ms => { this.cropModels = ms; this.crops.forEach(swap); }).catch(() => {});
+    this.swapCrop = swap;
     world.plots.forEach(addCrop);
     world.on("plotAdded", addCrop);                                                  // 목수가 지은 밭
     world.on("plotRemoved", p => { const i = this.crops.findIndex(c => c.p === p); if (i >= 0) { scene.remove(this.crops[i].g); this.crops.splice(i, 1); } });
@@ -105,7 +109,8 @@ export class LifeViews {
     for (const { p, g } of this.crops) {
       const grow = p.stage === "growing" ? 1 - Math.max(0, p.t) / (p.grow || 40) : p.stage === "ripe" ? 1 : 0;
       g.visible = p.stage !== "empty"; g.scale.setScalar(0.25 + 0.75 * grow);
-      for (const m of g.children) m.material = p.stage === "ripe" ? this.cropRipe : this.cropGreen;
+      if (!g.userData.model) for (const m of g.children) m.material = p.stage === "ripe" ? this.cropRipe : this.cropGreen;
+      else g.position.y = this.world.standHeight(p.x + 0.5, p.z + 0.5) + 0.06 - (p.stage === "ripe" ? 0 : 0.05 * (1 - grow));   // 모델: 자라며 커지고 땅 위로
     }
     // 말풍선
     this.world.units.forEach((u, i) => {

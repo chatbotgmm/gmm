@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { toWorldX, toWorldZ, WATER_Y } from "../config.js";
 import { BUILDINGS, MODULES } from "../data/catalog.js";
 import { stairCount } from "../world/World.js";
-import { modelFor } from "./assets.js";
+import { modelFor, rawModel } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
 import { tintRoofs } from "./roofTint.js";
 import { terrainHeight } from "../world/terrain.js";
@@ -22,7 +22,7 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = def.stairs ? stairsModel(b.ramp) : def.field ? fieldModel(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : await modelFor(def, () => buildingPlaceholder(def));
+    const model = def.stairs ? await stairsProp(def, b.ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : await modelFor(def, () => buildingPlaceholder(def));
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
@@ -77,6 +77,23 @@ function stairsModel(r) {
   return g;
 }
 
+/** 돌계단 모델(사용자 제공): 모델은 −x 쪽이 높음 → −z(올라가는 쪽)로 돌리고 1칸·계단 높이에 맞춤. 못 받으면 상자 계단 */
+async function stairsProp(def, r) {
+  if (!def.prop || !r) return stairsModel(r);
+  try {
+    const m = await rawModel(def.prop), g = new THREE.Group(), H = Math.max(0.15, r.h1 - r.h0);
+    m.scale.set(1 / 0.86, H / 0.615, 1 / 0.98); m.rotation.y = -Math.PI / 2; g.add(m); return g;
+  } catch { return stairsModel(r); }
+}
+/** 밭: 칸마다 나무 밭 틀(사용자 제공). 못 받으면 울타리 */
+async function fieldProp(def) {
+  if (!def.prop) return fieldModel(def);
+  try {
+    const src = await rawModel(def.prop), g = new THREE.Group(), W = def.footprint.w, D = def.footprint.d;
+    for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) { const t = i === 0 && j === 0 ? src : src.clone(true); t.scale.set(1 / 0.9, 1.2, 1 / 0.98); t.position.set(i + 0.5 - W / 2, 0, j + 0.5 - D / 2); g.add(t); }
+    return g;
+  } catch { return fieldModel(def); }
+}
 /** 밭: 낮은 나무 울타리 테두리(땅은 흙, 작물은 life.js) */
 const FENCE = new THREE.MeshStandardMaterial({ color: 0xa0784e, roughness: 0.9 });
 function fieldModel(def) {
