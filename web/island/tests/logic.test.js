@@ -726,3 +726,21 @@ test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어
   assert.ok(sailed, "배를 탐"); assert.ok(arrived, "도착"); assert.equal(w.compAt(Math.floor(u.x), Math.floor(u.z)), compOf(palm), "야자섬에 내림");
   void BUILDINGS;
 });
+
+test("포장도로: 돌길·나무 데크로 집과 시장·은행을 이으면 그 집 갈매미 만족도가 오르고, 흙길은 안 됨", async () => {
+  const RD = await import("../src/world/roads.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수");
+  const c = w.center, spot = (d, r0) => { for (let r = r0; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + 4 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const hq = spot("house", 8), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", 14), mk = w.placeBuilding("market", mq[0], mq[1], 0).building;
+  const u = w.units[0]; u.home = h.id; h.owner = u.unitId; u.full = 80;
+  w.updateRoads(); const before = u.sat; assert.ok(!u.satParts.some(p => p[0].includes("시장")));
+  const path = findPath(w.grid, h.door.x, h.door.z, mk.door.x, mk.door.z, 30000); assert.ok(path);
+  const cells = [[h.door.x, h.door.z], ...path];
+  for (const [x, z] of cells) w.paint(x, z, "Dirt"); w.updateRoads(); assert.equal(u.sat, before, "흙길은 포장이 아님");
+  for (const [x, z] of cells) w.paint(x, z, "Cobble"); w.updateRoads();
+  assert.ok(u.satParts.some(p => p[0].includes("집-시장")), JSON.stringify(u.satParts)); assert.equal(u.sat, Math.min(100, before + 15));
+  assert.equal(RD.linkedHouses(w), 1);
+  // 은행까지 이으면 +15 더
+  const bk = w.bankB(), p2 = findPath(w.grid, mk.door.x, mk.door.z, bk.door.x, bk.door.z, 30000); for (const [x, z] of p2) w.paint(x, z, "WoodDeck"); w.updateRoads();
+  assert.ok(u.satParts.some(p => p[0].includes("집-은행"))); assert.equal(u.sat, Math.min(100, before + 30));
+});

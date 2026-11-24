@@ -255,7 +255,8 @@ export class Hud {
       (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🐚 ${w.res.coins}</span>`) +
       `<span>🧩 땅 ${chunkInfo.tris ? Math.round(chunkInfo.tris / 1000) + "천 삼각형 · " : ""}${chunkInfo.fps ? `${chunkInfo.fps} fps` : ""}</span>`;
     this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.title = "갈매미들이 가진 돈 합계";
-    this.chipPop.textContent = `🐦 ${w.units.length} · ${mood} ${avg.toFixed(0)}`;
+    const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
+    this.chipPop.textContent = `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.title = "갈매미 수 · 평균 만족도 · 평균 포만감";
     document.getElementById("chipRank").textContent = `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
     if (this.timeLabel) this.chipTime.textContent = this.timeLabel();
     if (this.weatherLabel) this.chipWeather.textContent = this.weatherLabel();
@@ -281,7 +282,8 @@ export class Hud {
       const bag = E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${E.ITEM_ICON[k]}${u.inv[k]}`).join(" ");
       this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}</span></div>` +
         `<div class="doing">${doing}${note ? ` · <span class="warn">${note}</span>` : ""}</div>` +
-        `<div class="needs">${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("기력", n.energy ?? 0)}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
+        `<div class="needs">${bar("만족도", u.sat ?? 50, (u.sat ?? 50) < 35 ? "low" : "")}${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("기력", n.energy ?? 0)}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
+        (u.satParts ? `<div class="small dim">만족도: ${u.satParts.map(([n, v]) => `${n} ${v > 0 ? "+" : ""}${v}`).join(" · ")}</div>` : "") +
         (w.economy ? `<div class="ichips"><span>🪙 ${u.coins || 0}</span><span>${bag ? "🎒 " + bag : "🎒 비었음"}</span><span>${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") : "🏠 집 없음"}</span></div>` : "") +
         `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · 단짝: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)}</div>`; }
   }

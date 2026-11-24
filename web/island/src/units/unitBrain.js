@@ -128,6 +128,7 @@ function face(u, x, z) { u.heading = Math.atan2(x - u.x, z - u.z); }
 /** 경로를 따라 한 프레임 이동. 도착하면 true. 앞 칸이 막히면 같은 목적지로 다시 길을 찾는다. */
 function followPath(u, dt, world, rnd) {
   const grid = world.grid; let move = (u.running ? u.runSpeed ?? UNIT_SPEED * 1.6 : u.walkSpeed ?? UNIT_SPEED) * dt;   // 모델 정보가 없으면(시험) 기본 속도
+  { const c = grid.get(Math.floor(u.x), Math.floor(u.z)); if (c && (c.groundType === "Cobble" || c.groundType === "WoodDeck")) move *= 1.2; }   // 포장도로 위에선 20% 빨리
   u.moveT = (u.moveT || 0) + dt;
   const want = move, x0 = u.x, z0 = u.z;
   let guard = 0;
@@ -454,6 +455,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     if (k === "sleep") n.energy = Math.min(100, n.energy + 3 * dt); else if (k === "sit") n.energy = Math.min(100, n.energy + 1 * dt); else if (k === "read") n.fun = Math.min(100, n.fun + 1.5 * dt);
   }
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
+  u.eff *= 0.85 + 0.3 * (u.sat ?? 50) / 100;                             // 만족도가 높으면 조금 더 빨리(0.85~1.15)
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
   if (u.sailing) { sail(u, dt, world); return; }                          // 배 타는 중: 배가 닿을 때까지 다른 일은 안 함(닿으면 원래 하던 일의 길을 이어 감)
   if (!u.swimming && !u.insideBuildingId && world.grid.isWater(...cellOf(u)) && !world.grid.isWalkable(...cellOf(u))) {   // 헤엄 중이 아닌데 물에 있으면(헤엄을 그만둠 등) 가까운 땅으로(부두 위는 그대로)

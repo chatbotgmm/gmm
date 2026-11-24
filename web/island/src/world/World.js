@@ -17,6 +17,7 @@ import * as S from "./season.js";
 import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
+import * as RD from "./roads.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -313,6 +314,12 @@ export class World {
     this.emit("furnitureBought", { u, id, b: home }); return true;
   }
 
+  // ---- 포장도로·만족도(2초마다 다시 셈)
+  updateRoads() {
+    const net = RD.roadNet(this); this.roads = { net };
+    for (const u of this.units) { const s = RD.satisfaction(this, u, net); u.sat = s.value; u.satParts = s.parts; }
+  }
+  avgSat() { return this.units.reduce((a, u) => a + (u.sat ?? 50), 0) / Math.max(1, this.units.length); }
   // ---- 마을 등급
   score() { return rankScore(this); }
   stepRank() {
@@ -610,7 +617,7 @@ export class World {
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
     if ((this.histClock += dt) >= 20) { this.histClock = 0; this.priceHist.push({ t: Math.round(this.time), ...this.prices }); if (this.priceHist.length > 48) this.priceHist.shift(); }
     this.stepWishes(dt);
-    if ((this.rankClock += dt) >= 2) { this.rankClock = 0; this.stepRank(); }
+    if ((this.rankClock += dt) >= 2) { this.rankClock = 0; this.updateRoads(); this.stepRank(); }
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);
     this.separate();

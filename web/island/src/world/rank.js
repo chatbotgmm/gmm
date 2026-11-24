@@ -1,6 +1,7 @@
 // 마을 등급: 갈매미·집·시설·이룬 소원·배부름을 점수로 합쳐 등급을 올림(내려가지는 않음). 등급마다 새 건물이 열리고 모두에게 축하금.
 import { BUILDINGS } from "../data/catalog.js";
 import { comfort } from "./furniture.js";
+import { linkedHouses } from "./roads.js";
 
 export const RANKS = [
   { name: "갯마을", icon: "🛖", need: 0, unlock: [] },
@@ -26,6 +27,8 @@ export function rankScore(w) {
     ["🪜 계단(최대 10점)", stairs, 2, Math.min(10, stairs * 2)],
     ["🏮 장식(가로등 등, 최대 10점)", deco, 2, Math.min(10, deco * 2)],
     ["🛋 집 아늑함(가구, 최대 30점)", cozy, 1, Math.min(30, cozy)],
+    ["🛣 포장도로로 시장·은행과 이은 집(최대 20점)", linkedHouses(w), 4, Math.min(20, linkedHouses(w) * 4)],
+    ["😊 평균 만족도 60 이상", w.units.length && (w.avgSat?.() ?? 0) >= 60 ? 1 : 0, 10, w.units.length && (w.avgSat?.() ?? 0) >= 60 ? 10 : 0],
     ["💭 이룬 소원", w.wishDone || 0, 6, (w.wishDone || 0) * 6],
     ["😋 평균 포만감 50 이상", fed ? 1 : 0, 10, fed ? 10 : 0],
   ];
