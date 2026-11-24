@@ -3,7 +3,7 @@
 import * as THREE from "three";
 
 import { sunPosition } from "../world/sun.js";
-const RAD = Math.PI / 180;
+const DEG = Math.PI / 180;
 const C = (h) => new THREE.Color(h);
 // 해 높이(도)별 색 표: 밤 · 해질녘 · 낮
 const SKY_KEYS = [
@@ -39,8 +39,8 @@ export class Daylight {
     const d = this.now(), { elev, azim } = sunPosition(d), k = sample(elev);
     this.elev = elev; this.time = d;
     // 해(밤에는 달: 해 반대쪽 높이 40°로 둠)가 비추는 방향. 장면 좌표: +x 동, -z 북
-    const night = elev < -2, e = night ? 40 : Math.max(4, elev), a = (night ? azim + 180 : azim) * RAD;
-    this.dir.set(Math.sin(a) * Math.cos(e * RAD), Math.sin(e * RAD), -Math.cos(a) * Math.cos(e * RAD)).normalize();
+    const night = elev < -2, e = night ? 40 : Math.max(4, elev), a = (night ? azim + 180 : azim) * DEG;
+    this.dir.set(Math.sin(a) * Math.cos(e * DEG), Math.sin(e * DEG), -Math.cos(a) * Math.cos(e * DEG)).normalize();
     this.sun.color.copy(night ? this.moonColor : k.sun); this.sun.intensity = k.sunI;
     this.hemi.color.copy(k.hemiSky); this.hemi.groundColor.copy(k.hemiGround); this.hemi.intensity = k.hemiI;
     this.renderer.toneMappingExposure = k.exp;
