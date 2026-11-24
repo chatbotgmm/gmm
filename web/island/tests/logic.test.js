@@ -286,9 +286,9 @@ test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공
   // 나무꾼: 나무 6 → 상인에게 12🪙(상인 돈에서)
   giant.inv.wood = 6; const r = w.sellToMarket(giant);
   assert.equal(r.coins, 12); assert.equal(giant.coins, 12); assert.equal(merchant.coins, E.MERCHANT_START - 12); assert.equal(merchant.raw.wood, 6);
-  // 상인: 가공 → 은행에 팔기(목재 6 × 3 = 18🪙 발행, 창고로)
+  // 상인: 가공 → 은행에 팔기(목재 6 × 4 = 24🪙 발행, 창고로)
   assert.equal(w.processRaw(merchant), 6); const s = w.sellProcessed(merchant);
-  assert.equal(s.coins, 18); assert.equal(w.res.wood, 6); assert.equal(w.bank.issued, E.MERCHANT_START + 18);
+  assert.equal(s.coins, 6 * E.BANK_PROCESSED.wood); assert.equal(w.res.wood, 6); assert.equal(w.bank.issued, E.MERCHANT_START + 6 * E.BANK_PROCESSED.wood);
   // 음식: 농부(미니)에게서 3🪙에 삼(농부는 2개는 남김)
   mini.inv.food = 3; assert.equal(w.buyFoodFrom(giant, mini), true); assert.equal(giant.inv.food, 1); assert.equal(mini.coins, 3); assert.equal(giant.coins, 9);
   assert.equal(w.buyFoodFrom(giant, mini), false, "남김분 2개는 안 팖");
@@ -543,4 +543,46 @@ test("마주 보고 가는 두 갈매미가 서로 밀다 제자리에서 떨지
   void go;
   let t = 0; for (; t < 30 && !(Math.floor(a.x) === 44 && Math.floor(b.x) === 38); t += 1 / 30) w.update(1 / 30);
   assert.ok(Math.floor(a.x) >= 43 && Math.floor(b.x) <= 39, `지나가야 함: a ${a.x.toFixed(2)} b ${b.x.toFixed(2)} (${t.toFixed(1)}초)`);
+});
+
+test("계절·날씨: 날짜로 계절, 계절별 날씨, 폭풍엔 못 낚고 비엔 밭이 빨리 자람, 겨울엔 빨리 배고픔", async () => {
+  const S = await import("../src/world/season.js");
+  assert.equal(S.seasonOf(new Date(2026, 10, 24)), "autumn"); assert.equal(S.seasonOf(new Date(2026, 0, 5)), "winter");
+  assert.equal(S.seasonOf(new Date(2026, 3, 1)), "spring"); assert.equal(S.seasonOf(new Date(2026, 6, 1)), "summer");
+  const r = seededRandom(3), seen = new Set(); let prev = null;
+  for (let i = 0; i < 400; i++) { const k = S.pickWeather("summer", r, prev); assert.ok(!(prev === "storm" && k === "storm")); seen.add(k); prev = k; }
+  assert.ok(!seen.has("snow"), "여름엔 눈 없음"); assert.ok(seen.has("rain") && seen.has("storm"));
+  for (let i = 0; i < 200; i++) assert.notEqual(S.pickWeather("winter", r), "rain", "겨울엔 비 대신 눈");
+  assert.equal(S.effects("winter", "clear").hunger, 1.25); assert.equal(S.effects("spring", "rain").grow, 1.25 * 1.5);
+  const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("autumn"); w.setWeather("storm");
+  const u = w.units[0]; for (let i = 0; i < 50; i++) assert.equal(w.catchFish(u), null, "폭풍엔 못 낚음");
+  // 밭: 비 오는 봄은 1.875배 빨리 자람
+  w.setSeason("spring"); w.setWeather("rain"); w.weather.t = 1e9; w.plots.push({ x: 1, z: 1, stage: "growing", t: 10, grow: 10, claimed: null });
+  w.stepWeather(0); const p = w.plots[w.plots.length - 1]; const g = w.fx.grow; p.t -= 4 * g; assert.ok(Math.abs(p.t - (10 - 7.5)) < 1e-9);
+  // 날씨는 저장·불러오기에서 이어짐
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.equal(back.weather.kind, "rain");
+});
+
+test("소원: 갈매미가 바라는 걸 말하고, 이루어지면 축하금(새 돈)", async () => {
+  const E = await import("../src/world/economy.js");
+  const w = World.create(7, seededRandom(1), { wild: true }), u = w.units[0];
+  const wish = w.makeWish(); assert.ok(wish, "소원이 생김"); assert.equal(wish.unitId, u.unitId); assert.equal(w.makeWish(), null, "한 마리에 하나(지금 한 마리)");
+  // 친구 소원으로 바꿔서 확인: 소환하면 이루어짐
+  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0, issued = w.bank.issued;
+  w.stepWishes(1.1); assert.equal(w.wishes.length, 1, "아직");
+  w.summon(); w.stepWishes(1.1);
+  assert.equal(w.wishes.length, 0); assert.equal(w.wishDone, 1);
+  assert.equal(u.coins, coins + 10); assert.equal(w.bank.issued, issued + 10 + (w.units[1].job === "merchant" ? E.MERCHANT_START : 0));
+});
+
+test("가격 변동: 상인 창고에 쌓이면 원자재 값이 내려가고, 음식이 모자라거나 겨울이면 음식 값이 오름", async () => {
+  const E = await import("../src/world/economy.js");
+  assert.equal(E.marketPrice("wood", 0), 3); assert.equal(E.marketPrice("wood", 8), 2); assert.equal(E.marketPrice("wood", 30), 1);
+  assert.equal(E.marketPrice("iron", 0), 8); assert.equal(E.marketPrice("iron", 30), 3);
+  for (const k of E.RAW) for (let n = 0; n < 40; n++) assert.ok(E.marketPrice(k, n) < E.BANK_PROCESSED[k], "상인이 손해 보지 않음");
+  assert.equal(E.foodPriceFor(10, 0, 0), 3); assert.equal(E.foodPriceFor(1, 0, 0), 4); assert.equal(E.foodPriceFor(1, 0.5, 1), 5); assert.equal(E.foodPriceFor(20, 0, 0), 2);
+  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("황금"); const m = w.merchantU();
+  m.raw.wood = 25; w.updatePrices(); assert.equal(w.prices.wood, 1);
+  for (let i = 0; i < 25 * 60; i++) w.update(1 / 60);
+  assert.ok(w.priceHist.length >= 1, "20초마다 시세 기록");
 });

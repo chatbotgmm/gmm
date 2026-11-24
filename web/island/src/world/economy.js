@@ -37,10 +37,22 @@ export function spare(u) {
 //  → 번 돈으로 농부·어부에게서 음식을 삼. 건축가·목수는 공사 품삯을 은행에서 받음.
 export const RAW = ["wood", "stone", "iron"];
 export const MARKET_BUY = { wood: 2, stone: 3, iron: 6 };                       // 상인이 원자재 1개를 사 주는 값(상인 돈)
-export const BANK_PROCESSED = { wood: 3, stone: 4, iron: 8 };                   // 은행이 가공품 1개를 사 주는 값(새로 찍는 돈)
+export const BANK_PROCESSED = { wood: 4, stone: 5, iron: 10 };                  // 은행이 가공품 1개를 사 주는 값(새로 찍는 돈). 시장 값이 오르내려도 상인이 손해 보지 않게 넉넉히
 export const PROCESSED_NAME = { wood: "목재", stone: "석재", iron: "철괴" };
 export const FOOD_PRICE = 3;                                                   // 농부·어부에게서 음식 1개 값
 export const MERCHANT_START = 40;                                              // 상인 창업 자금(은행이 소환 때 찍어 줌)
 export const rawOf = u => ({ wood: u.inv?.wood || 0, stone: u.inv?.stone || 0, iron: u.inv?.iron || 0 });
 export const isProducer = u => u.job === "farmer" || u.job === "fisher";
 export const total = o => Object.values(o || {}).reduce((s, n) => s + (n || 0), 0);
+
+// ---- 가격 변동: 상인 창고에 많이 쌓인 원자재는 싸게, 모자라면 비싸게 사 줌(은행 가공품 값보다 1 아래까지)
+//  배수 = 1.3 − 0.04 × 창고 개수 (0.5 ~ 1.3). 예) 나무(기본 2): 창고 0개 2×1.3=2.6→3, 8개 2×0.98→2, 20개 이상 2×0.5→1
+export function marketPrice(k, stock) {
+  const f = Math.max(0.5, Math.min(1.3, 1.3 - 0.04 * stock));
+  return Math.max(1, Math.min(BANK_PROCESSED[k] - 1, Math.round(MARKET_BUY[k] * f)));
+}
+// 음식 값: 기본 3. 농부·어부가 내놓을 수 있는 음식이 모자라면(3개 미만) +1, 넘치면(15개 넘게) −1, 배고픈 갈매미가 많으면 +1, 겨울 +1. 2 ~ 5
+export function foodPriceFor(spareFood, hungryShare, seasonExtra = 0) {
+  let p = FOOD_PRICE + (spareFood < 3 ? 1 : spareFood > 15 ? -1 : 0) + (hungryShare > 0.4 ? 1 : 0) + seasonExtra;
+  return Math.max(2, Math.min(5, p));
+}

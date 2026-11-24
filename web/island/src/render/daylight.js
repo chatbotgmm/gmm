@@ -13,7 +13,7 @@ const SKY_KEYS = [
   { e: 25, top: C(0x7fc4ec), hor: C(0xe4f3f6), sun: C(0xffe2b8), sunI: 3.3, hemiSky: C(0xdcefff), hemiGround: C(0x8a8f5a), hemiI: 0.85, water: 1.0, exp: 1.12 },
 ];
 function sample(e) {
-  if (e <= SKY_KEYS[0].e) return SKY_KEYS[0]; if (e >= SKY_KEYS[SKY_KEYS.length - 1].e) return SKY_KEYS[SKY_KEYS.length - 1];
+  e = Math.max(SKY_KEYS[0].e, Math.min(SKY_KEYS[SKY_KEYS.length - 1].e - 1e-6, e));   // 끝에서도 표를 복사해서 돌려줌(날씨가 색을 바꿔도 표는 그대로)
   let i = 0; while (SKY_KEYS[i + 1].e < e) i++;
   const a = SKY_KEYS[i], b = SKY_KEYS[i + 1], t = (e - a.e) / (b.e - a.e), out = {};
   for (const k of Object.keys(a)) out[k] = a[k].isColor ? a[k].clone().lerp(b[k], t) : a[k] + (b[k] - a[k]) * t;
@@ -24,7 +24,7 @@ export class Daylight {
   /** mode: "real"(기기 시계) | "noon"(낮 고정) | "fast"(1분 = 1시간, 확인용) */
   constructor({ scene, renderer, sun, hemi, water, clouds, skyTex }) {
     Object.assign(this, { scene, renderer, sun, hemi, water, clouds, skyTex }); this.mode = "real"; this.fastT = 0; this.last = -1; this.dir = new THREE.Vector3(-0.6, 0.55, 0.32);
-    this.moonColor = C(0xaebcff);
+    this.moonColor = C(0xaebcff); this.wl = 1; this.grey = C(0x9aa3ad);          // wl: 날씨 밝기(흐림·비·폭풍이면 1보다 작음)
   }
   now() {
     if (this.mode === "noon") { const d = new Date(); d.setHours(12, 30, 0); return d; }
@@ -41,20 +41,24 @@ export class Daylight {
     // 해(밤에는 달: 해 반대쪽 높이 40°로 둠)가 비추는 방향. 장면 좌표: +x 동, -z 북
     const night = elev < -2, e = night ? 40 : Math.max(4, elev), a = (night ? azim + 180 : azim) * DEG;
     this.dir.set(Math.sin(a) * Math.cos(e * DEG), Math.sin(e * DEG), -Math.cos(a) * Math.cos(e * DEG)).normalize();
-    this.sun.color.copy(night ? this.moonColor : k.sun); this.sun.intensity = k.sunI;
-    this.hemi.color.copy(k.hemiSky); this.hemi.groundColor.copy(k.hemiGround); this.hemi.intensity = k.hemiI;
-    this.renderer.toneMappingExposure = k.exp;
+    const wl = this.wl, dim = 1 - wl;                                               // 흐린 만큼 하늘·안개·구름을 회색으로
+    k.top.lerp(this.grey, dim * 0.8); k.hor.lerp(this.grey, dim * 0.7);
+    this.sun.color.copy(night ? this.moonColor : k.sun); this.sun.intensity = k.sunI * wl;
+    this.hemi.color.copy(k.hemiSky); this.hemi.groundColor.copy(k.hemiGround); this.hemi.intensity = k.hemiI * (0.7 + 0.3 * wl);
+    this.renderer.toneMappingExposure = k.exp * (0.55 + 0.45 * this.wl);           // 흐리면 화면 전체를 어둡게
     // 하늘 그라데이션·안개
     const cv = this.skyTex.image, g = cv.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, cv.height);
     grad.addColorStop(0, "#" + k.top.getHexString()); grad.addColorStop(0.75, "#" + k.hor.getHexString()); grad.addColorStop(1, "#" + k.hor.getHexString());
     g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height); this.skyTex.needsUpdate = true;
     if (this.scene.fog) this.scene.fog.color.copy(k.hor);
-    this.water.userData.setLight?.(k.water);
+    this.water.userData.setLight?.(k.water * (0.75 + 0.25 * wl));
     this.clouds.traverse(o => { if (o.isSprite) o.material.color.copy(k.hor).lerp(C(0xffffff), 0.55); });
     this.night = Math.max(0, Math.min(1, (2 - elev) / 8));                          // 0 낮 ~ 1 밤(해 높이 2° → -6°)
     this.lamp();
     this.beam(dt);
   }
+  /** 날씨 밝기(0.45~1). 0.5초마다 하는 다시 계산 때 반영 */
+  setWeatherLight(v) { this.wl = v; }
   /** 등대: 램프 발광(밤에 세게), 둘레를 비추는 불빛, 회전하는 빛줄기 */
   lamp() {
     const lamp = this.scene.getObjectByName("lighthouseLamp"); if (!lamp) return;

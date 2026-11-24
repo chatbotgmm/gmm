@@ -12,6 +12,8 @@ import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, inte
 import { initMind } from "../units/mind.js";
 import { seededRandom } from "../util.js";
 import * as E from "./economy.js";
+import * as S from "./season.js";
+import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -38,6 +40,13 @@ export class World {
     this.plots = (extra.plots || []).map(p => ({ x: p.x, z: p.z, stage: p.stage || "empty", t: p.t || 0, grow: p.grow || 40, claimed: null }));
     this.stall = extra.stall || null;
     this.trees = []; this.ores = []; this.seeds = []; this.seedId = 1;
+    // 계절(화면이 기기 날짜로 정해 줌, 없으면 효과 없음)·날씨(따로 굴리는 난수라 다른 일의 순서를 바꾸지 않음)
+    this.season = null; this.wrnd = seededRandom(((extra.seed ?? 7) * 7919 + 13) >>> 0);
+    this.weather = extra.weather?.kind ? { ...extra.weather } : { kind: "clear", t: 150 };
+    // 소원: { id, unitId, base, age } 최대 2개 · 이룬 수
+    this.wishes = []; this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
+    // 시세: 상인이 사는 원자재 값·음식 값(5초마다 다시 셈) · 지난 값(20초마다 하나, 48개)
+    this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = []; this.priceClock = 0; this.histClock = 0;
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -52,7 +61,7 @@ export class World {
     w.seed = seed; w.wild = wild;
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
-      w.hungerScale = 0.6; w.seedFood = 20;                                        // 넓은 섬: 오가는 길이 멀어 배고픔을 늦추고 씨앗을 든든하게
+      w.hungerScale = 0.6; w.seedFood = 20;                                        // 넓은 섬: 오가는 길이 멀어 배고픔을 늦춤
       const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
       w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
@@ -159,8 +168,8 @@ export class World {
     const m = this.merchantU(), items = { wood: 0, stone: 0, iron: 0 }; let coins = 0;
     if (!this.marketB() || !m || m === u) return { items, coins };
     for (const k of E.RAW) {
-      const n = Math.min(u.inv[k] || 0, Math.floor((m.coins || 0) / E.MARKET_BUY[k])); if (!n) continue;
-      const c = n * E.MARKET_BUY[k]; u.inv[k] -= n; m.raw[k] += n; m.coins -= c; u.coins = (u.coins || 0) + c; items[k] = n; coins += c;
+      const price = this.prices[k] ?? E.MARKET_BUY[k], n = Math.min(u.inv[k] || 0, Math.floor((m.coins || 0) / price)); if (!n) continue;
+      const c = n * price; u.inv[k] -= n; m.raw[k] += n; m.coins -= c; u.coins = (u.coins || 0) + c; items[k] = n; coins += c;
     }
     this.emit("market", { u, kind: "sell", items, coins }); return { items, coins };
   }
@@ -175,10 +184,11 @@ export class World {
   }
   /** 농부·어부에게서 음식 1개 사기(파는 쪽은 먹을 것 FOOD_KEEP개는 남김) */
   buyFoodFrom(buyer, seller) {
-    if (!E.isProducer(seller) || seller === buyer || E.meals(seller) <= E.FOOD_KEEP || (buyer.coins || 0) < E.FOOD_PRICE) return false;
+    const price = this.foodPrice();
+    if (!E.isProducer(seller) || seller === buyer || E.meals(seller) <= E.FOOD_KEEP || (buyer.coins || 0) < price) return false;
     const k = seller.inv.food > 0 ? "food" : "fish"; seller.inv[k]--; buyer.inv[k]++;
-    buyer.coins -= E.FOOD_PRICE; seller.coins = (seller.coins || 0) + E.FOOD_PRICE;
-    this.emit("foodSale", { buyer, seller, k }); return true;
+    buyer.coins -= price; seller.coins = (seller.coins || 0) + price;
+    this.emit("foodSale", { buyer, seller, k, price }); return true;
   }
   /** (예전 방식) 공식은행에 팔기: 자재 전부 + 남는 먹을 것 → 새 돈, 물건은 은행 창고로 */
   sellToBank(u) {
@@ -227,6 +237,53 @@ export class World {
   moneySupply() { return this.units.reduce((s, u) => s + (u.coins || 0), 0); }
   avgFull() { return this.units.reduce((a, u) => a + (u.full ?? 80), 0) / Math.max(1, this.units.length); }
 
+  // ---- 계절·날씨
+  get fx() { return S.effects(this.season, this.weather.kind); }
+  setSeason(s) { if (s === this.season) return; this.season = s; this.emit("season", s); }
+  setWeather(kind) { this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather); }
+  stepWeather(dt) { if ((this.weather.t -= dt) <= 0) this.setWeather(S.pickWeather(this.season || "autumn", this.wrnd, this.weather.kind)); }
+
+  // ---- 시세
+  foodPrice() { return this.prices.food; }
+  updatePrices() {
+    const m = this.merchantU();
+    for (const k of E.RAW) this.prices[k] = E.marketPrice(k, m ? (m.raw[k] || 0) + (m.goods[k] || 0) : 0);
+    const spare = this.units.filter(E.isProducer).reduce((s, u) => s + Math.max(0, E.meals(u) - E.FOOD_KEEP), 0);
+    const hungry = this.units.filter(u => (u.full ?? 80) < J.HUNGRY + 10).length / Math.max(1, this.units.length);
+    this.prices.food = E.foodPriceFor(spare, hungry, this.fx.foodPrice);
+  }
+
+  // ---- 소원
+  wishOf(u) { return this.wishes.find(x => x.unitId === u.unitId) || null; }
+  makeWish() {
+    if (this.wishes.length >= 2 || !this.units.length) return null;
+    const free = this.units.filter(u => !this.wishOf(u));
+    for (let k = 0; k < 6 && free.length; k++) {
+      const u = free[Math.floor(this.wrnd() * free.length)];
+      const cands = WISHES.filter(d => !this.wishes.some(x => x.id === d.id) && d.ok(this, u));
+      if (!cands.length) continue;
+      const d = cands[Math.floor(this.wrnd() * cands.length)];
+      const wish = { id: d.id, unitId: u.unitId, base: d.base ? d.base(this) : this.units.length, age: 0 };
+      this.wishes.push(wish); emote(u, `💭 ${d.icon}`, 3); this.emit("wish", { wish, u }); return wish;
+    }
+    return null;
+  }
+  stepWishes(dt) {
+    if ((this.wishT -= dt) <= 0) { this.wishT = 80 + this.wrnd() * 70; this.makeWish(); }
+    if ((this.wishClock += dt) < 1) return; const step = this.wishClock; this.wishClock = 0;
+    for (const wish of [...this.wishes]) {
+      const u = this.units.find(o => o.unitId === wish.unitId), d = WISH_BY_ID[wish.id];
+      if (!u || !d) { this.wishes.splice(this.wishes.indexOf(wish), 1); continue; }
+      wish.age += step;
+      if (d.done(this, u, wish)) {
+        this.wishes.splice(this.wishes.indexOf(wish), 1); this.wishDone++;
+        if (this.economy) this.issue(u, WISH_REWARD);
+        u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘어요!", 3);
+        this.emit("wishDone", { wish, u, def: d });
+      } else if (Math.floor(wish.age) % 20 === 0) emote(u, `💭 ${d.icon}`, 2.5);   // 20초마다 말풍선으로 다시 알림
+    }
+  }
+
   // ---- 벌목·채광(나무꾼은 도끼질이 세서 덜 하고 많이 얻음, 광부는 돌을 많이 얻고 철이 잘 나옴)
   hitTree(t, who) {
     if (!t.alive) return;
@@ -247,7 +304,8 @@ export class World {
   }
   /** 낚시 결과: 못 낚음 / 물고기(흔하면 음식, 희귀 이상이면 보물) + 가끔 물건. 도감에 기록. */
   catchFish(u) {
-    if (this.rnd() >= J.catchChance(u)) return null;
+    const fishFx = this.fx.fish; if (fishFx <= 0) return null;                       // 폭풍: 못 낚음
+    if (this.rnd() >= Math.min(0.95, J.catchChance(u) * fishFx)) return null;
     const f = J.rollFish(u, this.rnd); if (!this.economy) this.res.fish++;
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
@@ -274,7 +332,7 @@ export class World {
   // ---- 밭(농부만): 빈 밭에 심고, 다 자라면 거둬 음식이 됨
   farmPlot(p, u) {
     if (p.stage === "empty") { p.stage = "growing"; p.grow = J.growSeconds(u); p.t = p.grow; this.emit("plot", p); return "plant"; }
-    if (p.stage === "ripe") { const n = J.harvestYield(u); this.gain(u, "food", n); p.stage = "empty"; p.t = 0; p.lastYield = n; this.emit("plot", p); return "harvest"; }
+    if (p.stage === "ripe") { const n = J.harvestYield(u) + this.fx.harvest; this.gain(u, "food", n); p.stage = "empty"; p.t = 0; p.lastYield = n; this.emit("plot", p); return "harvest"; }
     return null;
   }
   /** 격자 좌표(연속)에 서는 높이: 부두처럼 걸을 수 있는 시설 위면 그 높이, 아니면 보이는 땅 높이(경사면 포함). */
@@ -445,7 +503,12 @@ export class World {
   update(dt) {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
-    for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
+    this.stepWeather(dt);
+    const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람
+    for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt * grow) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
+    if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
+    if ((this.histClock += dt) >= 20) { this.histClock = 0; this.priceHist.push({ t: Math.round(this.time), ...this.prices }); if (this.priceHist.length > 48) this.priceHist.shift(); }
+    this.stepWishes(dt);
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);
     this.separate();
@@ -471,7 +534,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {

@@ -221,6 +221,7 @@ function startActivityInner(u, kind, world, rnd) {
       t.claimed = u.unitId; u.focus = t; u.state = kind === "chop" ? US.GoChop : US.GoMine; return true;
     }
     case "fish": {
+      if ((world.fx?.fish ?? 1) <= 0) return false;                                // 폭풍엔 낚시 안 감
       const s = nearest(u, world.spots.filter(s => !s.claimed && g.isWalkable(s.x, s.z)), s => [s.x, s.z]);
       if (!s || !startPath(u, world, s.x, s.z)) return false;
       s.claimed = u.unitId; u.focus = s; u.state = US.GoFish; return true;
@@ -241,7 +242,7 @@ function startActivityInner(u, kind, world, rnd) {
       if (world.economy) {                                                         // 경제: 내 가방 → 시장에서 사기 → 물물교환 → 씨앗
         if (E.meals(u) <= 0) {
           // 돈이 있으면 농부·어부에게서 사고, 없으면 자재를 들고 아무에게나 물물교환, 그것도 안 되면 씨앗
-          const buy = (u.coins || 0) >= E.FOOD_PRICE;
+          const buy = (u.coins || 0) >= (world.foodPrice?.() ?? E.FOOD_PRICE);
           const host = nearest(u, world.units.filter(o => o !== u && visible(o) && (buy ? E.isProducer(o) && E.meals(o) > E.FOOD_KEEP : E.meals(o) >= E.FOOD_KEEP)), o => [o.x, o.z]);
           if (host && (buy || E.spare(u))) { const [fx, fz] = cellOf(host); if (pathBeside(u, world, fx, fz)) { u.focus = host; u.state = US.Visit; u.wantFood = buy ? "buy" : "barter"; emote(u, buy ? "음식 사러!" : "배고파…"); return true; } }
           return startActivity(u, "forage", world, rnd) || startActivity(u, "shore", world, rnd);   // 넓은 섬엔 씨앗이 없어 바닷가로
@@ -401,7 +402,7 @@ export function exitBuilding(u, world, rnd) {
 // ---------------------------------------------------------------- 매 프레임
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
-  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
+  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * (world.fx?.hunger ?? 1) * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
@@ -486,7 +487,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         if (!close) { setIdle(u, rnd, world); break; }                        // 가 보니 친구가 떠남
         u.path = null; face(u, f.x, f.z); u.state = US.Greet; M.befriend(u, f, 1);         // 인사하면 서로 친해짐
         let swap = null;                                                         // 음식 사기(돈) 또는 물물교환
-        if (world.economy && u.wantFood === "buy" && world.buyFoodFrom(u, f)) swap = `🛒 음식 🪙${E.FOOD_PRICE}`;
+        if (world.economy && u.wantFood === "buy" && world.buyFoodFrom(u, f)) swap = `🛒 음식 🪙${world.foodPrice()}`;
         else if (world.economy) swap = world.barter(u, f);
         u.wantFood = null;
         if (swap) emote(u, swap, 2.4); else emote(u, M.affinity(u, f) >= 4 ? pick(["♥♥", "보고 싶었어!", "단짝!"], rnd) : pick(["♪", "♥", "안녕!"], rnd));

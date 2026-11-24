@@ -10,6 +10,9 @@ import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
+import { WeatherViews, SEASON_TINT } from "./render/weather.js";
+import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
+import { WISH_BY_ID, WISH_REWARD } from "./world/wishes.js";
 import { PROPS, TRIBES, JOBS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
@@ -50,6 +53,16 @@ const clouds = createClouds(); scene.add(clouds);
 // 현실 시간대(기기 시계): 해·하늘·안개·바다·구름·등대 / 툰 셰이딩(재질을 단계 명암으로)
 const daylight = new Daylight({ scene, renderer, sun, hemi, water, clouds, skyTex: scene.background });
 const toon = new Toon(scene); let lastToon = 0;
+// 계절·날씨: 계절은 기기 날짜(설정에서 바꿔 볼 수 있음), 날씨는 마을 안에서 바뀜 → 비·눈·번개·땅 색
+const weatherViews = new WeatherViews(scene, daylight);
+let seasonPick = null;                                                            // null = 실제 날짜
+const seasonNow = () => seasonPick || seasonOf(daylight.now());
+function tintGround() {
+  if (!chunks || !world?.season) return; const c = SEASON_TINT[world.season] ?? 0xffffff;
+  chunks.material.color.setHex(c); const t = toon.toToon.get(chunks.material); if (t) t.color.setHex(c);
+}
+const SEASON_NOTE = { spring: "밭이 빨리 자라요", summer: "밭이 조금 빨리 자라요", autumn: "거둘 때 곡식이 하나 더", winter: "밭이 느리게 자라고, 배가 빨리 고프고, 음식 값이 올라요" };
+const WEATHER_NOTE = { clear: "", cloudy: "", rain: "밭이 빨리 자라고 물고기가 잘 잡혀요", storm: "낚시를 못 하고 배가 빨리 고파요", snow: "밭이 천천히 자라요" };
 
 const overlay = document.getElementById("overlay");
 
@@ -62,7 +75,9 @@ const quality = new Quality(renderer, sun, c => {
   if (setTerrainDetail(c.terrainSub, c.lodScale, c.farDrop) && world) world.grid.markAllDirty();
   unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
   if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); }
+  weatherViews?.setAmount(c.decor.density);
 });
+weatherViews.setAmount(quality.cfg.decor.density);
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
@@ -76,6 +91,11 @@ function mount(w) {
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`); });
+  world.setSeason(seasonNow()); tintGround();
+  world.on("season", s => { tintGround(); hud?.status(`${SEASONS[s].icon} ${SEASONS[s].name}이에요 · ${SEASON_NOTE[s]}`); });
+  world.on("weather", e => { const w = WEATHER[e.kind]; hud?.status(`${w.icon} 날씨: ${w.name}${WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""}`); });
+  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${d.text}" (${d.hint})`); });
+  world.on("wishDone", ({ u, def }) => hud?.status(`♥ ${u.name}의 소원 "${def.text}"이 이루어졌어요!${world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""}`));
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }
@@ -117,7 +137,7 @@ Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
 });
 
 // ---------- 매 프레임
-const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0;
+const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0, lastSeason = 0;
 // 키보드로 화면: Q/E 돌리기, 방향키 옮기기(입력창이 아닐 때)
 const keys = new Set();
 addEventListener("keydown", e => { if (e.target?.tagName !== "INPUT" && /^(KeyQ|KeyE|Arrow(Up|Down|Left|Right))$/.test(e.code)) { keys.add(e.code); if (e.code.startsWith("Arrow")) e.preventDefault(); } });
@@ -141,6 +161,8 @@ function frame() {
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   daylight.update(dt, now);
+  weatherViews.update(dt, world.weather.kind, controls.target);
+  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); }
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);
@@ -162,10 +184,16 @@ const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", 
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 hud.onToon = () => { toon.set(!toon.on); return toon.on ? "툰" : "기본"; };
 hud.timeLabel = () => daylight.label();
+hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}`;
+hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")}`);
+const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];
+const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(${SEASONS[seasonOf(daylight.now())].name})`;
+hud.onSeasonMode = () => { seasonPick = SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };
+hud.setSeasonLabel(seasonText());
 hud.onQuality = mode => { quality.set(mode); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
 hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { daylight, toon, quality, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { daylight, toon, quality, weatherViews, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
