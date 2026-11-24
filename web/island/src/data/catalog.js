@@ -43,7 +43,7 @@ export const BUILDINGS = {
   },
   // 공식은행: 섬 가운데에 처음부터 있음(짓거나 철거 못 함). 갈매미가 물건을 팔면 새 돈을 찍어 주고, 산 물건은 은행 창고(마을 자재)로.
   bank: {
-    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 3.0, asset: "assets/suburban/building-type-f.glb", roof: GOLD, modelYaw: KENNEY_YAW,
+    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 3.6, asset: "assets/props/bank.glb", liteAsset: "assets/props/bank_lite.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·동전 은행(사용자 제공)
     placeholder: { wall: 0xf6efdc, roof: 0xe0b84a, roof_shape: "pyramid" }, interior: { w: 8, d: 6 },
   },
   // 목수가 짓는 시설
@@ -66,8 +66,8 @@ export const BUILDINGS = {
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   // 장식(집 근처 6칸 안에 있으면 그 집 갈매미 만족도 +2씩, 최대 +10)
-  bench:     { id: "bench", builtBy: "builder", deco: true, decoShape: "bench", cost: { wood: 1 }, tier: 1, name: "벤치", footprint: { w: 1, d: 1 }, work: 1, height: 0.5, asset: null, placeholder: { wall: 0xb98352, roof: 0xb98352, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
-  flowerbed: { id: "flowerbed", builtBy: "builder", deco: true, decoShape: "flowerbed", cost: { wood: 1 }, tier: 1, name: "꽃밭", footprint: { w: 1, d: 1 }, work: 1, height: 0.3, asset: null, placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  bench:     { id: "bench", builtBy: "builder", deco: true, asset: "assets/props/bench.glb", modelYaw: -Math.PI / 2, fit: { w: 0.85, d: 0.85 }, cost: { wood: 1 }, tier: 1, name: "벤치", footprint: { w: 1, d: 1 }, work: 1, height: 0.6, placeholder: { wall: 0xb98352, roof: 0xb98352, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  flowerbed: { id: "flowerbed", builtBy: "builder", deco: true, cost: { wood: 1 }, tier: 1, name: "화단", footprint: { w: 1, d: 1 }, work: 1, height: 0.45, asset: "assets/props/flower_box.glb", fit: { w: 0.9, d: 0.9 }, placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   fountain:  { id: "fountain", builtBy: "carpenter", deco: true, decoShape: "fountain", rank: 1, cost: { stone: 3 }, tier: 1, name: "분수", footprint: { w: 2, d: 2 }, work: 4, height: 1.2, asset: null, placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   snowman:   { id: "snowman", builtBy: "builder", deco: true, decoShape: "snowman", winterOnly: true, cost: {}, tier: 1, name: "눈사람", footprint: { w: 1, d: 1 }, work: 1, height: 1.0, asset: null, placeholder: { wall: 0xffffff, roof: 0xffffff, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 풍차 발전소: 둘레 18칸 안의 집에 전기(밤에 창이 밝아지고 만족도 +8)
@@ -84,7 +84,7 @@ export const BUILDINGS = {
   },
   // 저장고(겨울 대비): 농부·어부가 남는 음식을 은행에 팔면 여기 쌓이고, 배고픈 갈매미가 사 가거나(돈이 없고 아주 배고프면 나눠 줌) 겨울을 남
   storehouse: {
-    id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.2, asset: null,
+    id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.6, asset: "assets/props/storehouse.glb", liteAsset: "assets/props/storehouse_lite.glb", modelYaw: -Math.PI / 2,   // 돌집 저장고(사용자 제공)
     placeholder: { wall: 0xb5794a, roof: 0x7b4b2e, roof_shape: "pyramid" }, interior: { w: 5, d: 5 },
   },
   manor: {

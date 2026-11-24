@@ -16,3 +16,7 @@
 
 만든 방법: three.js로 meshopt 압축을 풀고 노멀·금속도 텍스처는 빼고(툰 셰이딩이라 거의 안 보임) 기본색만 줄여 다시 내보냄 →
 가벼운 판은 Blender 4.2 Decimate(collapse)로 삼각형을 줄임. 가로등 발광 마스크는 기본색에서 밝은 노란 유리 부분(약 8%)만 흰색으로 뽑은 것.
+| bank.glb / bank_lite.glb | 9,735 / 3,406 | 1024 / 512px | 공식은행(둥근 지붕) |
+| storehouse.glb / storehouse_lite.glb | 9,375 / 3,281 | 1024 / 512px | 저장고(돌집) |
+| bench.glb | 2,267 | 512px | 벤치(모든 단계) |
+| flower_box.glb | 2,249 | 512px | 화단(모든 단계) |
