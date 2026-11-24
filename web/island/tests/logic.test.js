@@ -681,3 +681,48 @@ test("저장: 등급·저장고·소원·가구·날씨·시세 기록까지 저
   assert.deepEqual(b.wishes.map(x => x.id), w.wishes.map(x => x.id)); assert.equal(b.weather.kind, "rain"); assert.equal(b.priceHist.length, w.priceHist.length);
   assert.ok(Math.abs(b.time - w.time) < 1e-6); const byName = ws => Object.fromEntries(ws.units.map(u => [u.name, [u.unitId, u.coins, u.home]])); assert.deepEqual(byName(b), byName(w), "갈매미마다 id·돈·집 그대로");
 });
+
+test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어지고, 선착장이 있으면 배를 타고 먼 섬에 감", async () => {
+  const { BUILDINGS } = await import("../src/data/catalog.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수");
+  assert.equal(w.grid.w, 192); assert.equal(w.zones.filter(z => z.id.startsWith("islet-")).length, 5);
+  const c = w.center, home = w.compAt(Math.floor(c.x), Math.floor(c.z) + 6);
+  const zone = id => w.zones.find(z => z.id === id), compOf = z => w.compAt(Math.floor(z.x), Math.floor(z.z));
+  const forest = zone("islet-forest"), palm = zone("islet-palm");
+  assert.notEqual(compOf(forest), home, "처음엔 숲섬이 따로 떨어져 있음");
+  // 본섬 땅 → 숲섬 땅 사이 곧은 물길(가로·세로) 중 가장 짧은 것에 다리
+  let best = null;
+  for (let z = 0; z < w.grid.h; z++) for (let x = 0; x < w.grid.w; x++) {
+    if (w.compAt(x, z) !== home) continue;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const line = []; let k = 1; while (k < 20 && w.grid.isWater(x + dx * k, z + dz * k)) { line.push([x + dx * k, z + dz * k]); k++; }
+      if (line.length && k < 20 && w.compAt(x + dx * k, z + dz * k) === compOf(forest) && (!best || line.length < best.length)) best = line;
+    }
+  }
+  assert.ok(best && best.length <= 12, `다리 길이 ${best?.length}`);
+  assert.equal(w.check("bridge", best[0][0], best[0][1], 0).ok, true); assert.equal(w.check("bridge", Math.floor(c.x), Math.floor(c.z) + 6, 0).ok, false, "땅엔 다리 못 놓음");
+  for (const [x, z] of best) assert.ok(w.placeBuilding("bridge", x, z, 0).ok);
+  assert.equal(compOf(forest), w.compAt(Math.floor(c.x), Math.floor(c.z) + 6), "다리로 이어짐");
+  // 선착장 둘(본섬·야자섬) → 야자섬 쪽으로 가는 길은 배
+  const pierAt = (cx, cz, comp) => { for (let r = 0; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r); for (let rot = 0; rot < 4; rot++) { const ch = w.check("pier", x, z, rot); if (ch.ok && w.compAt(ch.door.x, ch.door.z) === comp) return w.placeBuilding("pier", x, z, rot).building; } } return null; };
+  const pa = pierAt(palm.x, palm.z, compOf(palm));
+  const dirToPalm = Math.atan2(palm.z - c.z, palm.x - c.x), pm = pierAt(c.x + Math.cos(dirToPalm) * 40, c.z + Math.sin(dirToPalm) * 40, home);
+  assert.ok(pa && pm, "선착장 둘");
+  const u = w.units.find(o => o.name === "기본"); u.x = pm.door.x + 0.5; u.z = pm.door.z + 0.5;
+  const goal = [palm.x, palm.z].map(Math.floor); let g = null; for (let r = 0; r < 8 && !g; r++) for (let dz = -r; dz <= r && !g; dz++) for (let dx = -r; dx <= r && !g; dx++) if (w.compAt(goal[0] + dx, goal[1] + dz) === compOf(palm) && w.grid.isWalkable(goal[0] + dx, goal[1] + dz)) g = [goal[0] + dx, goal[1] + dz];
+  const { setIdle } = await import("../src/units/unitBrain.js");
+  setIdle(u, seededRandom(3), w); u.state = "Wander"; u.timer = 999;
+  const W2 = await import("../src/units/unitBrain.js");
+  assert.equal(w.ferryRoute(Math.floor(u.x), Math.floor(u.z), g[0], g[1]).B.id, pa.id);
+  // 길 찾기 → 선착장 → 배 → 야자섬
+  u.path = null; const ok = (() => { const fr = w.ferryRoute(Math.floor(u.x), Math.floor(u.z), g[0], g[1]); return !!fr; })(); assert.ok(ok);
+  // 실제로 걸어가 배를 타고 건너가 내림
+  assert.equal(W2._startPathForTest(u, w, g[0], g[1]), true); assert.ok(u.ferry, "배 타는 길");
+  let sailed = false, arrived = false;
+  for (let t = 0; t < 240 && !arrived; t += 0.1) {
+    if (u.sailing) sailed = true;
+    if (W2._followPathForTest(u, 0.1, w, seededRandom(4)) && !u.ferry && !u.sailing) arrived = true;
+  }
+  assert.ok(sailed, "배를 탐"); assert.ok(arrived, "도착"); assert.equal(w.compAt(Math.floor(u.x), Math.floor(u.z)), compOf(palm), "야자섬에 내림");
+  void BUILDINGS;
+});

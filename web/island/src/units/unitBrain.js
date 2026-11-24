@@ -57,7 +57,7 @@ export function uncommit(u, world) {
 export function setIdle(u, rnd, world = null, secs = null) {
   if (u.activity) { M.learn(u, u.activity, -0.2); u.activity = null; }   // 끝내지 못하고 그만둔 일 = 조금 나쁜 경험
   release(u);
-  u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null;
+  u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null; if (!u.sailing) u.ferry = null;
   u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined; u.swimming = false; u.swimGoal = null;   // 물속에서 그만두면 다음 프레임에 가까운 땅으로 올라옴
 }
 
@@ -91,7 +91,16 @@ export function smoothPath(grid, sx, sz, path) {
 }
 
 function startPath(u, world, gx, gz, run = null) {
-  const [sx, sz] = cellOf(u), raw = findPath(world.grid, sx, sz, gx, gz);
+  const [sx, sz] = cellOf(u);
+  // 다른 섬(걸어서 안 이어진 땅): 선착장이 있으면 배를 타고, 없으면 바로 포기(넓은 지도에서 헛된 길찾기를 하지 않게)
+  if (world.compAt && world.grid.isWalkable(sx, sz) && world.compAt(sx, sz) !== world.compAt(gx, gz)) {
+    const fr = world.ferryRoute?.(sx, sz, gx, gz); if (!fr) return false;
+    const rawA = findPath(world.grid, sx, sz, fr.A.door.x, fr.A.door.z, 30000); if (!rawA) return false;
+    u.path = rawA; u.pathIndex = 0; u.goal = { x: fr.A.door.x, z: fr.A.door.z }; u.moveT = 0; u.running = !!u.runSpeed;
+    u.ferry = { A: fr.A.id, B: fr.B.id, gx, gz }; u.giveUp = 9999; return true;
+  }
+  u.ferry = null;
+  const raw = findPath(world.grid, sx, sz, gx, gz, 30000);
   if (!raw) return false;
   const path = smoothPath(world.grid, sx, sz, raw);
   if (Math.hypot(u.x - (sx + 0.5), u.z - (sz + 0.5)) > 0.2) path.unshift([sx, sz]);   // 칸 모서리에 서 있으면 먼저 칸 가운데로
@@ -154,7 +163,27 @@ function followPath(u, dt, world, rnd) {
       if (!u.goal || !startPath(u, world, u.goal.x, u.goal.z, u.running)) { setIdle(u, rnd, world); return false; }
     }
   }
+  if (!!u.path && u.pathIndex >= u.path.length && u.ferry) return sail(u, dt, world);   // 선착장에 닿음 → 배 타기
   return !!u.path && u.pathIndex >= u.path.length;
+}
+/** 배 타기: 선착장 A 앞 물에서 뱃길을 따라 B 앞까지 → B 문 앞에 내려 원래 목적지로 걸어감. 가는 동안 false */
+function sail(u, dt, world) {
+  const A = world.buildings.get(u.ferry.A), B = world.buildings.get(u.ferry.B);
+  if (!A || !B) { u.ferry = null; u.sailing = null; return false; }
+  if (!u.sailing) { const a = world.berth(A), b = world.berth(B); u.sailing = { pts: world.seaPath(a, b), i: 0 }; u.x = a.x + 0.5; u.z = a.z + 0.5; }
+  const s = u.sailing, speed = 4.5 * dt;                                          // 배는 1초에 4.5칸
+  u.y = WATER_Y + 0.1;
+  let left = speed;
+  while (left > 0 && s.i < s.pts.length) {
+    const [px, pz] = s.pts[s.i], tx = px + 0.5, tz = pz + 0.5, d = Math.hypot(tx - u.x, tz - u.z);
+    if (d > 1e-6) u.heading = Math.atan2(tx - u.x, tz - u.z);
+    if (d <= left) { u.x = tx; u.z = tz; left -= d; s.i++; } else { u.x += (tx - u.x) / d * left; u.z += (tz - u.z) / d * left; left = 0; }
+  }
+  if (s.i < s.pts.length) return false;
+  const { gx, gz } = u.ferry; u.sailing = null; u.ferry = null; u.x = B.door.x + 0.5; u.z = B.door.z + 0.5; u.y = world.standHeight(u.x, u.z);
+  const raw = findPath(world.grid, B.door.x, B.door.z, gx, gz, 30000); if (!raw) { u.path = null; return true; }
+  u.path = raw; u.pathIndex = 0; u.goal = { x: gx, z: gz }; u.giveUp = Math.max(GIVE_UP, raw.length + 10);
+  return raw.length === 0;
 }
 const moving = u => !!u.path && u.pathIndex < u.path.length;
 
@@ -232,12 +261,13 @@ function startActivityInner(u, kind, world, rnd) {
       // 맡은 공사장이 있으면 그곳, 없으면 남이 안 맡은 공사장 중 많이 지어진 곳. 한 번 맡으면 100%까지 맡는다.
       let b = u.committed ? world.buildings.get(u.committed) : null;
       if (b && (world.isDone(b) || (b.busy && b.busy !== u.unitId))) { uncommit(u, world); b = null; }
-      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy && J.canBuild(u, BUILDINGS[b.defId]))
+      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy && J.canBuild(u, BUILDINGS[b.defId]) && world.workSpot(b))
         .sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
       if (!b) return false;
       u.committed = b.id; b.busy = u.unitId;
       if (!hasMaterials(world, b, u)) return gatherFor(u, world, b, rnd);          // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
-      if (!startPath(u, world, b.door.x, b.door.z)) return false;
+      const spot = world.workSpot(b); if (!spot) { uncommit(u, world); return false; }   // 다리: 땅이나 다 지은 다리에 붙은 칸부터
+      if (!startPath(u, world, spot.x, spot.z)) { uncommit(u, world); return false; }
       u.focus = b; u.state = US.GoBuild; return true;
     }
     case "eat": {                                                                 // 음식이 있으면 그 자리에서 먹고, 없으면 씨앗을 찾음
@@ -425,6 +455,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   }
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
+  if (u.sailing) { sail(u, dt, world); return; }                          // 배 타는 중: 배가 닿을 때까지 다른 일은 안 함(닿으면 원래 하던 일의 길을 이어 감)
   if (!u.swimming && !u.insideBuildingId && world.grid.isWater(...cellOf(u)) && !world.grid.isWalkable(...cellOf(u))) {   // 헤엄 중이 아닌데 물에 있으면(헤엄을 그만둠 등) 가까운 땅으로(부두 위는 그대로)
     const spot = nearestWalkable(world.grid, ...cellOf(u)); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; u.anim = null; emote(u, "푸하!"); }
   }
@@ -704,3 +735,4 @@ function settle(u, dt, world) {
   const h = world.standHeight ? world.standHeight(u.x, u.z) : world.grid.walkHeight(...cellOf(u));
   if (h !== null) u.y += (h - u.y) * Math.min(1, dt * 12);              // 경사면·계단을 따라 부드럽게
 }
+export const _startPathForTest = (...a) => startPath(...a), _followPathForTest = (...a) => followPath(...a);   // 시험용

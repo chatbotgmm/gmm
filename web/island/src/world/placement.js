@@ -1,5 +1,5 @@
 // 건물 배치 규칙(지시서 4-1). 순수 함수: 미리보기(고스트)와 실제 짓기가 같은 판정을 쓴다.
-import { MAX_STEP } from "../config.js";
+import { MAX_STEP, BRIDGE_Y } from "../config.js";
 
 /** 회전(90° 단위)을 넣은 차지 칸 수. */
 export function rotatedSize(def, rot) { const { w, d } = def.footprint; return rot % 2 ? { w: d, d: w } : { w, d }; }
@@ -28,6 +28,13 @@ export function footprint(def, ax, az, rot) {
 export function checkPlacement(grid, def, ax, az, rot, units = []) {
   const fp = footprint(def, ax, az, rot), fail = reason => ({ ...fp, ok: false, reason, elevation: 0 });
   if (!fp.cells.every(([x, z]) => grid.inBounds(x, z))) return fail("섬 밖이에요");
+  if (def.bridge) {                                                          // 다리: 물 칸에만, 문 없음
+    if (fp.cells.some(([x, z]) => !grid.isWater(x, z))) return fail("다리는 물 위에만 놓아요");
+    if (fp.cells.some(([x, z]) => grid.get(x, z).occupiedId)) return fail("이미 다리가 있어요");
+    const inFp0 = new Set(fp.cells.map(([x, z]) => `${x},${z}`));
+    if (units.some(u => !u.insideBuildingId && inFp0.has(`${Math.floor(u.x)},${Math.floor(u.z)}`))) return fail("갈매미가 있어요");
+    return { ...fp, ok: true, reason: "", elevation: BRIDGE_Y, ramp: null };
+  }
   if (fp.cells.some(([x, z]) => grid.isWater(x, z))) return fail("바다에는 지을 수 없어요");
   if (fp.cells.some(([x, z]) => grid.get(x, z).occupiedId)) return fail("다른 건물·시설과 겹쳐요");
   // 계단 이어 놓기: 아래 계단의 위쪽 칸에, 같은 방향으로 놓는 계단은 괜찮음(아래 계단 → 이 계단으로 바로 이어짐)
@@ -48,9 +55,9 @@ export function checkPlacement(grid, def, ax, az, rot, units = []) {
     if (top - e > 1.5 + 1e-6) return fail("너무 높아요(계단 하나로 1.5 m까지)");
     ramp = { dx: bx - sx, dz: bz - sz, bx, bz, h0: e, h1: top };
   }
-  if (def.dock) {                                                            // 낚시터: 문 반대쪽 칸이 물이어야 함(물 쪽을 보고 낚시)
+  if (def.dock || def.pier) {                                                // 낚시터·선착장: 문 반대쪽 칸이 물이어야 함
     const [sx, sz] = fp.cells[0], bx = 2 * sx - fp.door.x, bz = 2 * sz - fp.door.z;
-    if (!grid.inBounds(bx, bz) || !grid.isWater(bx, bz)) return fail("낚시터 앞(문 반대쪽)이 물이어야 해요(R로 방향 돌리기)");
+    if (!grid.inBounds(bx, bz) || !grid.isWater(bx, bz)) return fail(`${def.name} 앞(문 반대쪽)이 물이어야 해요(R로 방향 돌리기)`);
   }
   const inFp = new Set(fp.cells.map(([x, z]) => `${x},${z}`));
   if (units.some(u => !u.insideBuildingId && inFp.has(`${Math.floor(u.x)},${Math.floor(u.z)}`))) return fail("갈매미가 서 있어요");

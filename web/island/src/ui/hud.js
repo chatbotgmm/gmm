@@ -265,7 +265,7 @@ export class Hud {
     this.hungry = hungry; this.alertBtn.hidden = !hungry; if (hungry) this.alertBtn.textContent = `😣 ${hungry.name} 배고파요`;
     if (!this.phone.hidden && this.app && this.app !== "gulls") this.refreshApp();
     this.layout();                                                                   // 도구 막대 높이가 바뀌어도 📱·카드가 그 위에
-    w.units.forEach((u, i) => { const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
+    w.units.forEach((u, i) => { if (!this.rows[i]) return; const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
       this.rows[i].querySelector(".act").textContent = b ? (u.useFurni ? `🏠 ${FURNITURE[u.useFurni.id].useLabel}` : `${BUILDINGS[b.defId].name} 안`) : STATE_LABEL[u.state] || u.state;
       this.rows[i].querySelector(".coins").textContent = w.economy ? `🪙${u.coins || 0}${u.home ? " 🏠" : ""}` : "";
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);

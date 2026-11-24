@@ -1,6 +1,7 @@
 // 섬 전체 상태: 격자, 해안 모듈, 자원(나무·광석·씨앗·낚시 자리), 건물, 유닛.
 // 그림과 입력은 모르고, 바뀐 일을 이벤트(on/emit)로 알린다. 뷰가 이벤트와 매 프레임 상태를 읽어 그린다.
 import { BUILDINGS, MODULES, UNITS, RARITY, FISH, ITEMS, PRICES, FURNITURE } from "../data/catalog.js";
+import { WATER_Y } from "../config.js";
 import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
 import { Grid } from "./Grid.js";
@@ -65,7 +66,7 @@ export class World {
     w.seed = seed; w.wild = wild;
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
-      w.hungerScale = 0.6; w.seedFood = 20;                                        // 넓은 섬: 오가는 길이 멀어 배고픔을 늦춤
+      w.hungerScale = 0.48; w.seedFood = 20;                                       // 넓은 지도: 오가는 길이 멀어 배고픔을 늦춤(본섬 지름 1.3배 → 0.6 × 0.8)
       const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
       w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
@@ -76,7 +77,7 @@ export class World {
   addUnitByName(name) {
     const i = UNITS.findIndex(u => u.name === name); if (i < 0 || this.units.some(o => o.name === name)) return null;
     const c = this.center, spot = nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z) + 4, 8) || nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z));
-    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z); return u;
+    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z); this.emit("unitAdded", u); return u;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
   emit(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); }
@@ -253,6 +254,54 @@ export class World {
   setSeason(s) { if (s === this.season) return; this.season = s; this.emit("season", s); }
   setWeather(kind) { this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather); }
   stepWeather(dt) { if ((this.weather.t -= dt) <= 0) this.setWeather(S.pickWeather(this.season || "autumn", this.wrnd, this.weather.kind)); }
+
+  // ---- 다리·선착장·배
+  /** 공사할 때 서는 칸: 보통은 문 앞, 다리는 이미 걸을 수 있는 이웃 칸(땅이나 다 지은 다리). 없으면 null(아직 못 지음) */
+  workSpot(b) {
+    if (!BUILDINGS[b.defId].bridge) return b.door;
+    const [x, z] = b.cells[0]; for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) if (this.grid.isWalkable(x + dx, z + dz)) return { x: x + dx, z: z + dz };
+    return null;
+  }
+  /** 걸어서 이어진 땅 덩어리 번호(칸마다). 땅·건물이 바뀔 때만 다시 셈 */
+  comps() {
+    const g = this.grid; if (this._comp && this._compV === g.version) return this._comp;
+    const comp = new Int32Array(g.w * g.h).fill(-1); let id = 0;
+    for (let s = 0; s < comp.length; s++) {
+      if (comp[s] >= 0) continue; const sx = s % g.w, sz = (s / g.w) | 0; if (!g.isWalkable(sx, sz)) continue;
+      const q = [s]; comp[s] = id;
+      while (q.length) { const i = q.pop(), x = i % g.w, z = (i / g.w) | 0;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const ni = nz * g.w + nx; if (comp[ni] >= 0 || !g.canStep(x, z, nx, nz)) continue; comp[ni] = id; q.push(ni); } }
+      id++;
+    }
+    this._comp = comp; this._compV = g.version; return comp;
+  }
+  compAt(x, z) { return this.grid.inBounds(x, z) ? this.comps()[z * this.grid.w + x] : -1; }
+  piers() { return [...this.buildings.values()].filter(b => BUILDINGS[b.defId].pier && this.isDone(b)); }
+  /** 배 길: 출발 칸 덩어리의 선착장 → 도착 칸 덩어리의 선착장(가장 가까운 것끼리). 없으면 null */
+  ferryRoute(sx, sz, gx, gz) {
+    const a0 = this.compAt(sx, sz), b0 = this.compAt(gx, gz); if (a0 < 0 || b0 < 0 || a0 === b0) return null;
+    const ps = this.piers(), near = (list, x, z) => list.sort((p, q) => Math.hypot(p.door.x - x, p.door.z - z) - Math.hypot(q.door.x - x, q.door.z - z))[0];
+    const A = near(ps.filter(p => this.compAt(p.door.x, p.door.z) === a0), sx, sz), B = near(ps.filter(p => this.compAt(p.door.x, p.door.z) === b0), gx, gz);
+    return A && B ? { A, B } : null;
+  }
+  /** 선착장 앞 물 칸(배를 대는 곳) */
+  berth(p) { const [x, z] = p.cells[0]; return { x: 2 * x - p.door.x, z: 2 * z - p.door.z }; }
+  /** 두 물 칸 사이 뱃길(물 칸만, 8방향 A*). 못 찾으면 곧은 줄 */
+  seaPath(a, b) {
+    const g = this.grid, W = g.w, open = [[a.x, a.z, 0]], dist = new Map([[a.z * W + a.x, 0]]), from = new Map();
+    const water = (x, z) => g.inBounds(x, z) && g.isWater(x, z) && (!g.get(x, z).occupiedId || BUILDINGS[this.buildings.get(g.get(x, z).occupiedId)?.defId]?.bridge);
+    const h = (x, z) => Math.hypot(x - b.x, z - b.z); let n = 0;
+    while (open.length && n++ < 40000) {
+      let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][2] + h(open[i][0], open[i][1]) < open[bi][2] + h(open[bi][0], open[bi][1])) bi = i;
+      const [x, z, d] = open.splice(bi, 1)[0];
+      if (x === b.x && z === b.z) { const out = []; let k = z * W + x; while (k !== undefined) { out.push([k % W, (k / W) | 0]); k = from.get(k); } return out.reverse().filter((_, i, arr) => i % 3 === 0 || i === arr.length - 1); }
+      for (const [dx, dz, c] of [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.41], [1, -1, 1.41], [-1, 1, 1.41], [-1, -1, 1.41]]) {
+        const nx = x + dx, nz = z + dz; if (!water(nx, nz) && !(nx === b.x && nz === b.z)) continue;
+        const k = nz * W + nx, nd = d + c; if (nd < (dist.get(k) ?? Infinity)) { dist.set(k, nd); from.set(k, z * W + x); open.push([nx, nz, nd]); }
+      }
+    }
+    return [[a.x, a.z], [b.x, b.z]];
+  }
 
   // ---- 실내 꾸미기: 잡화점(마을 등급 항구 마을)에서 집주인이 자기 돈으로 가구를 사서 자기 집에 놓음(낸 돈은 은행으로 = 회수)
   shopB() { for (const b of this.buildings.values()) if (b.defId === "shop" && this.isDone(b)) return b; return null; }
@@ -467,8 +516,8 @@ export class World {
     const b = createBuildingData(id || `b${this.nextId++}`, def, ax, az, rot, r.cells, r.door);
     b.elevation = r.elevation; b.need = 3 * (def.work ?? def.footprint.w * def.footprint.d); b.hits = hits ?? (this.instantBuild ? b.need : 0); b.busy = null;
     b.ramp = r.ramp; if (b.ramp) b.hits = Math.min(b.hits, b.need);
-    this.grid.occupy(b.cells, b.id, { kind: "building", walkable: (!!b.ramp && this.isDone(b)) || !!def.field, surface: r.elevation, ramp: b.ramp });   // 밭은 처음부터 걸어 다님   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
-    this.grid.reserveDoor(b.door.x, b.door.z, b.id);
+    this.grid.occupy(b.cells, b.id, { kind: "building", walkable: (!!b.ramp && this.isDone(b)) || !!def.field || (!!def.bridge && this.isDone(b)), surface: r.elevation, ramp: b.ramp });   // 밭은 처음부터 걸어 다님   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
+    if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
     this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
     if (this.isDone(b)) this.completed(b);
@@ -490,6 +539,7 @@ export class World {
     if (def.field) for (const [x, z] of b.cells) if (!this.isPlot(x, z)) {
       this.grid.setGround(x, z, "Dirt"); const p = { x, z, stage: "empty", t: 0, grow: 40, claimed: null, field: b.id }; this.plots.push(p); this.emit("plotAdded", p);
     }
+    if (def.bridge || def.pier) { const o = this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; } }
     if (def.dock) {
       const o = this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; }
       const [x, z] = b.cells[0]; if (!this.spots.some(s => s.x === x && s.z === z)) this.spots.push({ x, z, dir: [x - b.door.x, z - b.door.z], claimed: null, dock: b.id });
@@ -518,7 +568,7 @@ export class World {
 
   // ---- 갈매미 들어 옮기기(드래그). 건물 안에 있는 갈매미는 보이지 않으므로 들 수 없다.
   pickUpUnit(u) {
-    if (!u || u.insideBuildingId || u.state === UnitState.Held) return false;
+    if (!u || u.insideBuildingId || u.state === UnitState.Held || u.sailing) return false;   // 배 타는 중엔 못 집음
     uncommit(u, this); setIdle(u, this.rnd, this);                          // 하던 일(찜한 나무·낚시 자리·맡은 공사)을 내려놓음
     u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held; emote(u, "!?");
     return true;
@@ -596,7 +646,7 @@ export class World {
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
     for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; } }
-    w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.6; w.seedFood = 20; }
+    w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; }

@@ -1,6 +1,7 @@
 // 섬 전체에 쓰는 숫자들. three.js에 기대지 않음(테스트에서 그대로 불러 씀).
-export const GRID_W = 96;          // 섬 격자 가로 칸 수(넓은 섬). 시험용 예전 섬은 64칸으로 따로 만듦
-export const GRID_H = 96;          // 섬 격자 세로 칸 수
+export const GRID_W = 192;         // 섬 격자 가로 칸 수(본섬 + 둘레 작은 섬들). 시험용 예전 섬은 64칸으로 따로 만듦
+export const GRID_H = 192;         // 섬 격자 세로 칸 수
+export const BRIDGE_Y = 0;         // 다리 위 높이(m): 잔디(0)·모래(−0.15)에서 바로 올라섬
 export const CELL = 1;             // 한 칸 = 1 m
 export const CHUNK = 16;           // 바닥은 16×16 칸 묶음(청크)마다 메쉬 하나
 export const SEA_LEVEL = -0.2;     // 높이가 이보다 낮은 칸은 바다

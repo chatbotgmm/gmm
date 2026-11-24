@@ -22,7 +22,7 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = def.stairs ? stairsModel(b.ramp) : def.field ? fieldModel(def) : def.dock ? dockModel() : await modelFor(def, () => buildingPlaceholder(def));
+    const model = def.stairs ? stairsModel(b.ramp) : def.field ? fieldModel(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : await modelFor(def, () => buildingPlaceholder(def));
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
@@ -94,6 +94,24 @@ function dockModel() {
   for (const [x, z] of [[-0.4, -1.3], [0.4, -1.3], [-0.4, -0.5], [0.4, -0.5]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.0, 0.1), POST); p.position.set(x, -0.45, z); g.add(p); }
   return g;
 }
+
+/** 다리 한 칸: 판자 + 물속 기둥 */
+function bridgeModel() {
+  const g = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.08, 1.0), PLANK); deck.position.y = -0.03; deck.castShadow = deck.receiveShadow = true; g.add(deck);
+  for (const x of [-0.45, 0.45]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 0.08), POST); p.position.set(x, -0.6, 0); g.add(p); const r = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.28, 0.06), POST); r.position.set(x, 0.14, 0); g.add(r); }
+  return g;
+}
+/** 배(선착장에 묶인 배 · 배 타는 갈매미 밑) */
+export function boatModel() {
+  const g = new THREE.Group(), hull = new THREE.MeshStandardMaterial({ color: 0x9a6b45, roughness: 0.8 }), rim = new THREE.MeshStandardMaterial({ color: 0xe9dcc4, roughness: 0.8 });
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.22, 1.35), hull); b.position.y = 0.05; b.castShadow = true; g.add(b);
+  const bow = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.375, 0.22, 4, 1), hull); bow.rotation.set(Math.PI / 2, Math.PI / 4, 0); bow.scale.set(1, 1, 0.6); bow.position.set(0, 0.05, 0.8); g.add(bow);
+  for (const x of [-0.39, 0.39]) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 1.35), rim); s.position.set(x, 0.18, 0); g.add(s); }
+  return g;
+}
+/** 선착장: 낚시터 같은 판자 + 끝에 묶인 배 */
+function pierModel() { const g = dockModel(), boat = boatModel(); boat.position.set(0.55, -0.2, -1.5); boat.rotation.y = 0.15; g.add(boat); return g; }
 
 export async function addModuleViews(scene, world) {
   const map = new Map();
@@ -171,7 +189,8 @@ export class UnitViews {
     if (camera) { projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projView); }
     this.frameNo = (this.frameNo || 0) + 1;
     this.world.units.forEach((u, i) => {
-      const v = this.views[i], { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
+      const v = this.views[i]; if (!v) return;                                     // 막 소환돼 아직 모습이 안 만들어진 갈매미
+      const { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));
       if (v.ch && camera && (v.castOn === undefined || (this.frameNo + i) % 15 === 0)) {   // 가까운 갈매미만 실제 그림자(15프레임마다 확인)
@@ -179,6 +198,8 @@ export class UnitViews {
         if (v.castOn !== want) { v.castOn = want; v.ch.root.traverse(o => { if (o.isMesh) o.castShadow = want; }); }
       }
       this.swimLook(v, u, i, dt, time);
+      if (u.sailing) { if (!v.boat) { v.boat = boatModel(); v.g.add(v.boat); } v.boat.visible = true; v.boat.position.y = -0.12 + Math.sin(time * 2 + i) * 0.02; }   // 배 타는 중: 밑에 배
+      else if (v.boat) v.boat.visible = false;
       let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
       const walking = !!u.path && u.pathIndex < u.path.length && u.state !== "Held";
       if (ch) {

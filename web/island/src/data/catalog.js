@@ -65,6 +65,16 @@ export const BUILDINGS = {
     asset: "assets/props/street_lamp.glb", liteAsset: "assets/props/street_lamp_lite.glb", fit: { w: 0.72, d: 0.72 },   // 폭 0.72 m → 높이 약 2.3 m(갈매미 약 3배)
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
+  // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
+  bridge: {
+    id: "bridge", builtBy: "carpenter", bridge: true, cost: { wood: 1 }, tier: 1, name: "다리", footprint: { w: 1, d: 1 }, work: 1, height: 0.15, asset: null,
+    placeholder: { wall: 0xb08050, roof: 0xb08050, roof_shape: "flat" }, interior: { w: 1, d: 1 },
+  },
+  // 선착장: 물가에(문 반대쪽이 물). 선착장이 둘 넘게 있으면 갈매미가 배를 타고 다른 섬으로 감
+  pier: {
+    id: "pier", builtBy: "carpenter", pier: true, cost: { wood: 2 }, tier: 1, name: "선착장", footprint: { w: 1, d: 1 }, work: 3, height: 0.3, asset: null,
+    placeholder: { wall: 0xb08050, roof: 0xb08050, roof_shape: "flat" }, interior: { w: 1, d: 1 },
+  },
   // 저장고(겨울 대비): 농부·어부가 남는 음식을 은행에 팔면 여기 쌓이고, 배고픈 갈매미가 사 가거나(돈이 없고 아주 배고프면 나눠 줌) 겨울을 남
   storehouse: {
     id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.2, asset: null,

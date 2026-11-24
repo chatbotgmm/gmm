@@ -146,6 +146,12 @@ export class Tools {
       }
     }
     else if (this.mode === "build") {                                            // 누르면 자리만 정함 → 🔨 건설 버튼(또는 Enter)으로 지음
+      if (BUILDINGS[this.buildId].bridge) {                                       // 다리: 처음 누른 칸 → 끝 칸(곧은 줄, 가로나 세로)
+        const p = this.plan;
+        if (!p || !p.bridge || p.done) this.plan = { x: h.x, z: h.z, x1: h.x, z1: h.z, bridge: true, done: false };
+        else { if (Math.abs(h.x - p.x) >= Math.abs(h.z - p.z)) { p.x1 = h.x; p.z1 = p.z; } else { p.x1 = p.x; p.z1 = h.z; } p.done = true; }
+        this.refresh(); return;
+      }
       this.plan = { x: h.x, z: h.z }; this.refresh(); return;
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
@@ -156,8 +162,19 @@ export class Tools {
   }
 
   /** 정해 둔 자리에 짓기(🔨 건설). */
+  /** 다리 줄의 칸들과 그중 놓을 수 있는(물) 칸 */
+  bridgeLine(p) {
+    const cells = [], sx = Math.sign(p.x1 - p.x), sz = Math.sign(p.z1 - p.z), n = Math.max(Math.abs(p.x1 - p.x), Math.abs(p.z1 - p.z));
+    for (let i = 0; i <= n; i++) cells.push([p.x + sx * i, p.z + sz * i]);
+    const ok = cells.filter(([x, z]) => this.world.check("bridge", x, z, 0).ok), water = cells.filter(([x, z]) => this.world.grid.isWater(x, z));
+    return { cells, ok, water };
+  }
   confirmBuild() {
     const h = this.plan; if (this.mode !== "build" || !h) return;
+    if (h.bridge) {
+      const { ok } = this.bridgeLine(h); let n = 0; for (const [x, z] of ok) if (this.world.placeBuilding("bridge", x, z, 0).ok) n++;
+      this.plan = null; this.refresh(); this.onStatus(n ? `다리 ${n}칸 공사를 시작했어요 · 🪚 목수가 땅 쪽부터 한 칸씩 놓아요` : "놓을 수 있는 물 칸이 없어요"); return;
+    }
     const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
     if (r.ok) this.plan = null;
     this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요` : `${def.name} 공사를 시작했어요 · 갈매미가 나무·돌로 지어요`);
@@ -168,7 +185,8 @@ export class Tools {
   refresh() {
     const plan = this.mode === "build" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false;
-    if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok); }
+    if (this.mode === "build" && plan?.bridge) { const L = this.bridgeLine(plan); this.onPlan?.(plan.done, L.ok.length > 0); }
+    else if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok); }
     else this.onPlan?.(false);
     if (!h) { this.buildingViews.setHighlight(null); return; }
     const cell = grid.get(h.x, h.z);
@@ -177,6 +195,13 @@ export class Tools {
       this.cursor.visible = true; this.cursor.scale.set(this.brush, this.brush, 1);
       this.cursor.position.set(toWorldX(h.x + 0.5), top + 0.03, toWorldZ(h.z + 0.5));
       this.cursor.material.color.setHex(cells.some(([x, z]) => this.mode === "height" ? this.world.canReshape(x, z) : this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
+    } else if (this.mode === "build" && plan?.bridge) {                           // 다리 줄 미리보기: 줄 전체를 한 상자로
+      const L = this.bridgeLine(plan.done ? plan : { ...plan, x1: this.hover?.x ?? plan.x, z1: this.hover?.z ?? plan.z }), [ax, az] = L.cells[0], [bx, bz] = L.cells[L.cells.length - 1];
+      const len = L.cells.length, horiz = az === bz, col = L.ok.length && L.ok.length === L.water.length ? OK : L.ok.length ? 0xffc04a : BAD;
+      this.ghost.visible = true; this.ghost.rotation.y = 0; this.ghost.position.set(toWorldX((ax + bx) / 2 + 0.5), 0, toWorldZ((az + bz) / 2 + 0.5));
+      this.ghostBox.scale.set(horiz ? len : 0.9, 0.15, horiz ? 0.9 : len); this.ghostBox.position.y = 0.05; this.ghostFloor.scale.set(horiz ? len : 1, horiz ? 1 : len, 1); this.ghostFloor.position.y = 0.04;
+      this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
+      this.onStatus(plan.done ? `다리 ${L.ok.length}칸(나무 ${L.ok.length}) · 🔨 건설을 누르면 지어요 · 다시 누르면 새로 정하기` : "다리 끝 칸을 누르세요(가로나 세로로 곧게)");
     } else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.check(this.buildId, a.x, a.z, this.rot);
       const y = r.ok ? r.elevation : Math.max(0, cell.elevation), col = r.ok ? OK : BAD;

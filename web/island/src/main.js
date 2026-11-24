@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { World, SPEED_BOOST } from "./world/World.js";
+import { GRID_W } from "./config.js";
 import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
@@ -52,7 +53,7 @@ const SUN_OFF = new THREE.Vector3(-26, 24, 14), SHADOW_R = 26;
 Object.assign(sun.shadow.camera, { left: -SHADOW_R, right: SHADOW_R, top: SHADOW_R, bottom: -SHADOW_R, near: 1, far: 100 }); scene.add(sun.target);
 sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; scene.add(sun);
 const water = createWater(); scene.add(water);
-const clouds = createClouds(); scene.add(clouds);
+const clouds = createClouds(18, 80, 150); scene.add(clouds);   // 넓은 지도(192 m)를 덮게
 // 현실 시간대(기기 시계): 해·하늘·안개·바다·구름·등대 / 툰 셰이딩(재질을 단계 명암으로)
 const daylight = new Daylight({ scene, renderer, sun, hemi, water, clouds, skyTex: scene.background });
 const toon = new Toon(scene); let lastToon = 0;
@@ -133,7 +134,8 @@ function saveNow(quiet = true) {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize())); lastSaved = Date.now(); if (!quiet) hud?.status("저장했어요(이 브라우저에만 · 1분마다 자동 저장)"); return true; }
   catch (e) { if (!quiet) hud?.status("저장하지 못했어요: " + e.message); return false; }
 }
-function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const w = World.fromJSON(JSON.parse(s)); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }
+let oldMap = false;
+function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const j = JSON.parse(s); if (j.grid?.w !== GRID_W) { oldMap = true; return null; } const w = World.fromJSON(j); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }   // 지도 크기가 바뀐 예전 저장은 새 섬으로
 const savedWorld = loadSaved(); resumed = !!savedWorld;
 const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 기본 갈매미 한 마리 → 🥚 소환으로 더
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
@@ -161,7 +163,8 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 // 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
 Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
-  if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`);
+  if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요");
+  else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`);
   else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요");
   else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 🏠 건물 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)");
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`);

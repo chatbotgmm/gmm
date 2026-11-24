@@ -115,7 +115,8 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
 // 처음엔 자연만: 만과 곶이 있는 들쭉날쭉한 해안선, 넓은 잔디 평야, 북서쪽 고지대(등고선처럼 굴곡진 잔디 단이 층층이,
 // 단 가장자리는 회색 바위 비탈, 단 사이는 흙길 비탈로 이어짐), 고지대 기슭 동굴(둘레 광석 바위), 숲 세 곳, 낮은 언덕, 곶 끝 등대, 해변 바위.
 // 가운데는 공식은행 자리로 비워 둠(World.create에서 지음). 시장·밭·낚시터·집은 갈매미가 지음.
-export const WILD = { size: 96, r: 33 };
+export const WILD = { size: 192, r: 43 };
+const ISL_S = WILD.r / 33;               // 예전(반지름 33) 기준으로 잡은 위치·크기를 본섬 크기에 맞춰 늘리는 배율
 const TERRACE = 0.9;                 // 고지대 한 층 높이(m): 걸어서는 못 오름(흙길 비탈로만). 가장자리는 돌벽
 
 /** 값 노이즈(격자 꼭짓점 난수를 부드럽게 보간) + 여러 겹(fbm) */
@@ -131,11 +132,11 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
   const rnd = seededRandom(seed), grid = new Grid(w, h), noise = makeNoise(seed);
   const cx = w / 2, cz = h / 2, ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
   // 해안선: 큰 굴곡 + 만 세 곳(남서·남·동쪽, 부두 놓기 좋은 곳) + 북동쪽 곶(등대)
-  const bays = [{ a: Math.PI * 0.72, d: 7, wd: 0.22 }, { a: Math.PI * 0.42, d: 6, wd: 0.18 }, { a: Math.PI * 0.05, d: 6, wd: 0.2 }];
+  const bays = [{ a: Math.PI * 0.72, d: 7 * ISL_S, wd: 0.22 }, { a: Math.PI * 0.42, d: 6 * ISL_S, wd: 0.18 }, { a: Math.PI * 0.05, d: 6 * ISL_S, wd: 0.2 }];
   const coast = a => {
     let r = WILD.r * (1 + 0.1 * Math.sin(2 * a + ph[0]) + 0.07 * Math.sin(3 * a + ph[1]) + 0.04 * Math.sin(7 * a + ph[2]));
     for (const b of bays) { const d = Math.atan2(Math.sin(a - b.a), Math.cos(a - b.a)); r -= b.d * Math.exp(-(d * d) / (2 * b.wd * b.wd)); }
-    const cape = Math.atan2(Math.sin(a + Math.PI / 4), Math.cos(a + Math.PI / 4)); r += 7 * Math.exp(-(cape * cape) / (2 * 0.1 * 0.1));   // 북동 곶
+    const cape = Math.atan2(Math.sin(a + Math.PI / 4), Math.cos(a + Math.PI / 4)); r += 7 * ISL_S * Math.exp(-(cape * cape) / (2 * 0.1 * 0.1));   // 북동 곶
     return Math.min(r, w / 2 - 3);
   };
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
@@ -149,7 +150,7 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
   const freeGrass = (x, z) => grid.inBounds(x, z) && !grid.isWater(x, z) && grid.get(x, z).groundType === GroundType.Grass && !used.has(key(x, z));
 
   // 고지대: 북서쪽에 굴곡진 덩어리(노이즈) → 층(TERRACE m)으로 나눔. 바다에서 4칸 안쪽까지만.
-  const hl = { x: cx - 15, z: cz - 14, rx: 21, rz: 17 };
+  const hl = { x: cx - 15 * ISL_S, z: cz - 14 * ISL_S, rx: 21 * ISL_S, rz: 17 * ISL_S };
   const level = new Map();
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
     const c = grid.get(x, z); if (c.groundType !== GroundType.Grass) continue;
@@ -268,7 +269,7 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     modules.push({ id: `ore-${k + 1}`, defId: "ore", cells: [[x, z]], rot: k % 4, variant: k % 3 }); used.add(key(x, z)); k++;
   }
   // 등대: 북동 곶 끝의 모래 2×2
-  for (let r = WILD.r + 10; r > 12; r -= 0.5) {
+  for (let r = WILD.r + 10 * ISL_S; r > 12; r -= 0.5) {
     const a = -Math.PI / 4, x = Math.floor(cx + r * Math.cos(a)), z = Math.floor(cz + r * Math.sin(a));
     const cells = [[x, z], [x + 1, z], [x, z + 1], [x + 1, z + 1]];
     if (cells.every(([px, pz]) => grid.inBounds(px, pz) && !grid.isWater(px, pz))) { modules.push({ id: "lighthouse-1", defId: "lighthouse", cells, rot: 0 }); cells.forEach(([px, pz]) => used.add(key(px, pz))); break; }
@@ -277,7 +278,7 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
   for (let z = cz - 6; z <= cz + 5; z++) for (let x = cx - 6; x <= cx + 6; x++) used.add(key(x, z));
   for (const k of ramps) used.add(k);
   // 숲 세 곳 + 평야에 드문드문
-  const forests = [{ x: cx - 20, z: cz + 13, n: 14, r: 5.5 }, { x: cx + 17, z: cz + 12, n: 12, r: 5 }, { x: cx + 12, z: cz - 17, n: 10, r: 4.5 }];
+  const forests = [{ x: cx - 20 * ISL_S, z: cz + 13 * ISL_S, n: 22, r: 7 }, { x: cx + 17 * ISL_S, z: cz + 12 * ISL_S, n: 18, r: 6.5 }, { x: cx + 12 * ISL_S, z: cz - 17 * ISL_S, n: 15, r: 6 }];
   let tid = 1;
   const okTree = (x, z) => freeGrass(x, z) && !near(x, z, 2);
   for (const f of forests) for (let k = 0, tries = 0; k < f.n && tries < 4000; tries++) {
@@ -285,20 +286,20 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     if (!okTree(x, z) || grid.get(x, z).elevation !== 0) continue;
     modules.push({ id: `tree-${tid}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: tid % 5 }); used.add(key(x, z)); tid++; k++;
   }
-  for (let k = 0, tries = 0; k < 14 && tries < 4000; tries++) {
+  for (let k = 0, tries = 0; k < 24 && tries < 6000; tries++) {
     const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h);
-    if (!okTree(x, z) || grid.get(x, z).elevation !== 0 || near(x, z, 4)) continue;   // 평지 잔디만(고지대 좁은 단의 길을 막지 않게)
+    if (Math.hypot(x - cx, z - cz) > WILD.r * 1.3 || !okTree(x, z) || grid.get(x, z).elevation !== 0 || near(x, z, 4)) continue;   // 평지 잔디만(고지대 좁은 단의 길을 막지 않게)
     modules.push({ id: `tree-${tid}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: tid % 5 }); used.add(key(x, z)); tid++; k++;
   }
   // 해변 바위
-  for (let k = 0, tries = 0; k < 10 && tries < 1000; tries++) {
-    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z);
-    if (grid.isWater(x, z) || c.groundType !== GroundType.Sand || c.elevation > -0.05 || near(x, z, 5)) continue;
+  for (let k = 0, tries = 0; k < 14 && tries < 3000; tries++) {
+    const x = Math.floor(cx + (rnd() - 0.5) * WILD.r * 2.6), z = Math.floor(cz + (rnd() - 0.5) * WILD.r * 2.6), c = grid.get(x, z);
+    if (!c || grid.isWater(x, z) || c.groundType !== GroundType.Sand || c.elevation > -0.05 || near(x, z, 5)) continue;
     modules.push({ id: `rock-${k + 1}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: k % 3 }); used.add(key(x, z)); k++;
   }
   // 야자수: 바닷가 모래(물에서 3칸 안), 서로 3칸 넘게 떨어뜨려 12그루. 다른 것을 다 놓은 뒤에 놓아 섬 모양·나무 자리는 그대로
-  for (let k = 0, tries = 0; k < 12 && tries < 4000; tries++) {
-    const x = Math.floor(rnd() * w), z = Math.floor(rnd() * h), c = grid.get(x, z);
+  for (let k = 0, tries = 0; k < 16 && tries < 6000; tries++) {
+    const x = Math.floor(cx + (rnd() - 0.5) * WILD.r * 2.6), z = Math.floor(cz + (rnd() - 0.5) * WILD.r * 2.6), c = grid.get(x, z);
     if (!c || grid.isWater(x, z) || c.groundType !== GroundType.Sand || used.has(key(x, z)) || near(x, z, 3)) continue;
     let wet = false; for (let dz = -3; dz <= 3 && !wet; dz++) for (let dx = -3; dx <= 3; dx++) if (grid.inBounds(x + dx, z + dz) && grid.isWater(x + dx, z + dz)) { wet = true; break; }
     if (!wet) continue;
@@ -307,6 +308,48 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
   const zones = [{ id: "highland", label: "⛰ 고지대", x: hl.x, z: hl.z }, { id: "cave", label: "🕳 동굴", x: caveAt.x, z: caveAt.z + 1 },
     ...forests.map((f, i) => ({ id: `forest${i}`, label: "🌲 숲", x: f.x, z: f.z })), { id: "bank", label: "🏦 공식은행", x: cx, z: cz - 3 }];
   if (typeof pondAt !== "undefined") zones.push({ id: "pond", label: "💧 연못", x: pondAt.x, z: pondAt.z });
+  addIslets(grid, rnd, noise, modules, used, zones, cx, cz, coast);
   grid.markAllDirty();
   return { grid, modules, spots: [], zones, plots: [], stall: null, center: { x: cx, z: cz } };
+}
+
+// ---------------------------------------------------------------- 둘레 작은 섬들(본섬 바다 건너)
+// 가까운 섬은 목수가 다리를 놓아 걸어가고, 먼 섬은 선착장에서 배를 타고 감. 섬마다 특색: 숲·광석·야자·들판·조개
+export const ISLETS = [
+  { kind: "forest", label: "🌲 숲섬", a: Math.PI * 0.86, gap: 8, r: 12 },
+  { kind: "mine", label: "⛏ 바위섬", a: -Math.PI * 0.62, gap: 9, r: 11 },
+  { kind: "meadow", label: "🌼 들판섬", a: Math.PI * 0.08, gap: 9, r: 12 },
+  { kind: "palm", label: "🌴 야자섬", a: Math.PI * 0.36, gap: 18, r: 10 },
+  { kind: "shell", label: "🐚 조개섬", a: Math.PI * 0.62, gap: 24, r: 6 },
+];
+function addIslets(grid, rnd, noise, modules, used, zones, cx, cz, coast) {
+  const key = (x, z) => `${x},${z}`, half = grid.w / 2;
+  const near = (x, z, d) => [...used].some(k => { const [ux, uz] = k.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < d; });
+  let tid = 1000, oid = 100, pid = 100, rid = 100;
+  for (const isl of ISLETS) {
+    const dist = Math.min(half - isl.r - 4, coast(isl.a) + isl.gap + isl.r), ix = cx + Math.cos(isl.a) * dist, iz = cz + Math.sin(isl.a) * dist;
+    const R = isl.r, cells = [];
+    for (let z = Math.floor(iz - R * 1.6); z <= iz + R * 1.6; z++) for (let x = Math.floor(ix - R * 1.6); x <= ix + R * 1.6; x++) {
+      const c = grid.get(x, z); if (!c) continue;
+      const a = Math.atan2(z + 0.5 - iz, x + 0.5 - ix), rr = Math.hypot(x + 0.5 - ix, z + 0.5 - iz) / (R * (1 + 0.12 * Math.sin(3 * a + isl.r) + 0.08 * Math.sin(5 * a))) + (noise(x * 0.2 + 40, z * 0.2) - 0.5) * 0.25;
+      if (rr < 0.72 && isl.kind !== "shell") { c.groundType = GroundType.Grass; c.elevation = 0; cells.push([x, z, rr]); }
+      else if (rr < 1) { c.groundType = GroundType.Sand; c.elevation = -Math.round(15 * Math.max(0, rr - 0.72) / 0.28) / 100; cells.push([x, z, rr]); }
+      else if (rr < 1.6 && c.elevation < -0.3) c.elevation = Math.max(c.elevation, -0.3 - (rr - 1) * 1.1);   // 섬 둘레 얕은 바다
+    }
+    const free = (x, z, ground) => { const c = grid.get(x, z); return c && !grid.isWater(x, z) && c.groundType === ground && !used.has(key(x, z)) && c.elevation >= -0.06; };
+    const pick = (n, ground, spacing, put, inner = 1) => { for (let k = 0, t = 0; k < n && t < 800; t++) { const [x, z, rr] = cells[Math.floor(rnd() * cells.length)]; if (rr > inner || !free(x, z, ground) || near(x, z, spacing)) continue; put(x, z); used.add(key(x, z)); k++; } };
+    const tree = (x, z) => modules.push({ id: `tree-${tid++}`, defId: "tree", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: tid % 5 });
+    const palm = (x, z) => modules.push({ id: `palm-${pid++}`, defId: "palm", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: 0 });
+    const ore = (x, z) => modules.push({ id: `ore-${oid++}`, defId: "ore", cells: [[x, z]], rot: oid % 4, variant: oid % 3 });
+    const rock = (x, z) => modules.push({ id: `rock-${rid++}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: rid % 3 });
+    if (isl.kind === "forest") pick(26, GroundType.Grass, 2, tree);
+    if (isl.kind === "mine") {                                                   // 가운데 바위 언덕(못 오름) + 둘레 광석 10개
+      for (const [x, z, rr] of cells) if (rr < 0.38) { const c = grid.get(x, z); c.groundType = GroundType.Rock; c.elevation = rr < 0.2 ? 1.8 : 0.9; used.add(key(x, z)); }
+      pick(10, GroundType.Grass, 2, ore, 0.7); pick(3, GroundType.Sand, 4, rock);
+    }
+    if (isl.kind === "meadow") { pick(4, GroundType.Grass, 5, tree, 0.6); }    // 넓은 잔디: 밭·집 지을 자리
+    if (isl.kind === "palm") { pick(9, GroundType.Sand, 3, palm); pick(3, GroundType.Grass, 3, palm); pick(2, GroundType.Sand, 4, rock); }
+    if (isl.kind === "shell") { pick(3, GroundType.Sand, 3, palm); pick(2, GroundType.Sand, 3, rock); }
+    zones.push({ id: `islet-${isl.kind}`, label: isl.label, x: ix, z: iz });
+  }
 }

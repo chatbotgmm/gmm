@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { WATER_Y, toWorldX, toWorldZ } from "../config.js";
 
-export function createWater(size = 300) {
+export function createWater(size = 480) {
   const depthTex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RedFormat); depthTex.needsUpdate = true;
   const mat = new THREE.ShaderMaterial({
     transparent: true, fog: true, depthWrite: false,
@@ -26,7 +26,7 @@ export function createWater(size = 300) {
       void main() {
         vec2 p = vWorld.xz, uv = (p - uOrigin) / uSize;
         vec2 cuv = clamp(uv, vec2(0.0), vec2(1.0));
-        float far = max(0.0, length(p) - 36.0);                                          // 섬 중심에서 36 m 넘게 떨어진 만큼(둥글게, 격자 끝에서 끊기지 않게)
+        float far = max(0.0, max(abs(p.x), abs(p.y)) - (uSize.x * 0.5 - 6.0));             // 지도 끝 바깥으로 갈수록 깊게(지도 안은 섬 높이 텍스처가 정함)
         float depth = texture2D(uDepth, cuv).r * 3.0 + far * 0.035;                       // 물 깊이(m): 섬 높이 + 먼 바다일수록 점점 깊게
         float w = sin(p.x * 0.9 + uTime * 0.8) * 0.5 + sin(p.y * 1.1 - uTime * 0.6) * 0.5 + sin((p.x + p.y) * 0.4 + uTime * 0.5);
         vec3 col = mix(uShallow, uMid, smoothstep(0.05, 0.45, depth));
@@ -52,9 +52,14 @@ export function createWater(size = 300) {
   /** 섬 높이로 물 깊이 텍스처를 (다시) 만듦. 칸마다 1화소, 선형 보간으로 부드럽게. */
   mesh.userData.setGrid = grid => {
     const W = grid.w, H = grid.h, data = new Uint8Array(W * H);
+    // 땅에서 먼 바다일수록 더 깊게(섬 사이 넓은 바다가 진한 파랑): 가장 가까운 땅까지 칸 수(너비 우선)
+    const dist = new Int16Array(W * H).fill(-1), q = [];
+    for (let i = 0; i < W * H; i++) if (grid.cells[i].elevation >= -0.6) { dist[i] = 0; q.push(i); }
+    for (let h = 0; h < q.length; h++) { const i = q[h], x = i % W, z = (i / W) | 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue; const ni = nz * W + nx; if (dist[ni] < 0) { dist[ni] = dist[i] + 1; q.push(ni); } } }
     for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
-      const e = grid.get(x, z).elevation, d = Math.max(0, Math.min(3, WATER_Y - e));
-      data[z * W + x] = Math.round(d / 3 * 255);
+      const i = z * W + x, e = grid.cells[i].elevation, d = Math.max(0, Math.min(3, WATER_Y - e + Math.max(0, dist[i]) * 0.07));
+      data[i] = Math.round(d / 3 * 255);
     }
     let tex = mat.uniforms.uDepth.value;
     if (tex.image.width !== W || tex.image.height !== H) {
