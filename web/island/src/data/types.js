@@ -18,7 +18,7 @@ export const UnitState = Object.freeze({
   Forage: "Forage", Eat: "Eat", Visit: "Visit", Greet: "Greet", Zoomies: "Zoomies", Flee: "Flee", Avoid: "Avoid",
   GoChop: "GoChop", Chop: "Chop", GoMine: "GoMine", Mine: "Mine", GoFish: "GoFish", Fish: "Fish", GoBuild: "GoBuild", Build: "Build",
   GoTrade: "GoTrade", Trade: "Trade", GoFarm: "GoFarm", Farm: "Farm",   // 상인·농부
-  Sleep: "Sleep", Curious: "Curious", GoSwim: "GoSwim", Swim: "Swim", GoBank: "GoBank", GoMarket: "GoMarket", GoShore: "GoShore",   // 은행에 팔러 · 시장에 사러   // 헤엄치러 감 · 헤엄                                  // 지쳐서 잠 · 구경하러 감
+  Sleep: "Sleep", Curious: "Curious", GoSwim: "GoSwim", Swim: "Swim", GoBank: "GoBank", GoMarket: "GoMarket", GoShore: "GoShore", GoImprove: "GoImprove", Improve: "Improve",   // 은행에 팔러 · 시장에 사러   // 헤엄치러 감 · 헤엄                                  // 지쳐서 잠 · 구경하러 감
 });
 
 /**

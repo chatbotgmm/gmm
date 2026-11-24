@@ -6,6 +6,7 @@
 import { GroundType } from "../data/types.js";
 import { BUILDINGS } from "../data/catalog.js";
 import { comfort } from "./furniture.js";
+import { yardFlat } from "./improve.js";
 
 export const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 export function isPaved(world, x, z) {
@@ -50,6 +51,7 @@ export function satisfaction(world, u, net = world.roads?.net) {
     if (deco) parts.push(["🌷 집 근처 장식", Math.min(10, deco * 2)]);
     if ([...world.buildings.values()].some(b => b.defId === "cafe" && world.isDone(b) && near(b, 30))) parts.push(["☕ 가까운 카페", 5]);
     if (world.powered?.(home)) parts.push(["⚡ 전기", 8]);
+    if (yardFlat(world, home)) parts.push(["🏡 고른 마당", 5]);
   }
   return { value: Math.max(0, Math.min(100, parts.reduce((s, p) => s + p[1], 0))), parts };
 }

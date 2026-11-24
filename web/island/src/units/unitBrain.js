@@ -12,6 +12,7 @@ import { findPath, nearestWalkable } from "../world/pathfinding.js";
 import * as M from "./mind.js";
 import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
+import * as IM from "../world/improve.js";
 import { FURNITURE } from "../data/catalog.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
@@ -57,6 +58,7 @@ export function uncommit(u, world) {
 export function setIdle(u, rnd, world = null, secs = null) {
   if (u.activity) { M.learn(u, u.activity, -0.2); u.activity = null; }   // 끝내지 못하고 그만둔 일 = 조금 나쁜 경험
   release(u);
+  if (u.improve && world) { for (const [x, z] of u.improve.cells) world.improveClaims?.delete(`${x},${z}`); u.improve = null; }   // 고치던 일을 그만두면 찜 풀기
   u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null; if (!u.sailing) u.ferry = null;
   u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined; u.swimming = false; u.swimGoal = null;   // 물속에서 그만두면 다음 프레임에 가까운 땅으로 올라옴
 }
@@ -392,6 +394,30 @@ export function interactNear(u, world, rnd = Math.random, R = 2.6, prefer = null
   return null;
 }
 
+/** 동네 고치기 시작: 계획을 세우고 첫 칸으로 감 */
+function startImprove(u, world, rnd) {
+  const plan = IM.planImprovement(world, u); if (!plan) return false;
+  const home = world.buildings.get(u.home);
+  if (plan.kind === "deco") { const b = IM.orderDeco(world, home, rnd); if (!b) return false; emote(u, `🌷 ${BUILDINGS[b.defId].name} 주문!`, 2.5); world.emit("improve", { u, kind: "deco", b }); done(u, 0.6, rnd, world); return true; }
+  world.improveClaims ||= new Set(); for (const [x, z] of plan.cells) world.improveClaims.add(`${x},${z}`);
+  u.improve = { ...plan, i: 0, paved: 0 };
+  if (!improveNext(u, world)) { endImprove(u, world); return false; }
+  emote(u, plan.kind === "pave" ? "🛣 길 깔러!" : "🏡 마당 고르기!", 2.2); u.activity = "build"; return true;
+}
+function improveNext(u, world) {
+  const im = u.improve; while (im && im.i < im.cells.length) { const [x, z] = im.cells[im.i]; if (pathBeside(u, world, x, z) || startPath(u, world, x, z)) { u.state = US.GoImprove; return true; } im.i++; }
+  return false;
+}
+function endImprove(u, world) { const im = u.improve; if (im) for (const [x, z] of im.cells) world.improveClaims?.delete(`${x},${z}`); u.improve = null; u.tool = null; }
+/** 한 칸 고치기: 길은 돌길로 칠하고(돌: 가방 → 은행 창고), 마당은 문 높이로 높이거나 낮춤 */
+function improveCell(u, world) {
+  const im = u.improve, [x, z] = im.cells[im.i];
+  if (im.kind === "pave" && world.canPaint(x, z)) {
+    if (im.paved % IM.STONE_PER === 0) { if ((u.inv?.stone || 0) > 0) u.inv.stone--; else if ((world.res.stone || 0) > 0) world.res.stone--; else return false; }
+    world.paint(x, z, "Cobble"); im.paved++;
+  } else if (im.kind === "yard" && world.canReshape(x, z)) { world.reshape(x, z, "flatten", im.target, 1); }
+  world.emit("improve", { u, kind: im.kind, x, z }); return true;
+}
 function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
   if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
@@ -414,6 +440,8 @@ function chooseNext(u, world, rnd) {
       if (want && (u.coins || 0) >= price + 2 * world.foodPrice() && startPath(u, world, shop.door.x, shop.door.z)) { u.state = US.GoMarket; u.shop = { kind: "furnish", id: want }; emote(u, `${FURNITURE[want].name} 사러!`); return; }
     }
   }
+  // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 시장/은행까지 돌길 · 장식 주문. 낮을수록 더 자주
+  if (world.economy && (u.sat ?? 100) < 75 && !u.committed && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy < 20 && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠
   // 성격 + 직업 특기 × 욕구(급한 욕구를 채우는 일) × 배운 취향(해 보니 좋았던 일)
@@ -685,6 +713,17 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       } else setIdle(u, rnd, world);
       break;
     }
+    case US.GoImprove:
+      if (!u.improve) { setIdle(u, rnd, world); break; }
+      if (followPath(u, dt, world, rnd)) { const [x, z] = u.improve.cells[u.improve.i]; face(u, x + 0.5, z + 0.5); u.state = US.Improve; u.tool = u.improve.kind === "pave" ? "hammer" : "pickaxe"; }
+      break;
+    case US.Improve:
+      if (!u.improve) { setIdle(u, rnd, world); break; }
+      workLoop(u, dt, u.improve.kind === "pave" ? "Build" : "Mine", 2, () => {}, () => {
+        const ok = improveCell(u, world); u.improve.i++;
+        if (!ok || u.improve.i >= u.improve.cells.length || !improveNext(u, world)) { const kind = u.improve.kind; endImprove(u, world); emote(u, kind === "pave" ? "🛣 길 완성!" : "🏡 마당 끝!", 2.2); M.learn(u, "build", 0.8); done(u, 1.4, rnd, world); }
+      });
+      break;
     case US.Greet: case US.Eat: case US.Farm: break;          // doOnce가 끝나면 풀림
     default: setIdle(u, rnd, world);
   }
