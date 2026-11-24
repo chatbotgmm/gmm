@@ -26,6 +26,10 @@ export class BuildingViews {
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
+    if (def.id === "bench") {                                                       // 좌판 높이를 모델에서 직접 잼(앉을 때 엉덩이를 맞춤): 칸 가운데(앞쪽으로 0.12)에서 위→아래 광선
+      holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.12).applyMatrix4(holder.matrixWorld);
+      const hit = new THREE.Raycaster(o, new THREE.Vector3(0, -1, 0)).intersectObject(model, true)[0]; if (hit) b.seatY = hit.point.y;
+    }
     v.height = new THREE.Box3().setFromObject(model).max.y + 0.35;                // 🐦 표시는 실제 지붕 위에
   }
   /** 공사 중인 건물은 진행만큼 아래에서부터 솟아오르고, 반투명한 비계 상자가 둘러싼다. */
@@ -249,6 +253,15 @@ export class UnitViews {
       m.material.opacity = 0.55 * (1 - ph) * k;
     });
   }
+  /** 앉은 자세에서 엉덩이(몸통 바닥)가 몸 원점보다 얼마나 위에 있는지(m): 골반 뼈 바로 아래(수평 반지름 안)의 가장 낮은 피부 꼭짓점 */
+  measureSeat(v) {
+    const g = v.g, ch = v.ch; g.updateMatrixWorld(true); let hips = null, mesh = null;
+    ch.root.traverse(o => { if (o.isBone && /^(hips|pelvis)$/i.test(o.name)) hips = o; if (o.isSkinnedMesh && !mesh) mesh = o; });
+    if (!hips || !mesh) return 0;
+    const hp = hips.getWorldPosition(new THREE.Vector3()), pos = mesh.geometry.attributes.position, p = new THREE.Vector3(), s = ch.root.getWorldScale(new THREE.Vector3()).x, R = 0.14 * s;
+    let minY = Infinity; for (let i = 0; i < pos.count; i += 2) { mesh.getVertexPosition(i, p); p.applyMatrix4(mesh.matrixWorld); if (Math.hypot(p.x - hp.x, p.z - hp.z) < R) minY = Math.min(minY, p.y); }
+    return isFinite(minY) ? minY - g.position.y : 0;
+  }
   /** 매 프레임: 위치·방향, 동작(AI가 정한 u.anim, 아니면 걷기·달리기·서 있기), 손의 도구, 낚싯줄과 찌. */
   sync(dt, playAnim, walkScale = 2.2, runScale = 1.5, speedBoost = 1, time = 0, camera = null) {
     if (camera) { projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projView); }
@@ -263,6 +276,11 @@ export class UnitViews {
         if (v.castOn !== want) { v.castOn = want; v.ch.root.traverse(o => { if (o.isMesh) o.castShadow = want; }); }
       }
       this.swimLook(v, u, i, dt, time);
+      if (u.state === "Sit" && v.ch) {                                               // 앉기: 몸통 바닥(엉덩이)이 좌판 높이(u.y)에 오게 모델을 내림. 자세가 잡힌 뒤 한 번 잼
+        v.sitT = (v.sitT || 0) + dt;
+        if (v.sitT > 0.5 && v.sitBottom === undefined) v.sitBottom = this.measureSeat(v);
+        g.position.y = u.y - (v.sitBottom ?? 0);
+      } else v.sitT = 0;
       if (u.sailing) { if (!v.boat) { v.boat = boatModel(); v.g.add(v.boat); } v.boat.visible = true; v.boat.position.y = -0.12 + Math.sin(time * 2 + i) * 0.02; }   // 배 타는 중: 밑에 배
       else if (v.boat) v.boat.visible = false;
       let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
