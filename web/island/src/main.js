@@ -256,7 +256,10 @@ function frame() {
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
-hud.onToon = () => { toon.set(!toon.on); tintGround(); return toon.on ? "툰" : "기본"; };
+const STYLES = [["toon", "툰"], ["clay", "클레이"], ["basic", "기본"]];
+function applyStyle(s) { toon.setStyle(s); roomView.toon.setStyle(s); tintGround(); try { localStorage.setItem("galmaemiman-style", s); } catch { /* 무시 */ } return STYLES.find(x => x[0] === s)[1]; }
+hud.onToon = () => applyStyle(STYLES[(STYLES.findIndex(x => x[0] === toon.style) + 1) % STYLES.length][0]);   // 그림체: 툰 → 클레이 → 기본
+{ let s0 = null; try { s0 = localStorage.getItem("galmaemiman-style"); } catch { /* 무시 */ } if (s0 && s0 !== "toon" && STYLES.some(x => x[0] === s0)) document.getElementById("toonBtn").textContent = `그림체: ${applyStyle(s0)}`; }
 hud.savedLabel = () => lastSaved ? `마지막 저장 ${new Date(lastSaved).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : "아직 저장 안 함";
 hud.timeLabel = () => daylight.label(); hud.today = () => daylight.now();
 hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}`;
