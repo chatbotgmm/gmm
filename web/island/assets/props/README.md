@@ -1,25 +1,19 @@
 # 소품 모델
 
-사용자가 Tripo로 만들어 준 모델(원본 약 6MB, 삼각형 약 9,500개, 4096px 텍스처 3장)을 게임용으로 줄인 것.
+사용자 방침(2026-11-24): 사용자가 보내는 소품·장식 모델은 면 수를 줄이지 않는다. 그래픽 설정과 관계없이 아래 원본 면 수 그대로 쓴다(텍스처만 1024px로 줄임).
 
-| 파일 | 삼각형 | 텍스처 | 쓰는 그래픽 설정 |
-|---|---|---|---|
-| street_lamp.glb | 9,561 | 기본색 1024px + 발광 마스크 256px | 최고 품질·높음 (두 번째로 받은 가는 가로등) |
-| street_lamp_lite.glb | 3,345 | 기본색 512px + 발광 마스크 256px | 보통·낮음·성능 우선 |
-| stairs_stone.glb | 9,850 | 기본색 1024px | 최고 품질·높음 (계단) |
-| stairs_stone_lite.glb | 2,955 | 기본색 512px | 보통 이하 |
-| field_plot.glb | 1,414 | 기본색 512px | 모든 단계 (밭 한 칸 틀) |
-| carrot.glb | 791 | 기본색 256px | 모든 단계 (밭 작물) |
-| cabbage.glb | 738 | 기본색 256px | 모든 단계 (밭 작물) |
-| palm.glb | 9,528 | 기본색 1024px | 최고 품질·높음 |
-| palm_lite.glb | 4,287 | 기본색 512px | 보통·낮음·성능 우선 |
-
-만든 방법: three.js로 meshopt 압축을 풀고 노멀·금속도 텍스처는 빼고(툰 셰이딩이라 거의 안 보임) 기본색만 줄여 다시 내보냄 →
-가벼운 판은 Blender 4.2 Decimate(collapse)로 삼각형을 줄임. 가로등 발광 마스크는 기본색에서 밝은 노란 유리 부분(약 8%)만 흰색으로 뽑은 것.
-| bank.glb / bank_lite.glb | 9,735 / 3,406 | 1024 / 512px | 공식은행(둥근 지붕) |
-| storehouse.glb / storehouse_lite.glb | 9,375 / 3,281 | 1024 / 512px | 저장고(돌집) |
-| bench.glb | 2,267 | 512px | 벤치(모든 단계) |
-| flower_box.glb | 2,249 | 512px | 화단(모든 단계) |
+| 파일 | 삼각형 |
+|---|---|
+| bank.glb | 9,735 |
+| bench.glb | 9,070 |
+| cabbage.glb | 9,234 |
+| carrot.glb | 9,910 |
+| field_plot.glb | 9,436 |
+| flower_box.glb | 8,998 |
+| palm.glb | 9,528 |
+| stairs_stone.glb | 9,850 |
+| storehouse.glb | 9,375 |
+| street_lamp.glb | 9,561 |
 
 ## 나무(tree_l0~l3)
 원본 47,208면(4096px 텍스처 3장, 6.3MB). 섬에 약 90그루라 단계별로 크게 줄임.
