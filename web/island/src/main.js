@@ -236,8 +236,8 @@ addEventListener("blur", () => keys.clear());
 function keyCamera(dt) {
   if (!keys.size || (keys.size === 1 && keys.has("Fast"))) return;
   const t = controls.target, off = camera.position.clone().sub(t);
-  const lift = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0);              // PC: E = 카메라 높이 올리기(내려다보기), Q = 낮추기(수평선 쪽)
-  if (lift) { const s = new THREE.Spherical().setFromVector3(off); s.phi = THREE.MathUtils.clamp(s.phi - lift * 0.9 * dt, Math.max(0.08, controls.minPolarAngle), controls.maxPolarAngle); off.setFromSpherical(s); }
+  const lift = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0);              // PC: E = 카메라를 위로, Q = 아래로(보는 각도는 그대로, 카메라와 보는 점을 함께 올리고 내림)
+  if (lift) t.y = THREE.MathUtils.clamp(t.y + lift * Math.max(3, off.length() * 0.3) * dt * (keys.has("Fast") ? 2.2 : 1), 0, 40);
   const fwd = new THREE.Vector3(-off.x, 0, -off.z).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const mv = new THREE.Vector3().addScaledVector(fwd, (keys.has("ArrowUp") ? 1 : 0) - (keys.has("ArrowDown") ? 1 : 0))
     .addScaledVector(right, (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0)).multiplyScalar(Math.max(4, off.length() * 0.6) * dt * (keys.has("Fast") ? 2.2 : 1));   // Shift = 빠르게

@@ -15,7 +15,7 @@ export class Minimap {
     this.setOn(on);
     document.getElementById("mapBtn").onclick = () => this.setOn(this.box.hidden);
     const go = e => { const r = this.cv.getBoundingClientRect(), w = this.getWorld(), gx = (e.clientX - r.left) / r.width * w.grid.w, gz = (e.clientY - r.top) / r.height * w.grid.h;
-      const off = this.camera.position.clone().sub(this.controls.target); this.controls.target.set(toWorldX(gx), 0, toWorldZ(gz)); this.camera.position.copy(this.controls.target).add(off); };
+      const off = this.camera.position.clone().sub(this.controls.target); this.controls.target.set(toWorldX(gx), this.controls.target.y, toWorldZ(gz)); this.camera.position.copy(this.controls.target).add(off); };
     this.cv.addEventListener("pointerdown", e => { e.stopPropagation(); go(e); this.drag = true; });
     this.cv.addEventListener("pointermove", e => { if (this.drag) go(e); });
     addEventListener("pointerup", () => { this.drag = false; });
