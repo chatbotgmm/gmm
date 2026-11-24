@@ -246,7 +246,7 @@ function keyCamera(dt) {
 function frame() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
-  if (ready) world.update(dt);                       // 불러오는 동안은 멈춤
+  if (ready) for (let k = 0; k < simSpeed; k++) world.update(dt);                 // 불러오는 동안은 멈춤. 시간 배수(테스트)면 마을도 여러 번 돌림
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
     roomView.update(dt); quality.frame(dt, performance.now());
     renderer.render(roomView.scene, roomView.camera); requestAnimationFrame(frame); return;
@@ -279,6 +279,12 @@ function frame() {
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
+// 시간 배수(테스트용): 시각·날짜·계절이 빨리 감 + 마을 진행(눈 쌓임·갈매미 하루)도 simSpeed배. 실제 시간 모드에서만 날짜가 바뀜
+const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];
+let simSpeed = 1;
+hud.onTimeMult = () => { const i = (TIME_MULTS.findIndex(m => m[0] === daylight.mult) + 1) % TIME_MULTS.length, [m, sp, l] = TIME_MULTS[i];
+  if (m > 1 && daylight.mode !== "real") { daylight.mode = "real"; document.getElementById("timeMode").textContent = "시간: 실제 시간"; }
+  daylight.setMult(m); simSpeed = sp; return l; };
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 const STYLES = [["toon", "툰"], ["clay", "클레이"], ["basic", "기본"]];

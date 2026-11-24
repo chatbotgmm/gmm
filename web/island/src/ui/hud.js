@@ -85,6 +85,7 @@ export class Hud {
     this.wishBtn = document.getElementById("chipWish"); this.wishBtn.onclick = () => { this.openPhone(); this.openApp("wish"); };
     this.seasonBtn = document.getElementById("seasonMode"); this.seasonBtn.onclick = () => this.setSeasonLabel(this.onSeasonMode?.());
     const tm = document.getElementById("timeMode"); tm.onclick = () => { const l = this.onTimeMode?.(); if (l) tm.textContent = `시간: ${l}`; };
+    const tx = document.getElementById("timeMult"); tx.onclick = () => { const l = this.onTimeMult?.(); if (l) tx.textContent = `시간 배수: ${l}`; };
     const tb = document.getElementById("toonBtn"); tb.onclick = () => { const l = this.onToon?.(); if (l) tb.textContent = `그림체: ${l}`; };
     addEventListener("resize", () => this.layout());
     this.setWorld(world); this.showMode("view"); this.layout();

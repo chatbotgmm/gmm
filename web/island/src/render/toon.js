@@ -19,6 +19,24 @@ function addSnow(sh) {
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.97, 1.0), clamp(uObjSnow * snowUp * (0.75 + 0.3 * snowN), 0.0, 1.0));`);
 }
 
+// 툰 그림자 보정(그늘 밝기 TOON_SHADE: 빛을 등진 면과 그림자 속이 같은 밝기). three.js 툰은 빛 반대쪽 면도 (N·L×0.5+0.5)로 42~62% 햇빛을 받는데, 그 면에 그림자 판정까지 곱해서
+// 판정이 0/1로 흔들리는 곳(빛을 등진 벽·스치는 면)에 가는 줄무늬가 생겼음. 그림자를 따로 받아 명암 단계 좌표에 넣음:
+// 빛을 등진 면은 판정 없이 그늘 밝기, 빛을 받는 면은 그림자 속이면 같은 그늘 밝기(이전엔 그림자 0·등진 면 0.42라 서로 달랐음).
+// 빛과 거의 나란한 면(N·L 0~0.08)은 판정을 서서히 빼서 스치는 각도의 줄무늬도 없앰.
+const TOON_SHADE = 0.15;
+const TOON_SHADOW_PARS = THREE.ShaderChunk.lights_toon_pars_fragment.replace("void RE_Direct_Toon", "float toonShadow = 1.0;\nvoid RE_Direct_Toon")
+  .replace("vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;", `float tNL = dot( geometryNormal, directLight.direction );
+	float tLit = tNL > 0.0 ? mix( 1.0, toonShadow, smoothstep( 0.0, 0.08, tNL ) ) : 0.0;
+	vec3 irradiance = mix( vec3( ${TOON_SHADE.toFixed(2)} ), getGradientIrradiance( geometryNormal, directLight.direction ), tLit ) * directLight.color;
+	toonShadow = 1.0;`);
+const DIR_SHADOW = "directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ]";
+const TOON_LIGHTS_BEGIN = THREE.ShaderChunk.lights_fragment_begin.replace(DIR_SHADOW, "toonShadow = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ]");
+export const TOON_SHADOW_OK = TOON_SHADOW_PARS.includes("toonShadow = 1.0;\n") && TOON_LIGHTS_BEGIN !== THREE.ShaderChunk.lights_fragment_begin;   // three.js 판이 바뀌어 글자가 안 맞으면 보정 안 함
+export function addToonShadow(sh) {
+  if (!TOON_SHADOW_OK) return;
+  sh.fragmentShader = sh.fragmentShader.replace("#include <lights_toon_pars_fragment>", TOON_SHADOW_PARS).replace("#include <lights_fragment_begin>", TOON_LIGHTS_BEGIN);
+}
+
 // 클레이(점토) 느낌: 명암을 끊지 않는 무광 + 손으로 빚은 듯한 잔 울퉁불퉁(노멀 흔들기) + 부드러운 테두리 밝힘(림) + 살짝 진한 색
 const CLAY_NOISE = `
 float clayH(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -53,7 +71,7 @@ export class Toon {
       const clay = this.style === "clay";
       t = clay ? new THREE.MeshStandardMaterial({ ...base, roughness: 1, metalness: 0 }) : new THREE.MeshToonMaterial({ ...base, gradientMap: GRAD });
       const own = Object.prototype.hasOwnProperty.call(m, "onBeforeCompile") ? m.onBeforeCompile : null, snow = this.snow && !m.userData.noSnow;   // 지붕 색 바꾸기 같은 셰이더 수정도 옮김 + 눈
-      if (own || snow || clay) { t.onBeforeCompile = (sh, r) => { own?.call(t, sh, r); if (snow) addSnow(sh); if (clay) addClay(sh); }; t.customProgramCacheKey = () => `${this.style}-${snow ? "snow-" : ""}${own ? m.customProgramCacheKey() : ""}`; }
+      t.onBeforeCompile = (sh, r) => { own?.call(t, sh, r); if (snow) addSnow(sh); if (clay) addClay(sh); else addToonShadow(sh); }; t.customProgramCacheKey = () => `${this.style}-ts-${snow ? "snow-" : ""}${own ? m.customProgramCacheKey() : ""}`;
       t.userData.src = m; t.userData.fromPatched = !!m.userData.treeSeason; this.toToon.set(m, t); this.toStd.set(t, m);   // 나무 계절 셰이더가 이미 붙은 재질을 바꾼 것(다시 붙이지 않게)
     }
     return t;

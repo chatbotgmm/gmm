@@ -29,18 +29,22 @@ function sample(e) {
 export class Daylight {
   /** mode: "real"(기기 시계) | "noon"(낮 고정) | "fast"(1분 = 1시간, 확인용) */
   constructor({ scene, renderer, sun, hemi, water, clouds, skyTex }) {
-    Object.assign(this, { scene, renderer, sun, hemi, water, clouds, skyTex }); this.mode = "real"; this.fastT = 0; this.last = -1; this.dir = new THREE.Vector3(-0.6, 0.55, 0.32);
+    Object.assign(this, { scene, renderer, sun, hemi, water, clouds, skyTex }); this.mode = "real"; this.fastT = 0; this.mult = 1; this.vMs = null; this.last = -1; this.dir = new THREE.Vector3(-0.6, 0.55, 0.32);
     this.moonColor = C(0xaebcff); this.wl = 1; this.grey = C(0x9aa3ad);          // wl: 날씨 밝기(흐림·비·폭풍이면 1보다 작음)
   }
   now() {
     if (this.mode === "noon") { const d = new Date(); d.setHours(12, 30, 0); return d; }
     if (this.mode === "fast") { const d = new Date(); d.setHours(0, 0, 0); return new Date(d.getTime() + this.fastT * 3600e3); }
+    if (this.mult > 1 && this.vMs != null) return new Date(this.vMs);           // 시간 배수(테스트용): 기기 시계에서 시작해 배수만큼 빨리 감
     return new Date();
   }
+  /** 시간 배수: 1이면 기기 시계로 돌아감. 1보다 크면 지금 보이는 시각에서 시작해 실제 1초에 mult초씩 감(날짜·계절도 따라 바뀜) */
+  setMult(m) { if (m > 1 && this.mult <= 1) this.vMs = this.now().getTime(); this.mult = m; if (m <= 1) this.vMs = null; this.last = -1; }
   /** 매 프레임(내부적으로 0.5초마다만 다시 계산) */
   update(dt, nowMs) {
     if (this.mode === "fast") this.fastT = (this.fastT + dt / 60) % 24;
-    if (nowMs - this.last < 500) { this.beam(dt); return; }
+    if (this.mult > 1 && this.vMs != null) this.vMs += dt * 1000 * this.mult;
+    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) { this.beam(dt); return; }   // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
     this.last = nowMs;
     const d = this.now(), { elev, azim } = sunPosition(d), k = sample(elev);
     this.elev = elev; this.time = d;
@@ -114,6 +118,6 @@ export class Daylight {
   label() {
     const d = this.time || new Date(), hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
     const e = this.elev ?? 30, icon = e > 6 ? "☀️" : e > -2 ? "🌇" : "🌙";
-    return `${icon} ${hh}:${mm}`;
+    return this.mult > 1 ? `${icon} ${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm} ×${this.mult}` : `${icon} ${hh}:${mm}`;
   }
 }
