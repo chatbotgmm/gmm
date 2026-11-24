@@ -61,8 +61,8 @@ export const BUILDINGS = {
   },
   // 가로등(장식): 밤에 유리가 빛나고 둘레를 밝힘. 마을 등급 점수(장식)에 들어감
   streetlamp: {
-    id: "streetlamp", builtBy: "builder", deco: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 1.7,
-    asset: "assets/props/street_lamp.glb", liteAsset: "assets/props/street_lamp_lite.glb", fit: { w: 0.55, d: 0.55 },
+    id: "streetlamp", builtBy: "builder", deco: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 2.3,
+    asset: "assets/props/street_lamp.glb", liteAsset: "assets/props/street_lamp_lite.glb", fit: { w: 0.72, d: 0.72 },   // 폭 0.72 m → 높이 약 2.3 m(갈매미 약 3배)
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   // 저장고(겨울 대비): 농부·어부가 남는 음식을 은행에 팔면 여기 쌓이고, 배고픈 갈매미가 사 가거나(돈이 없고 아주 배고프면 나눠 줌) 겨울을 남
