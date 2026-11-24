@@ -34,17 +34,20 @@ export class RoomView {
     this.ui.querySelector(".rexit").onclick = () => this.close();
     for (const b of this.ui.querySelectorAll(".rtabs button")) b.onclick = () => { this.tab = b.dataset.tab; this.refreshUI(); };
   }
+  get L() { return F.levels(this.b)[this.li] || F.levels(this.b)[0]; }
+  /** 층 바꾸기(2층집·큰 집) */
+  setLevel(i) { this.li = i; this.sel = null; this.ghost = null; this.build(); this.fit(); this.refreshUI(); this.status(`${this.L.name}`); }
   open(world, b) {
-    this.world = world; this.b = b; this.sel = null; this.ghost = null; this.isOpen = true;
+    this.world = world; this.b = b; this.sel = null; this.ghost = null; this.isOpen = true; this.li = 0;
     F.room(b); this.build();
-    const it = b.interior, span = Math.max(it.w, it.d);
+    const it = this.L, span = Math.max(it.w, it.d);
     this.controls.target.set(0, 0.4, 0); this.camera.position.set(span * 0.55, span * 0.95, span * 1.15); this.fit(); this.controls.update();
     this.touch.hidden = false; this.ui.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
     this.offFurn = () => {}; this.status(`${BUILDINGS[b.defId].name}에 들어왔어요 · 가구를 골라 방에 놓아 보세요`);
   }
   /** 화면 모양에 맞춰 방 전체가 보이게: 세로 화면은 렌즈를 넓히고 더 멀리서 */
   fit() {
-    const it = this.b.interior, a = innerWidth / innerHeight, portrait = a < 1;
+    const it = this.L, a = innerWidth / innerHeight, portrait = a < 1;
     this.camera.fov = portrait ? 55 : 40; this.camera.aspect = a; this.camera.updateProjectionMatrix();
     const span = Math.hypot(it.w, it.d) + 1, half = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const dist = span / 2 / Math.tan(half) / Math.min(1, a) * (portrait ? 1.05 : 0.95);   // 가로 폭이 화면 너비에 들어가게
@@ -57,9 +60,9 @@ export class RoomView {
   }
   status(t) { this.ui.querySelector(".rmsg").textContent = t; }
   // ---- 방 만들기
-  cellCenter(x, z, sz) { const it = this.b.interior; return new THREE.Vector3(x + sz.w / 2 - it.w / 2, 0, z + sz.d / 2 - it.d / 2); }
+  cellCenter(x, z, sz) { const it = this.L; return new THREE.Vector3(x + sz.w / 2 - it.w / 2, 0, z + sz.d / 2 - it.d / 2); }
   build() {
-    const it = this.b.interior, r = this.root; r.clear(); this.items = [];
+    const it = this.L, r = this.root; r.clear(); this.items = []; const WH = it.wallH || ROOM_WALL_H;
     const m = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95 });
     const floor = new THREE.Mesh(new THREE.BoxGeometry(it.w, 0.1, it.d), m(FLOORS[it.floor]?.color ?? 0xc49a6c)); floor.position.y = -0.05; floor.receiveShadow = true; r.add(floor);
     // 바닥 판자·타일 줄
@@ -68,15 +71,35 @@ export class RoomView {
     const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3));
     this.grid = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12 })); this.grid.userData.noToon = true; r.add(this.grid);
     const wc = WALLPAPERS[it.wallpaper]?.color ?? 0xf6eedc;
-    const back = new THREE.Mesh(new THREE.BoxGeometry(it.w + 0.15, ROOM_WALL_H, 0.15), m(wc)); back.position.set(0.075 - 0.15, ROOM_WALL_H / 2, -it.d / 2 - 0.075); back.receiveShadow = true; r.add(back);
-    const left = new THREE.Mesh(new THREE.BoxGeometry(0.15, ROOM_WALL_H, it.d), m(wc)); left.position.set(-it.w / 2 - 0.075, ROOM_WALL_H / 2, 0); left.receiveShadow = true; r.add(left);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(it.w + 0.15, WH, 0.15), m(wc)); back.position.set(0.075 - 0.15, WH / 2, -it.d / 2 - 0.075); back.receiveShadow = true; r.add(back);
+    const left = new THREE.Mesh(new THREE.BoxGeometry(0.15, WH, it.d), m(wc)); left.position.set(-it.w / 2 - 0.075, WH / 2, 0); left.receiveShadow = true; r.add(left);
     const trim = 0xe9dcc4;                                                         // 걸레받이
     const tb = new THREE.Mesh(new THREE.BoxGeometry(it.w, 0.12, 0.03), m(trim)); tb.position.set(0, 0.06, -it.d / 2 + 0.015); r.add(tb);
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, it.d), m(trim)); tl.position.set(-it.w / 2 + 0.015, 0.06, 0); r.add(tl);
     // 창문(뒷벽)·문(왼쪽 벽)
     const win = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 0.04), new THREE.MeshStandardMaterial({ color: 0xbfe4f5, emissive: 0x9fd4f0, emissiveIntensity: 0.35 })); win.position.set(Math.min(1, it.w / 2 - 1), 1.45, -it.d / 2 + 0.01); r.add(win);
     const frame = new THREE.Mesh(new THREE.BoxGeometry(1.42, 1.02, 0.03), m(0xffffff)); frame.position.copy(win.position).z -= 0.01; r.add(frame);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.8, 0.9), m(0x9a6b45)); door.position.set(-it.w / 2 + 0.01, 0.9, Math.min(1.2, it.d / 2 - 0.7)); r.add(door);
+    if (this.li === 0) { const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.8, 0.9), m(0x9a6b45)); door.position.set(-it.w / 2 + 0.01, 0.9, it.d / 2 - 0.7); r.add(door); }   // 현관은 1층만
+    // 칸막이벽(문 칸은 비움)
+    for (const wl of it.walls || []) for (let z = wl.z0; z < wl.z1; z++) {
+      if (wl.door && z >= wl.door[0] && z <= wl.door[1]) { const top = new THREE.Mesh(new THREE.BoxGeometry(0.12, WH - 2, 1), m(wc)); top.position.set(wl.x - it.w / 2, 2 + (WH - 2) / 2, z + 0.5 - it.d / 2); r.add(top); continue; }
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.12, WH * 0.85, 1), m(wc)); seg.position.set(wl.x - it.w / 2, WH * 0.425, z + 0.5 - it.d / 2); seg.castShadow = seg.receiveShadow = true; r.add(seg);
+    }
+    // 계단(아래층: 올라가는 디딤판) · 계단 구멍(위층: 난간 + 어두운 구멍)
+    const st = it.stairs;
+    if (st) {
+      const c = this.cellCenter(st.x, st.z, { w: st.w, d: st.d }), long = st.w >= st.d, n = 6, len = long ? st.w : st.d;
+      const ld = F.landing(st);
+      if (ld) { const mk = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.01, 0.9), new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.12 })); mk.position.copy(this.cellCenter(ld[0], ld[1], { w: 1, d: 1 })).y = 0.006; r.add(mk); }   // 계단 앞(비워 둠)
+      if (st.dir === "up") for (let k = 0; k < n; k++) {
+        const h = (k + 1) / n * WH * 0.9, step = new THREE.Mesh(new THREE.BoxGeometry(long ? len / n : (long ? 1 : st.w), h, long ? st.d : len / n), m(k % 2 ? 0xa8774a : 0xb98352));
+        const t = -len / 2 + (k + 0.5) * len / n; step.position.set(c.x + (long ? -t : 0), h / 2, c.z + (long ? 0 : -t)); step.castShadow = step.receiveShadow = true; r.add(step);   // 벽 쪽(왼쪽·뒤)으로 올라감
+      } else {
+        const hole = new THREE.Mesh(new THREE.BoxGeometry(st.w - 0.05, 0.02, st.d - 0.05), m(0x2a2420)); hole.position.set(c.x, 0.012, c.z); r.add(hole);
+        const rail = m(0x8a5a32); for (const [w, d, x, z] of [[st.w, 0.06, c.x, c.z + st.d / 2], [0.06, st.d, c.x + st.w / 2, c.z]]) { const b2 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), rail); b2.position.set(x, 0.75, z); r.add(b2);
+          for (let k = 0; k <= 3; k++) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.75, 0.05), rail); post.position.set(w > d ? x - w / 2 + k * w / 3 : x, 0.375, w > d ? z : z - d / 2 + k * d / 3); r.add(post); } }
+      }
+    }
     // 가구
     it.furniture.forEach((o, i) => { const g = furnitureModel(o.id), sz = F.size(o.id, o.rot); g.position.copy(this.cellCenter(o.x, o.z, sz)); g.rotation.y = -o.rot * Math.PI / 2; g.userData.index = i; r.add(g); this.items.push(g); });
     // 스탠드 불빛(방 안에서만, 최대 2개)
@@ -85,7 +108,7 @@ export class RoomView {
   }
   // ---- 고르기·미리 보기
   rayAt(e) { const rc = this.touch.getBoundingClientRect(); this.ndc.set((e.clientX - rc.left) / rc.width * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1); this.ray.setFromCamera(this.ndc, this.camera); }
-  cellAt(e) { this.rayAt(e); const p = this.ray.ray.intersectPlane(this.floorPlane, new THREE.Vector3()); if (!p) return null; const it = this.b.interior; return { x: Math.floor(p.x + it.w / 2), z: Math.floor(p.z + it.d / 2) }; }
+  cellAt(e) { this.rayAt(e); const p = this.ray.ray.intersectPlane(this.floorPlane, new THREE.Vector3()); if (!p) return null; const it = this.L; return { x: Math.floor(p.x + it.w / 2), z: Math.floor(p.z + it.d / 2) }; }
   anchor(c, id, rot) { const sz = F.size(id, rot); return { x: c.x - Math.floor((sz.w - 1) / 2), z: c.z - Math.floor((sz.d - 1) / 2) }; }
   tap(e) {
     if (this.ghost) {
@@ -96,23 +119,23 @@ export class RoomView {
     this.rayAt(e); const hit = this.ray.intersectObjects(this.items, true)[0];
     let o = hit?.object; while (o && o.userData.index === undefined) o = o.parent;
     this.sel = o ? o.userData.index : null; this.drawSel(); this.refreshUI();
-    if (this.sel != null) this.status(`${FURNITURE[this.b.interior.furniture[this.sel].id].name}: 옮기기·돌리기·치우기`);
+    if (this.sel != null) this.status(`${FURNITURE[this.L.furniture[this.sel].id].name}: 옮기기·돌리기·치우기`);
   }
   hover(e) { const c = this.cellAt(e); if (!c) return; Object.assign(this.ghost, this.anchor(c, this.ghost.id, this.ghost.rot)); this.drawGhost(); }
-  startPlace(id) { const it = this.b.interior; this.sel = null; this.ghost = { id, rot: 0, x: Math.floor(it.w / 2), z: Math.floor(it.d / 2), moving: null }; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status(`${FURNITURE[id].name}: 놓을 칸을 누르세요(한 번 더 누르면 놓기 · R 돌리기)`); }
-  startMove() { const o = this.b.interior.furniture[this.sel]; if (!o) return; this.ghost = { id: o.id, rot: o.rot, x: o.x, z: o.z, moving: this.sel }; this.items[this.sel].visible = false; this.sel = null; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status("옮길 칸을 누르세요"); }
+  startPlace(id) { const it = this.L; this.sel = null; this.ghost = { id, rot: 0, x: Math.floor(it.w / 2), z: Math.floor(it.d / 2), moving: null }; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status(`${FURNITURE[id].name}: 놓을 칸을 누르세요(한 번 더 누르면 놓기 · R 돌리기)`); }
+  startMove() { const o = this.L.furniture[this.sel]; if (!o) return; this.ghost = { id: o.id, rot: o.rot, x: o.x, z: o.z, moving: this.sel }; this.items[this.sel].visible = false; this.sel = null; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status("옮길 칸을 누르세요"); }
   rotate() {
     if (this.ghost) { this.ghost.rot = (this.ghost.rot + 1) % 4; this.drawGhost(); this.refreshUI(); return; }
-    if (this.sel == null) return; const o = this.b.interior.furniture[this.sel];
-    for (let k = 1; k <= 3; k++) if (F.move(this.world, this.b, this.sel, o.x, o.z, (o.rot + k) % 4)) { const s = this.sel; this.build(); this.sel = s; this.drawSel(); return; }
+    if (this.sel == null) return; const o = this.L.furniture[this.sel];
+    for (let k = 1; k <= 3; k++) if (F.move(this.world, this.b, this.sel, o.x, o.z, (o.rot + k) % 4, this.li)) { const s = this.sel; this.build(); this.sel = s; this.drawSel(); return; }
     this.status("돌릴 자리가 없어요");
   }
   commit() {
-    const g = this.ghost, ok = g.moving != null ? F.move(this.world, this.b, g.moving, g.x, g.z, g.rot) : F.place(this.world, this.b, g.id, g.x, g.z, g.rot);
+    const g = this.ghost, ok = g.moving != null ? F.move(this.world, this.b, g.moving, g.x, g.z, g.rot, this.li) : F.place(this.world, this.b, g.id, g.x, g.z, g.rot, this.li);
     if (!ok) return this.status("여기엔 놓을 수 없어요(벽 밖이거나 다른 가구와 겹쳐요)");
     this.status(`${FURNITURE[g.id].name}을 놓았어요`); this.ghost = null; this.build(); this.refreshUI();
   }
-  stow() { if (this.sel == null) return; const id = this.b.interior.furniture[this.sel].id; F.stow(this.world, this.b, this.sel); this.sel = null; this.build(); this.refreshUI(); this.status(`${FURNITURE[id].name}을 집 창고에 넣었어요`); }
+  stow() { if (this.sel == null) return; const id = this.L.furniture[this.sel].id; F.stow(this.world, this.b, this.sel, this.li); this.sel = null; this.build(); this.refreshUI(); this.status(`${FURNITURE[id].name}을 집 창고에 넣었어요`); }
   cancel() { this.ghost = null; this.sel = null; this.build(); this.refreshUI(); this.status(""); }
   drawSel() {
     this.items?.forEach((g, i) => g.traverse(m => { if (m.isMesh && m.material.emissive) { if (!m.userData.baseMat) m.userData.baseMat = m.material; m.material = i === this.sel ? selMat(m.userData.baseMat) : m.userData.baseMat; } }));
@@ -120,18 +143,21 @@ export class RoomView {
   drawGhost() {
     if (this.ghostObj) { this.root.remove(this.ghostObj); this.ghostObj = null; }
     const g = this.ghost; this.grid.material.opacity = g || this.sel != null ? 0.3 : 0.12; if (!g) return;
-    const ok = g.moving != null ? F.fits(this.b, g.id, g.x, g.z, g.rot, g.moving) : F.fits(this.b, g.id, g.x, g.z, g.rot);
+    const ok = g.moving != null ? F.fits(this.L, g.id, g.x, g.z, g.rot, g.moving) : F.fits(this.L, g.id, g.x, g.z, g.rot);
     const obj = furnitureModel(g.id), tint = new THREE.MeshBasicMaterial({ color: ok ? 0x6fdc8c : 0xff6b6b, transparent: true, opacity: 0.55, depthWrite: false });
     obj.traverse(m => { if (m.isMesh) { m.material = tint; m.castShadow = false; } }); obj.userData.noToon = true;
     obj.position.copy(this.cellCenter(g.x, g.z, F.size(g.id, g.rot))); obj.rotation.y = -g.rot * Math.PI / 2; this.root.add(obj); this.ghostObj = obj; this.ghostOk = ok;
   }
   // ---- 아래 판(가구·바닥·벽지)
   refreshUI() {
-    const w = this.world, b = this.b, it = b.interior, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = "";
+    const w = this.world, b = this.b, it = this.L, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = "";
     const owner = w.units.find(u => u.unitId === b.owner), inside = w.units.filter(u => u.insideBuildingId === b.id);
     this.ui.querySelector(".rtitle").textContent = `🏠 ${BUILDINGS[b.defId].name}${owner ? ` · 주인 ${owner.name}` : " · 주인 없음"} · 🛋 아늑함 ${F.comfort(b)}`;
     this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : "";
     for (const t of this.ui.querySelectorAll(".rtabs button")) t.classList.toggle("on", t.dataset.tab === this.tab);
+    const lvBox = this.ui.querySelector(".rlevels"), ls = F.levels(b); lvBox.innerHTML = "";
+    if (ls.length > 1) ls.forEach((L, i) => { const bt = rel("button", i === this.li ? "on" : "", `${i + 1}층 ${L.name.replace(/^\d층\s*/, "")}`); bt.onclick = () => this.setLevel(i); lvBox.appendChild(bt); });
+    else lvBox.appendChild(rel("span", "dim", it.name));
     if (this.tab === "furniture") {
       const av = F.available(w, b), ids = Object.keys(av);
       for (const id of ids) { const f = FURNITURE[id], bt = rel("button", this.ghost?.id === id && this.ghost.moving == null ? "on" : "", `${f.name} ×${av[id].n}`); bt.title = `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${av[id].from !== "stash" ? " · 낚시로 건진 가구(마을 가방)" : ""}`; bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
@@ -139,7 +165,7 @@ export class RoomView {
     } else {
       const table = this.tab === "floor" ? FLOORS : WALLPAPERS, key = this.tab === "floor" ? "floor" : "wallpaper";
       for (const [id, d] of Object.entries(table)) { const bt = rel("button", it[key] === id ? "on" : "", d.name); const sw = rel("span", "sw"); sw.style.background = "#" + d.color.toString(16).padStart(6, "0"); bt.prepend(sw);
-        bt.onclick = () => { it[key] = id; this.build(); this.refreshUI(); w.emit?.("furniture", { b }); }; list.appendChild(bt); }
+        bt.onclick = () => { it[key] = id; this.build(); this.refreshUI(); w.emit?.("furniture", { b }); }; list.appendChild(bt); }   // 바닥·벽지는 층마다
     }
     const add = (label, fn, cls = "") => { const bt = rel("button", cls, label); bt.onclick = fn; act.appendChild(bt); };
     if (this.ghost) { add("✅ 놓기", () => this.commit(), this.ghostOk ? "go" : ""); add("↻ 돌리기", () => this.rotate()); add("✕ 취소", () => this.cancel()); }

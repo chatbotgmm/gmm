@@ -69,7 +69,7 @@
   #room > div { pointer-events: auto; }
   #room .rhead { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 8px; align-items: flex-start;
     background: var(--panel); border-radius: 12px; padding: 8px 10px; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
-  #room .rwho { font-size: 12.5px; margin-top: 2px; }
+  #room .rwho { font-size: 12.5px; margin-top: 2px; } #room .rlevels { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; } #room .rlevels .dim { font-size: 12.5px; }
   #room .rbottom { position: absolute; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-radius: 12px; padding: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.15);
     display: flex; flex-direction: column; gap: 6px; max-width: 760px; margin: 0 auto; }
   #room .rmsg { font-size: 13px; min-height: 1em; } #room .racts:empty { display: none; }
@@ -141,7 +141,7 @@
 <div id="overlay"></div>
 <div id="roomTouch" hidden></div>
 <div id="room" hidden>
-  <div class="rhead"><div><b class="rtitle"></b><div class="rwho dim"></div></div><button class="rexit">🚪 나가기</button></div>
+  <div class="rhead"><div><b class="rtitle"></b><div class="rlevels"></div><div class="rwho dim"></div></div><button class="rexit">🚪 나가기</button></div>
   <div class="rbottom"><div class="rmsg"></div><div class="racts"></div>
     <div class="rtabs"><button data-tab="furniture">🛋 가구</button><button data-tab="floor">🟫 바닥</button><button data-tab="wall">🎨 벽지</button></div>
     <div class="rlist"></div></div>
