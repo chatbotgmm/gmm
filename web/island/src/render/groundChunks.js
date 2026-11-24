@@ -14,7 +14,7 @@ let SUB = 4;                                   // 가까운 땅의 칸당 조각
 export const LOD_NEAR = 26, LOD_MID = 50, LOD_HYST = 4;   // m: 이 안은 SUB, 그다음은 SUB/2, 더 멀면 1. 경계에서 왔다 갔다 하지 않게 4 m 여유
 const BLEND_R = 0.42, LOWEST = -1.6;
 export function setTerrainDetail(sub) { const changed = SUB !== sub; SUB = sub; return changed; }
-const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583);
+const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583), CLIFF_ROCK = new THREE.Color(0x8f8a82);
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
 const BASE = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[0])]));
 const ALT = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[1] ?? v.colors[0])]));
@@ -100,7 +100,7 @@ function normalAt(grid, gx, gz, hx, hz) {
 const toW = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
 
 function cliffColor(grid, x, z, y, gx, gz) {
-  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : CLIFF;
+  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : c && c.groundType === GroundType.Rock ? CLIFF_ROCK : CLIFF;
   return new THREE.Color().copy(base).multiplyScalar(0.82 + 0.18 * noise(gx * 2 + y * 3, gz * 2 - y * 3) + Math.max(-0.15, y * 0.1));
 }
 

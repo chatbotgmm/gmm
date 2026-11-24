@@ -9,8 +9,11 @@ const BUMP = 0.55;                 // 칸 가운데 볼록의 세기(1이면 칸
 /** 두 칸이 경사로 이어지는가. */
 export function joined(grid, a, b, ax, az, bx, bz) {
   if (!a || !b) return false;
-  return Math.abs(a.elevation - b.elevation) <= MAX_STEP + EPS || grid.isWater(ax, az) || grid.isWater(bx, bz);
+  const d = Math.abs(a.elevation - b.elevation);
+  if ((a.groundType === "Rock" || b.groundType === "Rock") && d <= ROCK_JOIN) return true;   // 바위산은 가팔라도 매끈한 비탈로 그림(걷기는 grid.canStep이 따로 막음)
+  return d <= MAX_STEP + EPS || grid.isWater(ax, az) || grid.isWater(bx, bz);
 }
+const ROCK_JOIN = 1.6;
 
 /** 칸 (x,z)의 꼭짓점 높이. cx, cz는 0(왼쪽·위) 또는 1(오른쪽·아래). 꼭짓점을 둘러싼 칸 중 이 칸과 이어진 칸들의 평균. */
 export function cornerHeight(grid, x, z, cx, cz) {

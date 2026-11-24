@@ -114,6 +114,7 @@ export const GROUND_STYLE = {
   [GroundType.WoodDeck]: { label: "나무 데크", colors: [0xcf9d63, 0xc19058] },
   [GroundType.Dirt]:     { label: "흙길",     colors: [0xcfa57a, 0xc69c71] },
   [GroundType.Sand]:     { label: "모래",     colors: [0xeedfb2, 0xe8d8a8] },
+  [GroundType.Rock]:     { label: "바위",     colors: [0xa29c92, 0x948e85] },
 };
 
 // 갈매미 8종(web/village/models/chars.json의 이름). 1단계는 캡슐 도형, scale은 몸 크기.

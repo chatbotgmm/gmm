@@ -2,7 +2,7 @@
 
 /** 바닥 종류(지시서 3-B-1). 바다는 종류가 아니라 높이(SEA_LEVEL 아래)로 정한다. */
 export const GroundType = Object.freeze({
-  Grass: "Grass", Cobble: "Cobble", WoodDeck: "WoodDeck", Dirt: "Dirt", Sand: "Sand",
+  Grass: "Grass", Cobble: "Cobble", WoodDeck: "WoodDeck", Dirt: "Dirt", Sand: "Sand", Rock: "Rock",   // Rock은 뒤에 붙임(저장 번호 유지)
 });
 export const GROUND_TYPES = Object.values(GroundType);
 
