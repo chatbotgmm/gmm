@@ -23,6 +23,7 @@ import { UnitControl } from "./systems/unitControl.js";
 import { TwoFinger } from "./systems/twoFinger.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
+import { PROP_LOD } from "./render/assets.js";
 import { RoomView } from "./render/room.js";
 import { Minimap } from "./ui/minimap.js";
 import { Sfx } from "./audio/sfx.js";
@@ -101,10 +102,31 @@ function hookSounds(w) {
 }
 // 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)
 function applyAssetTier(c) {
-  const lite = c.model < 1;
-  for (const d of Object.values(BUILDINGS)) if (d.liteAsset) { d.fullAsset ??= d.asset; d.asset = lite ? d.liteAsset : d.fullAsset; }
-  for (const d of Object.values(BUILDINGS)) if (d.liteProp) { d.fullProp ??= d.prop; d.prop = lite ? d.liteProp : d.fullProp; }
-  for (const d of Object.values(MODULES)) if (d.liteAssets) { d.fullAssets ??= d.assets; d.assets = lite ? d.liteAssets : d.fullAssets; }
+  PROP_LOD.level = c.lod ?? 0;                                                    // 소품 모델 단계(원본에서 줄인 4단계)
+  drawDist = c.drawDist ?? 200; lastCull = 0;   // 그리기 거리(보는 곳 둘레 반지름 = drawDist × 0.7), 끝은 안개로 가림(fitFog)
+}
+// 그리기 거리: 0.3초마다 나무·바위·건물·소품을 카메라와의 거리로 보이기/숨기기(멀리 있는 것은 그리지도, 그림자도 만들지 않음).
+// 다른 코드가 쓰는 visible(쓰러진 나무 등)과 겹치지 않게 레이어로: 멀면 메쉬를 레이어 3으로 옮김(카메라·그림자는 레이어 0만 봄)
+let drawDist = 200, lastCull = 0;
+const farState = new WeakMap(), _cp = new THREE.Vector3();
+function setFar(obj, far) {                                                       // 바뀔 때만 그 아래 메쉬 전부(모델이 늦게 붙어도 됨)
+  if ((farState.get(obj) ?? false) === far) return; farState.set(obj, far);
+  obj.traverse(o => { if (o.isMesh || o.isSprite || o.isPoints || o.isLineSegments) o.layers.set(far ? 3 : 0); });
+}
+/** 안개·카메라 먼 거리: 카메라에서 보는 곳까지 거리 + 그리기 반지름(멀리서 내려다봐도 보는 곳 둘레는 보이게) */
+function fitFog() {
+  const R = drawDist * 0.7, cd = camera.position.distanceTo(controls.target);
+  scene.fog.near = cd + R * 0.45; scene.fog.far = cd + R * 1.05; const far = cd + R * 1.3 + 20; if (Math.abs(camera.far - far) > 2) { camera.far = far; camera.updateProjectionMatrix(); }
+}
+function cullFar(now) {
+  fitFog();
+  if (now - lastCull < 300 || !worldRoot) return; lastCull = now;
+  // 보는 곳(화면 가운데) 둘레 R 안 + 카메라에서 너무 먼 작은 것은 뺌(멀리서 보면 점처럼 작아 보여도 그리기 호출은 같음): 소품·나무 1.3배, 건물 1.6배, 갈매미 1배
+  const t = controls.target, cam = camera.position, R = drawDist * 0.7;
+  const check = (obj, k) => { obj.getWorldPosition(_cp); const dt2 = (_cp.x - t.x) ** 2 + (_cp.z - t.z) ** 2, dc2 = _cp.distanceToSquared(cam), L = drawDist * k; setFar(obj, dt2 > R * R || dc2 > L * L); };
+  if (moduleObjs) for (const o of moduleObjs.values()) check(o, 1.3);
+  for (const v of buildingViews.views.values()) if (v.model) check(v.holder, 1.6);
+  for (const v of unitViews.views || []) if (v?.g) check(v.g, 1.0);
 }
 // 그래픽 설정 5단계: 바뀌면 땅 상세도·소품·갈매미 그림자 거리를 다시 맞춤
 let decor = null;
@@ -183,6 +205,7 @@ roomView.onSound = n => sfx.play(n, { vol: 0.7 });
 hud.sfx = sfx; hud.initSound?.();
 addEventListener("pointerdown", e => { if (e.target.closest?.("button")) sfx.play("click", { vol: 0.35 }); }, true);   // 버튼 누를 때 작은 소리
 const minimap = new Minimap({ getWorld: () => world, camera, controls });   // 넓은 지도: 미니맵(누르면 그곳으로)
+roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
@@ -204,7 +227,7 @@ Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
 
 // ---------- 매 프레임
 const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0, lastSeason = 0;
-// 키보드로 화면: Q/E 돌리기, 방향키 옮기기(입력창이 아닐 때)
+// 키보드로 화면: Q/E 카메라 높이, W·A·S·D·방향키 옮기기(입력창이 아닐 때)
 const keys = new Set();
 const WASD = { KeyW: "ArrowUp", KeyS: "ArrowDown", KeyA: "ArrowLeft", KeyD: "ArrowRight" };   // W·A·S·D = 방향키
 addEventListener("keydown", e => { if (e.target?.tagName === "INPUT" || roomView?.isOpen || e.ctrlKey || e.metaKey) return; const code = WASD[e.code] || e.code; if (/^(KeyQ|KeyE|Arrow(Up|Down|Left|Right))$/.test(code)) { keys.add(code); if (code.startsWith("Arrow")) e.preventDefault(); } if (e.shiftKey) keys.add("Fast"); });
@@ -213,8 +236,8 @@ addEventListener("blur", () => keys.clear());
 function keyCamera(dt) {
   if (!keys.size || (keys.size === 1 && keys.has("Fast"))) return;
   const t = controls.target, off = camera.position.clone().sub(t);
-  const turn = (keys.has("KeyQ") ? 1 : 0) - (keys.has("KeyE") ? 1 : 0);
-  if (turn) off.applyAxisAngle(THREE.Object3D.DEFAULT_UP, turn * 1.6 * dt);
+  const lift = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0);              // PC: E = 카메라 높이 올리기(내려다보기), Q = 낮추기(수평선 쪽)
+  if (lift) { const s = new THREE.Spherical().setFromVector3(off); s.phi = THREE.MathUtils.clamp(s.phi - lift * 0.9 * dt, Math.max(0.08, controls.minPolarAngle), controls.maxPolarAngle); off.setFromSpherical(s); }
   const fwd = new THREE.Vector3(-off.x, 0, -off.z).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const mv = new THREE.Vector3().addScaledVector(fwd, (keys.has("ArrowUp") ? 1 : 0) - (keys.has("ArrowDown") ? 1 : 0))
     .addScaledVector(right, (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0)).multiplyScalar(Math.max(4, off.length() * 0.6) * dt * (keys.has("Fast") ? 2.2 : 1));   // Shift = 빠르게
@@ -232,6 +255,7 @@ function frame() {
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 2, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
+  cullFar(now);
   daylight.focus = controls.target; daylight.update(dt, now);
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);

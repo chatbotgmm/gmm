@@ -9,6 +9,7 @@ import { FURNITURE, FLOORS, WALLPAPERS, BUILDINGS } from "../data/catalog.js";
 import * as F from "../world/furniture.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 const ROOM_WALL_H = 2.4, ROOM_TAP_PX = 8;
 const rel = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -21,7 +22,7 @@ export class RoomView {
     s.add(new THREE.HemisphereLight(0xfff4e2, 0x8a7a6a, 1.1));
     const sun = this.sun = new THREE.DirectionalLight(0xfff0d8, 1.6); sun.position.set(4, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
     Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 0.5, far: 30 }); sun.shadow.bias = -0.0008; s.add(sun);
-    this.root = new THREE.Group(); s.add(this.root);
+    this.root = new THREE.Group(); s.add(this.root); this.gulls = new Map(); this.chars = null;   // chars: 갈매미 모델(main이 넣어 줌)
     this.toon = new Toon(s, { snow: false });                                   // 방 안 가구엔 눈이 안 쌓임
     this.touch = document.getElementById("roomTouch"); this.ui = document.getElementById("room");
     const c = this.controls = new OrbitControls(this.camera, this.touch);
@@ -62,7 +63,8 @@ export class RoomView {
   // ---- 방 만들기
   cellCenter(x, z, sz) { const it = this.L; return new THREE.Vector3(x + sz.w / 2 - it.w / 2, 0, z + sz.d / 2 - it.d / 2); }
   build() {
-    const it = this.L, r = this.root; r.clear(); this.items = []; const WH = it.wallH || ROOM_WALL_H;
+    const it = this.L, r = this.root; r.clear(); this.items = []; this.gullT = 0;   // 다시 그리면 갈매미도 다시 놓음
+    const WH = it.wallH || ROOM_WALL_H;
     const m = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95 });
     const floor = new THREE.Mesh(new THREE.BoxGeometry(it.w, 0.1, it.d), m(FLOORS[it.floor]?.color ?? 0xc49a6c)); floor.position.y = -0.05; floor.receiveShadow = true; r.add(floor);
     // 바닥 판자·타일 줄
@@ -171,8 +173,43 @@ export class RoomView {
     if (this.ghost) { add("✅ 놓기", () => this.commit(), this.ghostOk ? "go" : ""); add("↻ 돌리기", () => this.rotate()); add("✕ 취소", () => this.cancel()); }
     else if (this.sel != null) { add("↔ 옮기기", () => this.startMove()); add("↻ 돌리기", () => this.rotate()); add("📦 치우기", () => this.stow()); add("✕", () => this.cancel()); }
   }
+  // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)
+  async gullModel(u) {
+    let v = this.gulls.get(u.unitId); if (v) return v;
+    v = { root: null }; this.gulls.set(u.unitId, v);
+    const pool = await this.chars; const ch = pool?.get?.(u.name); if (!ch) return v;
+    const root = SkeletonUtils.clone(ch.root), mixer = new THREE.AnimationMixer(root), acts = {};
+    for (const [k, a] of Object.entries(ch.acts)) acts[k] = mixer.clipAction(a.getClip());
+    root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    Object.assign(v, { root, mixer, acts, cur: null }); return v;
+  }
+  play(v, key, speed = 1) { if (!v.acts?.[key] || v.cur === key) return; v.acts[v.cur]?.fadeOut(0.25); v.acts[key].reset().fadeIn(0.25).play(); v.acts[key].timeScale = speed; v.cur = key; }
+  async syncGulls() {
+    const w = this.world, b = this.b, levels = F.levels(b), inside = w.units.filter(u => u.insideBuildingId === b.id);
+    for (const [id, v] of this.gulls) if (!inside.some(u => u.unitId === id) && v.root?.parent) v.root.parent.remove(v.root);
+    let free = 0;
+    for (const u of inside) {
+      const v = await this.gullModel(u); if (!v.root || !this.isOpen) continue;
+      const o = u.useFurni, li = o ? levels.findIndex(L => L.furniture.includes(o)) : 0;
+      if (li !== this.li) { if (v.root.parent) v.root.parent.remove(v.root); continue; }
+      if (!v.root.parent) { this.root.add(v.root); this.toon.sweep(v.root); }
+      const r = v.root; r.rotation.set(0, 0, 0);
+      if (o) {
+        const f = FURNITURE[o.id], sz = F.size(o.id, o.rot), c = this.cellCenter(o.x, o.z, sz), yaw = -o.rot * Math.PI / 2, use = f.use;
+        if (use === "sleep") { r.position.set(c.x, 0.52, c.z); r.rotation.set(-Math.PI / 2, yaw + Math.PI, 0, "YXZ"); this.play(v, "Idle", 0.35); }          // 침대에 누워 새근새근(천천히 숨쉬기)
+        else if (use === "sit") { r.position.set(c.x, f.id === "sofa" ? 0.36 : 0.42, c.z); r.rotation.y = yaw; this.play(v, "Sit"); }
+        else { const fx = Math.sin(yaw), fz = Math.cos(yaw); r.position.set(c.x + fx * 0.75, 0, c.z + fz * 0.75); r.rotation.y = yaw + Math.PI; this.play(v, "Idle", 0.8); }   // 책장 앞에 서서 읽기
+      } else {                                                                     // 쓸 가구가 없으면 빈자리에 서 있음
+        const L = levels[0], spots = []; for (let z = 0; z < L.d; z++) for (let x = 0; x < L.w; x++) if (F.fits(L, "chair", x, z, 0)) spots.push([x, z]);
+        const s = spots[(free++ * 7 + 3) % Math.max(1, spots.length)] || [1, 1], c = this.cellCenter(s[0], s[1], { w: 1, d: 1 });
+        r.position.set(c.x, 0, c.z); r.rotation.y = Math.PI * 0.25; this.play(v, "Idle");
+      }
+    }
+  }
   update(dt) {
     if (!this.isOpen) return; this.controls.update();
+    for (const v of this.gulls.values()) if (v.root?.parent) v.mixer.update(dt);
+    if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = 1; this.syncGulls(); }
     if (Math.abs(innerWidth / innerHeight - (this.lastAspect || 0)) > 0.01) this.fit();   // 화면을 돌리면 다시 맞춤
     if (this.whoT === undefined || (this.whoT -= dt) <= 0) { this.whoT = 1; const inside = this.world.units.filter(u => u.insideBuildingId === this.b.id); this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : ""; }
   }

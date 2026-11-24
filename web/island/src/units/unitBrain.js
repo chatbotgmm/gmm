@@ -731,7 +731,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (followPath(u, dt, world, rnd)) {
         const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = 7 + rnd() * 7; u.path = null;
         u.x = cx + 0.5 + (b.door.x - cx) * 0.12; u.z = cz + 0.5 + (b.door.z - cz) * 0.12;   // 벤치 위(앞쪽으로 살짝)
-        u.heading = Math.atan2(b.door.x - cx, b.door.z - cz); u.sitY = (b.elevation ?? 0) + 0.27 * Math.min(1, u.scale || 1) + 0.02; u.anim = "Sit"; emote(u, pick(["후~", "♪", "좋다"], rnd));
+        u.heading = Math.atan2(b.door.x - cx, b.door.z - cz); u.sitY = (b.elevation ?? 0) + 0.31 * Math.min(1, u.scale || 1) + 0.03;   // 엉덩이를 좌판에, 발은 땅에서 뜨게 u.anim = "Sit"; emote(u, pick(["후~", "♪", "좋다"], rnd));
       }
       break;
     }

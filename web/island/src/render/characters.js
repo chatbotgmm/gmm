@@ -224,8 +224,8 @@ function makePoseClips(root, idle) {
   const armRest = s => { const c = childBone(arm[s]); return c ? charP(c).sub(charP(arm[s])).normalize() : new THREE.Vector3(s === "L" ? 1 : -1, 0, 0); };
   const point = (s, dir) => new THREE.Quaternion().setFromUnitVectors(armRest(s), dir.clone().normalize());
   const side = s => Math.sign(charP(arm[s]).x) || (s === "L" ? 1 : -1);
-  build("Sit", f => { const br = Math.sin(f * Math.PI * 2) * 0.03;
-    return { hip: legLen * 0.62, rot: { legL: ax(X, -1.35), legR: ax(X, -1.35), kneeL: ax(X, 1.0), kneeR: ax(X, 1.0), spine: ax(X, -0.08 + br), head: ax(X, 0.05 - br),
+  build("Sit", f => { const br = Math.sin(f * Math.PI * 2) * 0.03, sw = Math.sin(f * Math.PI * 4) * 0.18;   // 다리를 앞으로 뻗고 발을 대롱대롱 흔듦
+    return { hip: legLen * 0.62, rot: { legL: ax(X, -1.45 + sw), legR: ax(X, -1.45 - sw), kneeL: ax(X, 0.35), kneeR: ax(X, 0.35), spine: ax(X, -0.08 + br), head: ax(X, 0.05 - br),
       armL: point("L", new THREE.Vector3(side("L") * 0.55, -0.8, 0.15)), armR: point("R", new THREE.Vector3(side("R") * 0.55, -0.8, 0.15)) } }; });
   build("Hoe", f => { const up = seg(f, 0, 0.45) * (1 - seg(f, 0.45, 0.62)), down = seg(f, 0.45, 0.62) * (1 - seg(f, 0.8, 1));
     const dir = s => new THREE.Vector3(side(s) * (0.25 - 0.1 * down), 0.2 + 0.75 * up - 0.95 * down, 0.35 + 0.1 * up + 0.55 * down);

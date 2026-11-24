@@ -8,7 +8,10 @@ import { loadGLB, loadProgress } from "./characters.js";
 const cache = new Map();
 
 // 경로 후보: 적힌 그대로, 그리고 앞의 village 폴더 부분을 뗀 것(아티팩트처럼 한 폴더에 모아 올린 경우). .glb는 .glb.json(base64)도 받는다.
+/** 소품 모델 단계(그래픽 설정): 경로의 {L}을 l0(최고·높음) · l1(보통) · l2(낮음) · l3(성능 우선)으로 바꿈. 바뀐 뒤 새로 만들어지는 모델부터 */
+export const PROP_LOD = { level: 0 };
 function load(url) {
+  url = url.replace("{L}", "l" + PROP_LOD.level);
   if (!cache.has(url)) {
     const fbx = /\.fbx$/i.test(url), tries = [url, url.replace(/^\.\.\/village\//, "")].filter((u, i, a) => a.indexOf(u) === i);
     cache.set(url, (async () => {

@@ -34,7 +34,7 @@ export class LifeViews {
     };
     // 작물 모델(사용자 제공 당근·양배추): 받으면 싹 4개 대신 칸마다 하나(칸 위치로 번갈아)
     const swap = c => { if (!this.cropModels || c.g.userData.model) return; c.g.clear(); const k = (c.p.x + c.p.z) % 2, src = this.cropModels[k], m = src.clone(true); m.scale.setScalar(k ? 0.6 : 0.62); c.g.add(m); c.g.userData.model = true; };
-    Promise.all(["assets/props/carrot.glb", "assets/props/cabbage.glb"].map(u => rawModel(u))).then(ms => { this.cropModels = ms; this.crops.forEach(swap); }).catch(() => {});
+    Promise.all(["assets/props/carrot_{L}.glb", "assets/props/cabbage_{L}.glb"].map(u => rawModel(u))).then(ms => { this.cropModels = ms; this.crops.forEach(swap); }).catch(() => {});
     this.swapCrop = swap;
     world.plots.forEach(addCrop);
     world.on("plotAdded", addCrop);                                                  // 목수가 지은 밭
