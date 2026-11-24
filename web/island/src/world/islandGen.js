@@ -116,7 +116,7 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
 // 단 가장자리는 회색 바위 비탈, 단 사이는 흙길 비탈로 이어짐), 고지대 기슭 동굴(둘레 광석 바위), 숲 세 곳, 낮은 언덕, 곶 끝 등대, 해변 바위.
 // 가운데는 공식은행 자리로 비워 둠(World.create에서 지음). 시장·밭·낚시터·집은 갈매미가 지음.
 export const WILD = { size: 96, r: 33 };
-const TERRACE = 0.8;                 // 고지대 한 층 높이(m): 걸어서는 못 오름(흙길 비탈로만)
+const TERRACE = 0.9;                 // 고지대 한 층 높이(m): 걸어서는 못 오름(흙길 비탈로만). 가장자리는 돌벽
 
 /** 값 노이즈(격자 꼭짓점 난수를 부드럽게 보간) + 여러 겹(fbm) */
 function makeNoise(seed) {
@@ -157,15 +157,15 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     const ex = (x + 0.5 - hl.x) / hl.rx, ez = (z + 0.5 - hl.z) / hl.rz, d = Math.hypot(ex, ez) + (noise(x * 0.06 + 5, z * 0.06) - 0.5) * 0.9;
     if (d >= 1 || coastD < 3) continue;
     const hcont = (1 - d) * 5.2 * (0.6 + 0.6 * noise(x * 0.07, z * 0.07 + 9)) * Math.min(1, (coastD - 2) / 3);
-    const lv = Math.min(5, Math.floor(hcont / TERRACE)); if (lv <= 0) continue;
+    const lv = Math.min(4, Math.floor(hcont / TERRACE)); if (lv <= 0) continue;
     level.set(key(x, z), lv);
   }
-  // 층 띠가 너무 좁지 않게(넓은 단 + 비탈 놓을 자리): 반지름 3칸 안의 가장 낮은 층 + 1보다 높지 않게
+  // 층 띠가 너무 좁지 않게(넓은 단 + 비탈 놓을 자리): 반지름 4칸 안의 가장 낮은 층 + 1보다 높지 않게
   for (let pass = 0; pass < 3; pass++) {
     const next = new Map();
     for (const [k, lv] of level) {
       const [x, z] = k.split(",").map(Number); let lo = lv;
-      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (dx * dx + dz * dz <= 10) lo = Math.min(lo, level.get(key(x + dx, z + dz)) || 0);
+      for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) if (dx * dx + dz * dz <= 17) lo = Math.min(lo, level.get(key(x + dx, z + dz)) || 0);
       const nl = Math.min(lv, lo + 1); if (nl > 0) next.set(k, nl);
     }
     level.clear(); for (const [k, v] of next) level.set(k, v);
@@ -184,11 +184,11 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     }
     for (const [x, z, lv] of cellsH) {                                              // 가장자리 바위
       let edge = false; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const o = grid.get(x + dx, z + dz); if (o && o.elevation < grid.get(x, z).elevation - 0.01) edge = true; }
-      if (edge) grid.get(x, z).groundType = GroundType.Rock;
+      void edge;                                                                   // 가장자리는 잔디(돌벽으로 보임)
     }
   }
   // 고지대 꼭대기 바위 봉우리(걸어서는 못 감): 가장 높은 층 안쪽 몇 곳
-  const tops = [...level].filter(([, lv]) => lv >= 4).map(([k]) => k.split(",").map(Number)).filter(([x, z]) => grid.get(x, z).groundType === GroundType.Grass);
+  const tops = [...level].filter(([, lv]) => lv >= 3).map(([k]) => k.split(",").map(Number)).filter(([x, z]) => grid.get(x, z).groundType === GroundType.Grass);
   for (let k = 0; k < 2 && tops.length; k++) {
     const [px, pz] = tops[Math.floor(rnd() * tops.length)];
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
@@ -196,12 +196,12 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
       c.elevation = Math.round((c.elevation + (dx || dz ? 0.9 : 1.6)) * 100) / 100; c.groundType = GroundType.Rock;
     }
   }
-  // 가장자리(더 낮은 이웃이 있는 칸) = 바위 비탈(그림에서 매끈하게 기울어짐, 걸어서는 못 오름)
+  // 가장자리(더 낮은 이웃이 있는 칸): 예전엔 바위 비탈이었으나 지금은 잔디 + 돌벽(groundChunks가 높은 벽을 돌빛으로 그림)
   const lvAt = (x, z) => level.get(key(x, z)) || 0;
   for (const [k, lv] of level) {
     const [x, z] = k.split(",").map(Number);
     let edge = false; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (lvAt(x + dx, z + dz) < lv && !grid.isWater(x + dx, z + dz)) edge = true;
-    if (edge) { const c = grid.get(x, z); c.groundType = GroundType.Rock; c.elevation = Math.round((lv - 0.5) * TERRACE * 100) / 100; }   // 반 층 낮춰 바위 비탈이 두 칸에 걸쳐 완만하게
+    void edge;                                                                     // 가장자리는 잔디 그대로(그림에서 수직 돌벽으로 보임)
   }
   // 흙길 비탈: 걸어서 닿는 곳에서 다음 층으로 4칸짜리 비탈(칸마다 0.2 m)을 붙임. 모든 층이 이어질 때까지 반복.
   const reach = () => {
@@ -236,10 +236,6 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     const after = reach();
     if ([...seen].some(k2 => !after.has(k2))) { for (const [c, e, t] of undo) { c.elevation = e; c.groundType = t; } bad.add(best.cells[0].join()); continue; }   // 이미 다니던 길을 끊으면 되돌림
     [...best.cells, best.b].forEach(([px, pz]) => ramps.add(key(px, pz)));
-    for (const [px, pz] of best.cells) for (const sgn of [1, -1]) {                  // 비탈 양옆은 바위로(벽 대신 비탈로 이어 보이게)
-      const sx = px + best.d[1] * sgn, sz = pz + best.d[0] * sgn, c = grid.get(sx, sz);
-      if (c && !grid.isWater(sx, sz) && !ramps.has(key(sx, sz)) && c.groundType === GroundType.Grass) c.groundType = GroundType.Rock;
-    }
   }
   { const seen = reach(); for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) { const c = grid.get(x, z); if (c.elevation > 0.25 && !seen.has(key(x, z)) && c.groundType !== GroundType.Rock) c.groundType = GroundType.Rock; } }   // 그래도 못 닿는 단은 바위로
 

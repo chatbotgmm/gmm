@@ -109,11 +109,11 @@ export const MODULES = {
 
 // 바닥 색(두 색을 칸마다 번갈아 칠함)과 이름. asset: 오토타일 조각 모델을 쓸 때 경로(1단계는 도형으로 그림).
 export const GROUND_STYLE = {
-  [GroundType.Grass]:    { label: "잔디",     colors: [0xa5d07e, 0x9ac874] },
+  [GroundType.Grass]:    { label: "잔디",     colors: [0x9fd35b, 0x8cc44e] },
   [GroundType.Cobble]:   { label: "돌길",     colors: [0xc4beb5, 0xb7b1a8] },
   [GroundType.WoodDeck]: { label: "나무 데크", colors: [0xcf9d63, 0xc19058] },
   [GroundType.Dirt]:     { label: "흙길",     colors: [0xcfa57a, 0xc69c71] },
-  [GroundType.Sand]:     { label: "모래",     colors: [0xeedfb2, 0xe8d8a8] },
+  [GroundType.Sand]:     { label: "모래",     colors: [0xf3e0a6, 0xecd496] },
   [GroundType.Rock]:     { label: "바위",     colors: [0xa29c92, 0x948e85] },
 };
 

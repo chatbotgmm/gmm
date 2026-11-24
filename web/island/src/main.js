@@ -4,8 +4,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { World, SPEED_BOOST } from "./world/World.js";
 import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
+import { skyBackground, createClouds } from "./render/sky.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
+import { Decor } from "./render/decor.js";
 import { PROPS, TRIBES, JOBS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
@@ -22,39 +24,43 @@ const TOUCH = matchMedia("(pointer: coarse)").matches;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, TOUCH ? 1.5 : 2)); renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
 document.body.prepend(renderer.domElement);
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0xcfeaf3); scene.fog = new THREE.Fog(0xcfeaf3, 85, 170);
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 220);   // 안개 너머(170 m)는 그리지 않음
+const scene = new THREE.Scene(); scene.background = skyBackground(); scene.fog = new THREE.Fog(0xdceff4, 110, 230);   // 위는 파랗고 수평선은 밝은 하늘, 안개는 멀리서만
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 260);   // 안개 너머(230 m)는 그리지 않음
 const portrait = () => innerWidth < innerHeight;
 function fitView() { camera.fov = portrait() ? 62 : 45; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }   // 세로 화면은 넓은 렌즈
 fitView();
-camera.position.set(0, portrait() ? 42 : 30, portrait() ? 40 : 34);
+camera.position.set(0, portrait() ? 70 : 54, portrait() ? 50 : 52);   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.46; controls.minDistance = 5; controls.maxDistance = 110;
 controls.screenSpacePanning = false; controls.target.set(0, 0, 4);
-scene.add(new THREE.HemisphereLight(0xf2f8ff, 0x8fae6a, 1.05));          // 하늘빛은 조금 줄이고
-const sun = new THREE.DirectionalLight(0xfff0dc, 2.8); sun.position.set(-26, 24, 14); sun.castShadow = true;   // 해를 조금 낮춰 언덕·비탈에 음영
+scene.add(new THREE.HemisphereLight(0xdcefff, 0x8a8f5a, 0.85));          // 하늘빛(위)·땅빛(아래)
+const sun = new THREE.DirectionalLight(0xffe2b8, 3.3);   // 따뜻한 햇빛
+ sun.position.set(-26, 24, 14); sun.castShadow = true;   // 해를 조금 낮춰 언덕·비탈에 음영
 sun.shadow.mapSize.set(TOUCH ? 2048 : 4096, TOUCH ? 2048 : 4096);
 // 그림자는 보는 곳 둘레 ±26 m만(넓은 섬 전체를 한 장에 담으면 흐리고 무거움). 해와 그림자 범위가 화면 중심을 따라감(frame)
 const SUN_OFF = new THREE.Vector3(-26, 24, 14), SHADOW_R = 26;
 Object.assign(sun.shadow.camera, { left: -SHADOW_R, right: SHADOW_R, top: SHADOW_R, bottom: -SHADOW_R, near: 1, far: 100 }); scene.add(sun.target);
 sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04; scene.add(sun);
 const water = createWater(); scene.add(water);
+const clouds = createClouds(); scene.add(clouds);
 
 const overlay = document.getElementById("overlay");
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
-let world, chunks, buildingViews, unitViews, lifeViews, worldRoot;
+let world, chunks, buildingViews, unitViews, lifeViews, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
 const quality = new Quality(renderer, sun, sub => { if (setTerrainDetail(sub) && world) world.grid.markAllDirty(); });
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
+  water.userData.setGrid(world.grid); world.on("ground", () => { waterDirty = true; });   // 물 깊이(얕은 물빛·물거품)
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world, charPool);
   lifeViews = new LifeViews(worldRoot, world, overlay);
+  new Decor(worldRoot, world);                     // 덤불·꽃·자갈(보기만)
   const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map))];
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
@@ -128,7 +134,8 @@ function frame() {
   unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
-  water.userData.tick(simT);
+  water.userData.tick(simT); clouds.userData.tick(dt);
+  if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();

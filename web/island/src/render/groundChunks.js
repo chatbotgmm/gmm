@@ -12,7 +12,7 @@ let SUB = 4;                                   // 가까운 땅의 칸당 조각
 // 거리별 상세도(오픈월드 지형의 LOD와 같은 생각): 보는 곳(화면 중심)에서 가까운 청크만 촘촘히, 멀수록 성기게.
 // 칸 테두리에서는 높이가 직선이라(가운데 볼록은 테두리에서 0) 상세도가 다른 청크끼리도 틈이 생기지 않는다.
 export const LOD_NEAR = 26, LOD_MID = 50, LOD_HYST = 4;   // m: 이 안은 SUB, 그다음은 SUB/2, 더 멀면 1. 경계에서 왔다 갔다 하지 않게 4 m 여유
-const BLEND_R = 0.42, LOWEST = -1.6;
+const BLEND_R = 0.22, LOWEST = -1.6;   // 칸 경계 색 섞는 폭(작을수록 또렷)
 export function setTerrainDetail(sub) { const changed = SUB !== sub; SUB = sub; return changed; }
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583), CLIFF_ROCK = new THREE.Color(0x8f8a82);
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
@@ -43,7 +43,7 @@ function typeColor(type, gx, gz, out) {
 /** 격자 좌표 (gx, gz)에서의 바닥 색: 근처 칸들의 종류를 경계에서 둥글게 섞는다(위치만의 함수라 칸 사이 이음매가 없음). */
 function groundColor(grid, rx, rz, out) {
   // 경계를 칸 선에서 살짝 비틀어(도메인 워프) 계단 모양 대신 구불구불한 자연스러운 경계로
-  const gx = rx + (noise(rx * 0.8 + 3.1, rz * 0.8) - 0.5) * 0.75, gz = rz + (noise(rx * 0.8, rz * 0.8 - 5.7) - 0.5) * 0.75;
+  const gx = rx + (noise(rx * 0.8 + 3.1, rz * 0.8) - 0.5) * 0.4, gz = rz + (noise(rx * 0.8, rz * 0.8 - 5.7) - 0.5) * 0.4;
   const x0 = Math.floor(gx), z0 = Math.floor(gz);
   let tw = 0; out.setRGB(0, 0, 0);
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
@@ -99,18 +99,29 @@ function normalAt(grid, gx, gz, hx, hz) {
 }
 const toW = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
 
-function cliffColor(grid, x, z, y, gx, gz) {
-  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : c && c.groundType === GroundType.Rock ? CLIFF_ROCK : CLIFF;
-  return new THREE.Color().copy(base).multiplyScalar(0.82 + 0.18 * noise(gx * 2 + y * 3, gz * 2 - y * 3) + Math.max(-0.15, y * 0.1));
+function cliffColor(grid, x, z, y, gx, gz, tall = false) {
+  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : (c && c.groundType === GroundType.Rock) || tall ? CLIFF_ROCK : CLIFF;
+  const strata = tall ? 0.9 + 0.12 * noise(gx * 0.7, y * 4.5) : 1;                 // 높은 절벽은 돌빛 + 가로 결
+  return new THREE.Color().copy(base).multiplyScalar((0.82 + 0.18 * noise(gx * 2 + y * 3, gz * 2 - y * 3) + Math.max(-0.15, y * 0.1)) * strata);
+}
+/** 구석 그늘(미리 계산): 둘레 8방향 두 거리에서 더 높은 땅·벽이 얼마나 막는지 → 0(트임)~0.5(깊은 구석) */
+function occlusion(grid, gx, gz, h0) {
+  let occ = 0;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4, ca = Math.cos(a), sa = Math.sin(a);
+    for (const r of [0.6, 1.4]) { const h = chunkHeight(grid, gx + ca * r, gz + sa * r); occ += Math.min(1, Math.max(0, (h - h0) / r) * 0.9); }
+  }
+  return Math.min(0.5, occ / 16 * 1.1);
 }
 
 /** 칸 테두리 한 변: 내 변이 이웃보다 높으면 그 사이에 벽(절벽·턱). */
 function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
   const [ha, hb] = my, [la, lb] = nb;
   if (ha - la < 0.01 && hb - lb < 0.01) return;
+  const tall = Math.max(ha - la, hb - lb) > 0.55 && la > -0.3, foot = 0.68;          // 높은 벽은 돌빛, 벽 밑동은 그늘로 어둡게
   b.quad([
-    { p: toW(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az) }, { p: toW(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz) },
-    { p: toW(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz) }, { p: toW(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az) },
+    { p: toW(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az, tall) }, { p: toW(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz, tall) },
+    { p: toW(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz, tall).multiplyScalar(foot) }, { p: toW(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az, tall).multiplyScalar(foot) },
   ]);
 }
 
@@ -130,6 +141,7 @@ function cellSurface(b, grid, x, z, c, sub) {
         const n = normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color());
         const steep = Math.min(1, Math.max(0, (0.86 - n[1]) / 0.2));             // 가파를수록 흙·바위 빛
         if (steep > 0 && !grid.isWater(Math.floor(gx), Math.floor(gz))) col.lerp(cliffColor(grid, Math.floor(gx), Math.floor(gz), 0, gx, gz), steep * 0.85);
+        if (!grid.isWater(Math.floor(gx), Math.floor(gz))) col.multiplyScalar(1 - occlusion(grid, gx, gz, heightIn(c, e, u, v)));   // 구석 그늘
         pc = { n, c: col }; pointCache.set(k, pc);
       }
       return { p: toW(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c };
