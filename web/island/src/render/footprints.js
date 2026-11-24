@@ -28,18 +28,18 @@ export class Footprints {
   }
   stamp(world, u, side) {
     const s = u.scale || 1, h = u.heading || 0, lx = Math.cos(h) * 0.065 * s * side, lz = -Math.sin(h) * 0.065 * s * side;   // 왼발·오른발 옆으로 벌림
-    const x = u.x + lx, z = u.z + lz, kind = this.surface(world, x, z); if (!kind) return;
+    if (!this.cap) return; const x = u.x + lx, z = u.z + lz, kind = this.surface(world, x, z); if (!kind) return;
     const p = { x, z, y: world.standHeight(x, z) + 0.012, h, s: 0.8 + 0.4 * s, t: LIFE, kind };
     if (this.prints.length < this.cap) this.prints.push(p); else { this.prints[this.next] = p; this.next = (this.next + 1) % this.cap; }
   }
   update(dt, world) {
-    if (!this.cap) { this.mesh.count = 0; return; }
+    if (!this.cap && !this.onStep) { this.mesh.count = 0; return; }
     for (const u of world.units) {                                                // 걸은 거리로 발 디딤(0.32 m × 몸 크기마다 번갈아)
       const was = this.last.get(u); this.last.set(u, { x: u.x, z: u.z, side: was?.side ?? 1, acc: was?.acc ?? 0 });
       if (!was || u.insideBuildingId || u.swimming || u.sailing || u.state === "Held") continue;
       const d = Math.hypot(u.x - was.x, u.z - was.z); if (d > 1.5) continue;   // 옮겨진 것(순간 이동)은 빼고
       const cur = this.last.get(u); cur.acc = was.acc + d;
-      if (cur.acc > 0.32 * (u.scale || 1)) { cur.acc = 0; cur.side = -was.side; this.stamp(world, u, cur.side); }
+      if (cur.acc > 0.32 * (u.scale || 1)) { cur.acc = 0; cur.side = -was.side; this.stamp(world, u, cur.side); if (u.running ? cur.side > 0 : true) this.onStep?.(u, this.surface(world, u.x, u.z)); }
     }
     let n = 0;
     for (let i = 0; i < this.prints.length; i++) {

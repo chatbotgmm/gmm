@@ -86,7 +86,7 @@ export class Tools {
     if (Math.abs(c.elevation - e) > 1e-6) w.applyHeight(d.x, d.z, e);
     if (c.groundType !== g) { w.grid.setGround(d.x, d.z, g); w.emit("ground", { x: d.x, z: d.z, type: g }); }
   }
-  undo() { this.commitStroke(); const s = this.history.pop(); if (!s) return this.onStatus("되돌릴 게 없어요"); for (const d of s) this.setCell(d, d.g0, d.e0); this.redoStack.push(s); this.onStatus(`↶ 되돌렸어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
+  undo() { this.commitStroke(); const s = this.history.pop(); if (!s) return this.onStatus("되돌릴 게 없어요"); for (const d of s) this.setCell(d, d.g0, d.e0); this.redoStack.push(s); this.onUndoSound?.(); this.onStatus(`↶ 되돌렸어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
   redo() { const s = this.redoStack.pop(); if (!s) return this.onStatus("다시 할 게 없어요"); for (const d of s) this.setCell(d, d.g1, d.e1); this.history.push(s); this.onStatus(`↷ 다시 했어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
   /** 모양: brush(붓) · line(길: 두 칸을 누르면 걸어가는 길을 따라) · rect(네모 채우기) */
   setShape(s) { this.shape = s; this.shapeStart = null; this.refresh(); this.onStatus(s === "line" ? "길: 시작 칸 → 끝 칸을 누르면 걸어가는 길을 따라 칠해요" : s === "rect" ? "네모: 두 모서리 칸을 누르면 그 안을 채워요" : ""); }
@@ -102,7 +102,7 @@ export class Tools {
     else if (this.heightOp === "level") this.world.reshape(x, z, "flatten", this.levelH, 1);
     else this.world.reshape(x, z, this.heightOp, this.flatTarget, 1);
   }
-  buzz() { if (TOOLS_TOUCH && navigator.vibrate) { const t = performance.now(); if (t - (this.lastBuzz || 0) > 60) { this.lastBuzz = t; navigator.vibrate(6); } } }
+  buzz() { this.onEdit?.(this.mode); if (TOOLS_TOUCH && navigator.vibrate) { const t = performance.now(); if (t - (this.lastBuzz || 0) > 60) { this.lastBuzz = t; navigator.vibrate(6); } } }
   // ---- 십자선 모드: 화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함
   setCross(on) { this.cross = on; this.cancelStroke(); this.applyControls(); this.onCross?.(on); this.refresh(); }
   tick() {

@@ -42,7 +42,7 @@ export class RoomView {
     F.room(b); this.build();
     const it = this.L, span = Math.max(it.w, it.d);
     this.controls.target.set(0, 0.4, 0); this.camera.position.set(span * 0.55, span * 0.95, span * 1.15); this.fit(); this.controls.update();
-    this.touch.hidden = false; this.ui.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
+    this.onSound?.("doorIn"); this.touch.hidden = false; this.ui.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
     this.offFurn = () => {}; this.status(`${BUILDINGS[b.defId].name}에 들어왔어요 · 가구를 골라 방에 놓아 보세요`);
   }
   /** 화면 모양에 맞춰 방 전체가 보이게: 세로 화면은 렌즈를 넓히고 더 멀리서 */
@@ -55,7 +55,7 @@ export class RoomView {
     this.controls.maxDistance = Math.max(16, dist * 1.4); this.lastAspect = a;
   }
   close() {
-    if (!this.isOpen) return; this.isOpen = false; this.touch.hidden = true; this.ui.hidden = true; document.body.classList.remove("inroom");
+    if (!this.isOpen) return; this.isOpen = false; this.onSound?.("doorOut"); this.touch.hidden = true; this.ui.hidden = true; document.body.classList.remove("inroom");
     this.root.clear(); this.onExit?.();
   }
   status(t) { this.ui.querySelector(".rmsg").textContent = t; }
@@ -133,7 +133,7 @@ export class RoomView {
   commit() {
     const g = this.ghost, ok = g.moving != null ? F.move(this.world, this.b, g.moving, g.x, g.z, g.rot, this.li) : F.place(this.world, this.b, g.id, g.x, g.z, g.rot, this.li);
     if (!ok) return this.status("여기엔 놓을 수 없어요(벽 밖이거나 다른 가구와 겹쳐요)");
-    this.status(`${FURNITURE[g.id].name}을 놓았어요`); this.ghost = null; this.build(); this.refreshUI();
+    this.onSound?.("furniture"); this.status(`${FURNITURE[g.id].name}을 놓았어요`); this.ghost = null; this.build(); this.refreshUI();
   }
   stow() { if (this.sel == null) return; const id = this.L.furniture[this.sel].id; F.stow(this.world, this.b, this.sel, this.li); this.sel = null; this.build(); this.refreshUI(); this.status(`${FURNITURE[id].name}을 집 창고에 넣었어요`); }
   cancel() { this.ghost = null; this.sel = null; this.build(); this.refreshUI(); this.status(""); }

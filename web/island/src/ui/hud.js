@@ -99,8 +99,12 @@ export class Hud {
   }
   setSeasonLabel(t) { if (t) this.seasonBtn.textContent = `계절: ${t}`; }
   // ---- 갈매폰
-  openPhone() { this.phone.hidden = false; this.openApp(null); }
-  closePhone() { this.phone.hidden = true; this.app = null; }
+  openPhone() { this.phone.hidden = false; this.openApp(null); this.sfx?.play("phoneOpen", { vol: 0.5 }); }
+  closePhone() { if (!this.phone.hidden) this.sfx?.play("phoneClose", { vol: 0.5 }); this.phone.hidden = true; this.app = null; }
+  initSound() {
+    const b = document.getElementById("sfxBtn"), v = document.getElementById("sfxVol"), s = this.sfx, label = () => { b.textContent = `소리: ${s.on ? "켬" : "끔"}`; };
+    label(); v.value = Math.round(s.volume * 100); b.onclick = () => { s.setOn(!s.on); label(); }; v.oninput = () => s.setVolume(v.value / 100);
+  }
   openApp(app) {
     this.app = app;
     const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor" };

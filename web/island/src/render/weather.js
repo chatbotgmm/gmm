@@ -49,7 +49,7 @@ export class WeatherViews {
       this.snow.geometry.setDrawRange(0, n); this.snow.geometry.attributes.position.needsUpdate = true;
     }
     // 번개(폭풍일 때 4~11초마다, 두 번 번쩍)
-    if (kind === "storm" && (this.nextBolt -= dt) <= 0) { this.nextBolt = 4 + Math.random() * 7; this.flash = 1; this.second = 0.18; }
+    if (kind === "storm" && (this.nextBolt -= dt) <= 0) { this.nextBolt = 4 + Math.random() * 7; this.flash = 1; this.second = 0.18; this.onBolt?.(); }
     if (this.second > 0 && (this.second -= dt) <= 0) this.flash = 0.8;
     this.flash = Math.max(0, this.flash - dt * 5); this.bolt.intensity = this.flash * 2.2;
   }

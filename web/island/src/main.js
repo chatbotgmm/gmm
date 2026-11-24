@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { World, SPEED_BOOST } from "./world/World.js";
-import { GRID_W } from "./config.js";
+import { GRID_W, toWorldX, toWorldZ } from "./config.js";
 import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
@@ -25,6 +25,7 @@ import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { RoomView } from "./render/room.js";
 import { Minimap } from "./ui/minimap.js";
+import { Sfx } from "./audio/sfx.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 
@@ -64,6 +65,8 @@ const weatherViews = new WeatherViews(scene, daylight);
 let seasonPick = null;                                                            // null = 실제 날짜
 const seasonNow = () => seasonPick || seasonOf(daylight.now());
 const seasonLook = new SeasonLook(toon), leaves = new FallingLeaves(scene), footprints = new Footprints(scene);   // 눈·모래 위 발자국
+footprints.onStep = (u, kind) => sfx.play("step", { pos: { x: toWorldX(u.x), z: toWorldZ(u.z) }, vol: kind === "snow" ? 0.35 : 0.22, rate: kind === "snow" ? 0.7 : kind === "sand" ? 0.85 : 1.05 });   // 발소리(가까운 갈매미만)
+weatherViews.onBolt = () => sfx.thunder(0.9);
 let moduleObjs = null;                                                            // 나무 등 모듈 물체(계절 잎 색)
 function tintGround() {                                                           // 나무 잎·덤불을 지금 계절로(땅은 셰이더가 천천히 바꿈)
   if (!world?.season) return;
@@ -78,6 +81,24 @@ const overlay = document.getElementById("overlay");
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
 let world, chunks, buildingViews, unitViews, lifeViews, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
+// 효과음(Kenney RPG sounds CC0 + 합성). 화면 중심에서 가까운 일만 들림
+const sfx = new Sfx();
+const at = o => o ? { x: toWorldX((o.x ?? 0) + 0.5), z: toWorldZ((o.z ?? 0) + 0.5) } : null;
+function hookSounds(w) {
+  w.on("treeHit", t => sfx.play("chop", { pos: at(t) }));
+  w.on("treeFell", e => sfx.play("creak", { pos: at(e.tree), vol: 0.8, rate: 0.8 }));
+  w.on("oreHit", o => sfx.play("mine", { pos: at(o), vol: 0.7, rate: 0.75 }));
+  w.on("buildingProgress", b => sfx.play("hammer", { pos: at(b.door), vol: 0.55, rate: 1.1 }));
+  w.on("buildingAdded", b => { if (ready) sfx.play("place", { pos: at(b.door) }); });
+  w.on("buildingDone", b => { sfx.play("done", { pos: at(b.door), vol: 0.8 }); sfx.chime([659, 784], 0.08, 0.12); });
+  w.on("fish", e => { sfx.splash(at(e.u), 0.8); if (e.fish.rarity !== "common" || e.fish.season) sfx.chime([880, 1175], 0.08, 0.15); });
+  for (const ev of ["market", "bank", "foodSale", "granary"]) w.on(ev, e => sfx.play("coins", { pos: at(e.u || e.buyer), vol: 0.6 }));
+  w.on("furnitureBought", e => sfx.play("bag", { pos: at(e.u) }));
+  w.on("beachcomb", e => sfx.chime([1047, 1319], 0.07, 0.14));
+  w.on("wishDone", () => sfx.chime([784, 988, 1175, 1568], 0.1, 0.2));
+  w.on("rank", () => sfx.fanfare());
+  w.on("unitAdded", () => { if (ready) sfx.summon(); });
+}
 // 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)
 function applyAssetTier(c) {
   const lite = c.model < 1;
@@ -109,7 +130,7 @@ function mount(w) {
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`); });
-  world.setSeason(seasonNow()); tintGround();
+  world.setSeason(seasonNow()); tintGround(); hookSounds(world);
   world.on("season", s => { tintGround(); hud?.status(`${SEASONS[s].icon} ${SEASONS[s].name}이에요 · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => { const w = WEATHER[e.kind]; hud?.status(`${w.icon} 날씨: ${w.name}${WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""}`); });
   world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${d.text}" (${d.hint})`); });
@@ -156,6 +177,11 @@ const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls
   onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
+sfx.listener = { target: controls.target, camera };
+tools.onEdit = kind => sfx.play(kind === "height" ? "dig" : "paint", { vol: 0.5 }); tools.onUndoSound = () => sfx.play("undo", { vol: 0.6 });
+roomView.onSound = n => sfx.play(n, { vol: 0.7 });
+hud.sfx = sfx; hud.initSound?.();
+addEventListener("pointerdown", e => { if (e.target.closest?.("button")) sfx.play("click", { vol: 0.35 }); }, true);   // 버튼 누를 때 작은 소리
 const minimap = new Minimap({ getWorld: () => world, camera, controls });   // 넓은 지도: 미니맵(누르면 그곳으로)
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
@@ -207,7 +233,7 @@ function frame() {
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   daylight.focus = controls.target; daylight.update(dt, now);
-  weatherViews.update(dt, world.weather.kind, controls.target);
+  weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
   if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); }
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
@@ -244,5 +270,5 @@ hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { roomView, daylight, toon, quality, weatherViews, seasonLook, setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { sfx, roomView, daylight, toon, quality, weatherViews, seasonLook, setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

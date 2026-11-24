@@ -38,10 +38,11 @@ SRC="$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -n 1)/web/island"
 [ -f "$SRC/tools/bundle.py" ] || { echo "내려받은 파일에 web/island가 없어요"; exit 1; }
 
 python3 "$SRC/tools/bundle.py" "$TMP/index.html" --flat
-mkdir -p "$DIR/assets/suburban" "$DIR/assets/gulls" "$DIR/assets/props"
+mkdir -p "$DIR/assets/suburban" "$DIR/assets/gulls" "$DIR/assets/props" "$DIR/assets/sfx"
 cp -r "$SRC/assets/suburban/." "$DIR/assets/suburban/"
 cp -r "$SRC/assets/gulls/." "$DIR/assets/gulls/"
 cp -r "$SRC/assets/props/." "$DIR/assets/props/"
+cp -r "$SRC/assets/sfx/." "$DIR/assets/sfx/"
 cp "$TMP/index.html" "$DIR/index.html"
 
 echo
