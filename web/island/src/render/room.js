@@ -196,7 +196,7 @@ export class RoomView {
       const r = v.root; r.rotation.set(0, 0, 0);
       if (o) {
         const f = FURNITURE[o.id], sz = F.size(o.id, o.rot), c = this.cellCenter(o.x, o.z, sz), yaw = -o.rot * Math.PI / 2, use = f.use;
-        if (use === "sleep") { r.position.set(c.x, 0.52, c.z); r.rotation.set(-Math.PI / 2, yaw + Math.PI, 0, "YXZ"); this.play(v, "Idle", 0.35); }          // 침대에 누워 새근새근(천천히 숨쉬기)
+        if (use === "sleep") { r.position.set(c.x, 0.52, c.z); r.rotation.set(-Math.PI / 2, yaw, 0, "YXZ"); this.play(v, "Idle", 0.35); }   // 머리가 베개(침대 뒤쪽 −z) 쪽, 천천히 숨쉬기          // 침대에 누워 새근새근(천천히 숨쉬기)
         else if (use === "sit") { r.position.set(c.x, f.id === "sofa" ? 0.36 : 0.42, c.z); r.rotation.y = yaw; this.play(v, "Sit"); }
         else { const fx = Math.sin(yaw), fz = Math.cos(yaw); r.position.set(c.x + fx * 0.75, 0, c.z + fz * 0.75); r.rotation.y = yaw + Math.PI; this.play(v, "Idle", 0.8); }   // 책장 앞에 서서 읽기
       } else {                                                                     // 쓸 가구가 없으면 빈자리에 서 있음

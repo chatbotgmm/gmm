@@ -21,8 +21,9 @@ const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 /** 매 프레임 욕구 변화: 시간이 지나면 줄고, 하는 일에 따라 찬다. */
 export function tickNeeds(u, dt, state, inside) {
   const n = u.needs; if (!n) return;
-  const working = ["Chop", "Mine", "Build", "Farm", "Trade", "Fish"].includes(state), resting = state === "Idle" || state === "Sleep";
-  n.energy = clamp(n.energy + dt * (state === "Sleep" ? 6 : inside ? 3 : resting ? 0.6 : working ? -0.35 : -0.15));
+  // 기력(= 100 − 피로도): 일하면 피로가 쌓이고(기력 −0.55/초), 앉아 쉬거나 자면 풀림(벤치·침대는 unitBrain에서 더)
+  const working = ["Chop", "Mine", "Build", "Farm", "Trade", "Fish", "Improve"].includes(state), resting = state === "Idle" || state === "Sleep" || state === "Sit";
+  n.energy = clamp(n.energy + dt * (state === "Sleep" ? 6 : inside ? 3 : resting ? 0.6 : working ? -0.55 : -0.15));
   n.social = clamp(n.social + dt * (inside ? 0.8 : -0.12));
   n.fun = clamp(n.fun + dt * (state === "Zoomies" || state === "Swim" ? 4 : state === "Fish" ? 0.8 : -0.1));
 }

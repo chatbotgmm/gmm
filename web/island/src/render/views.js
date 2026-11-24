@@ -27,7 +27,7 @@ export class BuildingViews {
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
     if (def.id === "bench") {                                                       // 좌판 높이를 모델에서 직접 잼(앉을 때 엉덩이를 맞춤): 칸 가운데(앞쪽으로 0.12)에서 위→아래 광선
-      holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.12).applyMatrix4(holder.matrixWorld);
+      holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.2).applyMatrix4(holder.matrixWorld);
       const hit = new THREE.Raycaster(o, new THREE.Vector3(0, -1, 0)).intersectObject(model, true)[0]; if (hit) b.seatY = hit.point.y;
     }
     v.height = new THREE.Box3().setFromObject(model).max.y + 0.35;                // 🐦 표시는 실제 지붕 위에

@@ -804,3 +804,20 @@ test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리
   for (let t = 0; t < 900 && !stood; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sit") { if (!sat) e0 = u.needs.energy; sat = true; assert.equal(b.sitter, u.unitId); } else if (sat) stood = true; }
   assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null);
 });
+
+test("밤·낮과 피로: 밤엔 집에 들어가 계속 자고(야행성은 밤에 일함), 일하면 피로가 쌓이고 쉬면 풀림", async () => {
+  const w = World.create(7, seededRandom(9), { wild: true }); w.instantBuild = true; w.addUnitByName("그림자");
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const q = spot("house", c.x + 6, c.z + 6), h = w.placeBuilding("house", q[0], q[1], 0).building, u = w.units.find(o => o.name === "기본"), n = w.units.find(o => o.name === "그림자");
+  u.home = h.id; h.owner = u.unitId; w.isNight = true;
+  let inside = 0, nightWork = 0;
+  for (let t = 0; t < 240; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (t > 60 && u.insideBuildingId === h.id) inside++; if (["GoMine", "Mine", "GoChop", "Chop", "Wander", "Visit"].includes(n.state)) nightWork++; }
+  assert.ok(inside > 1500, `밤엔 집 안에서 잠(${inside}/1800 틱)`); assert.ok(nightWork > 100, `야행성은 밤에 돌아다니며 일함(${nightWork})`);
+  // 낮: 야행성이 잠
+  w.isNight = false; let nSleep = 0; for (let t = 0; t < 120; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (n.state === "Sleep" || n.insideBuildingId) nSleep++; }
+  assert.ok(nSleep > 600, `야행성은 낮에 잠(${nSleep})`);
+  // 피로: 일하면 기력이 줄고(피로↑) 벤치·잠은 채움
+  const { tickNeeds } = await import("../src/units/mind.js"); const z = { needs: { energy: 80, social: 50, fun: 50 } };
+  tickNeeds(z, 10, "Chop", false); assert.ok(Math.abs(z.needs.energy - 74.5) < 1e-6, "일 10초 = 기력 −5.5(피로 +5.5)");
+  tickNeeds(z, 10, "Sit", false); assert.ok(z.needs.energy > 74.5, "앉아 쉬면 풀림"); const e1 = z.needs.energy; void e1; tickNeeds(z, 10, "Sleep", false); assert.equal(z.needs.energy, 100, "자면 10초에 다 풀림(초당 +6)");
+});

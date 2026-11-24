@@ -15,7 +15,7 @@ export class LifeViews {
     this.sparkGeo = new THREE.SphereGeometry(0.02, 6, 4); this.sparkMat = new THREE.MeshBasicMaterial({ color: 0xffe08a });
     world.on("seedAdded", s => this.addSeed(s)); world.on("seedRemoved", s => this.removeSeed(s));
     for (const s of world.seeds) this.addSeed(s);
-    world.on("treeHit", t => this.shake(t.id, 0.35, "z"));
+    world.on("treeHit", t => { this.sway(t); this.leaves(t); });                  // 도끼질: 나무가 밑동을 축으로 흔들리고 잎이 떨어짐
     world.on("treeFell", e => this.fell(e.tree, e.dir));
     world.on("treeGrow", t => this.grow(t.id));
     world.on("oreHit", o => { this.shake(o.id, 0.3, "x"); this.spark(o); });
@@ -57,7 +57,7 @@ export class LifeViews {
   shake(id, secs, axis) { const o = this.objs.get(id); if (o) this.anims.push({ kind: "shake", o, t: secs, axis }); }
   fell(tree, dir) {
     const o = this.objs.get(tree.id); if (!o) return;
-    const d = Math.hypot(dir[0], dir[1]) || 1;
+    const d = Math.hypot(dir[0], dir[1]) || 1; this.anims = this.anims.filter(a => !(a.kind === "sway" && a.o === o));   // 쓰러질 땐 흔들기 멈춤
     this.anims.push({ kind: "fall", o, t: 0, dx: dir[0] / d, dz: dir[1] / d, tree });
   }
   async showStump(tree, on) {
@@ -75,6 +75,16 @@ export class LifeViews {
     const tree = this.world.trees.find(t => t.id === id); if (tree) this.showStump(tree, false);
     o.visible = true; o.rotation.x = 0; o.rotation.z = 0; this.anims.push({ kind: "grow", o, t: 0 });
   }
+  /** 나무 흔들기: 밑동을 축으로 0.75초 동안 줄어들며 출렁(최대 약 9°), 흔들리는 방향은 매번 조금 다르게 */
+  sway(t) { const o = this.objs.get(t.id); if (!o) return; this.anims = this.anims.filter(a => !(a.kind === "sway" && a.o === o)); const a = Math.random() * 6.283;
+    this.anims.push({ kind: "sway", o, t: 0, dx: Math.cos(a), dz: Math.sin(a) }); }
+  /** 잎 몇 장이 떨어짐(계절에 따라 연두·단풍·흰색) */
+  leaves(t) {
+    const top = terrainHeight(this.world.grid, t.x + 0.5, t.z + 0.5) + 1.1, col = { autumn: 0xf2683a, winter: 0xeef3f6, spring: 0xa6e27e }[this.world.season] ?? 0x5aa845;
+    this.leafMat ||= new THREE.MeshStandardMaterial({ color: col, side: THREE.DoubleSide }); this.leafMat.color.setHex(col); this.leafGeo ||= new THREE.PlaneGeometry(0.07, 0.05);
+    for (let i = 0; i < 5; i++) { const m = new THREE.Mesh(this.leafGeo, this.leafMat); m.position.set(toWorldX(t.x + 0.5 + (Math.random() - 0.5) * 0.8), top + Math.random() * 0.5, toWorldZ(t.z + 0.5 + (Math.random() - 0.5) * 0.8)); m.rotation.set(Math.random() * 3, Math.random() * 3, 0); this.scene.add(m);
+      this.sparks.push({ m, v: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.3, (Math.random() - 0.5) * 0.6), t: 1.4, leaf: true }); }
+  }
   spark(o) {
     const y = terrainHeight(this.world.grid, o.x + 0.5, o.z + 0.5) + 0.2;
     for (let i = 0; i < 6; i++) {
@@ -86,6 +96,12 @@ export class LifeViews {
   update(dt, camera, w, h, tmp = new THREE.Vector3()) {
     for (let i = this.anims.length - 1; i >= 0; i--) {
       const a = this.anims[i], o = a.o, base = o.userData.base || { scale: 1 };
+      if (a.kind === "sway") {
+        a.t += dt; const k = Math.max(0, 1 - a.t / 0.75), ang = Math.sin(a.t * 20) * 0.16 * k;
+        o.rotation.set(a.dz * ang, o.rotation.y, -a.dx * ang, "YXZ");
+        if (k <= 0) { o.rotation.set(0, o.rotation.y, 0, "YXZ"); this.anims.splice(i, 1); }
+        continue;
+      }
       if (a.kind === "shake") {
         a.t -= dt; const v = Math.sin(a.t * 50) * 0.06 * a.t;
         if (a.axis === "z") o.rotation.z = v; else o.position.x = base.x + v * 0.3;
@@ -103,7 +119,7 @@ export class LifeViews {
       }
     }
     for (let i = this.sparks.length - 1; i >= 0; i--) {
-      const s = this.sparks[i]; s.t -= dt; s.v.y -= 9.8 * dt; s.m.position.addScaledVector(s.v, dt);
+      const s = this.sparks[i]; s.t -= dt; s.v.y -= (s.leaf ? 0.9 : 9.8) * dt; if (s.leaf) { s.v.y = Math.max(s.v.y, -0.6); s.m.rotation.x += dt * 3; s.m.rotation.z += dt * 2; } s.m.position.addScaledVector(s.v, dt);   // 잎은 천천히 팔랑
       if (s.t <= 0) { this.scene.remove(s.m); this.sparks.splice(i, 1); }
     }
     for (const { p, g } of this.crops) {

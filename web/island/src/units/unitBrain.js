@@ -431,9 +431,19 @@ function standUp(u, world) {
   const b = u.sitOn && world.buildings.get(u.sitOn); if (b) { if (b.sitter === u.unitId) b.sitter = null; if (u.state === US.Sit) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; } }
   u.sitOn = null; u.sitY = null;
 }
+/** 잘 시간인가: 보통 갈매미는 밤, 야행성(그림자·불씨)은 낮. world.isNight는 화면(해 높이)이 알려 줌 */
+export const isNocturnal = u => !!(PERSONA[u.name] || {}).nocturnal;
+export const sleepTime = (u, world) => world.isNight == null ? false : (isNocturnal(u) ? !world.isNight : world.isNight);
+/** 잠자리: 내 집(있으면) → 아니면 그 자리에서 */
+function goToBed(u, world, rnd) {
+  const home = u.home && world.buildings.get(u.home);
+  if (home && world.isDone(home) && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지", 2.4); return true; }
+  return startActivityInner(u, "sleep", world, rnd);
+}
 function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
   if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
+  if (sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { if (goToBed(u, world, rnd)) return; }   // 잘 시간: 집에 가서 잠(야행성은 낮에)
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
   if (world.economy) {
     if (u.job === "merchant") {                                                  // 상인: 가공품은 은행에, 원자재는 가공
@@ -555,7 +565,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     case US.Sleep:
       if ((u.emoteT ?? 0) <= 0) emote(u, "💤", 2.5);
-      if (u.timer <= 0 || (u.needs?.energy ?? 100) >= 95) { u.activity = "sleep"; done(u, 1, rnd, world); emote(u, "잘 잤다!"); }
+      if (u.timer <= 0 && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { u.timer = 8; break; }   // 집이 없으면 밖에서 계속 잠
+      if (u.timer <= 0 || ((u.needs?.energy ?? 100) >= 95 && !sleepTime(u, world))) { u.activity = "sleep"; done(u, 1, rnd, world); emote(u, "잘 잤다!"); }
       break;
     case US.Zoomies:
       if (followPath(u, dt, world, rnd)) {
@@ -667,7 +678,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     }
     case US.Inside:
-      if (u.timer <= 0) exitBuilding(u, world, rnd); break;
+      if (u.timer <= 0) { if (u.insideAct === "sleep" && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { u.timer = 8; if (u.useFurni?.id && !/bed/i.test(u.useFurni.id)) { const b = world.buildings.get(u.insideBuildingId); u.useFurni = b ? F.pickUse(b, true, rnd) : u.useFurni; } } else exitBuilding(u, world, rnd); }   // 아직 잘 시간이면 계속 잠
+      break;
     case US.GoTrade:
       if (world.economy && followPath(u, dt, world, rnd)) {                         // 경제: 시장 앞에서 한동안 손님을 기다림
         u.state = US.Trade; u.timer = 8 + rnd() * 6; emote(u, "어서 오세요!"); u.tradeStart = u.coins || 0; break;
@@ -730,7 +742,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = world.buildings.get(u.sitOn); if (!b) { standUp(u, world); setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
         const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = 7 + rnd() * 7; u.path = null;
-        u.x = cx + 0.5 + (b.door.x - cx) * 0.12; u.z = cz + 0.5 + (b.door.z - cz) * 0.12;   // 벤치 위(앞쪽으로 살짝)
+        u.x = cx + 0.5 + (b.door.x - cx) * 0.2; u.z = cz + 0.5 + (b.door.z - cz) * 0.2;   // 좌판 앞쪽(다리가 앞으로 내려오게)
         u.heading = Math.atan2(b.door.x - cx, b.door.z - cz); u.sitY = b.seatY ?? (b.elevation ?? 0) + 0.33;   // 좌판 높이(그림이 모델에서 잰 값). 엉덩이를 여기 맞추는 건 views.js u.anim = "Sit"; emote(u, pick(["후~", "♪", "좋다"], rnd));
       }
       break;

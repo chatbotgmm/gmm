@@ -211,12 +211,14 @@ function makePoseClips(root, idle) {
   const out = {}, B = { hips, spine, head, armL: arm.L, armR: arm.R, legL: leg.L, legR: leg.R, kneeL: knee.L, kneeR: knee.R };
   const build = (name, fn) => {
     const P = POSE_PERIOD[name], N = 30, times = [...Array(N + 1).keys()].map(i => i / N * P), tracks = [], changed = new Set(), rot = {}, pos = [];
-    for (let i = 0; i <= N; i++) { const r = fn(i / N); for (const [k, q] of Object.entries(r.rot)) (rot[k] ||= []).push(q); pos.push(r.hip || 0); }
+    const scl = {};
+    for (let i = 0; i <= N; i++) { const r = fn(i / N); for (const [k, q] of Object.entries(r.rot)) (rot[k] ||= []).push(q); pos.push(r.hip || 0); for (const [k, s] of Object.entries(r.scale || {})) (scl[k] ||= []).push(s); }
     for (const [k, qs] of Object.entries(rot)) { const o = B[k]; if (!o || changed.has(o.name)) continue;
       const v = []; qs.forEach((q, i) => toLocal(o, q).toArray(v, i * 4)); tracks.push(new THREE.QuaternionKeyframeTrack(o.name + ".quaternion", times, v)); changed.add(o.name); }
     { const v = []; pos.forEach((d, i) => hipLocal(d).toArray(v, i * 3)); tracks.push(new THREE.VectorKeyframeTrack(hips.name + ".position", times, v)); }
+    for (const [k, ss] of Object.entries(scl)) { const o = B[k]; if (!o) continue; const v = []; ss.forEach((s, i) => v.push(o.scale.x * s, o.scale.y * s, o.scale.z * s)); tracks.push(new THREE.VectorKeyframeTrack(o.name + ".scale", times, v)); changed.add(o.name + "#s"); }
     for (const t of idle.tracks) { const bn = t.name.slice(0, t.name.lastIndexOf(".")), prop = t.name.slice(t.name.lastIndexOf(".") + 1);
-      if ((prop === "quaternion" && changed.has(bn)) || (prop === "position" && bn === hips.name)) continue;
+      if ((prop === "quaternion" && changed.has(bn)) || (prop === "position" && bn === hips.name) || (prop === "scale" && changed.has(bn + "#s"))) continue;
       const n = t.getValueSize(); tracks.push(new t.constructor(t.name, [0], Array.from(t.values.slice(0, n)))); }
     out[name] = new THREE.AnimationClip(name, P, tracks);
   };
@@ -224,8 +226,9 @@ function makePoseClips(root, idle) {
   const armRest = s => { const c = childBone(arm[s]); return c ? charP(c).sub(charP(arm[s])).normalize() : new THREE.Vector3(s === "L" ? 1 : -1, 0, 0); };
   const point = (s, dir) => new THREE.Quaternion().setFromUnitVectors(armRest(s), dir.clone().normalize());
   const side = s => Math.sign(charP(arm[s]).x) || (s === "L" ? 1 : -1);
-  build("Sit", f => { const br = Math.sin(f * Math.PI * 2) * 0.03, sw = Math.sin(f * Math.PI * 4) * 0.18;   // 다리를 앞으로 뻗고 발을 대롱대롱 흔듦
-    return { hip: legLen * 0.62, rot: { legL: ax(X, -1.45 + sw), legR: ax(X, -1.45 - sw), kneeL: ax(X, 0.35), kneeR: ax(X, 0.35), spine: ax(X, -0.08 + br), head: ax(X, 0.05 - br),
+  // 앉기: 짧은 다리를 1.6배로 늘려(앉은 동안만) 허벅지는 좌판 위로 수평, 정강이는 좌판 앞으로 내려 대롱대롱 — 의자에 걸터앉은 모양
+  build("Sit", f => { const br = Math.sin(f * Math.PI * 2) * 0.03, sw = Math.sin(f * Math.PI * 4) * 0.22;
+    return { hip: legLen * 0.62, scale: { legL: 1.6, legR: 1.6 }, rot: { legL: ax(X, -1.5), legR: ax(X, -1.5), kneeL: ax(X, 1.45 + sw), kneeR: ax(X, 1.45 - sw), spine: ax(X, -0.08 + br), head: ax(X, 0.05 - br),
       armL: point("L", new THREE.Vector3(side("L") * 0.55, -0.8, 0.15)), armR: point("R", new THREE.Vector3(side("R") * 0.55, -0.8, 0.15)) } }; });
   build("Hoe", f => { const up = seg(f, 0, 0.45) * (1 - seg(f, 0.45, 0.62)), down = seg(f, 0.45, 0.62) * (1 - seg(f, 0.8, 1));
     const dir = s => new THREE.Vector3(side(s) * (0.25 - 0.1 * down), 0.2 + 0.75 * up - 0.95 * down, 0.35 + 0.1 * up + 0.55 * down);
