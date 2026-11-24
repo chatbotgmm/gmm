@@ -5,6 +5,7 @@ import * as J from "../world/jobs.js";
 import * as M from "../units/mind.js";
 import { TRIBES } from "../data/catalog.js";
 import * as E from "../world/economy.js";
+import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
 
 const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
   [UnitState.Zoomies]: "신나서 뛰는 중", [UnitState.Flee]: "도망치는 중", [UnitState.Avoid]: "혼자 있고 싶어",
@@ -45,7 +46,9 @@ export class Hud {
     this.instantBuild = false;
     this.summonBtn = document.getElementById("summon"); this.summonBtn.onclick = () => this.onSummon?.();
     document.getElementById("dexBtn").onclick = () => this.showDex(true);
-    this.qBtn = document.getElementById("quality"); this.qBtn.onclick = () => this.setQualityLabel(this.onQuality?.());
+    // 그래픽 설정 5단계(설정 앱): 누르면 바로 바뀜
+    this.qBox = document.getElementById("quality");
+    for (const k of ORDER) { const b = el("button", "", QUALITY[k].name); b.dataset.q = k; b.title = QUALITY_NOTE[k]; b.onclick = () => this.setQuality(this.onQuality?.(k)); this.qBox.appendChild(b); }
     document.getElementById("dexClose").onclick = () => this.showDex(false);
     this.info = document.getElementById("info");
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
@@ -181,7 +184,7 @@ export class Hud {
       i => i.furniture ? "가구 · 2단계 실내 꾸미기에서 놓기" : `${i.price}🐚`);
     body.append(el("p", "dim", "다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
-  setQualityLabel(name) { if (name) this.qBtn.textContent = `화질: ${name}`; }
+  setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
   status(text) { this.msg.textContent = text; this.msg.hidden = !text; }
   update(chunkInfo) {
     const w = this.world, inside = w.units.filter(u => u.insideBuildingId).length;

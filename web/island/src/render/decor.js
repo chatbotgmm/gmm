@@ -10,8 +10,9 @@ import { seededRandom } from "../util.js";
 const BUSH_COLORS = [0x5aa845, 0x6bb84e, 0x4f9a3f], FLOWER_COLORS = [0xffe066, 0xffffff, 0xff9cc0, 0x9fd4ff], PEBBLE_COLORS = [0xb9b3a8, 0xa9a397, 0xc9c3b6];
 
 export class Decor {
-  constructor(scene, world) {
-    this.world = world; this.scene = scene; const g = world.grid, rnd = seededRandom((world.seed ?? 7) * 31 + 5);
+  /** opt: { density: 0~1(양), simple: 단순한 모양(삼각형 1/4), bushShadow: 덤불 그림자 } — 그래픽 설정 */
+  constructor(scene, world, opt = { density: 1, simple: false, bushShadow: true }) {
+    this.world = world; this.scene = scene; const g = world.grid, rnd = seededRandom((world.seed ?? 7) * 31 + 5), keep = seededRandom((world.seed ?? 7) * 17 + 3);
     const at = (x, z) => g.get(x, z), cells = { bush: [], flower: [], pebble: [] };
     const treeNear = new Set(); for (const t of world.trees) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) treeNear.add(`${t.x + dx},${t.z + dz}`);
     const c0 = world.center;
@@ -23,16 +24,18 @@ export class Decor {
         if (o.elevation - c.elevation > 0.5) wallBase = true; if (c.elevation - o.elevation > 0.5) wallTop = true; if (o.groundType === "Sand" && !g.isWater(x + dx, z + dz)) sandNear = true; }
       if (c.groundType === "Grass") {
         const p = (treeNear.has(`${x},${z}`) ? 0.3 : 0) + (wallBase ? 0.3 : 0) + (wallTop ? 0.18 : 0) + (sandNear ? 0.1 : 0);
-        if (rnd() < p) cells.bush.push([x, z]);
+        const kb = keep() < opt.density, kf = keep() < opt.density, kp = keep() < opt.density;   // 양 줄이기(같은 자리는 늘 같은 결과)
+        if (rnd() < p && kb) cells.bush.push([x, z]);
         const patch = Math.sin(x * 0.37 + z * 0.21) * Math.cos(x * 0.13 - z * 0.29);
-        if (patch > 0.55 && rnd() < 0.5) cells.flower.push([x, z]); else if (rnd() < 0.02) cells.flower.push([x, z]);
-      } else if (c.groundType === "Sand" && rnd() < 0.035) cells.pebble.push([x, z]);
-      else if (c.groundType === "Rock" && rnd() < 0.3) cells.pebble.push([x, z]);
+        if (((patch > 0.55 && rnd() < 0.5) || rnd() < 0.02) && kf) cells.flower.push([x, z]);
+        void kp;
+      } else if (c.groundType === "Sand" && rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]);
+      else if (c.groundType === "Rock" && rnd() < 0.3 && keep() < opt.density) cells.pebble.push([x, z]);
     }
     // 덤불: 둥근 덩이(위·아래로 약간 눌림), 꽃: 작은 공 셋이 한 송이, 자갈: 깎은 돌
     this.types = {
-      bush: { geo: new THREE.IcosahedronGeometry(0.3, 1), per: 2, colors: BUSH_COLORS, size: [0.7, 1.25], squash: 0.78, shadow: true },
-      flower: { geo: new THREE.SphereGeometry(0.045, 6, 4), per: 3, colors: FLOWER_COLORS, size: [0.8, 1.3], squash: 1, shadow: false },
+      bush: { geo: new THREE.IcosahedronGeometry(0.3, opt.simple ? 0 : 1), per: 2, colors: BUSH_COLORS, size: [0.7, 1.25], squash: 0.78, shadow: !!opt.bushShadow },   // 단순: 80 → 20 삼각형
+      flower: { geo: opt.simple ? new THREE.OctahedronGeometry(0.05, 0) : new THREE.SphereGeometry(0.045, 6, 4), per: 3, colors: FLOWER_COLORS, size: [0.8, 1.3], squash: 1, shadow: false },   // 단순: 48 → 8
       pebble: { geo: new THREE.DodecahedronGeometry(0.11, 0), per: 1, colors: PEBBLE_COLORS, size: [0.6, 1.6], squash: 0.6, shadow: false },
     };
     this.items = [];                                                                 // { type, cell: "x,z", i(인스턴스 번호), gx, gz, s, rot, lift }
@@ -57,6 +60,8 @@ export class Decor {
     world.on("buildingRemoved", b => this.refresh(b.cells));
     world.on("ground", e => this.refresh([[e.x, e.z]]));
   }
+  /** 그래픽 설정이 바뀌어 다시 만들 때: 장면에서 빼고 메모리 반납 */
+  dispose() { this.disposed = true; for (const m of Object.values(this.meshes)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); m.dispose?.(); } }
   /** 소품 하나를 제자리에(칸에 건물이 있거나 맞지 않는 바닥이면 숨김) */
   place(it) {
     const g = this.world.grid, [x, z] = it.cell.split(",").map(Number), c = g.get(x, z), def = this.types[it.type], m = new THREE.Matrix4();
@@ -69,6 +74,7 @@ export class Decor {
     this.meshes[it.type].setMatrixAt(it.i, m);
   }
   refresh(cells) {
+    if (this.disposed) return;
     const touched = new Set();
     for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) for (const it of this.byCell.get(`${x + dx},${z + dz}`) || []) { this.place(it); touched.add(it.type); }
     for (const t of touched) this.meshes[t].instanceMatrix.needsUpdate = true;

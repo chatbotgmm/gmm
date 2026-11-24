@@ -56,16 +56,22 @@ const overlay = document.getElementById("overlay");
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
 let world, chunks, buildingViews, unitViews, lifeViews, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
-const quality = new Quality(renderer, sun, sub => { if (setTerrainDetail(sub) && world) world.grid.markAllDirty(); });
+// 그래픽 설정 5단계: 바뀌면 땅 상세도·소품·갈매미 그림자 거리를 다시 맞춤
+let decor = null;
+const quality = new Quality(renderer, sun, c => {
+  if (setTerrainDetail(c.terrainSub, c.lodScale, c.farDrop) && world) world.grid.markAllDirty();
+  unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
+  if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); }
+});
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   water.userData.setGrid(world.grid); world.on("ground", () => { waterDirty = true; });   // 물 깊이(얕은 물빛·물거품)
   buildingViews = new BuildingViews(worldRoot, world, overlay);
-  unitViews = new UnitViews(worldRoot, world, charPool); unitViews.realShadows = quality.cfg.gullShadow;
+  unitViews = new UnitViews(worldRoot, world, charPool); unitViews.setShadowDist(quality.cfg.shadows ? quality.cfg.gullShadowDist : 0);
   lifeViews = new LifeViews(worldRoot, world, overlay);
-  new Decor(worldRoot, world);                     // 덤불·꽃·자갈(보기만)
+  decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정)
   const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map))];
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
@@ -127,10 +133,11 @@ function keyCamera(dt) {
   t.add(mv); camera.position.copy(t).add(off);
 }
 function frame() {
+  if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   if (ready) world.update(dt);                       // 불러오는 동안은 멈춤
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
-  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target); lastSync = now; }   // + 거리별 상세도
+  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 2, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   daylight.update(dt, now);
@@ -155,8 +162,8 @@ const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", 
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 hud.onToon = () => { toon.set(!toon.on); return toon.on ? "툰" : "기본"; };
 hud.timeLabel = () => daylight.label();
-hud.onQuality = () => { quality.next(); unitViews.setRealShadows(quality.cfg.gullShadow); hud.status(`화질: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.cfg.name; };
-hud.setQualityLabel(quality.cfg.name);
+hud.onQuality = mode => { quality.set(mode); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
+hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이

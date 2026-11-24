@@ -43,6 +43,7 @@
   .apps button { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; box-shadow: none; font-size: 12.5px; padding: 4px; }
   .apps button span { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-size: 25px; background: #fbe3cf; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .col { display: flex; flex-direction: column; gap: 8px; } .col button { text-align: left; }
+  .qrow { display: flex; flex-wrap: wrap; gap: 6px; } .qrow button { text-align: center; }
   button.go { background: var(--accent); color: #fff; font-weight: 700; }
   #stats { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 12.5px; } #stats span { white-space: nowrap; }
   .tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; } .tbl td { padding: 4px 2px; border-bottom: 1px dashed #eadfcb; }
@@ -112,7 +113,7 @@
     <div id="pageMarket" class="page" hidden><div id="marketBody"></div></div>
     <div id="pageSummon" class="page" hidden><p class="dim">아직 마을에 없는 갈매미 하나가 무작위로 와요.</p><button id="summon" class="go">🥚 소환</button><div id="summonLast" class="dim"></div></div>
     <div id="pageFiles" class="page" hidden><div class="col"><button id="save">💾 저장(이 브라우저)</button><button id="load">📂 불러오기</button><button id="reset">🏝 새 섬</button></div></div>
-    <div id="pageSettings" class="page" hidden><div class="col"><button id="quality" title="자동: 느리면 해상도를 낮춤 · 높음 · 낮음(지형·그림자 가볍게)">화질: 자동</button><button id="zones">구역 이름 보이기</button><button id="timeMode" title="실제 시간(기기 시계) · 낮 고정 · 빠르게">시간: 실제 시간</button><button id="toonBtn" title="툰(단계 명암) · 기본(부드러운 명암)">그림체: 툰</button><button id="dexBtn" hidden>도감</button></div></div>
+    <div id="pageSettings" class="page" hidden><div class="col"><h4>그래픽</h4><div id="quality" class="qrow"></div><div id="qualityNote" class="dim"></div><h4>그 밖에</h4><button id="zones">구역 이름 보이기</button><button id="timeMode" title="실제 시간(기기 시계) · 낮 고정 · 빠르게">시간: 실제 시간</button><button id="toonBtn" title="툰(단계 명암) · 기본(부드러운 명암)">그림체: 툰</button><button id="dexBtn" hidden>도감</button></div></div>
     <div id="pageHelp" class="page" hidden><div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 돌리기 · 방향키 옮기기<br>도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기<br>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 벌리기 = 확대<br>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)<br>경제: 🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼·광부는 원자재를 🐚 시장의 상인에게 팔고, 상인은 가공(목재·석재·철괴)해서 은행에 팔아 돈을 벌어요. 번 돈으로 농부·어부에게서 음식을 사고, 시장에서 집을 사요. 돈이 없으면 물물교환해요.</div></div>
   </div>
 </div>

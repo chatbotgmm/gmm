@@ -13,7 +13,8 @@ let SUB = 4;                                   // 가까운 땅의 칸당 조각
 // 칸 테두리에서는 높이가 직선이라(가운데 볼록은 테두리에서 0) 상세도가 다른 청크끼리도 틈이 생기지 않는다.
 export const LOD_NEAR = 26, LOD_MID = 50, LOD_HYST = 4;   // m: 이 안은 SUB, 그다음은 SUB/2, 더 멀면 1. 경계에서 왔다 갔다 하지 않게 4 m 여유
 const BLEND_R = 0.22, LOWEST = -1.6;   // 칸 경계 색 섞는 폭(작을수록 또렷)
-export function setTerrainDetail(sub) { const changed = SUB !== sub; SUB = sub; return changed; }
+let LOD_SCALE = 1, FAR_DROP = false;                                                 // 그래픽 설정: 상세도 거리 배율, 멀리서 볼 때 한 단계 낮추기
+export function setTerrainDetail(sub, lodScale = 1, farDrop = false) { const changed = SUB !== sub || LOD_SCALE !== lodScale || FAR_DROP !== farDrop; SUB = sub; LOD_SCALE = lodScale; FAR_DROP = farDrop; return changed; }
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583), CLIFF_ROCK = new THREE.Color(0x8f8a82);
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
 const BASE = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[0])]));
@@ -180,18 +181,20 @@ export class GroundChunks {
   /** 이 청크가 보는 곳(focus, 월드 좌표)에서 얼마나 떨어졌는지에 따른 칸당 조각 수. cur: 지금 상세도(경계 여유용) */
   lodFor(cx, cz, focus, cur = null) {
     if (!focus) return SUB;
+    const near = LOD_NEAR * LOD_SCALE, mid = LOD_MID * LOD_SCALE, drop = FAR_DROP && (this.camDist || 0) > 70 ? 1 : 0;   // 카메라가 멀면(섬 전체 보기) 한 단계 성기게
     const n = this.grid.chunk, wx = toWorldX(cx * n + n / 2), wz = toWorldZ(cz * n + n / 2);
     const d = Math.max(0, Math.hypot(wx - focus.x, wz - focus.z) - n * 0.7);          // 청크 가장자리까지 대략의 거리
-    const lv = s => (s >= SUB ? 0 : s >= SUB / 2 && SUB > 1 ? 1 : 2), want = d < LOD_NEAR ? 0 : d < LOD_MID ? 1 : 2;
+    const lv = s => (s >= SUB ? 0 : s >= SUB / 2 && SUB > 1 ? 1 : 2), want = Math.min(2, (d < near ? 0 : d < mid ? 1 : 2) + drop);
     let level = want;
     if (cur !== null) {                                                               // 경계 근처면 지금 상세도를 유지
-      const c = lv(cur), edge = [LOD_NEAR, LOD_MID][Math.min(c, want)];
+      const c = lv(cur), edge = [near, mid][Math.min(c, want, 1)];
       if (c !== want && Math.abs(d - edge) < LOD_HYST) level = c;
     }
     return [SUB, Math.max(1, SUB / 2), 1][level];
   }
   /** 바뀐 청크는 바로, 보는 곳이 옮겨져 상세도가 바뀐 청크는 한 번에 maxLod개씩(끊김 없게) 다시 만든다. */
-  sync(focus = null, maxLod = 2) {
+  sync(focus = null, maxLod = 2, camDist = 0) {
+    this.camDist = camDist;
     const keys = this.grid.takeDirty();
     if (keys.length) { cornerCache = new Map(); cacheGrid = this.grid; }      // 높이가 바뀌었을 수 있으니 이번 동기화에서 새로 계산
     const todo = new Set(keys);

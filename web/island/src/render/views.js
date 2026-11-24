@@ -138,21 +138,18 @@ export class UnitViews {
       ch.root.parent?.remove(ch.root); v.g.remove(v.cap); v.g.add(ch.root); v.ch = ch;
       ch.anim = ""; ch.onceRef = null; for (const t of Object.values(ch.inHand)) t.visible = false;
       ch.root.rotation.set(0, 0, 0); ch.root.position.set(0, 0, 0);
-      ch.root.traverse(o => { if (o.isMesh) o.castShadow = this.realShadows !== false; });
+      v.castOn = undefined;                                                         // 그림자는 거리 보고 sync에서 정함
     });
     return v;
   }
-  /** 실제 그림자 켜기/끄기(화질). 끄면 발밑 둥근 원판으로 대신함 */
-  setRealShadows(on) {
-    this.realShadows = on;
-    for (const v of this.views) v.ch?.root.traverse(o => { if (o.isMesh) o.castShadow = on; });
-  }
+  /** 그래픽 설정: 카메라에서 이 거리(m) 안의 갈매미만 실제 그림자, 그 밖은 발밑 원판(0이면 모두 원판) */
+  setShadowDist(d) { this.shadowDist = d; for (const v of this.views) v.castOn = undefined; }
   /** 헤엄: 몸이 물 위에서 출렁이고 좌우로 살짝 기울며 앞으로 숙임, 발밑 그림자 대신 물결 고리 두 개가 퍼짐. */
   swimLook(v, u, i, dt, time) {
     const sw = !!u.swimming && !u.insideBuildingId, body = v.ch ? v.ch.root : v.cap, s = u.scale || 1;
     v.swimK = THREE.MathUtils.clamp((v.swimK || 0) + (sw ? dt : -dt) * 2.5, 0, 1);       // 들어가고 나올 때 부드럽게
     const k = v.swimK;
-    v.blob.visible = !this.realShadows && k < 0.5;                                   // 실제 그림자가 꺼졌을 때(화질 낮음)만 발밑 원판
+    v.blob.visible = !v.castOn && k < 0.5;                                           // 실제 그림자를 안 드리우는 갈매미(멀거나 설정)는 발밑 원판
     if (body && v.ch?.humanSwim) {                                                       // 사람형: 몸을 앞으로 눕혀 엎드린 자세(자유형), 등이 물 위로 살짝
       const lean = 1.15, h = u.height ?? 0.8 * s;
       body.rotation.x = lean * k; body.rotation.z = 0;
@@ -177,6 +174,10 @@ export class UnitViews {
       const v = this.views[i], { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));
+      if (v.ch && camera && (v.castOn === undefined || (this.frameNo + i) % 15 === 0)) {   // 가까운 갈매미만 실제 그림자(15프레임마다 확인)
+        const want = (this.shadowDist ?? 999) > 0 && camera.position.distanceTo(g.position) < (this.shadowDist ?? 999);
+        if (v.castOn !== want) { v.castOn = want; v.ch.root.traverse(o => { if (o.isMesh) o.castShadow = want; }); }
+      }
       this.swimLook(v, u, i, dt, time);
       let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
       const walking = !!u.path && u.pathIndex < u.path.length && u.state !== "Held";
