@@ -155,6 +155,8 @@ export class Hud {
       const rows = w.wishes.map(x => { const d = WISH_BY_ID[x.id], u = w.units.find(o => o.unitId === x.unitId); return `<tr><td>${d.icon} <b>${u?.name ?? ""}</b>: ${d.text}</td><td class="dim">${d.hint}</td></tr>`; }).join("");
       document.getElementById("wishBody").innerHTML = `<p class="dim">갈매미가 가끔 마을에 바라는 것을 말해요. 들어주면 기뻐하고 ${w.economy ? `공식은행이 축하금 🪙${WISH_REWARD}을 줘요` : "배가 조금 불러요"}.</p>` +
         (rows ? `<table class="tbl">${rows}</table>` : `<p class="dim">지금은 바라는 게 없어요.</p>`) + `<p>이룬 소원: <b>${w.wishDone}</b>개</p>`;
+    } else if (this.app === "files") {
+      document.getElementById("saveInfo").textContent = this.savedLabel?.() || "";
     } else if (this.app === "summon") {
       this.setSummon(w);
     }

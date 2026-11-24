@@ -46,9 +46,9 @@ export class World {
     this.season = null; this.wrnd = seededRandom(((extra.seed ?? 7) * 7919 + 13) >>> 0);
     this.weather = extra.weather?.kind ? { ...extra.weather } : { kind: "clear", t: 150 };
     // 소원: { id, unitId, base, age } 최대 2개 · 이룬 수
-    this.wishes = []; this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
+    this.wishes = (extra.wishes || []).map(x => ({ ...x })); this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
     // 시세: 상인이 사는 원자재 값·음식 값(5초마다 다시 셈) · 지난 값(20초마다 하나, 48개)
-    this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = []; this.priceClock = 0; this.histClock = 0;
+    this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = extra.priceHist || []; this.priceClock = 0; this.histClock = 0;
     this.rank = extra.rank || 0; this.rankClock = 0;                               // 마을 등급(오르기만 함)
     this.granary = extra.granary || 0;                                            // 저장고에 쌓인 음식
     for (const m of modules) {
@@ -586,12 +586,13 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
     if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
     const w = new World(Grid.fromJSON(j.grid), j.modules, rnd, j);
+    w.time = j.time || 0;
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
     for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; } }

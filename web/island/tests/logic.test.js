@@ -670,3 +670,14 @@ test("실내 꾸미기: 집마다 구조(층·계단·칸막이벽), 놓기·옮
   assert.ok(["bed", "shellBed"].includes(F.pickUse(h, true).id));
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.equal(F.levels(back.buildings.get(c2.id))[1].furniture.length, ls[1].furniture.length, "층까지 저장됨");
 });
+
+test("저장: 등급·저장고·소원·가구·날씨·시세 기록까지 저장하고 그대로 불러옴", () => {
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; while (w.summon());
+  for (let i = 0; i < 400; i++) w.update(0.1);
+  w.rank = 2; w.granary = 17; w.wishDone = 3; w.makeWish(); w.setWeather("rain");
+  const s = JSON.stringify(w.serialize()); assert.ok(s.length < 500000, `저장 크기 ${s.length}`);
+  const b = World.fromJSON(JSON.parse(s), seededRandom(2));
+  assert.equal(b.wild, true); assert.equal(b.units.length, w.units.length); assert.equal(b.rank, 2); assert.equal(b.granary, 17); assert.equal(b.wishDone, 3);
+  assert.deepEqual(b.wishes.map(x => x.id), w.wishes.map(x => x.id)); assert.equal(b.weather.kind, "rain"); assert.equal(b.priceHist.length, w.priceHist.length);
+  assert.ok(Math.abs(b.time - w.time) < 1e-6); const byName = ws => Object.fromEntries(ws.units.map(u => [u.name, [u.unitId, u.coins, u.home]])); assert.deepEqual(byName(b), byName(w), "갈매미마다 id·돈·집 그대로");
+});
