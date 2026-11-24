@@ -1,5 +1,6 @@
 // 마을 등급: 갈매미·집·시설·이룬 소원·배부름을 점수로 합쳐 등급을 올림(내려가지는 않음). 등급마다 새 건물이 열리고 모두에게 축하금.
 import { BUILDINGS } from "../data/catalog.js";
+import { comfort } from "./furniture.js";
 
 export const RANKS = [
   { name: "갯마을", icon: "🛖", need: 0, unlock: [] },
@@ -10,11 +11,12 @@ export const RANKS = [
 export const RANK_REWARD = 5;                                                     // 등급이 오르면 갈매미마다 축하금(새 돈)
 const FACILITY = d => d.market || d.field || d.dock || d.storehouse || ["cafe", "shop", "post"].includes(d.id);
 
-/** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8, 계단 ×2(최대 10점), 장식 ×2(최대 10점), 이룬 소원 ×6, 평균 포만감 50 이상 +10 */
+/** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8, 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 평균 포만감 50 이상 +10 */
 export function rankScore(w) {
   const done = [...w.buildings.values()].filter(b => w.isDone(b)).map(b => [BUILDINGS[b.defId], b]);
   const owned = done.filter(([d, b]) => d.house && b.owner).length, empty = done.filter(([d, b]) => d.house && !b.owner).length;
   const fac = done.filter(([d]) => FACILITY(d)).length, stairs = done.filter(([d]) => d.id === "stairs").length;
+  const cozy = done.filter(([d]) => d.house).reduce((s, [, b]) => s + comfort(b), 0);
   const deco = done.filter(([d]) => d.deco).length, fed = w.units.length && w.avgFull() >= 50;
   const parts = [
     ["🐦 갈매미", w.units.length, 10, w.units.length * 10],
@@ -23,6 +25,7 @@ export function rankScore(w) {
     ["🏪 시설(시장·밭·낚시터·저장고·카페 등)", fac, 8, fac * 8],
     ["🪜 계단(최대 10점)", stairs, 2, Math.min(10, stairs * 2)],
     ["🏮 장식(가로등 등, 최대 10점)", deco, 2, Math.min(10, deco * 2)],
+    ["🛋 집 아늑함(가구, 최대 30점)", cozy, 1, Math.min(30, cozy)],
     ["💭 이룬 소원", w.wishDone || 0, 6, (w.wishDone || 0) * 6],
     ["😋 평균 포만감 50 이상", fed ? 1 : 0, 10, fed ? 10 : 0],
   ];

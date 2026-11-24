@@ -21,6 +21,7 @@ import { UnitControl } from "./systems/unitControl.js";
 import { TwoFinger } from "./systems/twoFinger.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
+import { RoomView } from "./render/room.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 
@@ -137,6 +138,10 @@ hud = new Hud({ tools, world,
 });
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
   onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
+// 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
+const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
+hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
+unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
 hud.setSummon(world);
@@ -172,6 +177,10 @@ function frame() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   if (ready) world.update(dt);                       // 불러오는 동안은 멈춤
+  if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
+    roomView.update(dt); quality.frame(dt, performance.now());
+    renderer.render(roomView.scene, roomView.camera); requestAnimationFrame(frame); return;
+  }
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 2, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
@@ -212,5 +221,5 @@ hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { daylight, toon, quality, weatherViews, seasonLook, setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { roomView, daylight, toon, quality, weatherViews, seasonLook, setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

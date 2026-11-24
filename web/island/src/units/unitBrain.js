@@ -11,6 +11,8 @@ import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
 import * as M from "./mind.js";
 import * as E from "../world/economy.js";
+import * as F from "../world/furniture.js";
+import { FURNITURE } from "../data/catalog.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
@@ -375,6 +377,11 @@ function chooseNext(u, world, rnd) {
       const h = world.housesForSale(u).filter(b => (u.coins || 0) >= (BUILDINGS[b.defId].price || 30)).sort((a, c) => BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
       if (h && startActivity(u, "market", world, rnd)) { u.shop = { kind: "house", b: h.id }; emote(u, "집 사러!"); return; }
     }
+    const home = u.home && world.buildings.get(u.home), shop = world.shopB();
+    if (home && shop && rnd() < 0.35) {                                           // 집이 있으면 남는 돈으로 잡화점에서 가구를 삼(밥값 두 번어치는 남김)
+      const want = F.nextWant(home), price = want && FURNITURE[want].price;
+      if (want && (u.coins || 0) >= price + 2 * world.foodPrice() && startPath(u, world, shop.door.x, shop.door.z)) { u.state = US.GoMarket; u.shop = { kind: "furnish", id: want }; emote(u, `${FURNITURE[want].name} 사러!`); return; }
+    }
   }
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy < 20 && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠
@@ -394,6 +401,8 @@ export function enterBuilding(u, b, rnd) {
   release(u);
   u.state = US.Inside; u.insideBuildingId = b.id; u.timer = sleepy ? 15 + rnd() * 10 : 6 + rnd() * 8; u.path = null; u.goal = null; u.running = false;
   u.insideAct = sleepy ? "sleep" : act;
+  u.useFurni = b.owner === u.unitId ? F.pickUse(b, sleepy, rnd) : null;            // 자기 집이면 가구를 씀(침대에서 낮잠 등)
+  if (u.useFurni && FURNITURE[u.useFurni.id].use === "sleep") u.timer += 6;
   if (!b.occupants.includes(u.unitId)) b.occupants.push(u.unitId);
 }
 export function exitBuilding(u, world, rnd) {
@@ -401,7 +410,7 @@ export function exitBuilding(u, world, rnd) {
   if (b) b.occupants = b.occupants.filter(id => id !== u.unitId);
   const spot = b ? nearestWalkable(world.grid, b.door.x, b.door.z) : nearestWalkable(world.grid, Math.floor(u.x), Math.floor(u.z));
   if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; }
-  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null;
+  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null;
   done(u, 0.7, rnd, world);                                                // 집 구경·잠 = 좋은 경험
 }
 
@@ -410,6 +419,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
   u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * (world.fx?.hunger ?? 1) * dt); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
+  if (u.useFurni && u.insideBuildingId && u.needs) {                              // 집 가구 쓰기: 침대 = 기력 회복 두 배, 앉기 = 조금 더, 책장 = 재미
+    const k = FURNITURE[u.useFurni.id]?.use, n = u.needs;
+    if (k === "sleep") n.energy = Math.min(100, n.energy + 3 * dt); else if (k === "sit") n.energy = Math.min(100, n.energy + 1 * dt); else if (k === "read") n.fun = Math.min(100, n.fun + 1.5 * dt);
+  }
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
   if (!u.swimming && !u.insideBuildingId && world.grid.isWater(...cellOf(u)) && !world.grid.isWalkable(...cellOf(u))) {   // 헤엄 중이 아닌데 물에 있으면(헤엄을 그만둠 등) 가까운 땅으로(부두 위는 그대로)
@@ -626,6 +639,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         const n = E.total(u.raw); u.state = US.Trade; u.processing = true; u.timer = 1.5 + n * 0.6; u.tool = "hammer"; u.anim = "Build"; emote(u, `🔨 가공 중(${n})`);
       } else if (shop.kind === "food") {
         if (world.buyFood(u)) { emote(u, "🛒 음식"); world.eatFood(u); done(u, 0.8, rnd, world); } else { emote(u, "다 팔렸네…"); setIdle(u, rnd, world); }
+      } else if (shop.kind === "furnish") {
+        if (world.buyFurniture(u, shop.id)) { emote(u, `🛋 ${FURNITURE[shop.id].name}!`, 2.6); done(u, 1.5, rnd, world); } else { emote(u, "돈이 모자라…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "stock") {
         const n = world.stockFood(u); emote(u, n ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고가 꽉 찼네", 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
       } else if (shop.kind === "granary") {

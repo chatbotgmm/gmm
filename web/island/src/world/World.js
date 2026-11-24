@@ -1,6 +1,6 @@
 // 섬 전체 상태: 격자, 해안 모듈, 자원(나무·광석·씨앗·낚시 자리), 건물, 유닛.
 // 그림과 입력은 모르고, 바뀐 일을 이벤트(on/emit)로 알린다. 뷰가 이벤트와 매 프레임 상태를 읽어 그린다.
-import { BUILDINGS, MODULES, UNITS, RARITY, FISH, ITEMS, PRICES } from "../data/catalog.js";
+import { BUILDINGS, MODULES, UNITS, RARITY, FISH, ITEMS, PRICES, FURNITURE } from "../data/catalog.js";
 import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
 import { Grid } from "./Grid.js";
@@ -15,6 +15,7 @@ import * as E from "./economy.js";
 import * as S from "./season.js";
 import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
+import * as F from "./furniture.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -253,6 +254,16 @@ export class World {
   setWeather(kind) { this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather); }
   stepWeather(dt) { if ((this.weather.t -= dt) <= 0) this.setWeather(S.pickWeather(this.season || "autumn", this.wrnd, this.weather.kind)); }
 
+  // ---- 실내 꾸미기: 잡화점(마을 등급 항구 마을)에서 집주인이 자기 돈으로 가구를 사서 자기 집에 놓음(낸 돈은 은행으로 = 회수)
+  shopB() { for (const b of this.buildings.values()) if (b.defId === "shop" && this.isDone(b)) return b; return null; }
+  buyFurniture(u, id) {
+    const def = FURNITURE[id], home = u.home && this.buildings.get(u.home);
+    if (!def?.price || !home || !this.shopB() || (u.coins || 0) < def.price) return false;
+    u.coins -= def.price; this.bank.returned += def.price;
+    if (!F.autoPlace(this, home, id)) { const it = F.room(home); it.stash[id] = (it.stash[id] || 0) + 1; }
+    this.emit("furnitureBought", { u, id, b: home }); return true;
+  }
+
   // ---- 마을 등급
   score() { return rankScore(this); }
   stepRank() {
@@ -474,6 +485,7 @@ export class World {
   /** 다 지었을 때: 계단·낚시터는 걸을 수 있게, 밭은 칸마다 밭(심고 거둠), 낚시터는 낚시 자리 */
   completed(b) {
     const def = BUILDINGS[b.defId];
+    if (def.house && !b.interior.furnished) { b.interior.furnished = true; for (const id of ["chair", "table"]) F.autoPlace(this, b, id); }   // 새 집엔 의자·테이블이 기본으로
     this.openStairs(b);
     if (def.field) for (const [x, z] of b.cells) if (!this.isPlot(x, z)) {
       this.grid.setGround(x, z, "Dirt"); const p = { x, z, stage: "empty", t: 0, grow: 40, claimed: null, field: b.id }; this.plots.push(p); this.emit("plotAdded", p);

@@ -76,27 +76,30 @@ export const BUILDINGS = {
   },
 };
 
-// 2단계(실내 꾸미기)에서 쓸 가구. interactionPoints의 x, z는 가구 중심 기준 칸 단위, facing은 유닛이 바라볼 방향.
+// 실내 꾸미기 가구. footprint는 방 칸(1칸 = 1 m) 단위. price: 잡화점 값(🪙, 없으면 안 팖 = 낚시로만), comfort: 집 아늑함(마을 점수·기분),
+// layer "floor": 깔개(다른 가구를 위에 놓을 수 있음), use: 갈매미가 집에 들어왔을 때 하는 일(sleep 기력 회복 2배, sit 쉬기, read 재미).
+// 모델은 아직 없어 render/furniture.js가 상자·원기둥으로 만든 모양을 씀(나중에 asset을 넣으면 그 모델).
 export const FURNITURE = {
-  table:     { id: "table", name: "테이블", footprint: { w: 1, d: 1 }, height: 0.45, asset: null,
-               placeholder: { shape: "box", color: 0xc8955a },
-               interactionPoints: [{ x: 0, z: 0.75, facing: Math.PI, type: InteractionType.Eat, activity: "커피 마시기" }] },
-  chair:     { id: "chair", name: "의자", footprint: { w: 1, d: 1 }, height: 0.5, asset: null,
-               placeholder: { shape: "box", color: 0xe0a46b },
-               interactionPoints: [{ x: 0, z: 0, facing: 0, type: InteractionType.Sit, activity: "앉아 쉬기" }] },
-  oven:      { id: "oven", name: "오븐", footprint: { w: 1, d: 1 }, height: 0.8, asset: null,
-               placeholder: { shape: "box", color: 0x9aa3ab },
-               interactionPoints: [{ x: 0, z: 0.75, facing: Math.PI, type: InteractionType.Work, activity: "빵 굽기" }] },
-  mailbox:   { id: "mailbox", name: "우편함", footprint: { w: 1, d: 1 }, height: 0.9, asset: null,
-               placeholder: { shape: "box", color: 0xd9574b },
-               interactionPoints: [{ x: 0, z: 0.75, facing: Math.PI, type: InteractionType.Work, activity: "편지 정리" }] },
-  bookshelf: { id: "bookshelf", name: "책장", footprint: { w: 2, d: 1 }, height: 1.2, asset: null,
-               placeholder: { shape: "box", color: 0xa8774a },
-               interactionPoints: [{ x: 0, z: 0.75, facing: Math.PI, type: InteractionType.Rest, activity: "책 읽기" }] },
-  bed:       { id: "bed", name: "침대", footprint: { w: 1, d: 2 }, height: 0.4, asset: null,
-               placeholder: { shape: "box", color: 0xf2c6c0 },
-               interactionPoints: [{ x: 0, z: 0, facing: 0, type: InteractionType.Rest, activity: "낮잠" }] },
+  bed:       { id: "bed", name: "침대", footprint: { w: 1, d: 2 }, height: 0.5, price: 18, comfort: 4, use: "sleep", useLabel: "침대에서 낮잠", colors: [0x9a6b45, 0xf4f1ea, 0x7fb7d9] },
+  chair:     { id: "chair", name: "의자", footprint: { w: 1, d: 1 }, height: 0.9, price: 6, comfort: 1, use: "sit", useLabel: "의자에 앉아 쉬기", colors: [0xc8955a] },
+  table:     { id: "table", name: "테이블", footprint: { w: 1, d: 1 }, height: 0.6, price: 8, comfort: 1, colors: [0xb98352] },
+  sofa:      { id: "sofa", name: "소파", footprint: { w: 2, d: 1 }, height: 0.8, price: 14, comfort: 3, use: "sit", useLabel: "소파에서 뒹굴", colors: [0xe08a6b, 0xf2c6b0] },
+  bookshelf: { id: "bookshelf", name: "책장", footprint: { w: 2, d: 1 }, height: 1.5, price: 12, comfort: 2, use: "read", useLabel: "책 읽기", colors: [0xa8774a] },
+  wardrobe:  { id: "wardrobe", name: "옷장", footprint: { w: 1, d: 1 }, height: 1.7, price: 12, comfort: 1, colors: [0xd8c3a5] },
+  rug:       { id: "rug", name: "깔개", footprint: { w: 2, d: 2 }, height: 0.02, price: 5, comfort: 1, layer: "floor", colors: [0xd9774b, 0xf2d27a] },
+  plant:     { id: "plant", name: "화분", footprint: { w: 1, d: 1 }, height: 0.9, price: 4, comfort: 1, colors: [0xc8643c, 0x5aa845] },
+  floorLamp: { id: "floorLamp", name: "스탠드", footprint: { w: 1, d: 1 }, height: 1.5, price: 7, comfort: 1, colors: [0x4a4a4a, 0xfff1c9], light: true },
+  oven:      { id: "oven", name: "오븐", footprint: { w: 1, d: 1 }, height: 0.9, price: 10, comfort: 1, colors: [0x9aa3ab] },
+  // 낚시로만 건지는 특별 가구(ITEMS의 furniture)
+  driftChair: { id: "driftChair", name: "표류목 의자", footprint: { w: 1, d: 1 }, height: 0.9, comfort: 2, use: "sit", useLabel: "표류목 의자에서 쉬기", shape: "chair", colors: [0xbfae94] },
+  coralTable: { id: "coralTable", name: "산호 테이블", footprint: { w: 1, d: 1 }, height: 0.6, comfort: 3, shape: "table", colors: [0xff8f7a] },
+  wreckShelf: { id: "wreckShelf", name: "난파선 책장", footprint: { w: 2, d: 1 }, height: 1.5, comfort: 4, use: "read", useLabel: "난파선 책장에서 책 읽기", shape: "bookshelf", colors: [0x5a4232] },
+  shellBed:   { id: "shellBed", name: "조개 침대", footprint: { w: 1, d: 2 }, height: 0.5, comfort: 6, use: "sleep", useLabel: "조개 침대에서 낮잠", shape: "bed", colors: [0xf7c6d0, 0xfff6f0, 0xffd9e3] },
 };
+export const SHOP_FURNITURE = Object.values(FURNITURE).filter(f => f.price).map(f => f.id);
+// 실내 바닥·벽지 색
+export const FLOORS = { wood: { name: "나무", color: 0xc49a6c }, tile: { name: "타일", color: 0xe8e2d6 }, carpet: { name: "카펫", color: 0x9fb7c9 }, dark: { name: "짙은 나무", color: 0x7a5236 } };
+export const WALLPAPERS = { cream: { name: "크림", color: 0xf6eedc }, mint: { name: "민트", color: 0xcfeee0 }, pink: { name: "분홍", color: 0xf7d6dc }, sky: { name: "하늘", color: 0xd3e6f5 }, wood: { name: "나무 벽", color: 0xd9b88f } };
 
 // 해안 경계 모듈(지시서 2-1). walkable이면 유닛이 위를 걸을 수 있고 surface가 걷는 높이(m).
 export const MODULES = {
@@ -217,10 +220,10 @@ export const FISH = [
 export const ITEMS = [
   { id: "bottle",  name: "유리병 편지", rarity: "common", price: 4 },
   { id: "pearl",   name: "진주",       rarity: "rare",   price: 20 },
-  { id: "chair",   name: "표류목 의자", rarity: "rare",   furniture: "chair" },
-  { id: "table",   name: "산호 테이블", rarity: "epic",   furniture: "table" },
-  { id: "bookshelf", name: "난파선 책장", rarity: "epic", furniture: "bookshelf" },
-  { id: "bed",     name: "조개 침대",   rarity: "legend", furniture: "bed" },
+  { id: "chair",   name: "표류목 의자", rarity: "rare",   furniture: "driftChair" },
+  { id: "table",   name: "산호 테이블", rarity: "epic",   furniture: "coralTable" },
+  { id: "bookshelf", name: "난파선 책장", rarity: "epic", furniture: "wreckShelf" },
+  { id: "bed",     name: "조개 침대",   rarity: "legend", furniture: "shellBed" },
   // 계절 한정 물건(낚시로 건지거나 바닷가에서 주움)
   { id: "petal",   name: "벚꽃잎 책갈피", rarity: "common", price: 5,  season: "spring" },
   { id: "conch",   name: "소라 껍데기",   rarity: "common", price: 5,  season: "summer" },

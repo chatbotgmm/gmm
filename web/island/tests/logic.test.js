@@ -628,3 +628,33 @@ test("계절 한정 수집: 그 계절 물고기·물건만 나오고, 바닷가
   w.setSeason("winter"); let got = null; for (let i = 0; i < 200 && !got; i++) got = w.beachcomb(u);
   assert.equal(got?.id, "iceshell"); assert.ok(w.items.iceshell >= 1);
 });
+
+test("실내 꾸미기: 방 안·겹침 검사, 놓기·옮기기·돌리기·치우기, 낚시 가구, 잡화점에서 사면 알아서 놓음", async () => {
+  const F = await import("../src/world/furniture.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true;
+  const spot = d => { const c = w.center; for (let r = 4; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const q = spot("house"), h = w.placeBuilding("house", q[0], q[1], 0, null, 1e9).building, it = F.room(h);
+  assert.deepEqual([it.w, it.d], [6, 5]);
+  assert.deepEqual(it.furniture.map(o => o.id).sort(), ["chair", "table"], "새 집엔 의자·테이블"); it.furniture.length = 0;
+  it.stash.bed = 1; it.stash.rug = 1; it.stash.chair = 1;
+  assert.equal(F.fits(h, "bed", 5, 0, 0), true); assert.equal(F.fits(h, "bed", 5, 4, 0), false, "방 밖(2칸이라 z=5까지)");
+  assert.equal(F.fits(h, "bed", 5, 4, 1), false, "돌리면 가로 2칸 → x=5에선 넘침"); assert.equal(F.fits(h, "bed", 4, 4, 1), true, "돌리면 맨 아래 줄에 들어감");
+  assert.equal(F.place(w, h, "bed", 0, 0, 0), true); assert.equal(it.stash.bed, 0);
+  assert.equal(F.fits(h, "chair", 0, 1, 0), false, "침대와 겹침"); assert.equal(F.fits(h, "rug", 0, 0, 0), true, "깔개는 다른 층");
+  assert.equal(F.place(w, h, "rug", 0, 0, 0), true); assert.equal(F.place(w, h, "chair", 2, 2, 0), true);
+  assert.equal(F.move(w, h, 2, 0, 1, 0), false, "침대 자리로는 못 옮김"); assert.equal(F.move(w, h, 2, 3, 3, 1), true); assert.deepEqual([it.furniture[2].x, it.furniture[2].rot], [3, 1]);
+  assert.equal(F.stow(w, h, 2), true); assert.equal(it.stash.chair, 1); assert.equal(it.furniture.length, 2);
+  // 낚시로 건진 가구(마을 가방)
+  w.items.bed = 1; assert.equal(F.available(w, h).shellBed.n, 1); assert.equal(F.place(w, h, "shellBed", 4, 0, 0), true); assert.equal(w.items.bed, 0);
+  assert.equal(F.comfort(h), 4 + 1 + 6);
+  // 잡화점: 항구 마을부터, 집주인이 자기 돈으로 사면 알아서 놓임(돈은 은행으로)
+  const u = w.units[0]; h.owner = u.unitId; u.home = h.id; u.coins = 50;
+  assert.equal(w.buyFurniture(u, "plant"), false, "잡화점이 없음");
+  w.rank = 2; w.addUnitByName("목수"); const s = spot("shop"); w.placeBuilding("shop", s[0], s[1], 0, null, 1e9);
+  const ret = w.bank.returned; assert.equal(w.buyFurniture(u, "plant"), true); assert.equal(u.coins, 50 - 4); assert.equal(w.bank.returned, ret + 4);
+  assert.ok(it.furniture.some(o => o.id === "plant"), "알아서 놓임"); assert.equal(F.nextWant(h), "table", "침대·의자는 있음(의자는 창고)");
+  assert.equal(w.buyFurniture(u, "driftChair"), false, "낚시 가구는 안 팖");
+  // 집에 들어오면 가구를 씀
+  assert.equal(F.pickUse(h, true).id === "bed" || F.pickUse(h, true).id === "shellBed", true);
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.equal(back.buildings.get(h.id).interior.furniture.length, it.furniture.length, "저장됨");
+});

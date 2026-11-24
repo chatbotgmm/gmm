@@ -1,6 +1,7 @@
 // 갈매미의 소원: 가끔 한 마리가 마을에 바라는 것을 말함(최대 2개). 이루어지면 그 갈매미가 기뻐하고 공식은행이 축하금을 줌.
 // ok(w, u): 지금 이 소원을 빌 만한가 · done(w, u, wish): 이루어졌나(빈 뒤의 상태로 판단)
 import { BUILDINGS } from "../data/catalog.js";
+import { owns } from "./furniture.js";
 
 const builtAny = (w, test) => [...w.buildings.values()].some(b => test(BUILDINGS[b.defId], b) && w.isDone(b));
 const builtCount = (w, test) => [...w.buildings.values()].filter(b => test(BUILDINGS[b.defId], b) && w.isDone(b)).length;
@@ -28,6 +29,9 @@ export const WISHES = [
     ok: w => w.rank >= 1 && !builtAny(w, d => d.id === "cafe"), done: w => builtAny(w, d => d.id === "cafe") },
   { id: "lamp", icon: "🏮", text: "밤길이 어두워요. 가로등이 있으면 좋겠어요", hint: "🔨 기본이 가로등을 지어요",
     ok: w => w.units.length >= 2 && !builtAny(w, d => d.id === "streetlamp"), done: w => builtAny(w, d => d.id === "streetlamp") },
+  { id: "bed", icon: "🛏", text: "내 집에 푹신한 침대가 있으면 좋겠어요", hint: "🏠 집 꾸미기에서 침대 놓기(잡화점에서 사요)",
+    ok: (w, u) => !!u.home && !owns(w.buildings.get(u.home), "bed") && !owns(w.buildings.get(u.home), "shellBed"),
+    done: (w, u) => { const b = u.home && w.buildings.get(u.home); return !!b && b.interior.furniture.some(o => o.id === "bed" || o.id === "shellBed"); } },
   { id: "giant", icon: "🏯", text: "내 몸에 맞는 큰 집이 필요해요", hint: "🔨 자이언트의 집",
     ok: (w, u) => u.name === "자이언트" && !u.home, done: (w, u) => !!u.home },
 ];
