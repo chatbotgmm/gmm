@@ -191,6 +191,7 @@ export async function addModuleViews(scene, world) {
     // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
     const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
     obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
+    if (def.vary) { const h = Math.abs(((x * 73856093) ^ (z * 19349663)) >>> 0) / 4294967295; obj.scale.multiplyScalar(0.85 + h * 0.4); obj.rotation.y = h * 6.283 * 7; }   // 나무: 칸마다 크기 0.85~1.25배·방향 제각각
     obj.name = m.id; scene.add(obj); map.set(m.id, obj);
   }));
   return map;

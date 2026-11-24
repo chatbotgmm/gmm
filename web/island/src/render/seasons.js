@@ -3,6 +3,24 @@
 import * as THREE from "three";
 import { OBJ_SNOW } from "./toon.js";
 
+// 나무 잎 계절 색(텍스처 한 장에 줄기·잎이 같이 있는 모델): 초록빛이 강한 곳만 바꿈. 봄 연두(가끔 벚꽃) · 가을 단풍(나무마다 주황~노랑) · 겨울 눈
+const TREE_U = { uTSpr: { value: 0 }, uTAut: { value: 0 }, uTWin: { value: 0 } };
+const TREE_TARGET = { spring: [1, 0, 0], summer: [0, 0, 0], autumn: [0, 1, 0], winter: [0, 0.35, 1] };
+function patchTree(m) {
+  if (!m || m.userData.treeSeason || m.userData.fromPatched) return; m.userData.treeSeason = true;
+  const own = m.onBeforeCompile && Object.prototype.hasOwnProperty.call(m, "onBeforeCompile") ? m.onBeforeCompile : null;
+  m.onBeforeCompile = (sh, r) => { own?.call(m, sh, r); Object.assign(sh.uniforms, TREE_U);
+    sh.vertexShader = "varying vec3 vTreeW;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vTreeW = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;");
+    sh.fragmentShader = "uniform float uTSpr; uniform float uTAut; uniform float uTWin; varying vec3 vTreeW;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+      { float g = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 6.0, 0.0, 1.0), lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+        float h = fract(sin(dot(floor(vTreeW.xz * 0.99), vec2(12.9898, 78.233))) * 43758.5453);
+        vec3 spr = h > 0.8 ? vec3(1.0, 0.72, 0.82) * (lum * 1.9 + 0.15) : diffuseColor.rgb * vec3(1.05, 1.12, 0.82);
+        vec3 aut = mix(vec3(0.95, 0.28, 0.06), vec3(1.0, 0.68, 0.12), h) * (lum * 1.9 + 0.06);
+        diffuseColor.rgb = mix(diffuseColor.rgb, spr, g * uTSpr);
+        diffuseColor.rgb = mix(diffuseColor.rgb, aut, g * uTAut);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 1.0), g * uTWin * 0.85); }`); };
+  const key = own ? m.customProgramCacheKey?.bind(m) : null; m.customProgramCacheKey = () => "treeSeason-" + (key ? key() : ""); m.needsUpdate = true;
+}
 // 땅 셰이더 값(모든 땅 재질·툰 재질이 같은 값을 씀). 계절이 바뀌면 몇 초에 걸쳐 바뀜
 const U = { uSnow: { value: 0 }, uAutumn: { value: 0 }, uSpring: { value: 0 } };
 const TARGET = { spring: { uSnow: 0, uAutumn: 0, uSpring: 1 }, summer: { uSnow: 0, uAutumn: 0, uSpring: 0 }, autumn: { uSnow: 0, uAutumn: 1, uSpring: 0 }, winter: { uSnow: 0.85, uAutumn: 0.35, uSpring: 0 } };
@@ -41,6 +59,7 @@ export class SeasonLook {
     const t = TARGET[season] || TARGET.summer, k = Math.min(1, dt * 0.6);
     for (const key of Object.keys(U)) { const goal = key === "uSnow" && snow !== null ? snow : t[key]; U[key].value += (goal - U[key].value) * k; }   // 땅 눈 = 쌓인 눈 깊이
     OBJ_SNOW.value += (Math.max(0, (snow ?? 0) - 0.1) / 0.9 - OBJ_SNOW.value) * k;   // 물체 위 눈은 조금 쌓인 뒤부터
+    const tt = TREE_TARGET[season] || TREE_TARGET.summer; TREE_U.uTSpr.value += (tt[0] - TREE_U.uTSpr.value) * k; TREE_U.uTAut.value += (tt[1] - TREE_U.uTAut.value) * k; TREE_U.uTWin.value += (Math.max(tt[2] * 0.5, snow ?? 0) * tt[2] - TREE_U.uTWin.value) * k;
   }
   /** 잎 재질 하나를 이 계절 색으로 바꾼 복사본(계절·색마다 한 번만 만듦) */
   leafMat(base, season, i, pine) {
@@ -57,7 +76,7 @@ export class SeasonLook {
       o.traverse(x => {
         if (!x.isMesh) return;
         const cur = x.material, std = cur.userData.src || cur, base = x.userData.leafBase || std.userData.seasonBase || std;
-        if (!/^leafs/.test(base.name)) return;
+        if (!/^leafs/.test(base.name)) { patchTree(std); if (cur !== std) patchTree(cur); return; }   // 한 장짜리 텍스처 나무: 셰이더로 계절 색
         x.userData.leafBase = base;
         const want = this.leafMat(base, season, i, base.name === "leafsDark");
         x.material = this.toon?.on ? this.toon.convert(want) : want;

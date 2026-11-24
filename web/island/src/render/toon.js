@@ -54,7 +54,7 @@ export class Toon {
       t = clay ? new THREE.MeshStandardMaterial({ ...base, roughness: 1, metalness: 0 }) : new THREE.MeshToonMaterial({ ...base, gradientMap: GRAD });
       const own = Object.prototype.hasOwnProperty.call(m, "onBeforeCompile") ? m.onBeforeCompile : null, snow = this.snow && !m.userData.noSnow;   // 지붕 색 바꾸기 같은 셰이더 수정도 옮김 + 눈
       if (own || snow || clay) { t.onBeforeCompile = (sh, r) => { own?.call(t, sh, r); if (snow) addSnow(sh); if (clay) addClay(sh); }; t.customProgramCacheKey = () => `${this.style}-${snow ? "snow-" : ""}${own ? m.customProgramCacheKey() : ""}`; }
-      t.userData.src = m; this.toToon.set(m, t); this.toStd.set(t, m);
+      t.userData.src = m; t.userData.fromPatched = !!m.userData.treeSeason; this.toToon.set(m, t); this.toStd.set(t, m);   // 나무 계절 셰이더가 이미 붙은 재질을 바꾼 것(다시 붙이지 않게)
     }
     return t;
   }

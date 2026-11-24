@@ -135,9 +135,9 @@ export const MODULES = {
   bucket:     { id: "bucket", name: "양동이", walkable: false, viewSize: 0.45, assets: ["../village/assets/sk/bucket.glb"] },
   palm:       { id: "palm", name: "야자수", walkable: false, viewSize: 1.5,           // 바닷가 모래(나무처럼 벨 수 있음). 사용자 제공 모델
                 assets: ["assets/props/palm_{L}.glb"] },
-  tree:       { id: "tree", name: "나무", walkable: false, viewSize: 1.7,           // 잎이 옆 칸까지 퍼져 보이게(차지는 1칸)
-                assets: ["../village/assets/nk/tree_oak.glb", "../village/assets/nk/tree_default.glb", "../village/assets/nk/tree_fat.glb",
-                         "../village/assets/nk/tree_pineRoundA.glb", "../village/assets/nk/tree_detailed.glb"] },
+  // 나무(사용자 제공 Tripo 모델, 원본 47,208면 → 단계별 7,080 / 4,034 / 1,765 / 1,031면). 나무마다 크기·방향을 조금씩 다르게
+  tree:       { id: "tree", name: "나무", walkable: false, viewSize: 1.7, vary: true,   // 잎이 옆 칸까지 퍼져 보이게(차지는 1칸)
+                assets: ["assets/props/tree_{L}.glb"] },
 };
 
 // 바닥 색(두 색을 칸마다 번갈아 칠함)과 이름. asset: 오토타일 조각 모델을 쓸 때 경로(1단계는 도형으로 그림).
