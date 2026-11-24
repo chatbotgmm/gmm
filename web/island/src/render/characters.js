@@ -186,8 +186,8 @@ export async function preloadCharacters(set, tools = null, simplifyRatio = 1) {
 export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   const g = await loadGLB(dir + cfg.file.split("/").pop()), root = g.scene;
   if (simplifyRatio < 0.99) { const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); }); for (const m of meshes) await simplifyMesh(m, simplifyRatio); }
-  // 그림자는 발밑 원판으로(무거운 모델을 그림자용으로 한 번 더 그리지 않음). 화면 밖이면 그리지 않게, 움직여도 잘리지 않을 만큼 넉넉한 범위.
-  root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = true;
+  // 화면 밖이면 그리지 않게, 움직여도 잘리지 않을 만큼 넉넉한 범위.
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = true;   // 갈매미도 실제 그림자를 드리움(화질 낮음이면 views.js가 끄고 발밑 원판)
     if (o.geometry) { o.geometry.computeBoundingSphere(); if (o.geometry.boundingSphere) o.geometry.boundingSphere.radius *= 1.6; }
     if (o.isSkinnedMesh) { o.computeBoundingSphere?.(); if (o.boundingSphere) o.boundingSphere.radius *= 1.6; }
     for (const m of [].concat(o.material)) { m.metalness = 0; m.metalnessMap = null; } } });   // 환경맵 없이 검게 보이지 않게

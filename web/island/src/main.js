@@ -63,7 +63,7 @@ function mount(w) {
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   water.userData.setGrid(world.grid); world.on("ground", () => { waterDirty = true; });   // 물 깊이(얕은 물빛·물거품)
   buildingViews = new BuildingViews(worldRoot, world, overlay);
-  unitViews = new UnitViews(worldRoot, world, charPool);
+  unitViews = new UnitViews(worldRoot, world, charPool); unitViews.realShadows = quality.cfg.gullShadow;
   lifeViews = new LifeViews(worldRoot, world, overlay);
   new Decor(worldRoot, world);                     // 덤불·꽃·자갈(보기만)
   const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => lifeViews.attachModules(map))];
@@ -156,7 +156,7 @@ const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", 
 hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 hud.onToon = () => { toon.set(!toon.on); return toon.on ? "툰" : "기본"; };
 hud.timeLabel = () => daylight.label();
-hud.onQuality = () => { quality.next(); hud.status(`화질: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.cfg.name; };
+hud.onQuality = () => { quality.next(); unitViews.setRealShadows(quality.cfg.gullShadow); hud.status(`화질: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.cfg.name; };
 hud.setQualityLabel(quality.cfg.name);
 requestAnimationFrame(frame);
 
