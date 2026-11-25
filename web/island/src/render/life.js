@@ -130,7 +130,7 @@ export class LifeViews {
     }
     // 말풍선
     this.world.units.forEach((u, i) => {
-      const e = this.emoteFor(i), show = u.emoteT > 0 && !u.insideBuildingId; e.hidden = !show; if (!show) { e.dataset.t = ""; return; }
+      const e = this.emoteFor(i), show = u.emoteT > 0 && !!u.emoteText && !u.insideBuildingId; e.hidden = !show; if (!show) { e.dataset.t = ""; return; }
       tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z));
       const dist = camera.position.distanceTo(tmp); tmp.project(camera);
       if (tmp.z > 1 || dist > 75) { e.hidden = true; return; }                    // 너무 멀면 숨김(화면이 어지럽지 않게)

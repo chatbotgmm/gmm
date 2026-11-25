@@ -25,7 +25,7 @@ const GIVE_UP = 40;                                   // 이 시간(초) 넘게 
 const pick = (a, rnd) => a[Math.floor(rnd() * a.length)];
 const visible = u => !u.insideBuildingId && u.state !== US.Held;
 
-export function emote(u, text, secs = 1.6) { u.emoteText = text; u.emoteT = secs; }
+export function emote(u, text, secs = 1.6) { if (text == null || text === "") return; u.emoteText = String(text); u.emoteT = secs; }
 
 // 공사 한 번(망치질 3번)에 드는 재료: 건물마다 cost(없으면 나무 1·돌 1), 3등급 이상 건물은 철 1도.
 // 짓는 갈매미 가방에 있는 것부터 쓰고, 모자라면 은행 창고(마을 자재)에서.
@@ -500,13 +500,14 @@ export function exitBuilding(u, world, rnd) {
 /** 기분 말풍선: 20~40초마다(갈매미마다 엇갈리게), 다른 말풍선이 없을 때 지금 기분을 보여 줌. 난수(rnd)는 안 씀(마을 진행에 영향 없음) */
 const MOODS = { sleep: ["💤", "zZ…"], hungry: ["😫 배고파", "🐟 먹고 싶다…"], tired: ["😮‍💨 피곤해", "🥱 쉬고 싶다"], happy: ["😊", "♪", "☺️ 좋다", "🌸 기분 좋아"], sit: ["☕ 편하다", "😌", "♪ 쉬는 중"], read: ["📖 재밌다", "📚 음…", "💭 그렇구나"], sad: ["😞", "😟 별로야…"], cold: ["🥶 추워", "❄️ 으슬으슬"] };
 export function moodBubble(u, dt, world) {
-  if ((u.moodT = (u.moodT ?? 8 + (u.unitId * 7) % 20) - dt) > 0 || u.emoteT > 0 || u.state === US.Held) return;
-  u.moodT = 20 + ((u.unitId * 13 + Math.floor(world.time || 0)) % 21);
+  const id = Number.isFinite(u.unitId) ? u.unitId : 0;
+  if ((u.moodT = (u.moodT ?? 8 + (id * 7) % 20) - dt) > 0 || u.emoteT > 0 || u.state === US.Held) return;
+  u.moodT = 20 + ((id * 13 + Math.floor(world.time || 0)) % 21);
   const n = u.needs, sat = u.sat ?? 50, k = u.state === US.Sleep || u.sleeping || u.useFurni && FURNITURE[u.useFurni.id]?.use === "sleep" ? "sleep"
     : (u.full ?? 80) < J.HUNGRY ? "hungry" : n && n.energy < 20 ? "tired"
     : u.useFurni && u.insideBuildingId ? (FURNITURE[u.useFurni.id]?.use === "read" ? "read" : FURNITURE[u.useFurni.id]?.use === "sit" ? "sit" : null) : world.season === "winter" && (world.snow ?? 0) > 0.3 && !u.insideBuildingId && (u.unitId + Math.floor(world.time || 0)) % 3 === 0 ? "cold"
     : sat >= 80 ? "happy" : sat < 30 ? "sad" : null;
-  if (!k) return; const list = MOODS[k]; emote(u, list[(u.unitId + Math.floor((world.time || 0) / 7)) % list.length], 2.4);
+  if (!k) return; const list = MOODS[k]; emote(u, list[(id + Math.floor((world.time || 0) / 7)) % list.length] || list[0], 2.4);
 }
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
