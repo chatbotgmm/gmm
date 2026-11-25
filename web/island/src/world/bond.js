@@ -1,0 +1,60 @@
+// 갈매미와 나(플레이어) 사이의 정: 선물 주기 · 쓰다듬기 · 답례(순수 계산: 화면·난수를 모름).
+// 정(u.bond, 0~BOND_MAX)은 선물과 쓰다듬기로만 오르고 줄지 않음. 하트 단계(0~3)에 처음 닿으면 갈매미가 답례를 한 번 남김.
+import { ITEMS, FISH, FURNITURE, PERSONA } from "../data/catalog.js";
+
+export const BOND_MAX = 40;
+// 하트 단계: 정이 min 이상이면 그 단계. held = 들어 올렸을 때 하는 말(친해질수록 덜 놀람)
+export const BOND_STAGES = [
+  { name: "처음 만난 사이", min: 0, held: "!?" },
+  { name: "아는 사이", min: 5, held: "어, 어?" },
+  { name: "친한 사이", min: 14, held: "히히 ♪" },
+  { name: "소중한 사이", min: 28, held: "♥" },
+];
+/** 정 → 하트 단계(0~3) */
+export const bondStage = v => { let s = 0; BOND_STAGES.forEach((d, i) => { if ((v || 0) >= d.min) s = i; }); return s; };
+/** 하트 줄("♥♥♡") */
+export const bondHearts = v => { const s = bondStage(v), n = BOND_STAGES.length - 1; return "♥".repeat(s) + "♡".repeat(n - s); };
+
+// 선물 갈래: 가방 물건마다 하나, 보물 물고기는 모두 "fish". 갈매미마다 좋아하는·꺼리는 갈래는 PERSONA의 likes·dislikes
+export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는 것", plant: "꽃과 잎", sea: "바다 조개", ice: "차가운 것", fish: "귀한 물고기" };
+const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice" };
+// 반응 3단계: 꺼리는 것 · 보통 · 좋아하는 것 → 말풍선, 오르는 정, 재미
+export const GIFT_TIERS = [
+  { say: "음…", bond: 0.5, fun: 2 },
+  { say: "고마워", bond: 2, fun: 8 },
+  { say: "최고야!", bond: 4, fun: 15 },
+];
+/** 선물할 수 있는 것의 정의: 가구가 아닌 가방 물건 또는 보물 물고기(희귀 이상). 아니면 null. 음식은 선물하지 않음(먹거리 살림을 건드리지 않게) */
+export function giftDef(id) {
+  const it = ITEMS.find(i => i.id === id && !i.furniture); if (it) return { ...it, kind: "item", cat: GIFT_CATS[id] || null };
+  const f = FISH.find(f => f.id === id && f.rarity !== "common"); return f ? { ...f, kind: "fish", cat: "fish" } : null;
+}
+/** 지금 선물할 수 있는 것들: [{ id, name, kind, cat, n }] (마을 가방의 물건 → 보물 물고기 순서) */
+export function giftables(world) {
+  const out = [];
+  for (const i of ITEMS) { const n = world.items[i.id] || 0, d = n > 0 && giftDef(i.id); if (d) out.push({ ...d, n }); }
+  for (const f of FISH) { const n = world.treasures[f.id] || 0, d = n > 0 && giftDef(f.id); if (d) out.push({ ...d, n }); }
+  return out;
+}
+/** 이 갈매미가 이 선물을 받았을 때의 반응 단계(0 꺼림 · 1 보통 · 2 좋아함) */
+export function giftTier(name, id) {
+  const p = PERSONA[name] || {}, cat = giftDef(id)?.cat;
+  return cat && p.likes?.includes(cat) ? 2 : cat && p.dislikes?.includes(cat) ? 0 : 1;
+}
+
+// 쓰다듬기: 갈매미마다 하루(마을 날짜, news.js의 newsDay) PET_DAILY번까지
+export const PET_DAILY = 3, PET_BOND = 0.5, PET_FUN = 4;
+/** 오늘 더 쓰다듬을 수 있는 횟수 */
+export const petsLeft = (u, day) => Math.max(0, PET_DAILY - (u.petDay === day ? u.petN || 0 : 0));
+
+// 답례: 하트 단계(1~3)에 처음 닿았을 때 한 번. item = 마을 가방에 들어가는 물건(ITEMS의 id),
+// furniture = 그 갈매미 집 창고에 들어가는 가구(집이 없으면 대신 item을 마을 가방에)
+export const BOND_THANKS = [null, { item: "bottle" }, { furniture: "plant", item: "chair" }, { item: "pearl" }];
+/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지) */
+export function thanksFor(stage, hasHome) {
+  const t = BOND_THANKS[stage]; if (!t) return null;
+  if (t.furniture && hasHome && FURNITURE[t.furniture]) return { kind: "furniture", id: t.furniture, name: FURNITURE[t.furniture].name };
+  const it = ITEMS.find(i => i.id === t.item); return it ? { kind: "item", id: it.id, name: it.name } : null;
+}
+/** 저장에서 읽은 간직하기 표시(예전 저장엔 없음 → 빈 것). 선물할 수 있는 것만 */
+export const keepFromSave = j => Object.fromEntries(Object.keys(j && typeof j === "object" ? j : {}).filter(id => j[id] && giftDef(id)).map(id => [id, true]));

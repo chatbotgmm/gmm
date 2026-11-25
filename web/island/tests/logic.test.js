@@ -1140,3 +1140,85 @@ test("수족관: 다녀온 사이에 낚은 첫 희귀 이상 물고기도 기�
   const letter = N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [gave[0]] }, { post: true });
   assert.ok(letter.lines.some(l => l.includes(gave[0].fish.name) && l.endsWith("🐠 수족관에 기증")));
 });
+
+test("정(선물·쓰다듬기·답례): 순수 계산 — 하트 단계, 선물 갈래와 반응 3단계, 하루 쓰다듬기 횟수, 답례", async () => {
+  const B = await import("../src/world/bond.js"), { PERSONA, ITEMS, FURNITURE } = await import("../src/data/catalog.js");
+  assert.deepEqual([0, 4.9, 5, 13.9, 14, 27.9, 28, 99].map(B.bondStage), [0, 0, 1, 1, 2, 2, 3, 3]);
+  assert.equal(B.bondHearts(0), "♡♡♡"); assert.equal(B.bondHearts(14), "♥♥♡"); assert.equal(B.bondHearts(B.BOND_MAX), "♥♥♥");
+  assert.equal(B.BOND_STAGES[0].held, "!?", "처음엔 예전 그대로 놀람");
+  // 선물할 수 있는 것: 가구가 아닌 가방 물건과 보물 물고기만(음식·흔한 물고기·가구는 아님)
+  assert.equal(B.giftDef("pearl").cat, "shiny"); assert.equal(B.giftDef("tuna").cat, "fish"); assert.equal(B.giftDef("tuna").kind, "fish");
+  for (const id of ["chair", "bed", "anchovy", "food", "fish", "wood", "없는것"]) assert.equal(B.giftDef(id), null, id);
+  for (const i of ITEMS.filter(i => !i.furniture)) assert.ok(B.GIFT_CAT_NAME[B.giftDef(i.id).cat], `${i.name}: 갈래가 있어야 함`);
+  // 갈매미마다 좋아하는·꺼리는 갈래가 있고(겹치지 않음), 아는 갈래만 씀
+  for (const [name, p] of Object.entries(PERSONA)) {
+    assert.ok(p.likes?.length && p.dislikes?.length, name);
+    for (const c of [...p.likes, ...p.dislikes]) assert.ok(B.GIFT_CAT_NAME[c], `${name}: ${c}`);
+    assert.ok(!p.likes.some(c => p.dislikes.includes(c)), name);
+  }
+  assert.equal(B.giftTier("황금", "pearl"), 2); assert.equal(B.giftTier("그림자", "pearl"), 0); assert.equal(B.giftTier("기본", "pearl"), 1);
+  assert.equal(B.giftTier("물방울", "tuna"), 2); assert.equal(B.giftTier("미니", "tuna"), 0); assert.equal(B.giftTier("없는 갈매미", "pearl"), 1);
+  assert.deepEqual(B.GIFT_TIERS.map(t => t.say), ["음…", "고마워", "최고야!"]); assert.ok(B.GIFT_TIERS[0].bond < B.GIFT_TIERS[1].bond && B.GIFT_TIERS[1].bond < B.GIFT_TIERS[2].bond);
+  assert.deepEqual(B.giftables({ items: { pearl: 2, chair: 1, bottle: 0 }, treasures: { tuna: 1, anchovy: 3 } }).map(g => [g.id, g.n]), [["pearl", 2], ["tuna", 1]]);
+  // 쓰다듬기: 그날 횟수만 셈
+  assert.equal(B.petsLeft({}, 1), B.PET_DAILY); assert.equal(B.petsLeft({ petDay: 1, petN: 2 }, 1), B.PET_DAILY - 2); assert.equal(B.petsLeft({ petDay: 1, petN: 9 }, 1), 0); assert.equal(B.petsLeft({ petDay: 1, petN: 9 }, 2), B.PET_DAILY);
+  // 답례: 이미 있는 물건·가구만. 집이 없으면 가구 대신 가방 물건
+  assert.equal(B.thanksFor(0, true), null); assert.equal(B.thanksFor(9, true), null);
+  for (let s = 1; s < B.BOND_STAGES.length; s++) for (const home of [true, false]) { const g = B.thanksFor(s, home); assert.ok(g.kind === "furniture" ? FURNITURE[g.id] && home : ITEMS.find(i => i.id === g.id), `단계 ${s}`); }
+  assert.equal(B.thanksFor(2, true).kind, "furniture"); assert.equal(B.thanksFor(2, false).kind, "item");
+  assert.deepEqual(B.keepFromSave({ pearl: true, chair: true, tuna: 1, bottle: false, x: true }), { pearl: true, tuna: true }); assert.deepEqual(B.keepFromSave(undefined), {}); assert.deepEqual(B.keepFromSave("이상한 값"), {});
+});
+
+test("정(월드): 간직한 것은 안 팔고, 선물하면 하나 줄고 정·재미가 오르며, 단계에 처음 닿을 때만 답례·소식, 쓰다듬기는 마을 하루 3번, 저장·불러오기", async () => {
+  const B = await import("../src/world/bond.js"), { NEWS_DAY_SECS } = await import("../src/world/news.js"), Fu = await import("../src/world/furniture.js");
+  const w = World.create(7, seededRandom(33)), merchant = w.units.find(u => u.job === "merchant"), gold = w.units.find(u => u.name === "황금"), shadow = w.units.find(u => u.name === "그림자");
+  // 간직하기: 켠 것만 남고 나머지는 예전처럼 팔림
+  Object.assign(w.items, { pearl: 2, bottle: 1, chair: 1 }); Object.assign(w.treasures, { tuna: 1, flatfish: 1 });
+  assert.equal(w.toggleKeep("pearl"), true); assert.equal(w.toggleKeep("tuna"), true); assert.equal(w.toggleKeep("chair"), false, "가구는 원래 안 팔리므로 간직 표시가 없음"); assert.equal(w.toggleKeep("없는것"), false);
+  w.trade(merchant);
+  assert.equal(w.items.pearl, 2); assert.equal(w.treasures.tuna, 1); assert.equal(w.items.bottle, 0); assert.equal(w.treasures.flatfish, 0); assert.equal(w.items.chair, 1);
+  assert.equal(w.toggleKeep("tuna"), false); assert.deepEqual(w.keep, { pearl: true });
+  // 선물: 못 주는 것
+  assert.equal(w.giveGift(gold, "bottle"), null, "가진 게 없음"); assert.equal(w.giveGift(gold, "chair"), null, "가구는 선물 못 함"); assert.equal(w.giveGift(null, "pearl"), null); assert.equal(w.giveGift({ name: "남" }, "pearl"), null);
+  // 좋아하는 것 / 꺼리는 것 / 보통
+  const res0 = JSON.stringify(w.res), ev = []; w.on("gift", e => ev.push(["gift", e.u.name, e.item.id, e.tier])); w.on("bondStage", e => ev.push(["stage", e.u.name, e.stage, e.gift?.id]));
+  gold.needs.fun = 10; let r = w.giveGift(gold, "pearl");
+  assert.equal(r.tier, 2); assert.equal(r.say, "최고야!"); assert.equal(gold.emoteText, "최고야!"); assert.equal(w.items.pearl, 1); assert.equal(gold.bond, B.GIFT_TIERS[2].bond); assert.equal(gold.needs.fun, 10 + B.GIFT_TIERS[2].fun);
+  r = w.giveGift(shadow, "pearl"); assert.equal(r.tier, 0); assert.equal(shadow.emoteText, "음…"); assert.equal(shadow.bond, B.GIFT_TIERS[0].bond); assert.equal(w.items.pearl, 0);
+  r = w.giveGift(shadow, "tuna"); assert.equal(r.tier, 1); assert.equal(shadow.emoteText, "고마워"); assert.equal(w.treasures.tuna, 0);
+  assert.deepEqual(ev, [["gift", "황금", "pearl", 2], ["gift", "그림자", "pearl", 0], ["gift", "그림자", "tuna", 1]]); assert.deepEqual(r.thanks, []);
+  assert.equal(JSON.stringify(w.res), res0, "선물은 마을 창고(음식·돈)를 건드리지 않음");
+  // 단계에 처음 닿으면 답례 한 번(가방에 들어가고 간직 표시) + 소식지
+  ev.length = 0; w.items.pearl = 1; const news0 = w.newsLog.length; r = w.giveGift(gold, "pearl");
+  assert.equal(B.bondStage(gold.bond), 1); assert.equal(r.thanks.length, 1); assert.equal(r.thanks[0].gift.id, "bottle"); assert.equal(w.items.bottle, 1); assert.equal(w.keep.bottle, true); assert.equal(gold.bondGifts, 1);
+  assert.deepEqual(ev, [["gift", "황금", "pearl", 2], ["stage", "황금", 1, "bottle"]]);
+  assert.equal(w.newsLog.length, news0 + 1); assert.match(w.newsLog.at(-1).text, /황금과 아는 사이가 됐어요! 답례로 유리병 편지를 받았어요/);
+  // 들어 올릴 때 반응: 처음 만난 사이는 예전 그대로 "!?", 친해지면 덜 놀람
+  assert.ok(w.pickUpUnit(shadow)); assert.equal(shadow.emoteText, "!?"); w.dropUnit(shadow, Math.floor(shadow.heldFrom.x), Math.floor(shadow.heldFrom.z));
+  assert.ok(w.pickUpUnit(gold)); assert.equal(gold.emoteText, B.BOND_STAGES[1].held); assert.deepEqual(w.pet(gold), { ok: false, reason: "away" }, "들고 있는 동안은 못 쓰다듬음");
+  w.dropUnit(gold, Math.floor(gold.heldFrom.x), Math.floor(gold.heldFrom.z));
+  // 쓰다듬기: 마을 하루에 PET_DAILY번, 날이 바뀌면 다시
+  gold.insideBuildingId = null; const b0 = gold.bond; gold.needs.fun = 10;
+  for (let i = 0; i < B.PET_DAILY; i++) { r = w.pet(gold); assert.equal(r.ok, true); assert.equal(r.left, B.PET_DAILY - 1 - i); }
+  assert.equal(gold.bond, b0 + B.PET_DAILY * B.PET_BOND); assert.equal(gold.needs.fun, 10 + B.PET_DAILY * B.PET_FUN);
+  assert.deepEqual(w.pet(gold), { ok: false, reason: "cap", left: 0 }); assert.equal(gold.bond, b0 + B.PET_DAILY * B.PET_BOND);
+  assert.equal(w.pet(shadow).ok, true, "횟수는 갈매미마다 따로");
+  w.time += NEWS_DAY_SECS; assert.equal(w.pet(gold).ok, true, "마을 날이 바뀌면 다시"); assert.equal(gold.petN, 1);
+  // 답례 가구: 집이 있으면 그 집 창고로, 단계를 한꺼번에 넘으면 답례도 차례대로 모두, 다시는 안 줌
+  w.instantBuild = true; const hb = w.placeBuilding("house", 38, 26, 0).building; hb.owner = gold.unitId; gold.home = hb.id;
+  ev.length = 0; let got = w.addBond(gold, 100);
+  assert.equal(gold.bond, B.BOND_MAX); assert.deepEqual(got.map(g => [g.stage, g.gift.kind, g.gift.id]), [[2, "furniture", "plant"], [3, "item", "pearl"]]);
+  assert.equal(Fu.room(hb).stash.plant, 1); assert.equal(w.items.pearl, 1); assert.equal(w.keep.pearl, true);
+  assert.match(w.newsLog.find(e => /친한 사이/.test(e.text)).text, /답례로 화분을 황금네 작은 집에 들여놨어요/);
+  assert.deepEqual(w.addBond(gold, 5), []); assert.equal(gold.bondGifts, 3);
+  assert.ok(w.pickUpUnit(gold)); assert.equal(gold.emoteText, "♥"); w.dropUnit(gold, Math.floor(gold.heldFrom.x), Math.floor(gold.heldFrom.z));
+  // 저장·불러오기: 정·답례 수·쓰다듬기 횟수·간직하기가 그대로, 받은 답례를 또 받지 않음
+  const j = JSON.parse(JSON.stringify(w.serialize())), w2 = World.fromJSON(j, seededRandom(1)), g2 = w2.units.find(u => u.name === "황금"), s2 = w2.units.find(u => u.name === "그림자");
+  assert.equal(g2.bond, B.BOND_MAX); assert.equal(g2.bondGifts, 3); assert.equal(g2.petDay, gold.petDay); assert.equal(g2.petN, 1); assert.equal(s2.bond, shadow.bond); assert.deepEqual(w2.keep, w.keep);
+  const seen = []; w2.on("bondStage", e => seen.push(e)); w2.addBond(g2, 5); assert.deepEqual(seen, []);
+  assert.equal(B.petsLeft(g2, 2), B.PET_DAILY - 1);
+  // 예전 저장(새 칸 없음)도 불러옴: 모두 0·빈 것
+  delete j.keep; for (const u of j.units) { delete u.bond; delete u.bondGifts; delete u.petDay; delete u.petN; }
+  const w3 = World.fromJSON(j, seededRandom(1)), g3 = w3.units.find(u => u.name === "황금");
+  assert.deepEqual([g3.bond, g3.bondGifts, g3.petDay, g3.petN], [0, 0, 0, 0]); assert.deepEqual(w3.keep, {}); assert.equal(w3.pet(g3).ok || g3.insideBuildingId != null, true);
+});

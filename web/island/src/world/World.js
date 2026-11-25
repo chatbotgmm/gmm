@@ -19,7 +19,8 @@ import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
 import * as RD from "./roads.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
-import { newsFor, addNews, newsFromSave, awayHours, awayCasts } from "./news.js";
+import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
+import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -60,6 +61,7 @@ export class World {
     this.newsLog = newsFromSave(extra.newsLog); this.newsSeason = extra.newsSeason ?? null; this.savedAt = Number.isFinite(extra.savedAt) ? extra.savedAt : null;
     // 수족관: 기증한 물고기 종류 { id: true } · 종류별 가장 큰 크기(cm) · 받은 기증 기념 선물 수(예전 저장엔 없음 → 처음부터)
     this.donated = donatedFromSave(extra.donated); this.fishRecord = recordsFromSave(extra.fishRecord); this.donateGifts = Math.max(0, Math.min(DONATE_GIFTS.length, extra.donateGifts | 0));
+    this.keep = keepFromSave(extra.keep);                                         // 간직하기: { 물건·보물 id: true } → 상인이 팔지 않음(예전 저장엔 없음)
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -114,6 +116,7 @@ export class World {
     const s = createUnitAIState(`u${i + 1}`, def.name, x, z, 0.5 + r() * 2); s.scale = def.scale;
     J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
     s.coins = 0; s.inv = E.newBag(); s.home = null;                            // 돈·가방·내 집
+    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0;                      // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(은행)
     if (this.profiles) this.applyProfile(s);
@@ -405,6 +408,44 @@ export class World {
     this.emit("friendship", { a, b, stage }); return stage;
   }
 
+  // ---- 나와의 정: 간직하기 · 선물 · 쓰다듬기 · 답례(bond.js)
+  /** 간직하기 켜고 끄기(선물할 수 있는 물건·보물만). 켜 두면 상인이 팔지 않음. 바뀐 뒤의 값을 돌려줌 */
+  toggleKeep(id) { if (!giftDef(id)) return false; if (this.keep[id]) delete this.keep[id]; else this.keep[id] = true; return !!this.keep[id]; }
+  /** 정을 올리고, 하트 단계에 처음 닿았으면 답례를 남김(단계마다 한 번). 돌려주는 값: 이번에 받은 답례들 [{ stage, gift }] */
+  addBond(u, amt) {
+    u.bond = Math.min(BOND_MAX, (u.bond || 0) + amt); const got = [];
+    for (const top = bondStage(u.bond); (u.bondGifts || 0) < top;) {
+      const stage = u.bondGifts = (u.bondGifts || 0) + 1, home = u.home && this.buildings.get(u.home), gift = thanksFor(stage, !!home);
+      if (gift?.kind === "furniture") { const it = F.room(home); it.stash[gift.id] = (it.stash[gift.id] || 0) + 1; gift.where = BUILDINGS[home.defId].name; }
+      else if (gift) { this.items[gift.id] = (this.items[gift.id] || 0) + 1; if (giftDef(gift.id)) this.keep[gift.id] = true; }   // 답례로 받은 물건은 팔리지 않게 간직
+      got.push({ stage, gift }); this.emit("bondStage", { u, stage, gift });
+    }
+    return got;
+  }
+  /** 선물 주기: 마을 가방의 물건(가구 빼고)이나 보물 물고기 하나를 건넴 → 정·재미가 오르고 취향에 따라 세 가지 반응.
+   *  돌려주는 값: { item, tier(0 꺼림 · 1 보통 · 2 좋아함), say, bond, thanks } 또는 null(줄 수 없음) */
+  giveGift(u, id) {
+    const item = giftDef(id), bag = item?.kind === "fish" ? this.treasures : this.items;
+    if (!u || !item || !this.units.includes(u) || !((bag[id] || 0) > 0)) return null;
+    bag[id]--; const tier = giftTier(u.name, id), t = GIFT_TIERS[tier];
+    if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + t.fun);
+    emote(u, t.say, 2.4); this.emit("gift", { u, item, tier });
+    const thanks = this.addBond(u, t.bond);
+    return { item, tier, say: t.say, bond: u.bond, thanks };
+  }
+  /** 쓰다듬기: 정·재미가 조금 오름. 갈매미마다 마을 하루에 PET_DAILY번까지(실제 시계가 아니라 마을 날짜).
+   *  돌려주는 값: { ok, left: 오늘 남은 횟수, thanks } · 못 했으면 { ok: false, reason: "cap" | "away" } */
+  pet(u) {
+    if (!u || !this.units.includes(u) || u.insideBuildingId || u.state === UnitState.Held || u.sailing) return { ok: false, reason: "away" };
+    const day = newsDay(this.time);
+    if (!petsLeft(u, day)) return { ok: false, reason: "cap", left: 0 };
+    if (u.petDay !== day) { u.petDay = day; u.petN = 0; }
+    u.petN++; if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + PET_FUN);
+    emote(u, bondStage(u.bond) >= 2 ? "♥ 좋아" : "♥", 1.6);
+    const thanks = this.addBond(u, PET_BOND);
+    return { ok: true, left: PET_DAILY - u.petN, thanks };
+  }
+
   // ---- 소원
   wishOf(u) { return this.wishes.find(x => x.unitId === u.unitId) || null; }
   makeWish() {
@@ -513,9 +554,9 @@ export class World {
     const m = J.skillMult(u, "trade"), r = this.res, log = { sold: 0, bought: 0 };
     const sell = (key, keep) => { const n = Math.max(0, r[key] - keep); if (!n) return; r[key] -= n; const c = Math.round(n * PRICES[key] * m); r.coins += c; log.sold += c; };
     sell("wood", 20); sell("stone", 20); sell("iron", 10); sell("food", 30);
-    for (const [id, n] of Object.entries(this.treasures)) { const f = FISH.find(f => f.id === id); if (!n || !f) continue; const gifts = this.donateFish(f); if (gifts) this.tellDonation(null, f, gifts);   // 수족관이 생기기 전에 아껴 둔 보물: 아직 기증 안 한 종류면 한 마리는 팔지 않고 기증
+    for (const [id, n] of Object.entries(this.treasures)) { const f = FISH.find(f => f.id === id); if (!n || !f || this.keep[id]) continue; const gifts = this.donateFish(f); if (gifts) this.tellDonation(null, f, gifts);   // 수족관이 생기기 전에 아껴 둔 보물: 아직 기증 안 한 종류면 한 마리는 팔지 않고 기증
       const c = Math.round((n - (gifts ? 1 : 0)) * f.price * m); r.coins += c; log.sold += c; this.treasures[id] = 0; }
-    for (const [id, n] of Object.entries(this.items)) { const it = ITEMS.find(i => i.id === id); if (!n || !it || it.furniture) continue; const c = Math.round(n * it.price * m); r.coins += c; log.sold += c; this.items[id] = 0; }   // 가구는 팔지 않고 모음
+    for (const [id, n] of Object.entries(this.items)) { const it = ITEMS.find(i => i.id === id); if (!n || !it || it.furniture || this.keep[id]) continue; const c = Math.round(n * it.price * m); r.coins += c; log.sold += c; this.items[id] = 0; }   // 가구·간직하는 것은 팔지 않고 모음
     const building = [...this.buildings.values()].filter(b => !this.isDone(b));
     const buy = (key, want) => { while (r[key] < want) { const cost = Math.max(1, Math.round(PRICES[key] * 2 / m)); if (r.coins < cost) break; r.coins -= cost; r[key]++; log.bought += cost; } };
     if (building.length) { buy("wood", 4); buy("stone", 4); if (building.some(b => (BUILDINGS[b.defId].tier || 1) >= 3)) buy("iron", 2); }
@@ -668,7 +709,7 @@ export class World {
   pickUpUnit(u) {
     if (!u || u.insideBuildingId || u.state === UnitState.Held || u.sailing) return false;   // 배 타는 중엔 못 집음
     uncommit(u, this); setIdle(u, this.rnd, this);                          // 하던 일(찜한 나무·낚시 자리·맡은 공사)을 내려놓음
-    u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held; emote(u, "!?");
+    u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held; emote(u, BOND_STAGES[bondStage(u.bond)].held);   // 친해질수록 덜 놀람
     return true;
   }
   /** 내려놓기. 완공된 건물이면 들어가고, 걸을 수 있는 칸이면 거기 서고(나무·광석·공사장 칸이면 바로 옆 땅에),
@@ -735,7 +776,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units) })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0 })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -748,7 +789,8 @@ export class World {
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
-    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units); }   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
+    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
+      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); }                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
     if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
     w.nextId = j.nextId; return w;
   }

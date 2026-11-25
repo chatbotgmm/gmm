@@ -6,6 +6,7 @@ import { SEASONS, WEATHER } from "./season.js";
 import { wishText } from "./wishes.js";
 import { FRIEND_STAGES } from "../units/mind.js";
 import { josa } from "../util.js";
+import { BOND_STAGES, GIFT_TIERS } from "./bond.js";
 
 export const NEWS_DAY_SECS = 600;       // 마을 하루 = 마을 시간(world.time) 600초
 export const NEWS_KEEP_DAYS = 7;        // 소식지는 최근 7일치만
@@ -28,6 +29,9 @@ const NEWS_MAKERS = {
   wishDone: ({ wish, u, def }, w) => ({ icon: "♥", text: `${u.name}의 소원 "${wishText(def, w, u, wish)}"이 이루어졌어요!`, weight: 5 }),
   rank: ({ def }) => ({ icon: "🏅", text: `마을 등급이 올랐어요: ${def.icon} ${def.name}!`, weight: 8 }),
   friendship: ({ a, b, stage }) => { const d = FRIEND_STAGES[stage]; return { icon: d.icon, text: `${josa(a.name, "과", "와")} ${josa(b.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!`, weight: stage >= 2 ? 5 : 3 }; },
+  // 나와의 정: 선물(알림 줄에만) · 하트 단계에 처음 닿아 받은 답례
+  gift: ({ u, item, tier }) => ({ icon: "🎁", text: `${u.name}에게 ${josa(item.name, "을", "를")} 선물했어요 · "${GIFT_TIERS[tier].say}"`, weight: 0 }),
+  bondStage: ({ u, stage, gift }) => ({ icon: "💝", text: `${josa(u.name, "과", "와")} ${josa(BOND_STAGES[stage].name, "이", "가")} 됐어요!${gift ? ` 답례로 ${josa(gift.name, "을", "를")} ${gift.where ? `${u.name}네 ${gift.where}에 들여놨어요` : "받았어요"}` : ""}`, weight: stage >= 3 ? 6 : 4 }),
   season: s => SEASONS[s] ? { icon: SEASONS[s].icon, text: `${SEASONS[s].name}이에요`, weight: 6 } : null,
   // 날씨: 폭풍과 첫눈(땅에 눈이 없을 때 내리기 시작한 눈)만 소식지에
   weather: ({ kind }, w) => { const d = WEATHER[kind]; if (!d) return null; const first = kind === "snow" && (w.snow || 0) < 0.02;

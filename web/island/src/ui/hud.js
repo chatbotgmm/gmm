@@ -12,6 +12,7 @@ import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
+import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftables, petsLeft, PET_DAILY } from "../world/bond.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -65,6 +66,11 @@ export class Hud {
     document.getElementById("dexClose").onclick = () => this.showDex(false);
     this.info = document.getElementById("info");
     this.tugBtn = document.getElementById("tugBtn"); this.tugBtn.onclick = () => this.onTug?.();   // 찌 당기기(따라가는 갈매미에게 입질이 왔을 때만 보임)
+    // 선물·쓰다듬기(따라가기 카드 위): 카드는 매 프레임 다시 그리므로 버튼은 따로 둠
+    this.bondBar = document.getElementById("bondBar"); this.giftPick = document.getElementById("giftPick"); this.giftBtn = document.getElementById("giftBtn"); this.petBtn = document.getElementById("petBtn");
+    this.giftBtn.onclick = () => { this.giftPick.hidden = !this.giftPick.hidden; if (!this.giftPick.hidden) this.drawGifts(); };
+    this.petBtn.onclick = () => { if (this.follow) this.onPet?.(this.follow); };
+    this.giftPick.onclick = e => { const b = e.target.closest?.("[data-gift]"), u = this.follow; if (!b || !u) return; this.onGift?.(u, b.dataset.gift); this.drawGifts(); };
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
     document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
     document.getElementById("load").onclick = () => { onLoad(); this.closePhone(); };
@@ -312,10 +318,32 @@ export class Hud {
     if (on) b.style.bottom = `${Math.round(innerHeight - (this.info.hidden ? innerHeight - 60 : this.info.getBoundingClientRect().top) + 8)}px`;
     b.hidden = !on;
   }
+  /** 🎁 선물·♥ 쓰다듬기 버튼: 따라가는 갈매미가 있을 때 카드 바로 위에(당기기 버튼이 떠 있는 동안은 비켜 줌). 매 프레임 불러도 바뀔 때만 손댐 */
+  showBond(u) {
+    const on = !!u && this.tugBtn.hidden, bar = this.bondBar;
+    if (!on || u !== this.bondU) this.giftPick.hidden = true;                       // 다른 갈매미로 바꾸면 고르는 판은 닫음
+    this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!on) return;
+    const bottom = `${Math.round(innerHeight - this.info.getBoundingClientRect().top + 6)}px`; if (bar.style.bottom !== bottom) bar.style.bottom = bottom;
+    const left = petsLeft(u, newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
+    if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
+    if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
+  }
+  /** 선물 고르는 판: 마을 가방의 물건(가구 빼고)과 보물 물고기. 조금 친해지면(하트 1개부터) 좋아하는 것을 알려 줌 */
+  drawGifts() {
+    const u = this.follow, w = this.world; if (!u) { this.giftPick.hidden = true; return; }
+    const list = giftables(w), p = PERSONA[u.name] || {}, names = c => c.map(k => GIFT_CAT_NAME[k]).filter(Boolean).join(", ");
+    const hint = bondStage(u.bond) >= 1 && p.likes?.length ? `${u.name}의 취향: ♥ ${names(p.likes)}${p.dislikes?.length ? ` · 음… ${names(p.dislikes)}` : ""}` : `${u.name}에게 무엇을 줄까요? 건네 보면 좋아하는 걸 알 수 있어요.`;
+    this.giftPick.innerHTML = `<p class="dim">${hint}</p>` + (list.length
+      ? `<div class="gifts">${list.map(g => `<button data-gift="${g.id}">${g.kind === "fish" ? "🐟" : "🎁"} ${g.name} ×${g.n}${w.keep[g.id] ? " 💛" : ""}</button>`).join("")}</div>`
+      : `<p>지금은 줄 수 있는 게 없어요. 낚시나 바닷가에서 얻은 물건·보물 물고기를 선물할 수 있어요(📖 도감 · 가방).</p>`);
+  }
   /** 도감(낚은 물고기)·가방(건진 물건) 창 */
   showDex(on) {
     const d = document.getElementById("dex"); d.hidden = !on; if (!on) return;
     const w = this.world, body = document.getElementById("dexBody"); body.innerHTML = "";
+    // 간직하기: 켜 두면 상인이 팔지 않음(그 자리에서 글자만 바꿈 → 스크롤이 튀지 않게)
+    const keepBtn = id => { const b = el("button", "keep"), draw = () => { const on = !!w.keep[id]; b.textContent = on ? "💛 간직 중" : "🤍 간직하기"; b.classList.toggle("on", on); b.title = on ? "상인이 팔지 않아요 · 누르면 풀어요" : "켜 두면 상인이 팔지 않아요"; };
+      b.dataset.keep = id; b.onclick = () => { this.onKeep?.(id); draw(); }; draw(); return b; };
     const sec = (title, list, count, extra, more) => {
       body.append(el("h3", "", title)); const g = el("div", "dexgrid");
       for (const it of list) { const n = count(it), c = el("div", "dexcell" + (n ? "" : " unknown"));
@@ -331,6 +359,7 @@ export class Hud {
       (f, c, n) => {                                                               // 수족관: 크기 기록 · 기증됨
         if (n && w.fishRecord[f.id]) c.append(el("span", "rec", `📏 가장 큰 ${w.fishRecord[f.id]}cm`));
         if (w.donated[f.id]) c.append(el("span", "donated", "🐠 기증됨"));
+        if (w.treasures[f.id] > 0) c.append(keepBtn(f.id));
       });
     {                                                                              // 수족관 기증 현황(물고기 도감 바로 아래)
       const have = donatedCount(w.donated), next = DONATE_GIFTS[w.donateGifts], gift = next && ITEMS.find(i => i.id === next.item);
@@ -338,7 +367,9 @@ export class Hud {
         : `🐠 수족관 기증 ${have}/${DONATE_KINDS.length}종 · ${next ? `다음 기념 선물: ${next.label} 기증하면 ${gift?.name ?? "선물"}` : "기념 선물을 모두 받았어요!"}`));
     }
     sec(`🎁 가방 (${ITEMS.filter(i => w.items[i.id]).length}/${ITEMS.length})`, ITEMS, i => w.items[i.id] || 0,
-      i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : `${i.price}🐚`);
+      i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : `${i.price}🐚`,
+      (i, c, n) => { if (n && !i.furniture) c.append(keepBtn(i.id)); });
+    body.append(el("p", "dim", "💛 간직하기를 켜 둔 물건·보물은 상인이 팔지 않아요. 갈매미를 따라가며 🎁 선물로 건넬 수 있어요."));
     body.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
@@ -370,7 +401,7 @@ export class Hud {
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
     // 따라가는 갈매미 정보
-    const u = this.follow; this.info.hidden = !u;
+    const u = this.follow; this.info.hidden = !u; this.showBond(u);
     if (u) { const job = JOBS[u.job], r = RARITY[u.rarity];
       const n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
       // 따라가기 카드: 이름·직업 배지 / 지금 하는 일 / 욕구 막대 4개 / 돈·가방·집 칩 (긴 설명은 뺌)
@@ -379,9 +410,9 @@ export class Hud {
       const full = u.full ?? 80, note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
       const bag = E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${E.ITEM_ICON[k]}${u.inv[k]}`).join(" ");
       if (this.infoOpen === undefined) { this.infoOpen = !matchMedia("(max-width: 640px)").matches; this.info.onclick = () => { this.infoOpen = !this.infoOpen; }; }   // 휴대폰은 접힌 채(누르면 펼침)
-      if (!this.infoOpen) { this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${doing}</span><span class="dim">😊${Math.round(u.sat ?? 50)} 🍗${Math.round(full)} ▾</span></div>`; this.info.classList.add("mini"); return; }
+      if (!this.infoOpen) { this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${doing}</span><span class="hearts">${bondHearts(u.bond)}</span><span class="dim">😊${Math.round(u.sat ?? 50)} 🍗${Math.round(full)} ▾</span></div>`; this.info.classList.add("mini"); return; }
       this.info.classList.remove("mini");
-      this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}</span></div>` +
+      this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="hearts" title="${BOND_STAGES[bondStage(u.bond)].name}">${bondHearts(u.bond)}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}</span></div>` +
         `<div class="doing">${doing}${note ? ` · <span class="warn">${note}</span>` : ""}</div>` +
         `<div class="needs">${bar("만족도", u.sat ?? 50, (u.sat ?? 50) < 35 ? "low" : "")}${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("피로도", 100 - (n.energy ?? 100), (n.energy ?? 100) < 25 ? "low" : "")}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
         (u.satParts ? `<div class="small dim">만족도: ${u.satParts.map(([n, v]) => `${n} ${v > 0 ? "+" : ""}${v}`).join(" · ")}</div>` : "") +

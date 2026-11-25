@@ -72,7 +72,16 @@
   #tugBtn[hidden] { display: none; }
   @keyframes tugPulse { from { transform: scale(1); } to { transform: scale(1.07); } } @keyframes tugLeft { to { transform: scaleX(0); } }
   .emote.icon.bite { font-size: 30px; padding: 4px 12px; background: #ffe27a; } .emote.bite::after { border-top-color: #ffe27a; }
-  body.inroom #tugBtn { display: none !important; }
+  body.inroom #tugBtn, body.inroom #bondBar { display: none !important; }
+  /* 선물·쓰다듬기: 따라가기 카드 바로 위의 버튼 두 개(선물을 누르면 그 위로 고르는 판이 열림) */
+  #bondBar { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: 120px; z-index: 2; width: min(330px, calc(100% - 100px)); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+  #bondBar[hidden], #giftPick[hidden] { display: none; }
+  #bondBar .brow { display: flex; gap: 6px; } #bondBar button { pointer-events: auto; min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 12px; touch-action: manipulation; }
+  #petBtn { color: #c8456b; } #bondBar button:disabled { opacity: .55; }
+  #giftPick { pointer-events: auto; background: var(--panel); border-radius: 12px; padding: 8px 10px; box-shadow: 0 1px 6px rgba(0,0,0,.12); font-size: 12.5px; max-height: 34vh; overflow: auto; box-sizing: border-box; }
+  #giftPick p { margin: 0 0 6px; } #giftPick .gifts { display: flex; flex-wrap: wrap; gap: 5px; } #giftPick .gifts button { min-height: 38px; font-size: 13px; }
+  #info .hearts { color: #e0577e; letter-spacing: 1px; font-size: 13px; }
+  .dexcell .keep { align-self: flex-start; margin-top: 2px; min-height: 30px; padding: 3px 8px; font-size: 11.5px; border-radius: 9px; } .dexcell .keep.on { background: #fff1c2; border-color: #e5b93c; font-weight: 700; }
   #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
   #top { z-index: 2; }
   #cross { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; z-index: 2; pointer-events: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.4); }
@@ -151,7 +160,7 @@
     #tools button { flex: none; min-height: 34px !important; padding: 5px 9px !important; font-size: 13px !important; }
     #sub { max-height: 26vh !important; }
     #msg { font-size: 12.5px; padding: 4px 9px; }
-    #info { width: calc(100% - 96px); padding: 6px 9px; }
+    #info, #bondBar { width: calc(100% - 96px); } #info { padding: 6px 9px; }
     #info.mini .ihead { gap: 6px; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; } #info.mini .ihead span { font-size: 12px; }
     #phoneBtn { width: 46px; height: 46px; font-size: 22px; border-radius: 14px; }
     #minimap canvas { width: 120px; height: 120px; }
@@ -168,6 +177,7 @@
 <div id="chips"><span id="chipTime">☀️</span><button id="chipWeather" title="계절·날씨 효과 보기">🍂</button><button id="chipWish" hidden></button><span id="chipMoney">🪙 0</span><button id="chipRank" title="마을 등급·겨울 대비">🛖</button><button id="mapBtn" title="미니맵 보이기/숨기기">🗺 지도</button><span id="chipPop">🐦 0</span><button id="alert" hidden></button></div>
 <div id="info" hidden></div>
 <button id="tugBtn" hidden>🎣 당기기!</button>
+<div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" title="가방의 물건이나 보물 물고기를 선물해요">🎁 선물</button><button id="petBtn" title="쓰다듬으면 조금씩 친해져요(마을 하루에 몇 번까지)">♥ 쓰다듬기</button></div></div>
 <button id="phoneBtn" title="갈매폰: 갈매미·은행·시장·건설·소환·도감·저장·설정">📱</button>
 <div id="phone" hidden>
   <div class="card">

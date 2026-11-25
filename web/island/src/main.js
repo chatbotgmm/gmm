@@ -169,6 +169,9 @@ function mount(w) {
   world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common") say("fishRecord", e, " (📖 도감)"); });
   world.on("donate", e => { say("donate", e, " (📖 도감)"); sfx.chime([784, 988, 1319], 0.09, 0.16); });
   world.on("donateGift", e => say("donateGift", e, " (🏠 집 꾸미기에서 놓아요)"));
+  // 선물 반응 · 하트 단계가 올라 받은 답례(답례가 뒤에 와서 알림 줄에 남음)
+  world.on("gift", e => { say("gift", e); sfx.chime(e.tier >= 2 ? [784, 988, 1175] : e.tier ? [784, 988] : [440], 0.08, 0.14); });
+  world.on("bondStage", e => { say("bondStage", e, !e.gift ? "" : e.gift.kind === "furniture" ? " (🏠 집 꾸미기에서 놓아요)" : world.keep[e.gift.id] ? " (📖 가방 · 💛 간직하기를 켜 뒀어요)" : " (🏠 집 꾸미기에서 놓아요)"); sfx.chime([659, 784, 988, 1319], 0.09, 0.16); });
   world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
@@ -221,6 +224,13 @@ const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls
 // 찌 당기기(같이 낚시하기): 따라가는 갈매미에게 입질(❗)이 왔을 때 🎣 당기기! 버튼이나 스페이스 키
 const tugNow = () => { const u = unitControl.follow; if (!u || !world.tugFloat(u)) return false; hud.showTug(false); hud.status(`영차! ${josa(u.name, "과", "와")} 같이 당겼어요 · 귀한 물고기가 올 가능성이 커져요`); return true; };
 hud.onTug = tugNow;
+// 선물 · 쓰다듬기 · 간직하기(선물 알림은 월드가 알려 줌: gift · bondStage)
+hud.onGift = (u, id) => world.giveGift(u, id);
+hud.onKeep = id => world.toggleKeep(id);
+hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
+  if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘은 여기까지, 내일 또 만나요`);
+  else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요 · 마을 날이 바뀌면 또 할 수 있어요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
+  return r; };
 addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
