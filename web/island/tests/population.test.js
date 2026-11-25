@@ -142,3 +142,18 @@ test("공식은행이 없는 예전 섬은 예전 그대로(집 수와 상관없
   ready(w); assert.equal(has(w), true); w.summon(); assert.equal(has(w), false);
   ready(w); ready(w); w.summon(); w.summon(); ready(w); assert.equal(w.units.length, 4); assert.equal(w.summonInfo().can, true); assert.equal(has(w), false, "4마리부터는 예전처럼 안 나옴");
 });
+
+test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(1·213821·944352)도 공식은행 + 첫 집 + 금고 60으로 시작하고 집 수 규칙이 켜짐", () => {
+  for (const seed of [1, 213821, 944352]) {
+    const w = World.create(seed, seededRandom(3), { wild: true }), bk = w.bankB(), c = w.center;
+    assert.ok(bk, `씨앗 ${seed}: 공식은행`); assert.equal(w.economy, true);
+    const bx = Math.floor(c.x) - Math.floor(BUILDINGS.bank.footprint.w / 2), bz = Math.floor(c.z) - Math.floor(BUILDINGS.bank.footprint.d / 2);
+    assert.ok(Math.hypot(bk.x - bx, bk.z - bz) <= 3, "가운데에서 세 칸 안"); assert.ok(Math.hypot(bk.x - bx, bk.z - bz) > 0, "가운데에는 못 놓는 씨앗");
+    const hs = houses(w); assert.equal(hs.length, 1); assert.ok(w.isDone(hs[0])); assert.ok(findPath(w.grid, bk.door.x, bk.door.z, hs[0].door.x, hs[0].door.z));
+    assert.equal(w.bank.vault, 60); assert.equal(w.units.length, 0); assert.equal(w.summonInfo().gated, true);
+    assert.equal(w.summon().name, "기본"); assert.equal(w.summon(), null, "집 1 = 갈매미 1");
+    const again = World.create(seed, seededRandom(8), { wild: true }); assert.deepEqual([again.bankB().x, again.bankB().z], [bk.x, bk.z], "난수와 상관없이 같은 자리");
+  }
+  const w7 = World.create(7, seededRandom(3), { wild: true }), c = w7.center;   // 가운데가 평평한 섬은 예전 그대로 한가운데
+  assert.deepEqual([w7.bankB().x, w7.bankB().z], [c.x - Math.floor(BUILDINGS.bank.footprint.w / 2), c.z - Math.floor(BUILDINGS.bank.footprint.d / 2)]);
+});

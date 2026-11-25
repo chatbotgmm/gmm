@@ -97,11 +97,19 @@ export class World {
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
       w.hungerScale = 0.48; w.seedFood = 20;                                       // 넓은 지도: 오가는 길이 멀어 배고픔을 늦춤(본섬 지름 1.3배 → 0.6 × 0.8)
-      const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
+      w.placeBank(g.center);                                                       // 가운데 공식은행(가운데가 평평하지 않은 섬은 가장 가까운 평지)
       w.placeStarterHouse();                                                       // 인구 = 집 수: 첫 갈매미가 올 집 한 채(다 지은 작은 집, 설계비 없음)
       if (firstGull) w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
     return w;
+  }
+  /** 새 섬의 공식은행: 가운데에, 가운데 바닥이 평평하지 않으면(섬 씨앗 열에 하나쯤) 가운데에서 가장 가까운 놓을 수 있는 자리에(난수 안 씀). 못 찾으면 null */
+  placeBank(c = this.center) {
+    const def = BUILDINGS.bank, x0 = Math.floor(c.x) - Math.floor(def.footprint.w / 2), z0 = Math.floor(c.z) - Math.floor(def.footprint.d / 2), cands = [];
+    for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) cands.push([Math.hypot(dx, dz), x0 + dx, z0 + dz]);
+    cands.sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]);
+    for (const [, x, z] of cands) { const r = this.placeBuilding("bank", x, z, 0, null, 1e9); if (r.ok) return r.building; }
+    return null;
   }
   /** 새 섬의 첫 집: 은행 옆(문이 은행 문과 같은 줄)에 가장 가까운 빈 평지에, 은행 문에서 걸어갈 수 있는 자리(난수 안 씀 → 섬 씨앗마다 같은 자리). 못 찾으면 null */
   placeStarterHouse() {
