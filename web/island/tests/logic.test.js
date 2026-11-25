@@ -1635,3 +1635,38 @@ test("건설 모드 쿼터뷰: 들어가면 고정 각도, 끌어도 그대로, 
   cam.exit(); assert.equal(controls.enableRotate, true); run();
   assert.deepEqual([cam.state().yaw, cam.state().pitch], [before.yaw, before.pitch]);   // 들어오기 전 각도로
 });
+
+test("전기(풍차 선행): 가로등·건물 등불·집은 다 지은 풍차 둘레 POWER_RANGE칸 안에서만 전기가 들어옴 — 경계·짓는 중·철거·저장/불러오기·소원", async () => {
+  const PW = await import("../src/world/power.js"), { WISH_BY_ID } = await import("../src/world/wishes.js"), R = PW.POWER_RANGE;
+  assert.equal(R, 18);
+  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("목수"); w.rank = 2; w.instantBuild = true;
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const put = (d, x, z) => { const q = spot(d, x, z), r = w.placeBuilding(d, q[0], q[1], 0); assert.ok(r.ok, d); return r.building; };
+  const lampIn = put("streetlamp", c.x + 4, c.z + 4), house = put("house", c.x + 8, c.z), cafe = put("cafe", c.x - 8, c.z + 6);
+  // 풍차가 없으면 모두 꺼짐
+  for (const b of [lampIn, house, cafe]) assert.equal(w.powered(b), false, "풍차 없음: " + b.defId);
+  assert.equal(w.poweredAt(c.x, c.z), false); assert.equal(WISH_BY_ID.lamp.ok(w, w.units[0]), false, "풍차가 서기 전에는 가로등 소원을 빌지 않음");
+  // 짓는 중인 풍차는 전기를 못 냄 → 다 지으면 켜짐
+  w.instantBuild = false; const wm = put("windmill", c.x, c.z), m = PW.centerOf(wm); assert.equal(w.isDone(wm), false);
+  assert.equal(w.powered(lampIn), false, "짓는 중인 풍차"); assert.equal(PW.powerSources(w).length, 0);
+  w.finishAll(); w.instantBuild = true;
+  for (const b of [lampIn, house, cafe]) assert.equal(w.powered(b), true, "풍차 완공: " + b.defId);
+  assert.equal(PW.powerSources(w), PW.powerSources(w), "건물이 안 바뀌면 풍차 목록을 다시 세지 않음");
+  // 경계: 가운데끼리 딱 18칸이면 켜짐, 조금 넘으면 꺼짐
+  assert.equal(w.poweredAt(m.x + R, m.z), true); assert.equal(w.poweredAt(m.x + R + 0.01, m.z), false); assert.equal(w.poweredAt(m.x, m.z - R), true);
+  // 범위 밖 가로등은 꺼진 채, 짓는 중인 가로등은 범위 안이어도 꺼짐
+  const lampOut = put("streetlamp", c.x + 34, c.z + 2), co = PW.centerOf(lampOut); assert.ok(Math.hypot(co.x - m.x, co.z - m.z) > R, "범위 밖 자리");
+  assert.equal(w.powered(lampOut), false);
+  w.instantBuild = false; const lampSite = put("streetlamp", c.x + 5, c.z - 4); assert.equal(w.powered(lampSite), false, "짓는 중인 가로등"); w.finishAll(); assert.equal(w.powered(lampSite), true); w.instantBuild = true;
+  const lit = PW.litInRange(w, m.x, m.z).map(b => b.id); assert.ok([lampIn, house, cafe, lampSite].every(b => lit.includes(b.id))); assert.ok(!lit.includes(lampOut.id) && !lit.includes(wm.id));
+  // 소원: 불 켜진 가로등이 있어야 이루어짐
+  assert.equal(WISH_BY_ID.lamp.done(w), true); w.removeBuilding(lampIn.id); w.removeBuilding(lampSite.id); assert.equal(WISH_BY_ID.lamp.done(w), false, "범위 밖 가로등만으로는 안 됨"); assert.equal(WISH_BY_ID.lamp.ok(w), true);
+  // 저장·불러오기: 전기는 건물 목록에서 다시 계산
+  const w2 = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1)), by = id => w2.buildings.get(id);
+  assert.equal(w2.powered(by(house.id)), true); assert.equal(w2.powered(by(cafe.id)), true); assert.equal(w2.powered(by(lampOut.id)), false);
+  // 풍차를 철거하면 바로 꺼짐(만족도 ⚡도)
+  w.removeBuilding(wm.id); for (const b of [house, cafe, lampOut]) assert.equal(w.powered(b), false, "철거 뒤: " + b.defId);
+  // 풍차 두 개: 하나를 철거해도 다른 풍차가 덮으면 그대로
+  const a = put("windmill", c.x, c.z), b2 = put("windmill", c.x + 12, c.z + 2); assert.equal(w.powered(house), true); w.removeBuilding(a.id); assert.equal(w.powered(house), Math.hypot(PW.centerOf(house).x - PW.centerOf(b2).x, PW.centerOf(house).z - PW.centerOf(b2).z) <= R);
+  assert.equal(w.powered(house), true);
+});

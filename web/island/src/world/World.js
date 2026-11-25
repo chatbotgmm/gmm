@@ -18,6 +18,7 @@ import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
 import * as RD from "./roads.js";
+import * as PW from "./power.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
@@ -37,7 +38,7 @@ export const stairStep = (r, t) => { const n = stairCount(r), i = Math.min(n - 1
 export class World {
   constructor(grid, modules, rnd = Math.random, extra = {}) {
     this.grid = grid; this.modules = modules; this.rnd = rnd; this.time = 0;
-    this.buildings = new Map(); this.units = []; this.nextId = 1; this.listeners = {}; this.timers = [];
+    this.buildings = new Map(); this.powerRev = 0; this.units = []; this.nextId = 1; this.listeners = {}; this.timers = [];
     // 자원: 나무·돌·철(자재), 음식(물고기·작물), 조개(돈). treasures: 팔 수 있는 희귀 물고기, collection: 도감(종류별로 잡은 수), items: 가방
     this.res = { wood: START_WOOD, stone: START_STONE, iron: 0, food: 10, coins: 0, fish: 0, eaten: 0 };
     this.treasures = {}; this.collection = {}; this.items = {};
@@ -410,8 +411,9 @@ export class World {
     this.emit("furnitureBought", { u, id, b: home }); return true;
   }
 
-  // ---- 전기(풍차 발전소 둘레 18칸)
-  powered(b) { return [...this.buildings.values()].some(p => BUILDINGS[p.defId].power && this.isDone(p) && Math.hypot(p.x + 1 - (b.x + 1), p.z + 1 - (b.z + 1)) <= 18); }
+  // ---- 전기(다 지은 풍차 발전소 둘레 POWER_RANGE칸 — 규칙은 world/power.js 한 곳). 가로등·건물 등불·집 창가 불빛·만족도 ⚡가 모두 이것을 봄
+  powered(b) { return PW.powered(this, b); }
+  poweredAt(x, z) { return PW.poweredAt(this, x, z); }
   aquariumB() { for (const b of this.buildings.values()) if (b.defId === "aquarium" && this.isDone(b)) return b; return null; }
   /** 수족관 기증(알림 없이): 수족관이 있고 아직 기증 안 한 희귀 이상 종류면 한 마리를 기증하고, 기념 선물(낚시 가구)이 있으면 마을 가방에 넣음.
    *  돌려주는 값: 기증했으면 이번에 받은 선물들 [{ item, gift }](없으면 빈 배열), 기증하지 않았으면 null */
@@ -766,7 +768,7 @@ export class World {
     this.grid.occupy(b.cells, b.id, { kind: "building", walkable: (!!b.ramp && this.isDone(b)) || !!def.field || (!!def.bridge && this.isDone(b)), surface: r.elevation, ramp: b.ramp });   // 밭은 처음부터 걸어 다님   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
     if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
-    this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
+    this.buildings.set(b.id, b); this.powerRev++; this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
     if (this.isDone(b)) this.completed(b);
     return { ok: true, building: b };
   }
@@ -780,7 +782,7 @@ export class World {
   finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); } }
   /** 다 지었을 때: 계단·낚시터는 걸을 수 있게, 밭은 칸마다 밭(심고 거둠), 낚시터는 낚시 자리 */
   completed(b) {
-    const def = BUILDINGS[b.defId];
+    const def = BUILDINGS[b.defId]; this.powerRev++;                                // 풍차가 다 지어지면 전기 범위를 다시 셈(power.js)
     if (def.house && !b.interior.furnished) { b.interior.furnished = true; for (const id of ["chair", "table"]) F.autoPlace(this, b, id); }   // 새 집엔 의자·테이블이 기본으로
     this.openStairs(b);
     if (def.field) for (const [x, z] of b.cells) if (!this.isPlot(x, z)) {
@@ -806,7 +808,7 @@ export class World {
     const b = this.buildings.get(id); if (!b) return false;
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
     for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) u.committed = null; }   // 짓던 갈매미는 그만
-    this.grid.release(id); this.buildings.delete(id); this.emit("buildingRemoved", b);
+    this.grid.release(id); this.buildings.delete(id); this.powerRev++; this.emit("buildingRemoved", b);
     for (const p of this.plots.filter(p => p.field === id)) { this.plots.splice(this.plots.indexOf(p), 1); this.emit("plotRemoved", p); }
     this.spots = this.spots.filter(s => s.dock !== id);
     for (const u of this.units) if (u.home === id) u.home = null;

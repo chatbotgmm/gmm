@@ -7,6 +7,7 @@ import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
 import { Daylight } from "./render/daylight.js";
+import { PowerRange } from "./render/powerRange.js";
 import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
@@ -278,7 +279,8 @@ hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { r
 installKeys({ hud, tools, roomView });
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
-unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
+const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
+unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
 hud.setSummon(world);
@@ -344,7 +346,7 @@ function frameBody() {
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   cullFar(now);
-  daylight.focus = controls.target; daylight.update(dt, now);
+  daylight.focus = controls.target; daylight.world = world; daylight.update(dt, now); powerRange.update(tools);   // world: 가로등·등불이 풍차 전기를 확인
   world.winterYear = winterYearOf(daylight.now());                              // 첫눈은 겨울마다 한 번(어느 해 겨울인지는 화면이 알려 줌)
   skyShow.update(dt, world.sky, controls.target, camera);
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);

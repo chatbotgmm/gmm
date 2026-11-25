@@ -77,7 +77,7 @@ Kenney building-type-d·b와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/
   - `python3 tools/glow_mask.py post 0.3797,-0.2963,-0.1703,0.055`
   - `python3 tools/glow_mask.py shop 0.3291,-0.1975,-0.2534,0.055`
   - `python3 tools/glow_mask.py cafe 0.2498,-0.2361,0.1053,0.03 0.2536,-0.2368,-0.1048,0.03 --pane 0.62,0.76,0.72,0.82` (카페는 옆 유리가 어두운 노랑으로 그려져 문턱을 낮춤)
-- 그리기: src/render/daylight.js `lantern()` — 세기는 가로등과 같이 0.15 + 2.2 × 밤(낮에는 거의 안 보이고 밤에 빛남), 전기와 상관없이 켜짐, 짓는 중에는 꺼짐.
+- 그리기: src/render/daylight.js `lantern()` — 세기는 가로등과 같이 0.15 + 2.2 × 밤(낮에는 거의 안 보이고 밤에 빛남), 풍차 전기가 닿는 건물만 켜짐(world/power.js — 가로등도 같음), 짓는 중에는 꺼짐.
   실제 빛은 쓰지 않고 등불마다 더하기 색 스프라이트 하나. 건물마다 따로 켜고 끄게 재질만 복사(src/render/assets.js, 텍스처는 같이 씀)
 ## 자이언트의 집(giant_house_4k / 2k / 1k) · 등대(lighthouse_4k / 2k / 1k), 2026-11-25
 자이언트의 집 원본 fantasy_temple_3d_model.glb(받은 파일 이름 72ed68a9-…, 14,154면, 4096px 텍스처 3장, EXT_meshopt_compression) — 둥근 지붕·금빛 날개 장식·기둥 현관 신전(사용자가 자이언트의 집으로 정함).

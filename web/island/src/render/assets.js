@@ -50,7 +50,7 @@ export async function modelFor(def, makePlaceholder, asset = def.asset) {
     const src = await load(asset), fp = def.fit || def.footprint || { w: 1, d: 1 };   // fit: 칸보다 작게 보일 것(가로등 등)
     const quarter = Math.abs(Math.sin(def.modelYaw ?? 0)) > 0.5;                  // 모델을 ±90° 돌려 놓으면(views.js) 원본 x가 칸의 d, 원본 z가 칸의 w 쪽이 됨
     const obj = src.clone(true);
-    obj.traverse(o => { if (o.isMesh && o.material.name === "lanternGlow") o.material = o.material.clone(); });   // 등불 발광(glb의 발광 마스크)은 건물마다 따로 켜고 끄게 재질을 복사(텍스처는 같이 씀) — 세기는 daylight.js
+    obj.traverse(o => { if (o.isMesh && (o.material.name === "lanternGlow" || o.material.name === "lampBody")) o.material = o.material.clone(); });   // 등불·가로등 발광(glb의 발광 마스크)은 건물마다 따로 켜고 끄게 재질을 복사(텍스처는 같이 씀) — 세기는 daylight.js
     return normalize(obj, (quarter ? fp.d : fp.w) * CELL * 0.95, (quarter ? fp.w : fp.d) * CELL * 0.95);
   } catch (e) {
     console.warn(`에셋을 못 불러와 임시 도형을 씁니다: ${asset}`, e);
