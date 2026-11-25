@@ -8,6 +8,9 @@ import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./place
 import { tintRoofs } from "./roofTint.js";
 import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
+import { placeEl, showEl, textEl } from "../util.js";
+
+const _badgeP = new THREE.Vector3();
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -69,14 +72,16 @@ export class BuildingViews {
     } });
   }
   // 건물 위 표시: 안에 있는 갈매미 수(건물 밖에서도 안의 상태가 유지됨을 보여 줌)
-  updateBadges(camera, w, h, tmp = new THREE.Vector3()) {
+  updateBadges(camera, w, h) {
+    const tmp = _badgeP;
     for (const v of this.views.values()) {
       const b = v.building, n = b.occupants.length, building = b.hits < b.need, def = BUILDINGS[b.defId];
       const forSale = !building && def.house && !b.owner && this.economy?.();         // 다 지었는데 주인이 없는 집 = 시장 매물
-      v.badge.hidden = n === 0 && !building && !forSale; if (v.badge.hidden) continue;
+      if (n === 0 && !building && !forSale) { showEl(v.badge, false); continue; }
       tmp.set(v.holder.position.x, v.holder.position.y + v.height, v.holder.position.z).project(camera);
-      v.badge.textContent = building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${def.price}`; v.badge.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; v.badge.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
-      if (tmp.z > 1) v.badge.hidden = true;
+      if (tmp.z > 1 || Math.abs(tmp.x) > 1.2 || Math.abs(tmp.y) > 1.2) { showEl(v.badge, false); continue; }   // 카메라 뒤·화면 밖은 숨기고 건드리지 않음
+      textEl(v.badge, building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${def.price}`);
+      placeEl(v.badge, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); showEl(v.badge, true);   // 글자·자리는 바뀔 때만 씀(util.js)
     }
   }
 }

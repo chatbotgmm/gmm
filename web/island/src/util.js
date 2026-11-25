@@ -11,3 +11,18 @@ export function josa(word, withFinal, withoutFinal) {
   const hasFinal = code >= 0 && code <= 11171 && code % 28 !== 0;
   return word + (hasFinal ? withFinal : withoutFinal);
 }
+
+// 화면 위 표시(말풍선·건물 배지·구역 이름): 매 프레임 left/top·글자를 다시 쓰면 브라우저가 그때마다 배치(레이아웃)를 다시 계산함.
+// 값이 바뀔 때만 쓰고, 자리는 배치를 다시 하지 않는 translate로 옮긴다(translate를 모르는 옛 브라우저는 left/top).
+const HAS_TRANSLATE = typeof document !== "undefined" && "translate" in document.documentElement.style;
+/** el을 화면 (x, y) px로(0.5 px 단위, 바뀔 때만) */
+export function placeEl(el, x, y) {
+  x = Math.round(x * 2) / 2; y = Math.round(y * 2) / 2; if (el._px === x && el._py === y) return;
+  if (el._px === undefined && HAS_TRANSLATE) { el.style.left = "0"; el.style.top = "0"; }
+  el._px = x; el._py = y;
+  if (HAS_TRANSLATE) el.style.translate = `${x}px ${y}px`; else { el.style.left = `${x}px`; el.style.top = `${y}px`; }
+}
+/** 보이기·숨기기(바뀔 때만) */
+export function showEl(el, on) { if (el.hidden === on) el.hidden = !on; }
+/** 글자(바뀔 때만) */
+export function textEl(el, t) { if (el._txt !== t) { el._txt = t; el.textContent = t; } }
