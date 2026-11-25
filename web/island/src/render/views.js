@@ -10,7 +10,7 @@ import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
 import { placeEl, showEl, textEl } from "../util.js";
 
-const _badgeP = new THREE.Vector3();
+const _badgeP = new THREE.Vector3(), _lineP = new THREE.Vector3();
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -344,9 +344,9 @@ export class UnitViews {
       const fishing = !!u.fishing && g.visible; v.line.visible = v.bob.visible = fishing;
       if (fishing) {
         v.bob.position.set(toWorldX(u.fishing.x), -0.16 + Math.sin(time * 5 + i) * 0.01, toWorldZ(u.fishing.z));
-        const tip = ch?.inHand.rod?.getObjectByName("tip"), from = new THREE.Vector3();
+        const tip = v.tip === undefined || v.tipOf !== ch ? (v.tipOf = ch, v.tip = ch?.inHand.rod?.getObjectByName("tip") ?? null) : v.tip, from = _lineP;   // 낚싯대 끝은 한 번만 찾음
         if (tip) tip.getWorldPosition(from); else from.set(g.position.x, g.position.y + h * 0.7, g.position.z);
-        v.line.geometry.setFromPoints([from, v.bob.position.clone()]);
+        const lp = v.line.geometry.attributes.position; lp.setXYZ(0, from.x, from.y, from.z); lp.setXYZ(1, v.bob.position.x, v.bob.position.y, v.bob.position.z); lp.needsUpdate = true; v.line.geometry.computeBoundingSphere();
       }
     });
   }

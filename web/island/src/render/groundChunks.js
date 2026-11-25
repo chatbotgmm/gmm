@@ -205,10 +205,9 @@ export class GroundChunks {
     const todo = new Set(keys);
     if (focus) {
       let n = 0;
-      for (let cz = 0; cz < this.grid.chunksZ && n < maxLod; cz++) for (let cx = 0; cx < this.grid.chunksX && n < maxLod; cx++) {
-        const key = `${cx},${cz}`, m = this.meshes.get(key);
-        if (!m || todo.has(key)) continue;
-        if (this.lodFor(cx, cz, focus, m.userData.sub) !== m.userData.sub) { todo.add(key); n++; }
+      for (const [key, m] of this.meshes) {                                        // 매 프레임 도는 곳: 열쇠 글자를 새로 만들지 않고 있는 메쉬를 그대로 훑음
+        if (n >= maxLod) break; if (todo.has(key)) continue;
+        if (this.lodFor(m.userData.cx, m.userData.cz, focus, m.userData.sub) !== m.userData.sub) { todo.add(key); n++; }
       }
     }
     for (const key of todo) {
@@ -216,7 +215,7 @@ export class GroundChunks {
       const geo = buildChunkGeometry(this.grid, cx, cz, sub);
       let m = m0;
       if (m) { m.geometry.dispose(); m.geometry = geo; }                         // 예전 조각은 바로 버림(메모리)
-      else { m = new THREE.Mesh(geo, this.material); m.receiveShadow = true; m.castShadow = false; m.name = `chunk ${key}`; m.userData.chunk = key; this.scene.add(m); this.meshes.set(key, m); }   // 땅은 그림자를 받기만(그림자용으로 다시 그리지 않음)
+      else { m = new THREE.Mesh(geo, this.material); m.receiveShadow = true; m.castShadow = false; m.name = `chunk ${key}`; m.userData.chunk = key; m.userData.cx = cx; m.userData.cz = cz; this.scene.add(m); this.meshes.set(key, m); }   // 땅은 그림자를 받기만(그림자용으로 다시 그리지 않음)
       m.userData.sub = sub;
     }
     this.rebuilt += todo.size; return todo.size;
