@@ -15,7 +15,6 @@
 | flower_box | 8,998 | flower_box_3d_model.glb |
 | house (작은 집) | 14,646 (+등불 발광 마스크 512px, 등불 1) | round_cottage_3d_model.glb |
 | giant_house (자이언트의 집) | 14,154 | fantasy_temple_3d_model.glb (2026-11-25, 아래) |
-| house (작은 집) | 14,646 | round_cottage_3d_model.glb |
 | lighthouse (등대) | 14,788 | winged_lighthouse_3d_model.glb (2026-11-25, 아래 · 원본 텍스처 2048px) |
 | palm | 9,528 | palm_tree_3d_model.glb |
 | post (우체국) | 14,388 (+등불 발광 마스크 512px, 등불 1) | fantasy_house_3d_model.glb |
