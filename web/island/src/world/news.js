@@ -20,6 +20,10 @@ const builtWeight = d => d.house ? 3 : d.deco || d.stairs || d.bridge || d.pier 
 /** 일마다 소식 한 줄: (알림 내용, 월드) → { icon, text, weight }. weight 0은 알림 줄에만 쓰고 소식지에는 안 실음. */
 const NEWS_MAKERS = {
   fish: ({ u, fish }) => ({ icon: "🎣", text: `${josa(u.name, "이", "가")} ${fish.season ? "제철 " : ""}${josa(fish.name, "을", "를")} 낚았어요!`, weight: (FISH_WEIGHT[fish.rarity] ?? 0) + (fish.season ? 2 : 0) }),
+  // 수족관: 크기 기록(알림 줄에만) · 기증 · 기증 기념 선물
+  fishRecord: ({ u, fish, size, first }) => ({ icon: "📏", text: `${josa(u.name, "이", "가")} 낚은 ${fish.name} ${size}cm! ${first ? "첫 기록이에요" : "새 기록이에요"}`, weight: 0 }),
+  donate: ({ u, fish }) => ({ icon: "🐠", text: `${u ? `${josa(u.name, "이", "가")} 처음 낚은 ` : "아껴 둔 "}${josa(fish.name, "을", "를")} 수족관에 기증했어요!`, weight: 5 }),
+  donateGift: ({ item, gift }) => ({ icon: "🎁", text: `수족관 기증 ${gift.label} 기념으로 ${josa(item.name, "을", "를")} 받았어요!`, weight: 6 }),
   beachcomb: ({ u, item }) => ({ icon: "✨", text: `${josa(u.name, "이", "가")} 바닷가에서 ${josa(item.name, "을", "를")} 주웠어요`, weight: 2 }),
   wishDone: ({ wish, u, def }, w) => ({ icon: "♥", text: `${u.name}의 소원 "${wishText(def, w, u, wish)}"이 이루어졌어요!`, weight: 5 }),
   rank: ({ def }) => ({ icon: "🏅", text: `마을 등급이 올랐어요: ${def.icon} ${def.name}!`, weight: 8 }),
@@ -78,7 +82,7 @@ export function awayLetter(report, { post = false, news = [], wishes = [] } = {}
   if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
   if (!ripened && !catches.length) lines.push("별일 없이 조용한 시간이었어요.");
   if (post) {
-    for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? ` (${RARITY[c.fish.rarity]?.name ?? ""}!)` : ""}${c.item ? ` + ${c.item.name}` : ""}`);
+    for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? ` (${RARITY[c.fish.rarity]?.name ?? ""}!)` : ""}${c.item ? ` + ${c.item.name}` : ""}${c.donated ? " · 🐠 수족관에 기증" : ""}`);
     if (news.length) { lines.push("📰 떠나기 전 마을 소식"); for (const n of news) lines.push(`· ${n.icon} ${n.text}`); }
     for (const x of wishes) lines.push(`💭 ${x.who}: "${x.text}" 소원이 기다리고 있어요.`);
     lines.push("📮 우체국이 있어서 꼼꼼히 적어 보냈어요.");

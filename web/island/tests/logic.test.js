@@ -1041,3 +1041,85 @@ test("찌 당기기: 따라가는 갈매미만 입질(❗)이 오고, 같이 당
   // 저장에는 안 남음(잠깐의 상태)
   const j = JSON.parse(JSON.stringify(w.serialize())); assert.ok(!("watchId" in j) && !j.units.some(x => "bite" in x)); assert.ok(World.fromJSON(j).units.length);
 });
+
+test("수족관: 물고기 크기는 난수 없이 범위 안에서 정해지고, 종류별 가장 큰 크기를 기록한다", async () => {
+  const { FISH } = await import("../src/data/catalog.js"); const A = await import("../src/world/aquarium.js");
+  for (const f of FISH) { assert.ok(Array.isArray(f.cm) && f.cm[0] > 0 && f.cm[0] < f.cm[1], `${f.name} 크기 범위`);
+    assert.equal(A.fishSize(f, 0), f.cm[0]); assert.equal(A.fishSize(f, 1), f.cm[1]); assert.ok(A.fishSize(f, 0.5) < (f.cm[0] + f.cm[1]) / 2, "큰 놈일수록 드묾"); }
+  const seen = new Set();
+  for (let i = 0; i < 400; i++) { const t = A.sizeNoise(i * 0.7, i % 9, i); assert.ok(t >= 0 && t < 1); assert.equal(t, A.sizeNoise(i * 0.7, i % 9, i)); seen.add(Math.floor(t * 10)); }
+  assert.equal(seen.size, 10, "고르게 퍼짐");
+  // 크기를 재도 마을 난수는 예전과 똑같이 쓰임: 같은 씨앗의 낚시 결과(종류·물건)가 난수 사용 횟수까지 같음
+  const run = () => { let calls = 0; const base = seededRandom(11), w = World.create(7, () => { calls++; return base(); }); const u = w.units.find(x => x.job === "fisher"); const out = [];
+    for (let i = 0; i < 60; i++) { w.time += 3; const r = w.catchFish(u); out.push(r ? [r.fish.id, r.item?.id ?? null, r.size] : null); } return { w, out, calls }; };
+  const a = run(), b = run(); assert.deepEqual(a.out, b.out); assert.equal(a.calls, b.calls);
+  const got = a.out.filter(Boolean); assert.ok(got.length > 20);
+  { const base = seededRandom(21), w0 = World.create(7, seededRandom(2)), u0 = w0.units.find(x => x.job === "fisher");   // 한 번 낚을 때 난수는 예전처럼 물고기 1번 + 물건 확률 1번(+ 물건 1번)만
+    for (let i = 0; i < 200; i++) { let calls = 0; const r = w0.landFish(u0, () => { calls++; return base(); }); assert.equal(calls, r.item ? 3 : 2); } }
+  for (const f of FISH) { const sizes = got.filter(x => x[0] === f.id).map(x => x[2]); if (!sizes.length) { assert.equal(a.w.fishRecord[f.id], undefined); continue; }
+    assert.ok(sizes.every(s => s >= f.cm[0] && s <= f.cm[1])); assert.equal(a.w.fishRecord[f.id], Math.max(...sizes), `${f.name} 기록`); }
+  // 새 기록일 때만 알림
+  const w = World.create(7, seededRandom(4)), u = w.units.find(x => x.job === "fisher"), recs = []; w.on("fishRecord", e => recs.push(e));
+  let n = 0; for (let i = 0; i < 80; i++) { w.time += 2; const before = { ...w.fishRecord }, r = w.catchFish(u); if (!r) continue; n++;
+    assert.equal(r.record, r.size > (before[r.fish.id] || 0)); assert.equal(r.first, !before[r.fish.id]); }
+  assert.ok(recs.length > 0 && recs.length < n, `기록 ${recs.length} / 낚음 ${n}`); assert.equal(recs.filter(e => e.first).length, Object.keys(w.fishRecord).length);
+});
+
+test("수족관: 있을 때만 처음 낚은 희귀 이상 한 마리를 기증하고(팔지 않음), 3·6종·전설만 빼고 모두 기증하면 기념 가구를 준다", async () => {
+  const { FISH, ITEMS, BUILDINGS } = await import("../src/data/catalog.js"); const A = await import("../src/world/aquarium.js");
+  const { RANKS, rankScore } = await import("../src/world/rank.js");
+  assert.equal(BUILDINGS.aquarium.rank, 2); assert.ok(RANKS[2].unlock.includes("aquarium")); assert.equal(BUILDINGS.aquarium.asset, null);
+  const byId = id => FISH.find(f => f.id === id), rares = A.DONATE_KINDS, noLegend = rares.filter(f => f.rarity !== "legend");
+  assert.ok(rares.every(f => f.rarity !== "common") && rares.length === FISH.filter(f => f.rarity !== "common").length);
+  // 선물 단계(순수)
+  const give = list => Object.fromEntries(list.map(f => [f.id, true]));
+  assert.equal(A.giftsEarned({}), 0); assert.equal(A.giftsEarned(give(rares.slice(0, 2))), 0); assert.equal(A.giftsEarned(give(rares.slice(0, 3))), 1);
+  assert.equal(A.giftsEarned(give(rares.slice(0, 6))), 2); assert.equal(A.giftsEarned(give(noLegend.slice(1))), 2, "전설 아닌 것 하나가 빠짐");
+  assert.equal(A.giftsEarned(give(noLegend)), 3); assert.equal(A.giftsEarned(give(rares)), 3);
+  assert.ok(A.DONATE_GIFTS.every(g => ITEMS.find(i => i.id === g.item)?.furniture), "선물은 이미 있는 낚시 가구");
+  // 월드: 수족관이 없으면 예전 그대로(보물로 쌓임)
+  const w = World.create(7, seededRandom(3), { empty: true }); w.instantBuild = true; const u = w.addUnit(UNITS[5], 5, w.center.x + 0.5, w.center.z + 0.5);
+  const land = id => { const f = byId(id), seq = [0, 0.999]; let acc = 0; const ws = FISH.map(x => !x.season || x.season === w.season ? x.weight * (x.rarity === "common" ? 1 : 1.3) : 0), tot = ws.reduce((p, q) => p + q, 0);
+    for (let i = 0; i < FISH.length; i++) { if (FISH[i] === f) { seq[0] = (acc + ws[i] / 2) / tot; break; } acc += ws[i]; } let k = 0; return w.landFish(u, () => seq[k++]); };
+  let r = land("flatfish"); assert.equal(r.fish.id, "flatfish"); assert.equal(r.donated, false); assert.equal(w.treasures.flatfish, 1); assert.deepEqual(w.donated, {});
+  assert.equal(w.donateFish(byId("flatfish")), null, "수족관이 없으면 기증 안 함");
+  const base = rankScore(w).score; w.rank = 2;
+  let at = null; const c = w.center; for (let rr = 2; rr < 30 && !at; rr++) for (let dz = -rr; dz <= rr && !at; dz++) for (let dx = -rr; dx <= rr && !at; dx++) if (w.placeBuilding("aquarium", c.x + dx, c.z + dz, 0, null, 1e9).ok) at = [c.x + dx, c.z + dz];
+  assert.ok(at); assert.ok(w.aquariumB());
+  assert.equal(rankScore(w).score, base + 8, "수족관은 시설 점수");
+  assert.ok(w.canEnter(u, w.aquariumB()), "누구나 구경");
+  // 수족관이 생기기 전에 아껴 둔 보물: 상인이 팔 때 한 마리는 기증, 나머지만 팖
+  w.treasures.flatfish = 3; const news0 = w.newsLog.length, coins0 = w.res.coins, ev = []; w.on("donate", e => ev.push(e)); w.on("donateGift", e => ev.push(e));
+  w.res.wood = w.res.stone = w.res.iron = w.res.food = 0; const log = w.trade(u);
+  assert.equal(w.donated.flatfish, true); assert.equal(w.res.coins - coins0, Math.round(2 * byId("flatfish").price * 1)); assert.equal(log.sold, 16); assert.equal(w.treasures.flatfish, 0);
+  assert.equal(ev.length, 1); assert.match(w.newsLog.at(-1).text, /광어를 수족관에 기증했어요!$/); assert.equal(w.newsLog.length, news0 + 1);
+  // 처음 낚은 한 마리는 보물이 아니라 기증, 두 번째부터는 보물. 흔한 물고기는 기증하지 않음
+  r = land("octopus"); assert.equal(r.fish.id, "octopus"); assert.equal(r.donated, true); assert.equal(w.treasures.octopus || 0, 0); assert.equal(w.collection.octopus, 1);
+  r = land("octopus"); assert.equal(r.donated, false); assert.equal(w.treasures.octopus, 1);
+  r = land("anchovy"); assert.equal(r.fish.id, "anchovy"); assert.equal(r.donated, false); assert.equal(w.donated.anchovy, undefined);
+  assert.equal(rankScore(w).score, base + 8 + 2 * A.DONATE_SCORE, "기증한 종류마다 등급 점수");
+  // 3번째 종류 → 표류목 의자(마을 가방 = 집 꾸미기에서 놓는 길)
+  w.items = {}; r = land("tuna"); assert.equal(r.donated, true); assert.deepEqual(r.gifts.map(g => g.item.id), ["chair"]); assert.equal(w.items.chair, 1); assert.equal(w.donateGifts, 1);
+  // catchFish는 알림까지: 기증·선물 소식
+  ev.length = 0; for (const f of rares) if (!w.donated[f.id] && f.rarity !== "legend") { const g = w.donateFish(f); w.tellDonation(u, f, g); }
+  assert.equal(w.donateGifts, 3); assert.equal(w.items.table, 1); assert.equal(w.items.bed, 1); assert.equal(w.items.chair, 1, "선물은 한 번씩만");
+  assert.equal(ev.filter(e => e.gift).length, 2); assert.ok(w.newsLog.some(n => /기념으로 조개 침대를 받았어요!$/.test(n.text)));
+  assert.equal(w.donateFish(byId("whaleshark")).length, 0, "전설도 기증은 되지만 더 받을 선물은 없음"); assert.equal(w.donateFish(byId("whaleshark")), null, "한 종류는 한 번만");
+  // 저장·불러오기 + 예전 저장(새 칸 없음)
+  w.fishRecord.tuna = 123.4; const j = JSON.parse(JSON.stringify(w.serialize())), w2 = World.fromJSON(j, seededRandom(3));
+  assert.deepEqual(w2.donated, w.donated); assert.deepEqual(w2.fishRecord, w.fishRecord); assert.equal(w2.donateGifts, 3); assert.ok(w2.aquariumB());
+  assert.equal(w2.donateFish(byId("tuna")), null); assert.equal(w2.items.bed, 1);
+  delete j.donated; delete j.fishRecord; delete j.donateGifts; const old = World.fromJSON(j, seededRandom(3));
+  assert.deepEqual(old.donated, {}); assert.deepEqual(old.fishRecord, {}); assert.equal(old.donateGifts, 0);
+  j.donated = { tuna: 1, nope: true }; j.fishRecord = { tuna: "x", cod: 50, nope: 3 }; j.donateGifts = 99; const odd = World.fromJSON(j, seededRandom(3));
+  assert.deepEqual(odd.donated, { tuna: true }); assert.deepEqual(odd.fishRecord, { cod: 50 }); assert.equal(odd.donateGifts, 3);
+});
+
+test("수족관: 구경하는 갈매미는 재미가 차오른다", () => {
+  const w = World.create(7, seededRandom(3), { empty: true }); w.instantBuild = true; const u = w.addUnit(UNITS[0], 0, w.center.x + 0.5, w.center.z + 0.5); w.rank = 2;
+  let at = null; const c = w.center; for (let rr = 2; rr < 30 && !at; rr++) for (let dz = -rr; dz <= rr && !at; dz++) for (let dx = -rr; dx <= rr && !at; dx++) if (w.placeBuilding("aquarium", c.x + dx, c.z + dz, 0, null, 1e9).ok) at = [c.x + dx, c.z + dz];
+  const b = w.aquariumB(); w.pickUpUnit(u); const d = w.dropUnit(u, b.cells[0][0], b.cells[0][1]);
+  assert.equal(d.building, b); assert.equal(u.insideBuildingId, b.id); u.needs.fun = 20; u.timer = 100;
+  for (let i = 0; i < 20; i++) w.update(0.1);
+  assert.ok(u.needs.fun > 20 + 2 * 2.3, `재미 ${u.needs.fun}`);
+});

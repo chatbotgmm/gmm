@@ -165,6 +165,10 @@ function mount(w) {
   world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", e => say("beachcomb", e, " (📖 도감)"));
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
+  // 수족관: 크기 기록(흔한 물고기의 첫 기록은 조용히) · 기증 · 기념 선물
+  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common") say("fishRecord", e, " (📖 도감)"); });
+  world.on("donate", e => { say("donate", e, " (📖 도감)"); sfx.chime([784, 988, 1319], 0.09, 0.16); });
+  world.on("donateGift", e => say("donateGift", e, " (🏠 집 꾸미기에서 놓아요)"));
   world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때

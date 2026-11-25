@@ -87,6 +87,11 @@ export const BUILDINGS = {
     id: "storehouse", builtBy: "carpenter", storehouse: true, cost: { wood: 2, stone: 1 }, tier: 1, name: "저장고", footprint: { w: 3, d: 3 }, work: 5, height: 2.6, asset: "assets/props/storehouse_{T}.glb", modelYaw: -Math.PI / 2,   // 돌집 저장고(사용자 제공)
     placeholder: { wall: 0xb5794a, roof: 0x7b4b2e, roof_shape: "pyramid" }, interior: { w: 5, d: 5 },
   },
+  // 수족관: 희귀 이상 물고기를 처음 낚으면 한 마리를 기증받아 보여 줌(도감에 기증됨·크기 기록). 누구나 구경(재미가 차오름)
+  aquarium: {
+    id: "aquarium", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "수족관", footprint: { w: 4, d: 3 }, work: 7, height: 2.4, asset: null,
+    placeholder: { wall: 0xe6f4f7, roof: 0x4fa3c7, roof_shape: "flat", awning: 0x7fd0e0, tank: 0x3f9fd0 }, interior: { w: 7, d: 5 },
+  },
   manor: {
     id: "manor", builtBy: "builder", house: true, price: 80, rank: 3, cost: { wood: 3, stone: 2 }, tier: 1, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
@@ -215,25 +220,25 @@ export const UNIT_JOBS = {
   "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"], "목수": ["태초", "carpenter", "rare"],   // 목수는 희귀(일반보다 빨리 지음)
 };
 
-// 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중.
+// 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중. cm: 낚일 때 크기 범위([작은, 큰] cm, 수족관 크기 기록)
 export const FISH = [
-  { id: "anchovy",  name: "멸치",     rarity: "common", weight: 34, food: 1, price: 1 },
-  { id: "mackerel", name: "고등어",   rarity: "common", weight: 26, food: 2, price: 2 },
-  { id: "squid",    name: "오징어",   rarity: "common", weight: 16, food: 2, price: 3 },
-  { id: "flatfish", name: "광어",     rarity: "rare",   weight: 10, food: 3, price: 8 },
-  { id: "octopus",  name: "문어",     rarity: "rare",   weight: 7,  food: 3, price: 10 },
-  { id: "tuna",     name: "참치",     rarity: "epic",   weight: 4,  food: 5, price: 25 },
-  { id: "seabream", name: "황금 도미", rarity: "epic",  weight: 2,  food: 4, price: 35 },
-  { id: "whaleshark", name: "고래상어", rarity: "legend", weight: 1, food: 0, price: 120 },
+  { id: "anchovy",  name: "멸치",     rarity: "common", weight: 34, food: 1, price: 1, cm: [6, 15] },
+  { id: "mackerel", name: "고등어",   rarity: "common", weight: 26, food: 2, price: 2, cm: [22, 45] },
+  { id: "squid",    name: "오징어",   rarity: "common", weight: 16, food: 2, price: 3, cm: [18, 40] },
+  { id: "flatfish", name: "광어",     rarity: "rare",   weight: 10, food: 3, price: 8, cm: [30, 80] },
+  { id: "octopus",  name: "문어",     rarity: "rare",   weight: 7,  food: 3, price: 10, cm: [30, 90] },
+  { id: "tuna",     name: "참치",     rarity: "epic",   weight: 4,  food: 5, price: 25, cm: [80, 250] },
+  { id: "seabream", name: "황금 도미", rarity: "epic",  weight: 2,  food: 4, price: 35, cm: [25, 70] },
+  { id: "whaleshark", name: "고래상어", rarity: "legend", weight: 1, food: 0, price: 120, cm: [400, 1200] },
   // 계절 한정(그 계절에만 잡힘). 우리나라에서 흔히 말하는 제철 바다 먹거리로 골랐음
-  { id: "doddari",  name: "도다리",   rarity: "rare", weight: 7, food: 3, price: 9,  season: "spring" },
-  { id: "jukkumi",  name: "주꾸미",   rarity: "rare", weight: 6, food: 2, price: 8,  season: "spring" },
-  { id: "minnow",   name: "민어",     rarity: "rare", weight: 6, food: 3, price: 12, season: "summer" },
-  { id: "hamo",     name: "갯장어",   rarity: "epic", weight: 3, food: 3, price: 28, season: "summer" },
-  { id: "jeoneo",   name: "전어",     rarity: "rare", weight: 8, food: 2, price: 8,  season: "autumn" },
-  { id: "crab",     name: "꽃게",     rarity: "rare", weight: 5, food: 3, price: 14, season: "autumn" },
-  { id: "bangeo",   name: "방어",     rarity: "rare", weight: 7, food: 4, price: 14, season: "winter" },
-  { id: "cod",      name: "대구",     rarity: "epic", weight: 3, food: 4, price: 30, season: "winter" },
+  { id: "doddari",  name: "도다리",   rarity: "rare", weight: 7, food: 3, price: 9, cm: [18, 35],  season: "spring" },
+  { id: "jukkumi",  name: "주꾸미",   rarity: "rare", weight: 6, food: 2, price: 8, cm: [8, 20],  season: "spring" },
+  { id: "minnow",   name: "민어",     rarity: "rare", weight: 6, food: 3, price: 12, cm: [50, 110], season: "summer" },
+  { id: "hamo",     name: "갯장어",   rarity: "epic", weight: 3, food: 3, price: 28, cm: [60, 180], season: "summer" },
+  { id: "jeoneo",   name: "전어",     rarity: "rare", weight: 8, food: 2, price: 8, cm: [15, 28],  season: "autumn" },
+  { id: "crab",     name: "꽃게",     rarity: "rare", weight: 5, food: 3, price: 14, cm: [10, 22], season: "autumn" },
+  { id: "bangeo",   name: "방어",     rarity: "rare", weight: 7, food: 4, price: 14, cm: [50, 110], season: "winter" },
+  { id: "cod",      name: "대구",     rarity: "epic", weight: 3, food: 4, price: 30, cm: [45, 100], season: "winter" },
 ];
 // 낚시로 가끔 건지는 물건(가구는 2단계 실내 꾸미기에서 놓을 수 있게 가방에 모아 둠)
 export const ITEMS = [

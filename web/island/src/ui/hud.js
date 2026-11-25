@@ -10,6 +10,7 @@ import { WISH_BY_ID, WISH_REWARD, wishText } from "../world/wishes.js";
 import { RANKS, RANK_REWARD, rankScore } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
+import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
@@ -315,18 +316,27 @@ export class Hud {
   showDex(on) {
     const d = document.getElementById("dex"); d.hidden = !on; if (!on) return;
     const w = this.world, body = document.getElementById("dexBody"); body.innerHTML = "";
-    const sec = (title, list, count, extra) => {
+    const sec = (title, list, count, extra, more) => {
       body.append(el("h3", "", title)); const g = el("div", "dexgrid");
       for (const it of list) { const n = count(it), c = el("div", "dexcell" + (n ? "" : " unknown"));
         c.style.borderColor = RARITY[it.rarity].color;
         const ss = it.season ? SEASONS[it.season] : null, now = it.season && it.season === w.season;
         c.append(el("b", "", n ? it.name : "???"), el("span", "", `${RARITY[it.rarity].name}${n ? ` · ${n}개` : ""}`), el("span", "dim", n ? extra(it) : ""));
         if (ss) { const t = el("span", "season" + (now ? " now" : ""), `${ss.icon} ${ss.name}에만${now ? " · 지금!" : ""}`); c.append(t); }
-        g.append(c); }
+        more?.(it, c, n); g.append(c); }
       body.append(g);
     };
     sec(`🐟 물고기 도감 (${FISH.filter(f => w.collection[f.id]).length}/${FISH.length})`, FISH, f => w.collection[f.id] || 0,
-      f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${w.treasures[f.id] ? ` · 보관 ${w.treasures[f.id]}` : ""}`);
+      f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${w.treasures[f.id] ? ` · 보관 ${w.treasures[f.id]}` : ""}`,
+      (f, c, n) => {                                                               // 수족관: 크기 기록 · 기증됨
+        if (n && w.fishRecord[f.id]) c.append(el("span", "rec", `📏 가장 큰 ${w.fishRecord[f.id]}cm`));
+        if (w.donated[f.id]) c.append(el("span", "donated", "🐠 기증됨"));
+      });
+    {                                                                              // 수족관 기증 현황(물고기 도감 바로 아래)
+      const have = donatedCount(w.donated), next = DONATE_GIFTS[w.donateGifts], gift = next && ITEMS.find(i => i.id === next.item);
+      body.append(el("p", "dim aqua", !w.aquariumB() && !have ? "🐠 수족관(마을 등급 ⚓ 항구 마을부터)을 지으면 처음 낚은 희귀 이상 물고기를 한 마리씩 기증해요."
+        : `🐠 수족관 기증 ${have}/${DONATE_KINDS.length}종 · ${next ? `다음 기념 선물: ${next.label} 기증하면 ${gift?.name ?? "선물"}` : "기념 선물을 모두 받았어요!"}`));
+    }
     sec(`🎁 가방 (${ITEMS.filter(i => w.items[i.id]).length}/${ITEMS.length})`, ITEMS, i => w.items[i.id] || 0,
       i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : `${i.price}🐚`);
     body.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));

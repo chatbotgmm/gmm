@@ -521,6 +521,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     if (k === "sleep") n.energy = Math.min(100, n.energy + 3 * dt); else if (k === "sit") n.energy = Math.min(100, n.energy + 1 * dt); else if (k === "read") n.fun = Math.min(100, n.fun + 1.5 * dt);
   }
   if (u.insideBuildingId && u.needs && world.buildings.get(u.insideBuildingId)?.defId === "cafe") { u.needs.fun = Math.min(100, u.needs.fun + 2 * dt); u.needs.social = Math.min(100, u.needs.social + 1.5 * dt); }   // 카페: 재미·친구
+  if (u.insideBuildingId && u.needs && world.buildings.get(u.insideBuildingId)?.defId === "aquarium") u.needs.fun = Math.min(100, u.needs.fun + 2.5 * dt);   // 수족관 구경: 재미
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
   u.eff *= 0.85 + 0.3 * (u.sat ?? 50) / 100;                             // 만족도가 높으면 조금 더 빨리(0.85~1.15)
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함

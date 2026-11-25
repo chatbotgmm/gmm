@@ -35,6 +35,12 @@ export function buildingPlaceholder(def) {
     const aw = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, Math.min(W * 0.8, 1.4), 12, 1, false, 0, Math.PI), mat(p.awning, { side: THREE.DoubleSide }));
     aw.rotation.z = Math.PI / 2; aw.position.set(0, 0.95, D / 2 + 0.05); aw.castShadow = true; g.add(aw);
   }
+  if (p.tank) {                                                                      // 수족관: 앞·옆 벽의 큰 수조 유리(살짝 빛남) + 지붕 위 물고기 간판
+    const glass = mat(p.tank, { emissive: p.tank, emissiveIntensity: 0.25, roughness: 0.3 });
+    for (const sx of [-1, 1]) { const t = new THREE.Mesh(new THREE.BoxGeometry(W * 0.3, H * 0.4, 0.06), glass); t.position.set(sx * W * 0.3, H * 0.5, D / 2 + 0.03); g.add(t); }
+    const sign = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), mat(0xffb35c)); sign.scale.set(1.5, 0.8, 0.45); sign.position.set(0, H + 0.5, D * 0.3); sign.castShadow = true; g.add(sign);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.3, 4), mat(0xffb35c)); tail.rotation.z = -Math.PI / 2; tail.scale.z = 0.4; tail.position.set(-0.55, H + 0.5, D * 0.3); g.add(tail);
+  }
   return g;
 }
 

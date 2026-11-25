@@ -3,23 +3,25 @@ import { BUILDINGS } from "../data/catalog.js";
 import { comfort } from "./furniture.js";
 import { linkedHouses } from "./roads.js";
 import { bestiePairs } from "../units/mind.js";
+import { donatedCount, DONATE_SCORE } from "./aquarium.js";
 
 export const RANKS = [
   { name: "갯마을", icon: "🛖", need: 0, unlock: [] },
   { name: "어촌", icon: "🏘", need: 60, unlock: ["cafe"] },
-  { name: "항구 마을", icon: "⚓", need: 140, unlock: ["shop", "post"] },
+  { name: "항구 마을", icon: "⚓", need: 140, unlock: ["shop", "post", "aquarium"] },
   { name: "섬 도시", icon: "🏙", need: 240, unlock: ["manor"] },
 ];
 export const RANK_REWARD = 5;                                                     // 등급이 오르면 갈매미마다 축하금(새 돈)
-const FACILITY = d => d.market || d.field || d.dock || d.storehouse || d.power || ["cafe", "shop", "post"].includes(d.id);
+const FACILITY = d => d.market || d.field || d.dock || d.storehouse || d.power || ["cafe", "shop", "post", "aquarium"].includes(d.id);
 
-/** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8, 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 단짝 쌍 ×3(최대 15점), 평균 포만감 50 이상 +10 */
+/** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8, 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 단짝 쌍 ×3(최대 15점), 수족관 기증 종류 ×2, 평균 포만감 50 이상 +10 */
 export function rankScore(w) {
   const done = [...w.buildings.values()].filter(b => w.isDone(b)).map(b => [BUILDINGS[b.defId], b]);
   const owned = done.filter(([d, b]) => d.house && b.owner).length, empty = done.filter(([d, b]) => d.house && !b.owner).length;
   const fac = done.filter(([d]) => FACILITY(d)).length, stairs = done.filter(([d]) => d.id === "stairs").length;
   const cozy = done.filter(([d]) => d.house).reduce((s, [, b]) => s + comfort(b), 0);
   const pals = bestiePairs(w.units);
+  const gave = donatedCount(w.donated);
   const deco = done.filter(([d]) => d.deco).length, fed = w.units.length && w.avgFull() >= 50;
   const parts = [
     ["🐦 갈매미", w.units.length, 10, w.units.length * 10],
@@ -33,6 +35,7 @@ export function rankScore(w) {
     ["😊 평균 만족도 60 이상", w.units.length && (w.avgSat?.() ?? 0) >= 60 ? 1 : 0, 10, w.units.length && (w.avgSat?.() ?? 0) >= 60 ? 10 : 0],
     ["💭 이룬 소원", w.wishDone || 0, 6, (w.wishDone || 0) * 6],
     ["💞 단짝(쌍, 최대 15점)", pals, 3, Math.min(15, pals * 3)],
+    ["🐠 수족관에 기증한 물고기(종류)", gave, DONATE_SCORE, gave * DONATE_SCORE],
     ["😋 평균 포만감 50 이상", fed ? 1 : 0, 10, fed ? 10 : 0],
   ];
   return { score: parts.reduce((s, p) => s + p[3], 0), parts };
