@@ -33,5 +33,5 @@ export const weatherDuration = (kind, rnd) => kind === "storm" ? 50 + rnd() * 50
 /** 계절 × 날씨를 합친 효과 */
 export function effects(season, weather) {
   const s = SEASONS[season] || NEUTRAL, w = WEATHER[weather] || WEATHER.clear;
-  return { grow: s.grow * w.grow, hunger: s.hunger * w.hunger, fish: w.fish, harvest: s.harvest, foodPrice: s.foodPrice, light: w.light };
+  return { grow: s.grow * w.grow, hunger: s.hunger * w.hunger, fish: w.fish, harvest: s.harvest, foodPrice: s.foodPrice, light: w.light, item: 1 };   // item: 물건을 찾을 확률 배수(드문 하늘이 바꿈, World.fx)
 }

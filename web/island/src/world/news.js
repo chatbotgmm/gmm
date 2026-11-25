@@ -33,9 +33,12 @@ const NEWS_MAKERS = {
   gift: ({ u, item, tier }) => ({ icon: "🎁", text: `${u.name}에게 ${josa(item.name, "을", "를")} 선물했어요 · "${GIFT_TIERS[tier].say}"`, weight: 0 }),
   bondStage: ({ u, stage, gift }) => ({ icon: "💝", text: `${josa(u.name, "과", "와")} ${josa(BOND_STAGES[stage].name, "이", "가")} 됐어요!${gift ? ` 답례로 ${josa(gift.name, "을", "를")} ${gift.where ? `${u.name}네 ${gift.where}에 들여놨어요` : "받았어요"}` : ""}`, weight: stage >= 3 ? 6 : 4 }),
   season: s => SEASONS[s] ? { icon: SEASONS[s].icon, text: `${SEASONS[s].name}이에요`, weight: 6 } : null,
-  // 날씨: 폭풍과 첫눈(땅에 눈이 없을 때 내리기 시작한 눈)만 소식지에
-  weather: ({ kind }, w) => { const d = WEATHER[kind]; if (!d) return null; const first = kind === "snow" && (w.snow || 0) < 0.02;
-    return { icon: d.icon, text: first ? "첫눈이 내려요!" : `날씨: ${d.name}`, weight: first ? 5 : kind === "storm" ? 2 : 0 }; },
+  // 날씨: 폭풍만 소식지에(첫눈은 아래 드문 하늘에서)
+  weather: ({ kind }) => { const d = WEATHER[kind]; return d ? { icon: d.icon, text: `날씨: ${d.name}`, weight: kind === "storm" ? 2 : 0 } : null; },
+  // 드문 하늘: 겨울마다 첫눈 · 무지개 · 유성우 · 유성우 밤에 주운 별조각
+  firstSnow: ({ def }) => ({ icon: def.icon, text: def.text, weight: 5 }),
+  sky: ({ kind, def }) => ({ icon: def.icon, text: def.text, weight: kind === "meteor" ? 6 : 5 }),
+  starPiece: ({ u, item }) => ({ icon: "⭐", text: `${josa(u.name, "이", "가")} 별똥별이 떨어진 자리에서 ${josa(item.name, "을", "를")} 주웠어요!`, weight: 5 }),
   buildingDone: b => { const d = BUILDINGS[b.defId]; return d ? { icon: d.house ? "🏠" : "🔨", text: `${josa(d.name, "이", "가")} 다 지어졌어요`, weight: builtWeight(d) } : null; },
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };

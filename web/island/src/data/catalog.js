@@ -257,6 +257,8 @@ export const ITEMS = [
   { id: "conch",   name: "소라 껍데기",   rarity: "common", price: 5,  season: "summer" },
   { id: "maple",   name: "단풍잎 표본",   rarity: "common", price: 5,  season: "autumn" },
   { id: "iceshell", name: "얼음 조개",    rarity: "rare",   price: 15, season: "winter" },
+  // 하늘에서 온 물건(sky: 낚시로는 안 나옴. 유성우가 오는 밤에 깨어 있는 야행성 갈매미가 주움)
+  { id: "stardust", name: "별조각",       rarity: "epic",   price: 30, sky: true },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

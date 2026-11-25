@@ -9,7 +9,7 @@ import { generateIsland, generateWildIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
-import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
+import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere, isNocturnal } from "../units/unitBrain.js";
 import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToNames, friendsFromNames } from "../units/mind.js";
 import { seededRandom } from "../util.js";
 import * as E from "./economy.js";
@@ -20,6 +20,7 @@ import * as F from "./furniture.js";
 import * as RD from "./roads.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
+import { SKY_EVENTS, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -62,6 +63,9 @@ export class World {
     // 수족관: 기증한 물고기 종류 { id: true } · 종류별 가장 큰 크기(cm) · 받은 기증 기념 선물 수(예전 저장엔 없음 → 처음부터)
     this.donated = donatedFromSave(extra.donated); this.fishRecord = recordsFromSave(extra.fishRecord); this.donateGifts = Math.max(0, Math.min(DONATE_GIFTS.length, extra.donateGifts | 0));
     this.keep = keepFromSave(extra.keep);                                         // 간직하기: { 물건·보물 id: true } → 상인이 팔지 않음(예전 저장엔 없음)
+    // 드문 하늘: 지금 떠 있는 것 { kind, t 남은 초 }(저장하지 않음 → 불러오면 끝난 것으로) · 본 횟수 · 첫눈을 본 겨울(해, 화면이 winterYear를 넣어 줌)
+    this.sky = null; this.skySeen = skySeenFromSave(extra.skySeen); this.firstSnowYear = extra.firstSnowYear ?? null; this.winterYear = null;
+    this.skyRnd = seededRandom(((extra.seed ?? 7) * 104729 + 31) >>> 0); this.skyClock = 0; this.starClock = 0;   // 하늘만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -261,15 +265,59 @@ export class World {
 
   /** 바닷가에서 먹이를 잡다가 가끔 계절 물건을 주움(도감·가방). 주운 물건을 돌려줌 */
   beachcomb(u) {
-    if (this.rnd() >= 0.2) return null;
+    if (this.rnd() >= 0.2 * this.fx.item) return null;                               // 무지개가 뜨면 조금 더 잘 주움
     const list = ITEMS.filter(i => i.season && i.season === this.season); if (!list.length) return null;
     const it = list[Math.floor(this.rnd() * list.length)]; this.items[it.id] = (this.items[it.id] || 0) + 1;
     this.emit("beachcomb", { u, item: it }); this.notice(u.x, u.z, "fish", u); return it;
   }
   // ---- 계절·날씨
-  get fx() { return S.effects(this.season, this.weather.kind); }
-  setSeason(s) { if (s === this.season) return; this.season = s; this.emit("season", s); }
-  setWeather(kind) { this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather); }
+  /** 계절 × 날씨 효과 + 드문 하늘(item: 물건을 찾을 확률 배수, 무지개가 떠 있으면 1보다 큼) */
+  get fx() { const f = S.effects(this.season, this.weather.kind); if (this.sky) f.item *= SKY_EVENTS[this.sky.kind].item; return f; }
+  setSeason(s) { if (s === this.season) return; if (this.season === "winter") this.firstSnowYear = null; this.season = s; this.emit("season", s); }   // 겨울이 지나가면 다음 겨울의 눈이 다시 첫눈
+  setWeather(kind) {
+    const prev = this.weather.kind; this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather);
+    if (kind === "snow" && this.season === "winter") this.firstSnow();
+    if (kind === "clear" && (prev === "rain" || prev === "storm") && !this.isNight && this.skyRnd() < RAINBOW_CHANCE) this.startSky("rainbow");   // 낮에 비가 갠 뒤
+  }
+  // ---- 드문 하늘(무지개·유성우·첫눈)
+  /** 이번 겨울 첫눈이면 기록하고 알림(겨울마다 한 번). force: 시험용으로 다시 알림. 알렸으면 true */
+  firstSnow(force = false) {
+    const year = this.winterYear ?? 0;
+    if (this.firstSnowYear === "?") this.firstSnowYear = year;                      // 눈이 쌓인 채 넘어온 예전 저장: 이번 겨울 첫눈은 이미 본 것으로
+    if (!force && this.firstSnowYear === year) return false;
+    this.firstSnowYear = year; this.skySeen.firstSnow++; this.emit("firstSnow", { def: SKY_EVENTS.firstSnow }); this.skyLook(SKY_EVENTS.firstSnow.emote); return true;
+  }
+  /** 무지개·유성우를 띄움. forced(시험용 손잡이): 낮밤·날씨와 상관없이 시간이 다 될 때까지 떠 있음 */
+  startSky(kind, forced = false) {
+    const def = SKY_EVENTS[kind]; if (!def?.secs) return false;
+    this.sky = { kind, t: def.secs, found: 0 }; if (forced) this.sky.forced = true; this.starClock = 0; this.skyClock = 0;
+    this.skySeen[kind]++; this.emit("sky", { kind, def }); this.skyLook(def.emote); return true;
+  }
+  /** 하늘 일이 시작되면 밖에서 깨어 있는 갈매미가(마리마다 SKY_LOOK_CHANCE) 올려다봄: 쉬거나 산책하던 갈매미는 잠깐 멈춰 서고, 일하던 갈매미는 말풍선만 */
+  skyLook(text) {
+    for (const u of this.units) {
+      if (u.insideBuildingId || u.swimming || u.sailing || [UnitState.Sleep, UnitState.Held].includes(u.state) || this.skyRnd() >= SKY_LOOK_CHANCE) continue;
+      if (u.state === UnitState.Idle) u.timer = Math.max(u.timer || 0, 2.5);
+      else if (u.state === UnitState.Wander) { u.activity = null; setIdle(u, this.skyRnd, this, 2.5); }   // 산책은 그만둬도 나쁜 경험이 아님
+      emote(u, text, 2.5);
+    }
+  }
+  stepSky(dt) {
+    const s = this.sky;
+    if (!s) {                                                                       // 맑은 밤이 이어지면 가끔 유성우
+      if (this.isNight !== true || this.weather.kind !== "clear") { this.skyClock = 0; return; }
+      if ((this.skyClock += dt) >= METEOR_CHECK_SECS) { this.skyClock = 0; if (this.skyRnd() < METEOR_CHANCE) this.startSky("meteor"); }
+      return;
+    }
+    const fits = s.forced || this.weather.kind === "clear" && (s.kind === "meteor" ? this.isNight === true : !this.isNight);
+    if ((s.t -= dt) <= 0 || !fits) { this.sky = null; this.emit("skyEnd", s); return; }   // 시간이 다 됐거나 날이 흐려짐·낮밤이 바뀜
+    if (s.kind !== "meteor" || (this.starClock += dt) < STAR_CHECK_SECS) return;
+    this.starClock = 0; const item = ITEMS.find(i => i.id === STAR_ITEM);
+    for (const u of this.units) {                                                   // 깨어서 밖에 있는 야행성 갈매미가 별조각을 주움
+      if (s.found >= STAR_MAX || !isNocturnal(u) || u.insideBuildingId || [UnitState.Sleep, UnitState.Held].includes(u.state) || this.skyRnd() >= STAR_CHANCE) continue;
+      s.found++; this.items[item.id] = (this.items[item.id] || 0) + 1; emote(u, "⭐", 2.5); this.emit("starPiece", { u, item });
+    }
+  }
   /** 눈 깊이: 겨울 눈 오는 날 약 80초에 가득, 겨울 맑은 날은 0.55까지 천천히, 비·다른 계절엔 녹음 */
   stepSnow(dt) {
     const k = this.weather.kind, winter = this.season === "winter";
@@ -529,7 +577,7 @@ export class World {
     const gifts = this.donateFish(f);
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else if (!gifts) this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
     let item = null;
-    if (rnd() < J.itemChance(u)) { item = J.rollItem(u, rnd, this.season, bonus); this.items[item.id] = (this.items[item.id] || 0) + 1; }
+    if (rnd() < J.itemChance(u) * this.fx.item) { item = J.rollItem(u, rnd, this.season, bonus); this.items[item.id] = (this.items[item.id] || 0) + 1; }
     return { fish: f, item, size, record, first: !prev, donated: !!gifts, gifts };
   }
   /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌. 마을을 돌리지 않고 딱 두 가지만:
@@ -744,7 +792,7 @@ export class World {
   update(dt) {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
-    this.stepWeather(dt); this.stepSnow(dt);
+    this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt);
     const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람
     for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt * grow) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
@@ -778,12 +826,14 @@ export class World {
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0 })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
     if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
     const w = new World(Grid.fromJSON(j.grid), j.modules, rnd, j);
     w.time = j.time || 0;
+    if (j.firstSnowYear === undefined && w.snow > 0.02) w.firstSnowYear = "?";    // 예전 저장(첫눈 기록 없음)인데 눈이 쌓여 있으면 이번 겨울 첫눈은 지난 일
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
     for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; } }

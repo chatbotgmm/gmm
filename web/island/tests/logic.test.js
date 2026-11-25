@@ -1234,3 +1234,66 @@ test("정(월드): 간직하던 것의 마지막 하나를 선물하면 간직 �
   w.giveGift(v, "bottle"); assert.equal(w.keep.bottle, undefined);
   w.items.bottle = 3; w.trade(merchant); assert.equal(w.items.bottle, 0);
 });
+
+test("드문 하늘: 무지개(낮에 비가 갠 뒤)·유성우(맑은 밤)·겨울 첫눈, 별조각, 하늘 기록 저장·예전 저장", async () => {
+  const K = await import("../src/world/skywatch.js"), { ITEMS } = await import("../src/data/catalog.js"), J = await import("../src/world/jobs.js"), B = await import("../src/world/bond.js"), N = await import("../src/world/news.js");
+  assert.equal(K.winterYearOf(new Date(2026, 11, 25)), 2026); assert.equal(K.winterYearOf(new Date(2027, 1, 3)), 2026, "1~2월은 지난해 겨울"); assert.equal(K.winterYearOf(new Date(2027, 2, 1)), 2027);
+  assert.deepEqual(K.skySeenFromSave(undefined), { rainbow: 0, meteor: 0, firstSnow: 0 }); assert.deepEqual(K.skySeenFromSave({ rainbow: 2.7, meteor: -1, firstSnow: "x" }), { rainbow: 2, meteor: 0, firstSnow: 0 });
+  // 별조각: 가방 물건(팔 수 있고 선물할 수 있음)이지만 낚시로는 안 나옴
+  const star = ITEMS.find(i => i.id === K.STAR_ITEM); assert.equal(star.name, "별조각"); assert.ok(star.price > 0 && !star.furniture); assert.equal(B.giftDef(star.id).cat, "shiny");
+  { const r = seededRandom(5), u = { skill: {} }; for (let i = 0; i < 3000; i++) assert.notEqual(J.rollItem(u, r, null, 3).id, star.id); }
+  const mk = () => { const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("summer"); return w; };
+  // 무지개: 비·폭풍 → 맑음일 때만, 낮에만 굴림. 확률은 RAINBOW_CHANCE(하늘 난수), 마을·날씨 난수는 안 씀
+  let w = mk(), seen = 0, tries = 400;
+  for (let i = 0; i < tries; i++) { w.sky = null; w.setWeather(i % 2 ? "storm" : "rain"); assert.equal(w.sky, null); w.setWeather("clear"); if (w.sky) { seen++; assert.equal(w.sky.kind, "rainbow"); assert.equal(w.sky.t, K.SKY_EVENTS.rainbow.secs); } }
+  assert.ok(Math.abs(seen / tries - K.RAINBOW_CHANCE) < 0.08, `무지개 ${seen}/${tries}`); assert.equal(w.skySeen.rainbow, seen);
+  w = mk(); w.skyRnd = () => 0; w.setWeather("cloudy"); w.setWeather("clear"); assert.equal(w.sky, null, "흐림 → 맑음은 무지개 없음");
+  w.isNight = true; w.setWeather("rain"); w.setWeather("clear"); assert.equal(w.sky, null, "밤에는 무지개 없음");
+  w.isNight = false; w.setWeather("rain");
+  { const a = mk(), b = mk(); b.skyRnd = () => 0; for (const x of [a, b]) { x.skyRnd = x === a ? () => 1 : () => 0; x.setWeather("rain"); x.setWeather("clear"); }
+    assert.equal(a.sky, null); assert.equal(b.sky.kind, "rainbow"); assert.equal(a.rnd(), b.rnd(), "마을 난수를 쓰지 않음"); assert.equal(a.wrnd(), b.wrnd(), "날씨 난수를 쓰지 않음"); }
+  // 떠 있는 동안 물건을 찾을 확률 배수(fx.item), 시간이 다 되거나 날이 흐려지면 끝
+  const got = []; w.on("sky", e => got.push(e.kind)); w.on("skyEnd", e => got.push("end:" + e.kind));
+  assert.equal(w.fx.item, 1); w.setWeather("clear"); w.weather.t = 1e9; assert.equal(w.fx.item, K.SKY_EVENTS.rainbow.item); assert.ok(w.fx.item > 1);
+  assert.match(w.newsLog.at(-1).text, /무지개/); assert.equal(N.newsFor("sky", { kind: "rainbow", def: K.SKY_EVENTS.rainbow }, w).icon, "🌈");
+  w.stepSky(K.SKY_EVENTS.rainbow.secs - 1); assert.ok(w.sky); w.stepSky(2); assert.equal(w.sky, null); assert.equal(w.fx.item, 1); assert.deepEqual(got, ["rainbow", "end:rainbow"]);
+  w.startSky("rainbow"); w.weather.kind = "cloudy"; w.stepSky(0.1); assert.equal(w.sky, null, "흐려지면 무지개가 사라짐");
+  w.weather.kind = "clear"; w.startSky("rainbow", true); w.isNight = true; w.stepSky(1); assert.ok(w.sky, "시험용으로 띄운 것은 시간이 다 될 때까지");
+  assert.equal(w.startSky("firstSnow"), false); assert.equal(w.startSky("nope"), false);
+  // 올려다보기: 밖에서 깨어 있는 갈매미가 말풍선(쉬던 갈매미는 잠깐 멈춤), 자는 갈매미·집 안은 빼고
+  w = mk(); w.addUnitByName("미니"); w.addUnitByName("불씨"); w.skyRnd = () => 0; const [u0, u1, u2] = w.units;
+  u0.state = UnitState.Idle; u0.timer = 0.1; u1.state = UnitState.Sleep; u1.emoteText = ""; u2.insideBuildingId = 99; u2.emoteText = "";
+  w.startSky("rainbow"); assert.equal(u0.emoteText, "🌈"); assert.ok(u0.timer >= 2.5); assert.equal(u0.state, UnitState.Idle); assert.equal(u1.emoteText, ""); assert.equal(u2.emoteText, "");
+  w.skyRnd = () => 0.99; u0.emoteText = ""; w.startSky("rainbow"); assert.equal(u0.emoteText, "", "확률에 안 들면 그대로");
+  // 유성우: 밤이 아니거나(시험·낮) 맑지 않으면 굴리지 않음. 맑은 밤엔 METEOR_CHECK_SECS마다 한 번
+  w = mk(); w.weather = { kind: "clear", t: 1e9 }; let rolls = 0; w.skyRnd = () => { rolls++; return 0.99; };
+  w.stepSky(1000); assert.equal(rolls, 0, "isNight를 모르면(시험) 안 굴림"); w.isNight = false; w.stepSky(1000); assert.equal(rolls, 0);
+  w.isNight = true; w.weather.kind = "cloudy"; w.stepSky(1000); assert.equal(rolls, 0); w.weather.kind = "clear";
+  for (let i = 0; i < K.METEOR_CHECK_SECS * 3 * 10; i++) w.stepSky(0.1); assert.ok(rolls >= 2 && rolls <= 3, `굴린 횟수 ${rolls}`); assert.equal(w.sky, null);
+  w.skyRnd = () => K.METEOR_CHANCE - 0.001; w.stepSky(K.METEOR_CHECK_SECS); assert.equal(w.sky.kind, "meteor"); assert.equal(w.skySeen.meteor, 1); assert.equal(w.fx.item, 1);
+  // 별조각: 유성우 동안 밖에서 깨어 있는 야행성 갈매미만, 한 번에 STAR_MAX개까지
+  w.addUnitByName("미니"); w.addUnitByName("불씨"); w.addUnitByName("그림자"); const fire = w.units.find(u => u.name === "불씨"), shade = w.units.find(u => u.name === "그림자");
+  const stars = []; w.on("starPiece", e => stars.push(e.u.name)); shade.state = UnitState.Sleep; w.skyRnd = () => 0;
+  w.stepSky(K.STAR_CHECK_SECS - 1); assert.equal(stars.length, 0); w.stepSky(1); assert.deepEqual(stars, ["불씨"], "야행성이고 깨어 있는 갈매미만"); assert.equal(w.items.stardust, 1); assert.equal(fire.emoteText, "⭐");
+  assert.match(w.newsLog.at(-1).text, /불씨가 .*별조각을 주웠어요/);
+  w.stepSky(K.STAR_CHECK_SECS); w.stepSky(K.STAR_CHECK_SECS); assert.equal(w.items.stardust, K.STAR_MAX, "한 번에 많아야 STAR_MAX개");
+  w.isNight = false; w.stepSky(0.1); assert.equal(w.sky, null, "날이 밝으면 끝");
+  { const coins = w.res.coins, n = w.items.stardust; w.trade(fire); assert.equal(w.items.stardust, 0, "상인이 팖"); assert.ok(w.res.coins >= coins + n * star.price); }
+  // 첫눈: 겨울마다 한 번. 같은 겨울엔 다시 알리지 않고, 겨울이 지나가거나 해가 바뀌면 다시
+  w = mk(); const snows = []; w.on("firstSnow", () => snows.push(w.winterYear)); w.setWeather("snow"); assert.equal(snows.length, 0, "겨울이 아니면 첫눈이 아님");
+  w.setSeason("winter"); w.winterYear = 2026; w.setWeather("snow"); assert.deepEqual(snows, [2026]); assert.equal(w.skySeen.firstSnow, 1); assert.equal(w.newsLog.at(-1).text, "첫눈이 내려요!");
+  w.setWeather("clear"); w.snow = 0; w.setWeather("snow"); assert.equal(snows.length, 1, "같은 겨울엔 한 번만");
+  // 저장 → 불러오기: 하늘 기록·첫눈 해는 남고, 떠 있던 하늘은 끝난 것으로
+  w.startSky("meteor", true); w.items.stardust = 3; let j = JSON.parse(JSON.stringify(w.serialize())), back = World.fromJSON(j, seededRandom(2));
+  assert.deepEqual(back.skySeen, w.skySeen); assert.equal(back.firstSnowYear, 2026); assert.equal(back.sky, null); assert.equal(back.items.stardust, 3);
+  back.setSeason("winter"); back.winterYear = 2026; back.setWeather("clear"); back.setWeather("snow"); assert.equal(back.skySeen.firstSnow, 1, "불러온 뒤 같은 겨울엔 다시 알리지 않음");
+  back.winterYear = 2027; back.setWeather("clear"); back.setWeather("snow"); assert.equal(back.skySeen.firstSnow, 2, "다음 해 겨울엔 다시 첫눈");
+  back.setSeason("spring"); back.setSeason("winter"); back.setWeather("clear"); back.setWeather("snow"); assert.equal(back.skySeen.firstSnow, 3, "겨울이 지나갔다 오면 다시 첫눈");
+  // 예전 저장(새 칸 없음): 기록 0에서 시작. 눈이 쌓인 채면 이번 겨울 첫눈은 지난 일로 봄
+  delete j.skySeen; delete j.firstSnowYear; j.snow = 0; let old = World.fromJSON(j, seededRandom(2));
+  assert.deepEqual(old.skySeen, { rainbow: 0, meteor: 0, firstSnow: 0 }); assert.equal(old.firstSnowYear, null);
+  old.setSeason("winter"); old.winterYear = 2026; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 1);
+  j.snow = 0.6; old = World.fromJSON(j, seededRandom(2)); old.setSeason("winter"); old.winterYear = 2026; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 0, "눈이 쌓여 있던 예전 저장");
+  old.winterYear = 2027; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 1);
+  assert.equal(w.firstSnow(true), true, "시험용으로는 다시 알릴 수 있음");
+});

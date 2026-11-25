@@ -12,6 +12,8 @@ import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
 import { WeatherViews } from "./render/weather.js";
+import { SkyShow } from "./render/skyshow.js";
+import { SKY_EVENTS, winterYearOf } from "./world/skywatch.js";
 import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
@@ -64,7 +66,7 @@ const clouds = createClouds(18, 80, 150); scene.add(clouds);   // 넓은 지도(
 const daylight = new Daylight({ scene, renderer, sun, hemi, water, clouds, skyTex: scene.background });
 const toon = new Toon(scene); let lastToon = 0;
 // 계절·날씨: 계절은 기기 날짜(설정에서 바꿔 볼 수 있음), 날씨는 마을 안에서 바뀜 → 비·눈·번개·땅 색
-const weatherViews = new WeatherViews(scene, daylight);
+const weatherViews = new WeatherViews(scene, daylight), skyShow = new SkyShow(scene);   // + 드문 하늘(무지개·유성우)
 let seasonPick = null;                                                            // null = 실제 날짜
 const seasonNow = () => seasonPick || seasonOf(daylight.now());
 const seasonLook = new SeasonLook(toon), leaves = new FallingLeaves(scene), footprints = new Footprints(scene);   // 눈·모래 위 발자국
@@ -159,6 +161,10 @@ function mount(w) {
   const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`); };
   world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => say("weather", e, WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""));
+  // 드문 하늘: 무지개·유성우가 시작될 때, 겨울 첫눈, 유성우 밤에 주운 별조각
+  world.on("sky", e => { say("sky", e, ` · ${e.def.note} (📖 도감)`); sfx.chime(e.kind === "meteor" ? [988, 1319, 1568] : [659, 784, 988, 1175], 0.1, 0.14); });
+  world.on("firstSnow", e => { say("firstSnow", e, " (📖 도감 · 하늘 기록)"); sfx.chime([1175, 988, 784], 0.14, 0.12); });
+  world.on("starPiece", e => { say("starPiece", e, " (📖 가방)"); sfx.chime([1319, 1568], 0.08, 0.14); });
   world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`); });
   world.on("friendship", e => { say("friendship", e, " (📱 관계도)"); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
   world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`));
@@ -293,6 +299,8 @@ function frame() {
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   cullFar(now);
   daylight.focus = controls.target; daylight.update(dt, now);
+  world.winterYear = winterYearOf(daylight.now());                              // 첫눈은 겨울마다 한 번(어느 해 겨울인지는 화면이 알려 줌)
+  skyShow.update(dt, world.sky, controls.target, camera);
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
@@ -330,7 +338,7 @@ hud.onToon = () => applyStyle(STYLES[(STYLES.findIndex(x => x[0] === toon.style)
 { let s0 = null; try { s0 = localStorage.getItem("galmaemiman-style"); } catch { /* 무시 */ } if (s0 && s0 !== "toon" && STYLES.some(x => x[0] === s0)) document.getElementById("toonBtn").textContent = `그림체: ${applyStyle(s0)}`; }
 hud.savedLabel = () => lastSaved ? `마지막 저장 ${new Date(lastSaved).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : "아직 저장 안 함";
 hud.timeLabel = () => daylight.label(); hud.today = () => daylight.now();
-hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}`;
+hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}${world.sky ? ` · ${SKY_EVENTS[world.sky.kind].icon} ${SKY_EVENTS[world.sky.kind].name}` : ""}`;
 hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")}`);
 const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];
 const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(${SEASONS[seasonOf(daylight.now())].name})`;
@@ -341,5 +349,7 @@ hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { sfx, roomView, daylight, toon, quality, weatherViews, seasonLook, setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+window.__island = { sfx, roomView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
+  sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

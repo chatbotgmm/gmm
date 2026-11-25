@@ -17,7 +17,7 @@ export const bondHearts = v => { const s = bondStage(v), n = BOND_STAGES.length 
 
 // 선물 갈래: 가방 물건마다 하나, 보물 물고기는 모두 "fish". 갈매미마다 좋아하는·꺼리는 갈래는 PERSONA의 likes·dislikes
 export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는 것", plant: "꽃과 잎", sea: "바다 조개", ice: "차가운 것", fish: "귀한 물고기" };
-const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice" };
+const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice", stardust: "shiny" };
 // 반응 3단계: 꺼리는 것 · 보통 · 좋아하는 것 → 말풍선, 오르는 정, 재미
 export const GIFT_TIERS = [
   { say: "음…", bond: 0.5, fun: 2 },
