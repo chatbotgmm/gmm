@@ -9,6 +9,7 @@
 | bench | 9,070 | wooden_bench_3d_model.glb |
 | cabbage | 9,234 | tripo_convert_037c8b53… |
 | carrot | 9,910 | tripo_convert_b251bc0d… |
+| cottage (2층집) | 14,304 | 2층집.glb (2026-11-25, 아래) |
 | field_plot | 9,436 | tripo_convert_1547a90d… |
 | flower_box | 8,998 | flower_box_3d_model.glb |
 | house (작은 집) | 14,646 | round_cottage_3d_model.glb |
@@ -43,3 +44,10 @@ metallic 0.1·roughness 0.8, KHR_mesh_quantization). 같은 파일 이름에 덮
 원본 round_cottage_3d_model.glb(14,646면, 4096px 텍스처 3장, EXT_meshopt_compression). 같은 방법, 정문 +x → modelYaw −π/2. Kenney building-type-a와 지붕 색 바꾸기(roof)는 뺌
 (자이언트의 집은 그대로 Kenney building-type-a + 하늘색 지붕).
 크기: 3×3칸에 꽉 채우면 높이 약 2.75 m(계산)로 2층집(2.55 m)보다 커짐 → fit 2.3칸으로 폭 2.2 m · 높이 약 2.1 m(def.height 1.95 → 2.1). 문 앞 칸은 그대로(앞벽에서 문 칸까지 약 0.45 m).
+
+## 2층집(cottage_4k / 2k / 1k, 2026-11-25)
+원본 2층집.glb(받은 파일 이름은 aa007fc2-2__.glb, 14,304면, 4096px 텍스처 3장, EXT_meshopt_compression). 발코니·꽃 상자·줄무늬 차양 2층집. 같은 방법(압축 풀기, 면 그대로,
+기본색만 4096 / 2048 / 1024px JPEG 92, metallic 0.1·roughness 0.8, KHR_mesh_quantization). 정문(차양·나무 문) +x → modelYaw −π/2(rot 0~3 문 칸 확인).
+Kenney building-type-o와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/suburban에 그대로 있음, 쓰는 곳 없음).
+크기: 원본 0.77 × 1.0 × 0.76(높이가 가장 큼). 3×3칸에 꽉 채우면 높이 약 3.7 m로 은행(4.3 m)에 가까워짐 → fit 2.7칸으로 폭 2.53 m · 깊이 2.57 m · 높이 3.32 m(def.height 2.55 → 3.3).
+작은 집(2.19 × 2.11 × 2.11 m)보다 폭 1.15배 · 높이 1.57배. 방(interior 6×5, 2층 침실)은 그대로.
