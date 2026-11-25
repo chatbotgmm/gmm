@@ -215,12 +215,25 @@ export function boatModel() {
 /** 선착장: 낚시터 같은 판자 + 끝에 묶인 배 */
 function pierModel() { const g = dockModel(), boat = boatModel(); boat.position.set(0.55, -0.2, -1.5); boat.rotation.y = 0.15; g.add(boat); return g; }
 
+/** 등대 모델: 임시 몸통(lighthouseBody)을 사용자 모델로 바꾸고, 램프·빛줄기(이름 그대로 — daylight.js가 밤에 켬)를 모델의 등불 방 높이로 옮김.
+ *  램프는 유리 칸을 감싸는 빛 껍질(더하기 색, 발광 세기만큼 밝아짐). 모델을 못 받으면 임시 등대 그대로 */
+async function lighthouseModel(obj, def) {
+  const m = await rawModel(def.model), body = obj.getObjectByName("lighthouseBody"), t = body.parent, lamp = obj.getObjectByName("lighthouseLamp"), beam = obj.getObjectByName("lighthouseBeam");
+  const bx = new THREE.Box3().setFromObject(m), H = def.modelH, s = H / (bx.max.y - bx.min.y), turn = new THREE.Group();
+  m.scale.setScalar(s); m.position.set(-(bx.min.x + bx.max.x) / 2 * s, -bx.min.y * s, -(bx.min.z + bx.max.z) / 2 * s); turn.add(m); turn.rotation.y = def.modelYaw ?? 0;
+  t.remove(body); t.add(turn);
+  lamp.position.y = beam.position.y = H * def.lampAt;
+  lamp.geometry = new THREE.LatheGeometry(def.lampShape.map(([r, y]) => new THREE.Vector2(r * H, (y - def.lampAt) * H)), 24);
+  lamp.material = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc24a, emissiveIntensity: 0.9, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false });
+  lamp.material.userData.noToon = true; lamp.castShadow = lamp.receiveShadow = false; lamp.renderOrder = 2;
+}
+
 export async function addModuleViews(scene, world) {
   const map = new Map();
   await Promise.all(world.modules.map(async m => {
     const def = MODULES[m.defId], cellsWorld = m.cells.map(([x, z]) => [toWorldX(x + 0.5), toWorldZ(z + 0.5)]);
     const asset = def.assets ? def.assets[(m.variant ?? 0) % def.assets.length] : def.asset;
-    if (!asset) { const obj = modulePlaceholder(m.defId, cellsWorld, m.rot); obj.name = m.id; scene.add(obj); return; }
+    if (!asset) { const obj = modulePlaceholder(m.defId, cellsWorld, m.rot); obj.name = m.id; scene.add(obj); if (def.model) await lighthouseModel(obj, def).catch(e => console.warn(`에셋을 못 불러와 임시 도형을 씁니다: ${def.model}`, e)); return; }
     // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
     const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
     obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;

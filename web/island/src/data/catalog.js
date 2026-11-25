@@ -38,7 +38,7 @@ export const BUILDINGS = {
   },
   // 자이언트 전용 집: 몸이 커서(키 약 1.4 m) 일반 집에는 못 들어가고 이 집에만 들어감. 다른 갈매미는 못 들어감.
   giantHouse: {
-    id: "giantHouse", builtBy: "builder", house: true, price: 40, cost: { wood: 2 }, tier: 1, name: "자이언트의 집", footprint: { w: 5, d: 5 }, work: 6, forUnit: "자이언트", height: 3.0, asset: "assets/suburban/building-type-a.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "giantHouse", builtBy: "builder", house: true, price: 40, cost: { wood: 2 }, tier: 1, name: "자이언트의 집", footprint: { w: 5, d: 5 }, work: 6, forUnit: "자이언트", height: 4.9, asset: "assets/props/giant_house_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4.7, d: 4.7 },   // 둥근 지붕·금빛 날개 장식 신전(사용자 제공, 문 +x → +z). 5칸에 꽉 채우면 높이 약 5.25 m로 우체국(5.1 m)보다 높아져서 폭 4.5 m·깊이 4.0 m·높이 약 4.9 m로
     placeholder: { wall: 0xefe6d2, roof: 0x9fd3e6, roof_shape: "pyramid", chimney: true }, interior: { w: 8, d: 8 },
   },
   // 공식은행: 섬 가운데에 처음부터 있음(짓거나 철거 못 함). 갈매미가 물건을 팔면 새 돈을 찍어 주고, 산 물건은 은행 창고(마을 자재)로.
@@ -142,7 +142,10 @@ export const WALLPAPERS = { cream: { name: "크림", color: 0xf6eedc }, mint: { 
 export const MODULES = {
   pier:       { id: "pier", name: "나무 부두", asset: null, walkable: true, surface: 0.0 },
   breakwater: { id: "breakwater", name: "돌 방파제", asset: null, walkable: false },
-  lighthouse: { id: "lighthouse", name: "등대", asset: null, walkable: false },
+  // 등대: 날개 달린 등대(사용자 제공). model은 몸통만 바꿈(램프·빛줄기는 placeholders.js 그대로) — modelH 높이(m), 문 +z → modelYaw −π/4로 섬 안쪽(남서)을 봄,
+  // lampAt = 등불 방(유리 칸) 가운데 높이, lampShape = 유리 칸을 살짝 감싸는 옆모습 [반지름, 높이]들(모두 모델 높이에 대한 비율. 유리 칸은 높이 0.775~0.905, 위로 갈수록 좁아짐)
+  lighthouse: { id: "lighthouse", name: "등대", asset: null, walkable: false, model: "assets/props/lighthouse_{T}.glb", modelH: 5.5, modelYaw: -Math.PI / 4, lampAt: 0.835,
+    lampShape: [[0.082, 0.776], [0.089, 0.82], [0.089, 0.845], [0.078, 0.86], [0.065, 0.88], [0.05, 0.903]] },
   cave:       { id: "cave", name: "동굴", asset: null, walkable: false },          // 산기슭 동굴 입구(둘레에 광석 바위)
   // 기존 Kenney Nature Kit 모델(web/village/assets, CC0)을 쓴다. 여러 개면 모듈마다 variant 번호로 고른다.
   beachRock:  { id: "beachRock", name: "해변 바위", walkable: false,

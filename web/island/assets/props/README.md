@@ -14,6 +14,9 @@
 | field_plot | 9,436 | tripo_convert_1547a90d… |
 | flower_box | 8,998 | flower_box_3d_model.glb |
 | house (작은 집) | 14,646 (+등불 발광 마스크 512px, 등불 1) | round_cottage_3d_model.glb |
+| giant_house (자이언트의 집) | 14,154 | fantasy_temple_3d_model.glb (2026-11-25, 아래) |
+| house (작은 집) | 14,646 | round_cottage_3d_model.glb |
+| lighthouse (등대) | 14,788 | winged_lighthouse_3d_model.glb (2026-11-25, 아래 · 원본 텍스처 2048px) |
 | palm | 9,528 | palm_tree_3d_model.glb |
 | post (우체국) | 14,388 (+등불 발광 마스크 512px, 등불 1) | fantasy_house_3d_model.glb |
 | shop (잡화점) | 14,420 (+등불 발광 마스크 512px, 등불 1) | fantasy_house_3d_model.glb (da8af4be…, 우체국과 다른 파일 · 2026-11-25, 아래) |
@@ -44,7 +47,7 @@ metallic 0.1·roughness 0.8, KHR_mesh_quantization). 같은 파일 이름에 덮
 
 ## 작은 집(house_4k / 2k / 1k, 2026-11-25)
 원본 round_cottage_3d_model.glb(14,646면, 4096px 텍스처 3장, EXT_meshopt_compression). 같은 방법, 정문 +x → modelYaw −π/2. Kenney building-type-a와 지붕 색 바꾸기(roof)는 뺌
-(자이언트의 집은 그대로 Kenney building-type-a + 하늘색 지붕).
+(자이언트의 집도 2026-11-25에 사용자 모델로 바뀜, 아래).
 크기: 3×3칸에 꽉 채우면 높이 약 2.75 m(계산)로 2층집(2.55 m)보다 커짐 → fit 2.3칸으로 폭 2.2 m · 높이 약 2.1 m(def.height 1.95 → 2.1). 문 앞 칸은 그대로(앞벽에서 문 칸까지 약 0.45 m).
 
 ## 2층집(cottage_4k / 2k / 1k, 2026-11-25)
@@ -77,3 +80,15 @@ Kenney building-type-d·b와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/
   - `python3 tools/glow_mask.py cafe 0.2498,-0.2361,0.1053,0.03 0.2536,-0.2368,-0.1048,0.03 --pane 0.62,0.76,0.72,0.82` (카페는 옆 유리가 어두운 노랑으로 그려져 문턱을 낮춤)
 - 그리기: src/render/daylight.js `lantern()` — 세기는 가로등과 같이 0.15 + 2.2 × 밤(낮에는 거의 안 보이고 밤에 빛남), 전기와 상관없이 켜짐, 짓는 중에는 꺼짐.
   실제 빛은 쓰지 않고 등불마다 더하기 색 스프라이트 하나. 건물마다 따로 켜고 끄게 재질만 복사(src/render/assets.js, 텍스처는 같이 씀)
+## 자이언트의 집(giant_house_4k / 2k / 1k) · 등대(lighthouse_4k / 2k / 1k), 2026-11-25
+자이언트의 집 원본 fantasy_temple_3d_model.glb(받은 파일 이름 72ed68a9-…, 14,154면, 4096px 텍스처 3장, EXT_meshopt_compression) — 둥근 지붕·금빛 날개 장식·기둥 현관 신전(사용자가 자이언트의 집으로 정함).
+등대 원본 winged_lighthouse_3d_model.glb(받은 파일 이름 4593947a-…, 14,788면, **2048px** 텍스처 3장, 압축 없음·정점 값 float 그대로).
+같은 방법(면 그대로, 기본색만 JPEG 92, metallic 0.1·roughness 0.8, 노멀·금속도 텍스처 뺌). 등대는 원본이 2048px이라 키우지 않음 — lighthouse_4k와 2k는 같은 2048px 그림, 1k만 1024px.
+- 자이언트의 집: 정문 +x → modelYaw −π/2(rot 0~3에서 모델 +x와 문 칸 방향 내적 1 확인). Kenney building-type-a와 지붕 색 바꾸기(roof)는 뺌. 원본 0.81 × 1.0 × 0.90(x·높이·z).
+  5×5칸에 꽉 채우면 높이 약 5.25 m로 우체국(5.1 m)보다 높아짐 → fit 4.7칸으로 폭 4.46 m · 깊이 4.02 m · 높이 4.94 m(def.height 3.0 → 4.9). 2층집(3.32 m)의 1.5배, 은행(4.3 m)보다 높고 우체국보다 낮음.
+  이전(Kenney): 폭 4.75 · 깊이 3.76 · 높이 3.05 m. 자이언트(키 1.37 m)가 문 앞에 서면 문 높이와 비슷함. 방(interior 8×8)·문 칸·기능은 그대로.
+- 등대: 건물이 아니라 해안 모듈(MODULES.lighthouse, 2×2칸, 못 지나감 그대로). 임시 등대(placeholders.js)의 몸통(lighthouseBody)만 모델로 바꾸고 램프(lighthouseLamp)·빛줄기(lighthouseBeam)는 이름 그대로 둠(render/views.js lighthouseModel) — 밤 불빛은 daylight.js가 그대로 켬.
+  높이 modelH 5.5 m(이전 임시 등대 4.2 m · 우체국 5.1 m보다 높음 — 섬에서 가장 높은 건물). 탑 밑동 지름 약 2.06 m(2×2칸), 문 앞 턱까지 반지름 1.12 m, 날개 폭 2.58 m(공중).
+  문은 원본 +z → modelYaw −π/4로 섬 가운데(남서)를 봄(문 방향과 등대→섬 가운데 방향 내적 1.00). 이전 등대는 둥근 탑이라 방향이 없었음.
+  등불 방(유리 칸): 모델 높이의 0.776~0.903. 램프·빛줄기 높이 lampAt 0.835 × 5.5 = 4.59 m(받침에서. 월드 y 4.44, 이전 3.35). 램프는 유리 칸을 살짝 감싸는 빛 껍질(lampShape, 더하기 색 · 발광 세기 낮 0.9 → 밤 4.4).
+  모델을 못 받으면 임시 등대(빨강·하양 줄무늬) 그대로 보임.

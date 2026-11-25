@@ -61,10 +61,11 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
   } else if (defId === "lighthouse") {
     const cx = cellsWorld.reduce((s, c) => s + c[0], 0) / cellsWorld.length, cz = cellsWorld.reduce((s, c) => s + c[1], 0) / cellsWorld.length;
     const t = new THREE.Group(); t.position.set(cx, -0.15, cz); g.add(t);
-    t.add(box(1.7, 0.3, 1.7, 0xb9b5ad));
+    const body = new THREE.Group(); body.name = "lighthouseBody"; t.add(body);   // 임시 몸통(받침·줄무늬 탑·지붕). 등대 모델을 받으면 이것만 바뀜(views.js lighthouseModel)
+    body.add(box(1.7, 0.3, 1.7, 0xb9b5ad));
     for (let k = 0; k < 4; k++) {
       const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.55 - k * 0.06, 0.6 - k * 0.06, 0.75, 16), mat(k % 2 ? 0xd9574b : 0xf7f2e8));
-      seg.position.y = 0.3 + 0.375 + k * 0.75; seg.castShadow = true; t.add(seg);
+      seg.position.y = 0.3 + 0.375 + k * 0.75; seg.castShadow = true; body.add(seg);
     }
     // 램프: 발광 재질(밤에 세짐, daylight.js). 둘레 유리 기둥 + 빛줄기 두 개(반대 방향, 밤에만 보이며 돎)
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffe08a, emissive: 0xffc24a, emissiveIntensity: 0.9, roughness: 0.4 });
@@ -91,7 +92,7 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
       const cone = new THREE.Mesh(new THREE.ConeGeometry(2.8, BEAM_LEN, 32, 1, true).translate(0, -BEAM_LEN / 2, 0), bm);
       cone.rotation.z = sgn * Math.PI / 2; cone.rotation.x = -0.06; cone.renderOrder = 3; beam.add(cone);   // 바다(renderOrder 1)보다 나중에 그려야 가려지지 않음   // 아주 조금 아래(바다 쪽)로
     }
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; t.add(cap);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; body.add(cap);
   } else if (defId === "cave") {
     // 동굴 입구: 바위 덩이들이 둘러싼 검은 아치(+z 쪽으로 열림)
     const cx = cellsWorld.reduce((s, c) => s + c[0], 0) / cellsWorld.length, cz = cellsWorld.reduce((s, c) => s + c[1], 0) / cellsWorld.length;
