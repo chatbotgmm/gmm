@@ -481,7 +481,8 @@ function chooseNext(u, world, rnd) {
   if (festAwake(u, world) && !u.committed && rnd() < FESTIVAL_JOIN_CHANCE && startGather(u, world, rnd)) return;
   if (sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { if (goToBed(u, world, rnd)) return; }   // 잘 시간: 집에 가서 잠(야행성은 낮에)
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
-  if (world.economy) {
+  // 피곤하면(기력 TIRED 아래) 심부름(가공·은행·시장·저장고·장보기)을 새로 시작하지 않고 아래에서 먼저 쉼: 상인이 가공 → 은행을 쉬지 않고 이어 가다 기력이 바닥나지 않게
+  if (world.economy && (u.needs?.energy ?? 100) >= M.TIRED) {
     if (u.job === "merchant") {                                                  // 상인: 가공품은 은행에, 원자재는 가공
       if (E.total(u.goods) > 0 && startActivity(u, "deposit", world, rnd)) return;
       if (E.total(u.raw) >= 3 && startActivity(u, "process", world, rnd)) return;

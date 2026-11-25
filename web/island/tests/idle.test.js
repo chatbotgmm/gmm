@@ -107,3 +107,24 @@ test("피곤하면(기력 30 아래) 동네 고치기를 새로 시작하지 않
   assert.ok(fresh.includes("improve"), `안 피곤하면 동네를 고침(${fresh.filter(x => x === "improve").length}/30)`);
   assert.deepEqual(tired.filter(x => x !== "rest"), [], "피곤하면 30번 모두 쉬기부터");
 });
+
+test("피곤하면(기력 30 아래) 심부름을 새로 시작하지 않고 먼저 쉼: 가공품을 든 상인도 은행은 쉬고 나서", async () => {
+  const { setIdle } = await import("../src/units/unitBrain.js");
+  const w = World.create(7, seededRandom(5), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금"); w.isNight = false;   // 시장을 지으려면 목수가 있어야 함
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const mq = spot("market", c.x + 2, c.z + 14); w.placeBuilding("market", mq[0], mq[1], 0);
+  const u = w.units.find(o => o.name === "황금"); assert.equal(u.job, "merchant"); assert.ok(w.economy && w.bankB());
+  const trial = (energy, bag) => {                                            // 한 번 고르게 해 보고 무엇을 시작했는지
+    setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null; u.sat = 100;
+    u.goods = { wood: 0, stone: 0, iron: 0 }; u.raw = { wood: 0, stone: 0, iron: 0 }; Object.assign(bag === "goods" ? u.goods : u.raw, { wood: 5 });
+    for (let k = 0; k < 90 && u.state === "Idle" && u.activity !== "rest"; k++) w.update(1 / 30);
+    return u.activity === "rest" || u.state === "GoSit" ? "rest" : u.state === "Sleep" ? "sleep" : u.state;
+  };
+  for (let i = 0; i < 10; i++) {
+    assert.equal(trial(90, "goods"), "GoBank", "안 피곤하면 가공품을 은행에");
+    assert.equal(trial(90, "raw"), "GoMarket", "안 피곤하면 원자재를 가공하러");
+    assert.equal(trial(25, "goods"), "rest", "피곤하면 은행보다 쉬기 먼저"); assert.equal(u.goods.wood, 5, "가공품은 그대로 들고 있음");
+    assert.equal(trial(25, "raw"), "rest", "피곤하면 가공보다 쉬기 먼저");
+    assert.equal(trial(15, "goods"), "sleep", "지쳤으면(기력 20 아래) 잠");
+  }
+});
