@@ -41,12 +41,13 @@ export function planImprovement(world, u) {
   if (!plans.length) return null;
   return plans.sort((a, b) => b.w - a.w)[0];
 }
+const FREE = { free: true };                                                            // 갈매미가 스스로 주문한 공사: 플레이어 금고에서 설계비를 내지 않음
 /** 장식 공사장 놓기: 집 문에서 2~5칸 안의 빈 땅에 화단 또는 벤치 */
 export function orderDeco(world, home, rnd) {
   const id = rnd() < 0.5 ? "flowerbed" : "bench";
   for (let r = 2; r <= 5; r++) for (let k = 0; k < 16; k++) {
     const a = k / 16 * 6.283 + rnd() * 0.3, x = Math.round(home.door.x + Math.cos(a) * r), z = Math.round(home.door.z + Math.sin(a) * r);
-    for (let rot = 0; rot < 4; rot++) if (world.check(id, x, z, rot).ok) { const res = world.placeBuilding(id, x, z, rot); if (res.ok) { (world.decoOrder ||= new Set()).add(home.id); return res.building; } }
+    for (let rot = 0; rot < 4; rot++) if (world.check(id, x, z, rot, FREE).ok) { const res = world.placeBuilding(id, x, z, rot, null, null, FREE); if (res.ok) { (world.decoOrder ||= new Set()).add(home.id); return res.building; } }
   }
   return null;
 }

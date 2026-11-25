@@ -47,6 +47,16 @@ const NEWS_MAKERS = {
   festival: ({ def }) => ({ icon: def.icon, text: `${josa(def.name, "이", "가")} 열렸어요! 갈매미들이 광장으로 모여요`, weight: 8 }),
   festivalEnd: ({ def, item, n }) => ({ icon: "🎁", text: `${josa(def.name, "이", "가")} 끝났어요. ${n ? `갈매미 ${n}마리가 즐겼고, ` : ""}기념으로 ${item ? josa(item.name, "을", "를") : "추억을"} 받았어요!`, weight: 7 }),
   buildingDone: b => { const d = BUILDINGS[b.defId]; return d ? { icon: d.house ? "🏠" : "🔨", text: `${josa(d.name, "이", "가")} 다 지어졌어요`, weight: builtWeight(d) } : null; },
+  // 은행 금고(bank.js): 바닥 사태 시작·끝은 사태마다 한 번 · 얼마 안 남음·세금·설계비·품삯은 알림 줄에만
+  vaultShort: () => ({ icon: "🏦", text: "은행 금고가 바닥났어요 — 품삯이 밀리고 집 대출이 멈췄어요", weight: 6 }),
+  vaultOk: () => ({ icon: "🏦", text: "금고가 다시 찼어요. 밀린 품삯을 모두 치렀어요", weight: 4 }),
+  vaultLow: ({ vault }) => ({ icon: "🏦", text: `금고에 조개가 얼마 안 남았어요 (🪙${vault})`, weight: 0 }),
+  loanPaid: ({ u }) => ({ icon: "🏠", text: `${josa(u.name, "이", "가")} 집값을 다 갚았어요`, weight: 3 }),
+  loanRefused: ({ u }) => ({ icon: "🏦", text: `${josa(u.name, "은", "는")} 금고가 비어 집 대출을 못 받았어요`, weight: 0 }),
+  tax: ({ total, n }) => total ? { icon: "🏦", text: `세금 🪙${total}이 금고에 들어왔어요 (${n}마리)`, weight: 0 } : null,
+  fee: ({ b, fee }) => BUILDINGS[b.defId] ? { icon: "🏦", text: `${BUILDINGS[b.defId].name} 설계비 🪙${fee}을 금고에서 냈어요`, weight: 0 } : null,
+  wageOwed: ({ u, n }) => ({ icon: "💸", text: `${u.name}의 품삯 🪙${n}이 밀렸어요`, weight: 0 }),
+  wagePaid: ({ u, n }) => ({ icon: "💸", text: `${josa(u.name, "이", "가")} 밀린 품삯 🪙${n}을 받았어요`, weight: 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 이 일의 소식 한 줄(없으면 null) */

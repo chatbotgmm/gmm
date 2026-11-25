@@ -486,7 +486,9 @@ function chooseNext(u, world, rnd) {
     if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀)
     if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝 옆집이 있으면 그 집부터, 다음은 싼 집)
       const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => areNeighbors(b, palHome) ? 1 : 0;
-      const h = world.housesForSale(u).filter(b => (u.coins || 0) >= (BUILDINGS[b.defId].price || 30)).sort((a, c) => nearPal(c) - nearPal(a) || BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
+      const deals = world.housesForSale(u).map(b => [b, world.houseDeal(u, b)]);   // 집값을 다 가졌거나, 계약금이 있고 금고가 빌려줄 수 있으면(bank.js)
+      if (!deals.some(([, d]) => d.ok)) { const v = deals.find(([, d]) => d.reason === "vault"); if (v) world.refuseLoan(u, v[1]); }   // 금고가 비어 대출 거절(한 사태에 한 번 말풍선)
+      const h = deals.filter(([, d]) => d.ok).map(([b]) => b).sort((a, c) => nearPal(c) - nearPal(a) || BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
       if (h && startActivity(u, "market", world, rnd)) { u.shop = { kind: "house", b: h.id }; emote(u, "집 사러!"); return; }
     }
     const home = u.home && world.buildings.get(u.home), shop = world.shopB();
@@ -714,7 +716,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
         if (world.isDone(b)) { world.payWage(u); uncommit(u, world); done(u, 2, rnd, world); return; }
         M.learn(u, "build", 0.8);                                               // 한 바퀴 지을 때마다 보람
-        world.payWage(u);                                                       // 한 바퀴 품삯(은행이 찍어 줌)
+        world.payWage(u);                                                       // 한 바퀴 품삯(금고에서, 모자라면 밀림)
         if (hasMaterials(world, b, u)) { useMaterials(world, b, u); return; }         // u.work가 비었으니 다음 바퀴부터 다시
         u.activity = null;
         emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);
@@ -790,7 +792,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         const r = world.takeFood(u); if (r) { world.eatFood(u); emote(u, r === "buy" ? "🏚 저장고 음식 냠" : "🏚 나눠 받았어요", 2.2); done(u, 0.8, rnd, world); } else { emote(u, "저장고가 비었네…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "house") {
         const b = world.buildings.get(shop.b);
-        if (b && world.buyHouse(u, b)) { emote(u, "🏠 내 집!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, "놓쳤다…"); setIdle(u, rnd, world); }
+        if (b && world.buyHouse(u, b)) { emote(u, "🏠 내 집!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, b && world.houseDeal(u, b).reason === "vault" ? "은행에 돈이 없대…" : "놓쳤다…"); setIdle(u, rnd, world); }
       } else setIdle(u, rnd, world);
       break;
     }

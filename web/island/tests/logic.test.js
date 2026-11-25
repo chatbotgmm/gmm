@@ -294,7 +294,8 @@ test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공
   assert.equal(w.buyFoodFrom(giant, mini), false, "남김분 2개는 안 팖");
   // 집: 다 지어도 주인이 없으면 못 들어감 → 사면 주인만
   const hs = spot("house"), h = w.placeBuilding("house", hs[0], hs[1], 0).building;
-  assert.equal(w.canEnter(mini, h), false); mini.coins = 29; assert.equal(w.buyHouse(mini, h), false);
+  assert.equal(w.canEnter(mini, h), false); mini.coins = 11; assert.equal(w.buyHouse(mini, h), false, "계약금(12)도 없으면 못 삼");
+  const vault = w.bank.vault; w.bank.vault = 0; mini.coins = 29; assert.equal(w.buyHouse(mini, h), false, "금고가 비면 대출 거절(집값을 다 가져야 삼)"); w.bank.vault = vault;   // 은행 금고 개편: 29조개면 대출로 살 수 있음
   mini.coins = 40; assert.equal(w.buyHouse(mini, h), true); assert.equal(w.canEnter(mini, h), true); assert.equal(w.canEnter(boss, h), false);
   // 물물교환: 돈 없이 배고프면 자재 ↔ 음식
   boss.full = 30; boss.coins = 0; boss.inv.wood = 3; mini.inv.food = 4; assert.ok(w.barter(boss, mini));
