@@ -1567,3 +1567,30 @@ test("여덟 가지 함께: 친구·소식지·찌 당기기·수족관·선물�
   assert.equal(w2.festival, null); assert.equal(w2.festivals["2026-autumn"], true); assert.equal(w2.items.festAutumn, 1, "기념 가구 하나");
   for (let i = 0; i < 30; i++) w2.update(0.1); assert.ok(!w2.wishes.some(x => x.id === "festival"), "이번 계절 축제 소원은 다시 안 생김");
 });
+
+test("바닥 그림: 좁게 칠한 곳(3칸 이하 띠)과 그 둘레만 상세도와 상관없이 촘촘히, 넓은 땅·넓은 경계·물가는 그대로", async () => {
+  const { cellSub, isThin, nearThin, EDGE_SUB, snowClear } = await import("../src/world/groundLook.js");
+  const g = new Grid(24, 24, 16);
+  for (let z = 0; z < 24; z++) for (let x = 0; x < 24; x++) { g.get(x, z).elevation = 0.15; g.get(x, z).groundType = GroundType.Grass; }
+  g.get(5, 5).groundType = GroundType.Cobble;                                     // 한 칸 칠하기
+  assert.equal(cellSub(g, 5, 5, 1), EDGE_SUB);                                    // 칠한 칸
+  assert.equal(cellSub(g, 4, 4, 1), EDGE_SUB);                                    // 대각선 이웃도
+  assert.equal(cellSub(g, 8, 8, 1), 1);                                           // 멀리 떨어진 잔디는 상세도 그대로
+  assert.equal(cellSub(g, 5, 5, 4), 4);                                           // 이미 촘촘하면 그대로
+  for (let x = 2; x < 20; x++) g.get(x, 10).groundType = GroundType.Dirt;          // 한 칸 폭 길
+  assert.ok(isThin(g, 11, 10) && nearThin(g, 11, 9) && !nearThin(g, 11, 12));
+  for (let z = 16; z < 24; z++) for (let x = 0; x < 24; x++) g.get(x, z).groundType = GroundType.Sand;   // 넓은 모래(자연 해변)
+  assert.equal(cellSub(g, 11, 16, 1), 1);                                         // 넓은 땅끼리의 경계는 그대로
+  assert.equal(cellSub(g, 11, 15, 1), 1);
+  for (let z = 20; z < 24; z++) for (let x = 4; x < 10; x++) g.get(x, z).groundType = GroundType.Rock;   // 넓게 칠한 바위: 테두리도 그대로
+  assert.equal(cellSub(g, 4, 20, 1), 1); assert.equal(cellSub(g, 3, 20, 1), 1);
+  for (let z = 20; z < 24; z++) for (let x = 14; x < 20; x++) g.get(x, z).groundType = GroundType.Cobble; // 넓게 칠한 돌길: 테두리 안팎 칸만 촘촘히
+  assert.equal(cellSub(g, 14, 20, 1), EDGE_SUB); assert.equal(cellSub(g, 13, 20, 1), EDGE_SUB); assert.equal(cellSub(g, 16, 22, 1), 1);
+  const s = new Grid(16, 16, 16);                                                 // 물가
+  for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) { s.get(x, z).elevation = z < 10 ? 0.15 : -1; s.get(x, z).groundType = z < 6 ? GroundType.Grass : GroundType.Sand; }
+  assert.equal(isThin(s, 8, 9), false);                                           // 물 앞 모래 띠(4칸)가 물 때문에 좁은 띠가 되지 않음
+  assert.equal(isThin(s, 8, 12), false);                                          // 물 칸은 늘 그대로
+  assert.equal(cellSub(s, 8, 6, 1), 1);                                           // 넓은 잔디·모래 경계는 그대로
+  assert.ok(snowClear(GroundType.Cobble) > 0.5 && snowClear(GroundType.WoodDeck) > 0.5 && snowClear(GroundType.Dirt) > 0.5);   // 길은 쓸어서 눈이 덜
+  assert.equal(snowClear(GroundType.Grass) + snowClear(GroundType.Sand) + snowClear(GroundType.Rock), 0);                     // 자연 땅은 그대로
+});

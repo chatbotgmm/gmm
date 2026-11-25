@@ -38,15 +38,16 @@ const BUSH = { spring: [0xffffff, 0x000000], summer: [0xe6f2d8, 0x000000], autum
 export function seasonalGround(mat) {
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = "varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + sh.vertexShader.replace("#include <begin_vertex>",
-      "#include <begin_vertex>\n vSeasonW = (modelMatrix * vec4(transformed, 1.0)).xyz; vSeasonN = normalize(mat3(modelMatrix) * objectNormal);");
-    sh.fragmentShader = "uniform float uSnow; uniform float uAutumn; uniform float uSpring; varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+    // aSnowClear(꼭짓점마다, groundChunks.js): 길은 쓸어서 눈이 덜 쌓임. 속성이 없는 메쉬는 0으로 읽혀 그대로 눈
+    sh.vertexShader = "attribute float aSnowClear; varying float vSnowClear; varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + sh.vertexShader.replace("#include <begin_vertex>",
+      "#include <begin_vertex>\n vSnowClear = aSnowClear; vSeasonW = (modelMatrix * vec4(transformed, 1.0)).xyz; vSeasonN = normalize(mat3(modelMatrix) * objectNormal);");
+    sh.fragmentShader = "uniform float uSnow; uniform float uAutumn; uniform float uSpring; varying float vSnowClear; varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
       float green = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 5.0, 0.0, 1.0);          // 잔디처럼 초록인 곳
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.92, 1.1, 0.82), uSpring * green);   // 봄: 연두
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.32, 0.98, 0.5), uAutumn * green);   // 가을: 누런 잔디
       float up = smoothstep(0.55, 0.85, vSeasonN.y), land = smoothstep(-0.07, -0.015, vSeasonW.y);   // 바닷가 모래(0보다 낮은 비탈)엔 눈이 안 쌓임
       float n = fract(sin(dot(floor(vSeasonW.xz * 1.7), vec2(12.9898, 78.233))) * 43758.5453);              // 칸마다 조금씩 다르게(얼룩진 눈)
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.97, 1.0), clamp(uSnow * up * land * (0.9 + 0.12 * n), 0.0, 1.0));`);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.97, 1.0), clamp(uSnow * up * land * (0.9 + 0.12 * n) * (1.0 - vSnowClear), 0.0, 1.0));`);
   };
   mat.customProgramCacheKey = () => "seasonGround"; mat.userData.noSnow = true;   // 땅은 자체 눈
   return mat;

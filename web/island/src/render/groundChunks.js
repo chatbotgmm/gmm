@@ -8,6 +8,7 @@ import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
 import { corners as cornersRaw, heightIn, joined } from "../world/terrain.js";
+import { cellSub, snowClear } from "../world/groundLook.js";
 
 let SUB = 4;                                   // 가까운 땅의 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
 // 거리별 상세도(오픈월드 지형의 LOD와 같은 생각): 보는 곳(화면 중심)에서 가까운 청크만 촘촘히, 멀수록 성기게.
@@ -43,37 +44,40 @@ function typeColor(type, gx, gz, out) {
 }
 
 /** 격자 좌표 (gx, gz)에서의 바닥 색: 근처 칸들의 종류를 경계에서 둥글게 섞는다(위치만의 함수라 칸 사이 이음매가 없음). */
+let lastClear = 0;                               // groundColor가 같이 셈: 이 점의 눈 덜 쌓임(길은 쓸어서 덜, seasons.js aSnowClear)
 function groundColor(grid, rx, rz, out) {
   // 경계를 칸 선에서 살짝 비틀어(도메인 워프) 계단 모양 대신 구불구불한 자연스러운 경계로
   const gx = rx + (noise(rx * 0.8 + 3.1, rz * 0.8) - 0.5) * 0.4, gz = rz + (noise(rx * 0.8, rz * 0.8 - 5.7) - 0.5) * 0.4;
   const x0 = Math.floor(gx), z0 = Math.floor(gz);
-  let tw = 0; out.setRGB(0, 0, 0);
+  let tw = 0, cl = 0; out.setRGB(0, 0, 0);
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
     const x = x0 + dx, z = z0 + dz, c = grid.get(x, z); if (!c) continue;
     const ddx = Math.max(x - gx, 0, gx - (x + 1)), ddz = Math.max(z - gz, 0, gz - (z + 1)), d = Math.hypot(ddx, ddz);
     if (d >= BLEND_R) continue;
     const w = (1 - d / BLEND_R) ** 2;
     if (grid.isWater(x, z)) tmp2.copy(SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
-    out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w;
+    out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w; if (!grid.isWater(x, z)) cl += snowClear(c.groundType) * w;
   }
+  lastClear = tw ? cl / tw : 0;
   return tw ? out.multiplyScalar(1 / tw) : out.copy(BASE[GroundType.Grass]);
 }
 
 class Builder {
-  constructor() { this.pos = []; this.nor = []; this.col = []; }
-  vert(p, n, c) { this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); }
+  constructor() { this.pos = []; this.nor = []; this.col = []; this.clr = []; }
+  vert(p, n, c, s = 0) { this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); this.clr.push(s); }
   /** 사각형 하나(a→b→c→d 둘레 순서). 각 꼭짓점에 법선·색. 위에서 볼 때 반시계가 앞면이 되게 맞춤. */
   quad(v) {
     const [a, b, c] = v, ab = [b.p[0] - a.p[0], b.p[1] - a.p[1], b.p[2] - a.p[2]], ac = [c.p[0] - a.p[0], c.p[1] - a.p[1], c.p[2] - a.p[2]];
     const cr = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
     const want = v[0].n; if (cr[0] * want[0] + cr[1] * want[1] + cr[2] * want[2] < 0) v = [v[0], v[3], v[2], v[1]];
-    for (const i of [0, 1, 2, 0, 2, 3]) this.vert(v[i].p, v[i].n, v[i].c);
+    for (const i of [0, 1, 2, 0, 2, 3]) this.vert(v[i].p, v[i].n, v[i].c, v[i].s);
   }
   geometry() {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
+    g.setAttribute("aSnowClear", new THREE.Float32BufferAttribute(this.clr, 1));
     g.computeBoundingSphere(); return g;
   }
 }
@@ -133,7 +137,7 @@ function deepSea(grid, x, z) {
   return true;
 }
 function cellSurface(b, grid, x, z, c, sub) {
-  const e = grid.get(x, z).elevation, S = deepSea(grid, x, z) ? 1 : sub;
+  const e = grid.get(x, z).elevation, S = deepSea(grid, x, z) ? 1 : cellSub(grid, x, z, sub);   // 좁게 칠한 곳·길 테두리는 멀리서도 촘촘히(칠한 곳이 이웃 색에 묻히지 않게, groundLook.js)
   const step = 1 / S;
   for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
@@ -144,9 +148,9 @@ function cellSurface(b, grid, x, z, c, sub) {
         const steep = Math.min(1, Math.max(0, (0.86 - n[1]) / 0.2));             // 가파를수록 흙·바위 빛
         if (steep > 0 && !grid.isWater(Math.floor(gx), Math.floor(gz))) col.lerp(cliffColor(grid, Math.floor(gx), Math.floor(gz), 0, gx, gz), steep * 0.85);
         if (!grid.isWater(Math.floor(gx), Math.floor(gz))) col.multiplyScalar(1 - occlusion(grid, gx, gz, heightIn(c, e, u, v)));   // 구석 그늘
-        pc = { n, c: col }; pointCache.set(k, pc);
+        pc = { n, c: col, s: lastClear }; pointCache.set(k, pc);
       }
-      return { p: toW(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c };
+      return { p: toW(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c, s: pc.s };
     });
     b.quad(pts);
   }
