@@ -90,3 +90,20 @@ test("음식 사러 가는 길: 파는 갈매미가 동작 중(밭일·낚시 �
   assert.equal(tries, 1, "한 번 가서 삼"); assert.equal(quits, 0, "가다가 그만두지 않음");
   assert.equal(u.inv.food, 1); assert.equal(host.inv.food, 5);
 });
+
+test("피곤하면(기력 30 아래) 동네 고치기를 새로 시작하지 않고 먼저 쉼: 만족도가 낮아도 길 깔기는 쉬고 나서", async () => {
+  const { setIdle } = await import("../src/units/unitBrain.js");
+  const w = World.create(7, seededRandom(5), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const hq = spot("house", c.x + 12, c.z + 10), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", c.x + 2, c.z + 14); w.placeBuilding("market", mq[0], mq[1], 0);
+  const u = w.units.find(o => o.name === "불씨"); u.home = h.id; h.owner = u.unitId; u.inv.stone = 0; w.res.stone = 10; u.coins = 0;
+  w.updateRoads(); assert.ok(u.sat < 75, `만족도 ${u.sat}: 고칠 마음이 있음`);
+  const trial = energy => {                                                   // 한 번 고르게 해 보고 무엇을 시작했는지
+    setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null;
+    for (let k = 0; k < 90 && u.state === "Idle" && u.activity !== "rest"; k++) w.update(1 / 30);
+    return u.state === "GoImprove" || u.state === "Improve" ? "improve" : u.activity === "rest" || u.state === "GoSit" ? "rest" : u.state;
+  };
+  const tired = Array.from({ length: 30 }, () => trial(25)), fresh = Array.from({ length: 30 }, () => trial(90));
+  assert.ok(fresh.includes("improve"), `안 피곤하면 동네를 고침(${fresh.filter(x => x === "improve").length}/30)`);
+  assert.deepEqual(tired.filter(x => x !== "rest"), [], "피곤하면 30번 모두 쉬기부터");
+});

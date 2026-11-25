@@ -504,7 +504,7 @@ function chooseNext(u, world, rnd) {
     }
   }
   // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 시장/은행까지 돌길 · 장식 주문. 낮을수록 더 자주
-  if (world.economy && (u.sat ?? 100) < 75 && !u.committed && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
+  if (world.economy && (u.sat ?? 100) < 75 && !u.committed && (u.needs?.energy ?? 100) >= M.TIRED && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy < 20 && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠
   if (u.needs && u.needs.energy < M.TIRED) { startActivity(u, "rest", world, rnd); emote(u, pick(["🥱 좀 쉬자", "😮‍💨 피곤해", "후…"], rnd)); return; }   // 피곤하면 쉼(기력이 찰 때까지)
