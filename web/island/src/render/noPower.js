@@ -1,6 +1,7 @@
 // 「전기 없음」 배지: 다 지은 가로등·등불 건물(카페·잡화점·우체국)·집(작은 집·2층집·큰 집·자이언트의 집) 가운데 풍차 전기 범위 밖인 것 위에 작은 말풍선(⚡✕).
 // 누구에게 띄울지는 world/power.js 한 곳(unpowered — world.powerRev가 바뀔 때만 다시 셈). 풍차가 범위 안에 다 지어지면 바로 사라지고 철거하면 다시 뜸. 짓는 중인 건물에는 안 띄움(🔨 진행률 표시가 있음).
 //  · 자리: 건물 표시(views.js .badge — 🪧 값·🐦 안에 있는 수)와 같은 점. 그 표시가 떠 있으면 그 위로 NP_STACK px 올려 쌓음
+//    다른 건물의 표시·땅 이름·갈매미 말풍선과 겹칠 때는 배지가 아래(overlay의 맨 앞 자식) — 글자는 늘 읽힘
 //  · 많을 때: 카메라에서 NP_NEAR m까지는 제 크기, 멀수록 NP_MIN_S배까지 작아짐. 가로등은 NP_LAMP_FADE m부터 옅어져 NP_LAMP_HIDE m 밖은 숨김(건물은 NP_HOUSE_FADE~NP_HOUSE_HIDE).
 //    화면에서 서로 겹치면(가운데 사이가 NP_GAP px × 크기 안) 건물 먼저·가까운 것 먼저 하나만 남김 → 멀리서 본 가로등 줄은 띄엄띄엄 몇 개만
 //  · DOM은 바뀐 값만 씀. 카메라·화면 크기·건물 목록·건물 표시가 그대로면 아무것도 안 함
@@ -45,12 +46,12 @@ export class NoPowerBadges {
   /** 매 프레임(main.js, buildingViews.updateBadges 다음) */
   update(vw, vh) {
     const w = this.getWorld(), views = this.getViews(); if (!w || !views) return;
-    if (!this.root.isConnected) { this.root.textContent = ""; this.els.clear(); this.list = null; this.overlay.appendChild(this.root); }   // 새 섬·불러오기: main.js가 overlay를 비움
+    if (!this.root.isConnected) { this.root.textContent = ""; this.els.clear(); this.list = null; this.overlay.insertBefore(this.root, this.overlay.firstChild); }   // 새 섬·불러오기: main.js가 overlay를 비움. 맨 아래에 둠 → 값표·진행률·땅 이름·갈매미 말풍선이 겹치면 그 글자가 위(배지가 글을 안 가림)
     const list = unpowered(w), cam = this.camera;
     let same = list === this.list; if (!same) { this.list = list; this.sync(list, views); this.cardSync(w); }
     const k = this.cam, e = cam.matrixWorld.elements, pe = cam.projectionMatrix.elements;   // 카메라·화면 크기가 그대로인지(글자열을 만들지 않고 숫자로 견줌)
     for (let i = 0; i < 20; i++) { const x = i < 16 ? e[i] : i === 16 ? pe[0] : i === 17 ? pe[5] : i === 18 ? vw : vh; if (k[i] !== x) { k[i] = x; same = false; } }
-    for (const it of this.items) { const st = !it.v.badge.hidden; if (st !== it.st) { it.st = st; same = false; } }   // 건물 표시가 뜨거나 지면 쌓는 높이가 바뀜
+    for (const it of this.items) { const st = !it.v.badge.hidden, h = it.v.height; if (st !== it.st || h !== it.h) { it.st = st; it.h = h; same = false; } }   // 건물 표시가 뜨거나 지면 쌓는 높이가 바뀜 · 모델이 늦게 불려 오면 높이가 바뀜
     if (same) return;
     const p = this.tmp, shown = [];
     for (const it of this.items) {
