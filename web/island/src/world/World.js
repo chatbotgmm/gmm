@@ -257,9 +257,11 @@ export class World {
     if (coins) this.issue(u, coins);
     this.emit("bank", { u, items, coins }); return { items, coins };
   }
-  /** 공사 한 바퀴 품삯: 금고에서(새로 찍지 않음). 금고가 모자라거나 이미 밀린 게 있으면 밀림(일은 계속) → 금고에 돈이 들어오면 나눠 갚음 */
-  payWage(u) {
+  /** 공사 한 바퀴 품삯: 금고에서(새로 찍지 않음). 금고가 모자라거나 이미 밀린 게 있으면 밀림(일은 계속) → 금고에 돈이 들어오면 나눠 갚음.
+   *  b가 갈매미 주문 공사(b.order)면 금고가 아니라 주문한 갈매미 돈에서(payOrder), 다 지었으면 남은 돈을 돌려줌 */
+  payWage(u, b = null) {
     if (!this.economy || !u) return;
+    if (b?.order) { const n = this.payOrder(b, E.WAGE); u.coins = (u.coins || 0) + n; if (this.isDone(b)) this.settleOrder(b); return; }
     this.settleOwed();
     if (this.bank.vault >= E.WAGE && !(u.wageOwed > 0)) { this.bank.vault -= E.WAGE; this.bank.wages += E.WAGE; this.led("wages", E.WAGE); u.coins = (u.coins || 0) + E.WAGE; this.checkLow(); return; }
     u.wageOwed = (u.wageOwed || 0) + E.WAGE; this.bank.owed += E.WAGE;
@@ -270,6 +272,31 @@ export class World {
     u.coins -= price; const m = this.units.find(o => o.job === "merchant" && o.state === UnitState.Trade);
     const cut = m && m !== u ? Math.min(price, E.COMMISSION) : 0; if (cut) m.coins = (m.coins || 0) + cut;
     this.deposit(price - cut);
+  }
+
+  // ---- 갈매미 주문 공사(improve.js orderDeco): 주문한 갈매미가 놓을 때 맡긴 돈(b.order.left)으로 품삯·자재값을 냄. 금고는 품삯을 내지 않음
+  /** 주문 열기: 갈매미 돈에서 cost를 떼어 공사장에 맡김 */
+  openOrder(b, u, cost) { cost = Math.max(0, Math.min(cost, u.coins || 0)); u.coins -= cost; b.order = { by: u.unitId, left: cost }; }
+  /** 주문 공사에서 n을 냄: 맡긴 돈 먼저, 모자라면 주문한 갈매미 지갑에서(있는 만큼). 실제로 낸 돈을 돌려줌 */
+  payOrder(b, n) {
+    const o = b.order; if (!o || !(n > 0)) return 0;
+    let paid = Math.min(n, o.left); o.left -= paid;
+    if (paid < n) { const by = this.units.find(x => x.unitId === o.by), more = by ? Math.min(n - paid, Math.max(0, by.coins || 0)) : 0; if (more) { by.coins -= more; paid += more; } }
+    if (paid < n) o.unpaid = (o.unpaid || 0) + (n - paid);                    // 거의 안 생김(맡긴 돈에 여유를 둠): 그만큼 덜 받음, 금고는 대신 내지 않음
+    return paid;
+  }
+  /** 주문 공사의 자재값(시장 값 MARKET_BUY): 은행 창고에서 쓴 것은 금고로, 짓는 갈매미 가방에서 쓴 것은 그 갈매미에게 */
+  orderMaterials(b, builder, mine = {}, ware = {}) {
+    if (!b?.order || !this.economy) return;
+    const val = o => E.RAW.reduce((s, k) => s + (o[k] || 0) * E.MARKET_BUY[k], 0);
+    const w = this.payOrder(b, val(ware)); if (w) this.deposit(w);
+    const m = this.payOrder(b, val(mine)); if (m && builder) builder.coins = (builder.coins || 0) + m;
+  }
+  /** 주문 끝(다 지음·철거): 남은 맡긴 돈을 주문한 갈매미에게 돌려줌(그 갈매미가 없으면 금고로) */
+  settleOrder(b) {
+    const o = b.order; if (!o) return; b.order = null;
+    if (!(o.left > 0)) return; const by = this.units.find(x => x.unitId === o.by);
+    if (by) by.coins = (by.coins || 0) + o.left; else this.deposit(o.left);
   }
 
   // ---- 은행 금고(bank.js): 금고 = 플레이어 돈
@@ -311,10 +338,22 @@ export class World {
   feeFor(defId) {
     if (!this.economy) return 0;
     if (BUILDINGS[defId]?.market && ![...this.buildings.values()].some(b => BUILDINGS[b.defId].market)) return 0;   // 첫 시장은 설계비 없음: 금고로 돈이 돌아오는 첫 건물이라, 금고가 바닥나도 빠져나올 길을 남김
-    return BK.feeOf(defId);
+    return BK.scaled(BK.feeOf(defId), this.priceMult());
   }
-  /** 집 거래 판단 { ok, price, down, loan, reason }(난수 안 씀) */
-  houseDeal(u, b) { return BK.houseDealFor(BUILDINGS[b.defId].price || 30, u.coins, this.bank.vault, this.economy); }
+  /** 물가에 세는 다 지은 집·시설 수(bank.js growthCounts) */
+  growthCount() { let n = 0; for (const b of this.buildings.values()) if (this.isDone(b) && BK.growthCounts(BUILDINGS[b.defId])) n++; return n; }
+  /** 지금 물가 배수(경제가 없으면 1). 설계비·집값에 곱함 */
+  priceMult() { return this.economy ? BK.priceMult(this.rank, this.growthCount()) : 1; }
+  /** 화면용 물가 정보: { mult, rank, n, free, rankPart, buildPart, cap, nextAt }. nextAt = 다음 집·시설 몇 채째부터 오르는지(최대면 null) */
+  priceInfo() {
+    const rank = this.rank || 0, n = this.growthCount(), mult = this.priceMult();
+    return { mult, rank, n, free: BK.PRICE_FREE, rankPart: +BK.rankPartOf(rank).toFixed(2), buildPart: +BK.buildPartOf(n).toFixed(2),
+      cap: BK.PRICE_CAP, nextAt: mult >= BK.PRICE_CAP ? null : Math.max(n, BK.PRICE_FREE) + 1 };
+  }
+  /** 지금 집값(물가를 곱한 값). b는 건물 또는 defId */
+  housePrice(b) { const def = BUILDINGS[typeof b === "string" ? b : b?.defId]; return BK.scaled(def?.price || 30, this.priceMult()); }
+  /** 집 거래 판단 { ok, price, down, loan, reason }(난수 안 씀). 값은 지금 물가로 */
+  houseDeal(u, b) { return BK.houseDealFor(this.economy ? this.housePrice(b) : BUILDINGS[b.defId].price || 30, u.coins, this.bank.vault, this.economy); }
   /** 화면용: 갈매미 대출 { left, per, days } 또는 null */
   loanInfo(u) { const l = u?.loan; return l && l.left > 0 ? { left: l.left, per: l.per, days: Math.ceil(l.left / l.per) } : null; }
   /** 대출 거절 표시(금고가 거절한 대출만큼 찰 때까지 한 마리 한 번): 말풍선 · 만족도(roads.js). 금고가 VAULT_LOW보다 적을 때만 바닥 사태(금고가 넉넉한데 비싼 집 하나가 거절된 건 사태가 아님) */
@@ -326,6 +365,7 @@ export class World {
   stepBank() {
     const bk = this.bank, d = newsDay(this.time); if (d === bk.day) return;
     bk.day = d; if (!this.economy) return;
+    for (const b of this.buildings.values()) if (b.order && this.isDone(b)) this.settleOrder(b);   // 다 지었는데 마지막 품삯 전에 일이 끊긴 주문 공사: 남은 돈 돌려줌
     let total = 0, n = 0;
     for (const u of this.units) {
       const out = !u.insideBuildingId; let said = false;
@@ -882,6 +922,7 @@ export class World {
     const job = def.builtBy || "builder", word = { builder: "건축", carpenter: "목수" }[job] || job;
     if (!this.units.some(u => u.job === job)) return { ...r, ok: false, reason: `${word} 갈매미가 있어야 지을 수 있어요 (🥚 소환)` };
     if (!this.builderFor(def)) return { ...r, ok: false, reason: `${RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name} 이상 건축가가 있어야 지을 수 있어요` };
+    if (opt.order && (opt.order.u?.coins || 0) < opt.order.cost) return { ...r, ok: false, reason: `주문한 갈매미 돈이 모자라요 (🪙${opt.order.cost})` };
     const fee = opt.free ? 0 : this.feeFor(defId);
     if (fee > this.bank.vault) return { ...r, ok: false, fee, reason: BK.feeReason(fee, this.bank.vault) };
     return { ...r, fee };
@@ -894,12 +935,13 @@ export class World {
     b.elevation = r.elevation; b.need = 3 * (def.work ?? def.footprint.w * def.footprint.d); b.hits = hits ?? (this.instantBuild ? b.need : 0); b.busy = null;
     b.ramp = r.ramp; if (b.ramp) b.hits = Math.min(b.hits, b.need);
     b.fee = hits === null ? r.fee || 0 : 0;
+    b.order = null; if (hits === null && opt.order && this.economy) this.openOrder(b, opt.order.u, opt.order.cost);   // 갈매미 주문 공사: 품삯·자재값을 맡김
     if (b.fee) { this.bank.vault -= b.fee; this.bank.fees += b.fee; this.led("fees", b.fee); this.emit("fee", { b, fee: b.fee }); this.checkLow(); }
     this.grid.occupy(b.cells, b.id, { kind: "building", walkable: (!!b.ramp && this.isDone(b)) || !!def.field || (!!def.bridge && this.isDone(b)), surface: r.elevation, ramp: b.ramp });   // 밭은 처음부터 걸어 다님   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
     if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
     this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
-    if (this.isDone(b)) { this.completed(b); if (hits === null) this.builtNow(b); }   // ⚡ 바로 완공도 다 지은 것(불러오기·시험 받침은 hits를 넘김 → 아님)
+    if (this.isDone(b)) { this.completed(b); if (hits === null) this.builtNow(b); if (b.order) this.settleOrder(b); }   // ⚡ 바로 완공도 다 지은 것(불러오기·시험 받침은 hits를 넘김 → 아님)
     return { ok: true, building: b };
   }
   isDone(b) { return b.hits >= b.need; }
@@ -907,9 +949,9 @@ export class World {
     if (this.isDone(b)) return;
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
     b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
-    if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
+    if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (!u && b.order) this.settleOrder(b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
-  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); } }
+  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); } }
   /** 공사가 끝나 다 지어졌을 때(망치질·finishAll·⚡ 바로 완공. 불러오기는 아님): 수족관이면 갈매미들이 아껴 둔 물고기를 기증 */
   builtNow(b) { if (b.defId === "aquarium") this.donateStashes(); }
   /** 다 지었을 때: 계단·낚시터는 걸을 수 있게, 밭은 칸마다 밭(심고 거둠), 낚시터는 낚시 자리 */
@@ -939,6 +981,7 @@ export class World {
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
     if (b.fee && !this.isDone(b)) { this.bank.vault += b.fee; this.bank.fees -= b.fee; this.led("refunds", b.fee); b.fee = 0; this.settleOwed(); }   // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로)
+    if (b.order) this.settleOrder(b);                                              // 갈매미 주문 공사를 철거: 남은 맡긴 돈을 주문한 갈매미에게
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
     for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) u.committed = null; }   // 짓던 갈매미는 그만
     this.grid.release(id); this.buildings.delete(id); this.emit("buildingRemoved", b);
@@ -1082,7 +1125,7 @@ export class World {
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
       sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
-      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0 })) };
+      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null })) };
   }
   static fromJSON(j, rnd = Math.random) {
     if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
@@ -1091,7 +1134,7 @@ export class World {
     if (j.firstSnowYear === undefined && w.snow > 0.02) w.firstSnowYear = "?";    // 예전 저장(첫눈 기록 없음)인데 눈이 쌓여 있으면 이번 겨울 첫눈은 지난 일
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
-    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); } }
+    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; } }
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두

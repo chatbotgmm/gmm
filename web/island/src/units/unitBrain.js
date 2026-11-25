@@ -37,7 +37,9 @@ const costOf = b => { const c = { ...(BUILDINGS[b.defId].cost || { wood: 1, ston
 const have = (world, u, k) => (u?.inv?.[k] || 0) + (world.res[k] || 0);
 const hasMaterials = (world, b, u = null) => Object.entries(costOf(b)).every(([k, n]) => have(world, u, k) >= n);
 function useMaterials(world, b, u = null) {
-  for (const [k, n] of Object.entries(costOf(b))) { let left = n; const mine = Math.min(left, u?.inv?.[k] || 0); if (mine) { u.inv[k] -= mine; left -= mine; } world.res[k] -= left; }
+  const fromBag = {}, fromWare = {};
+  for (const [k, n] of Object.entries(costOf(b))) { let left = n; const mine = Math.min(left, u?.inv?.[k] || 0); if (mine) { u.inv[k] -= mine; left -= mine; } world.res[k] -= left; fromBag[k] = mine; fromWare[k] = left; }
+  if (b.order) world.orderMaterials(b, u, fromBag, fromWare);                     // 갈매미 주문 공사: 주문한 갈매미가 자재값을 냄(창고 것은 금고로, 가방 것은 짓는 갈매미에게)
 }
 /** 모자란 재료를 구하러 감: 나무가 모자라면 벌목, 돌·철이 모자라면 채광. */
 function gatherFor(u, world, b, rnd) {
@@ -408,7 +410,7 @@ export function interactNear(u, world, rnd = Math.random, R = 2.6, prefer = null
 function startImprove(u, world, rnd) {
   const plan = IM.planImprovement(world, u); if (!plan) return false;
   const home = world.buildings.get(u.home);
-  if (plan.kind === "deco") { const b = IM.orderDeco(world, home, rnd); if (!b) return false; emote(u, `🌷 ${BUILDINGS[b.defId].name} 주문!`, 2.5); world.emit("improve", { u, kind: "deco", b }); done(u, 0.6, rnd, world); return true; }
+  if (plan.kind === "deco") { const b = IM.orderDeco(world, home, rnd, u); if (!b) return false; emote(u, `🌷 ${BUILDINGS[b.defId].name} 주문!${b.order ? ` 🪙${b.order.left}` : ""}`, 2.5); world.emit("improve", { u, kind: "deco", b }); done(u, 0.6, rnd, world); return true; }
   world.improveClaims ||= new Set(); for (const [x, z] of plan.cells) world.improveClaims.add(`${x},${z}`);
   u.improve = { ...plan, i: 0, paved: 0 };
   if (!improveNext(u, world)) { endImprove(u, world); return false; }
@@ -714,9 +716,9 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const c = b.cells.reduce((a, [x, z]) => [a[0] + x + 0.5, a[1] + z + 0.5], [0, 0]); face(u, c[0] / b.cells.length, c[1] / b.cells.length);
       // 망치질 3번마다 나무 1·돌 1을 더 써서 그 자리에서 계속. 재료가 없으면 구하러 갔다가 돌아옴. 100%가 되면 끝.
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
-        if (world.isDone(b)) { world.payWage(u); uncommit(u, world); done(u, 2, rnd, world); return; }
+        if (world.isDone(b)) { world.payWage(u, b); uncommit(u, world); done(u, 2, rnd, world); return; }
         M.learn(u, "build", 0.8);                                               // 한 바퀴 지을 때마다 보람
-        world.payWage(u);                                                       // 한 바퀴 품삯(금고에서, 모자라면 밀림)
+        world.payWage(u, b);                                                    // 한 바퀴 품삯(금고에서, 모자라면 밀림. 갈매미 주문 공사는 주문한 갈매미 돈에서)
         if (hasMaterials(world, b, u)) { useMaterials(world, b, u); return; }         // u.work가 비었으니 다음 바퀴부터 다시
         u.activity = null;
         emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);

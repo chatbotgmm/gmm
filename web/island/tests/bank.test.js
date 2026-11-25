@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import { newsDay, NEWS_DAY_SECS } from "../src/world/news.js";
-import { orderDeco } from "../src/world/improve.js";
+import { orderDeco, orderCost, canOrder, planImprovement } from "../src/world/improve.js";
 import * as BK from "../src/world/bank.js";
 import * as E from "../src/world/economy.js";
 
@@ -267,4 +267,72 @@ test("장부: 전날 놓은 공사장을 오늘 철거하면 오늘 칸에 환�
   assert.equal(w.bank.fees, 0, "누계는 환불을 뺌"); assert.equal(w.bank.vault, 100);
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize()))); assert.equal(back.bank.ledger.at(-1).refunds, 10);
   assert.equal(BK.bankFromSave({ ledger: [{ day: 1, fees: 3 }] }).ledger[0].refunds, 0, "예전 장부엔 없음 → 0");
+});
+
+test("물가: 배수 = 1 + 0.15 × (등급 − 1) + 0.06 × (다 지은 집·시설 − 8), 최대 3 · 설계비·집값(계약금·대출)에 곱함 · 새 섬은 1배", () => {
+  assert.equal(BK.priceMult(0, 0), 1); assert.equal(BK.priceMult(1, 8), 1, "어촌 · 8채까지는 그대로");
+  assert.equal(BK.priceMult(2, 8), 1.15); assert.equal(BK.priceMult(3, 8), 1.3); assert.equal(BK.priceMult(1, 9), 1.06);
+  assert.equal(BK.priceMult(2, 12), 1.39); assert.equal(BK.priceMult(3, 200), BK.PRICE_CAP);
+  assert.equal(BK.scaled(10, 1.39), 14); assert.equal(BK.scaled(30, 1.39), 42); assert.equal(BK.scaled(0, 3), 0, "0은 0"); assert.equal(BK.scaled(1, 1.06), 1);
+  const { w, mini } = town(1000);
+  assert.deepEqual(w.priceInfo(), { mult: 1, rank: 0, n: 1, free: 8, rankPart: 0, buildPart: 0, cap: 3, nextAt: 9 }, "새 섬: 시장 1채, 1배");
+  assert.equal(w.feeFor("house"), 10); assert.equal(w.housePrice("house"), 30);
+  // 장식·계단·짓는 중인 건물은 세지 않음
+  w.instantBuild = true; place(w, "bench"); place(w, "stairs"); w.instantBuild = false; place(w, "house");
+  assert.equal(w.priceInfo().n, 1);
+  for (let k = 0; k < 11; k++) readyHouse(w);                                // 다 지은 집 11채 + 시장 = 12
+  w.rank = 2;
+  const pi = w.priceInfo(); assert.equal(pi.n, 12); assert.equal(pi.mult, 1.39); assert.equal(pi.rankPart, 0.15); assert.equal(pi.buildPart, 0.24); assert.equal(pi.nextAt, 13);
+  assert.equal(w.feeFor("house"), 14); assert.equal(w.feeFor("cottage"), 21); assert.equal(w.feeFor("snowman"), 0); assert.equal(w.feeFor("bridge"), 1);
+  const s = spotFor(w, "house"), c = w.check("house", s[0], s[1], 0); assert.equal(c.fee, 14);
+  const v0 = w.bank.vault, r = w.placeBuilding("house", s[0], s[1], 0); assert.equal(r.building.fee, 14); assert.equal(w.bank.vault, v0 - 14);
+  w.removeBuilding(r.building.id); assert.equal(w.bank.vault, v0, "환불은 낸 설계비 그대로");
+  // 집값: 42 → 계약금 17 · 대출 25(금고 대출금 + 20)
+  const h = [...w.buildings.values()].find(b => b.defId === "house" && w.isDone(b) && !b.owner);
+  mini.coins = 41; const d = w.houseDeal(mini, h); assert.deepEqual(d, { ok: true, price: 42, down: 17, loan: 25, reason: null });
+  mini.coins = 16; assert.equal(w.houseDeal(mini, h).reason, "coins");
+  mini.coins = 20; const v1 = w.bank.vault; assert.equal(w.buyHouse(mini, h), true);
+  assert.deepEqual(mini.loan, { left: 25, per: 5 }); assert.equal(mini.coins, 3); assert.ok(w.bank.vault - v1 >= 16, "금고엔 계약금(상인 몫 1 뺌)");
+  // 첫 시장은 여전히 0(시장이 하나도 없을 때)
+  const w2 = World.create(7, seededRandom(3), { wild: true }); w2.addUnitByName("목수"); w2.rank = 3; assert.equal(w2.feeFor("market"), 0);
+  // 은행 없는 섬은 늘 1배
+  assert.equal(World.create(7, seededRandom(3)).priceMult(), 1);
+});
+
+test("갈매미 주문 장식: 주문한 갈매미가 값을 맡기고(설계비 없음) 품삯·자재값을 거기서 냄 · 금고는 품삯을 안 냄 · 다 지으면 남은 돈 돌려받음", () => {
+  assert.equal(orderCost("bench"), 12); assert.equal(orderCost("flowerbed"), 12);
+  const { w, mini, boss } = town(0), h = readyHouse(w);
+  mini.coins = 30; const deco = orderDeco(w, h, seededRandom(1), mini);
+  assert.ok(deco); assert.equal(deco.fee, 0); assert.deepEqual(deco.order, { by: mini.unitId, left: 12 }); assert.equal(mini.coins, 18); assert.equal(w.bank.vault, 0);
+  // 품삯: 금고 0이어도 밀리지 않고 맡긴 돈에서
+  boss.coins = 0; w.payWage(boss, deco);
+  assert.equal(boss.coins, 2); assert.equal(boss.wageOwed || 0, 0); assert.equal(w.bank.owed, 0); assert.equal(w.bank.short, 0); assert.equal(w.bank.vault, 0); assert.equal(deco.order.left, 10);
+  // 자재: 은행 창고 나무 1 → 금고로 시장 값 2, 짓는 갈매미 가방의 나무 1 → 그 갈매미에게 2
+  w.orderMaterials(deco, boss, {}, { wood: 1 }); assert.equal(w.bank.vault, 2); assert.equal(w.bank.returned >= 2, true); assert.equal(deco.order.left, 8);
+  w.orderMaterials(deco, boss, { wood: 1 }, {}); assert.equal(boss.coins, 4); assert.equal(deco.order.left, 6);
+  // 다 지은 뒤 마지막 품삯 → 남은 4를 돌려받음, 주문 끝
+  deco.hits = deco.need; w.payWage(boss, deco); assert.equal(boss.coins, 6); assert.equal(deco.order, null); assert.equal(mini.coins, 22);
+  // 맡긴 돈이 떨어지면 주문한 갈매미 지갑에서, 그래도 없으면 덜 받음(금고는 대신 내지 않음)
+  const d2 = orderDeco(w, h, seededRandom(2), mini); assert.equal(mini.coins, 10);
+  d2.order.left = 0; mini.coins = 1; w.payWage(boss, d2); assert.equal(boss.coins, 7); assert.equal(mini.coins, 0); assert.equal(d2.order.unpaid, 1); assert.equal(w.bank.vault, 2);
+  // 짓기 전에 철거하면 남은 돈을 돌려받음
+  mini.coins = 30; const d3 = orderDeco(w, h, seededRandom(3), mini); assert.equal(mini.coins, 18);
+  w.payWage(boss, d3); w.removeBuilding(d3.id); assert.equal(mini.coins, 28, "12 − 품삯 2 = 10 돌려받음");
+  // 돈이 모자라면 주문하지 않음(맡길 12 + 밥값 10)
+  mini.coins = 21; assert.equal(canOrder(w, mini), false, "계획(planImprovement)은 맡길 돈 + 밥값이 있어야 주문");
+  mini.coins = 22; assert.equal(canOrder(w, mini), true);
+  mini.coins = 11; assert.equal(orderDeco(w, h, seededRandom(4), mini), null, "맡길 돈이 없으면 놓지 않음"); assert.equal(mini.coins, 11);
+});
+
+test("갈매미 주문 장식: 돈이 없으면 고치기 계획에 장식 주문이 안 나옴 · 저장/불러오기에 맡긴 돈이 남음 · 다 지었는데 끊긴 주문은 다음 날 돌려줌", () => {
+  const { w, mini } = town(100), h = readyHouse(w);
+  mini.home = h.id; h.owner = mini.unitId; w.updateRoads();
+  mini.coins = 0; const p0 = planImprovement(w, mini); assert.ok(!p0 || p0.kind !== "deco", "돈 없으면 장식 주문 없음");
+  mini.coins = 500; mini.satParts = [["집-시장", 1], ["집-은행", 1]];
+  const deco = orderDeco(w, h, seededRandom(1), mini);
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())));
+  const b2 = back.buildings.get(deco.id); assert.deepEqual(b2.order, { by: mini.unitId, left: 12 });
+  const m2 = back.units.find(u => u.name === "미니"); assert.equal(m2.coins, mini.coins);
+  b2.hits = b2.need; back.time = NEWS_DAY_SECS + 1; back.stepBank();
+  assert.equal(b2.order, null); assert.ok(m2.coins >= mini.coins + 12 - BK.TAX_CAP, "맡긴 12를 돌려받음(그날 세금은 따로)");
 });

@@ -28,6 +28,20 @@ export const feeOf = defId => FEE[defId] ?? FEE_UNKNOWN;
 /** 금고가 모자랄 때 놓기 실패 사유(tools.js가 상태 줄에 그대로 띄움) */
 export const feeReason = (fee, vault) => `🏦 금고에 조개가 모자라요 (설계비 🪙${fee} · 금고 🪙${Math.floor(vault)})`;
 
+// ---- 물가(값 오름): 마을이 커질수록 설계비·집값이 오름(갈매미 돈과 세금이 늘어 금고가 금방 넘치지 않게)
+//  배수 = 1 + 0.15 × (마을 등급 − 1, 0 이상) + 0.06 × (다 지은 집·시설 수 − 8, 0 이상), 최대 3. 소수 둘째 자리에서 반올림.
+//  · 등급: 갯마을·어촌 +0, 항구 마을 +0.15, 섬 도시 +0.3.
+//  · 집·시설 = 다 지은 건물 중 장식·계단·다리·은행이 아닌 것(집·시장·밭·낚시터·저장고·카페 등). 8채까지는 +0, 그 뒤 한 채마다 +0.06.
+//  · 새 섬(어촌 이하, 집·시설 8채 이하)은 1배 그대로. 값 = 반올림(기본값 × 배수)(1 이상), 기본값 0(눈사람·은행·첫 시장)은 그대로 0.
+//  예) 항구 마을 · 집·시설 12채 → 1 + 0.15 + 0.24 = 1.39 → 집 설계비 10 → 14, 작은 집 값 30 → 42(계약금 17 · 대출 25)
+export const PRICE_RANK = 0.15, PRICE_RANK_FROM = 1, PRICE_PER = 0.06, PRICE_FREE = 8, PRICE_CAP = 3;
+export const rankPartOf = rank => PRICE_RANK * Math.max(0, (rank || 0) - PRICE_RANK_FROM);
+export const buildPartOf = n => PRICE_PER * Math.max(0, (n || 0) - PRICE_FREE);
+export const priceMult = (rank, n) => Math.round(Math.min(PRICE_CAP, 1 + rankPartOf(rank) + buildPartOf(n)) * 100) / 100;
+export const scaled = (base, mult) => base > 0 ? Math.max(1, Math.round(base * mult)) : 0;
+/** 물가에 세는 건물인가(다 지은 집·시설): 장식·계단·다리·하나뿐인 건물(은행)은 빼고 */
+export const growthCounts = def => !!def && !def.deco && !def.stairs && !def.bridge && !def.fixed && !def.bank;
+
 export const downOf = price => Math.ceil(price * LOAN_DOWN);
 export const perOf = loan => Math.ceil(loan / LOAN_DAYS);
 /** 이 돈을 가진 갈매미의 하루 세금 */
