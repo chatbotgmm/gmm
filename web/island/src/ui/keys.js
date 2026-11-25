@@ -86,6 +86,9 @@ export function installKeys({ hud, tools, roomView }) {
     if (!list.length) return; const a = document.activeElement, i = list.indexOf(a);
     if (i < 0 || (e.shiftKey && i === 0) || (!e.shiftKey && i === list.length - 1)) { e.preventDefault(); (e.shiftKey ? list[list.length - 1] : list[0]).focus(); }
   };
+  // 키보드(Tab 등)로 옮긴 포커스만 기억. Chrome은 마우스로 누른 버튼도 키를 누르는 순간 :focus-visible이 되므로 그것으로는 못 가림
+  let keyFocus = null;
+  document.addEventListener("focusin", e => { keyFocus = lastKey ? e.target : null; }, true);
   addEventListener("keydown", e => {
     const t = e.target, typing = t?.tagName === "INPUT" || t?.tagName === "TEXTAREA" || t?.isContentEditable;
     if (!typing) { lastKey = true; setInput("mouse"); }                         // 키보드를 쓰면 PC 표시(키 힌트·툴팁)
@@ -95,9 +98,10 @@ export function installKeys({ hud, tools, roomView }) {
     if (typing) return;                                                         // 입력칸(소리 크기 막대)은 원래대로
     if (shortcut(e, ov)) { e.preventDefault(); e.stopPropagation(); return; }
     if (ov) { e.stopPropagation(); return; }                                    // 열린 창 뒤로 W·R·Space·Ctrl+Z 등이 새지 않게(keyup은 통과 → 눌린 키가 남지 않음)
-    // 버튼에 포커스가 있을 때 Enter·Space: 버튼만 눌리고 게임 키로는 안 감(예: "취소"에 포커스 + Enter → 건설 안 됨)
+    // 키보드로 버튼에 포커스를 두었을 때 Enter·Space: 버튼만 눌리고 게임 키로는 안 감(예: "취소"에 포커스 + Enter → 건설 안 됨)
     if ((e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space") && t?.matches?.(KEY_CONTROL_SEL)) {
-      if (e.code === "Space" && (!hud.tugBtn?.hidden || !t.matches(":focus-visible"))) { e.preventDefault(); return; }   // 입질 중 · 마우스로 누른 뒤 남은 포커스: 스페이스는 게임으로(당기기 · 화면 돌리기)
+      // 마우스로 누른 뒤 남은 포커스(예: 🔄 돌리기를 누르고 Enter) · 입질 중 스페이스: 버튼은 다시 안 눌리고 키는 게임으로(건설 · 당기기 · 화면 돌리기)
+      if (t !== keyFocus || (e.code === "Space" && !hud.tugBtn?.hidden)) { e.preventDefault(); return; }
       e.stopPropagation();
     }
   }, true);
