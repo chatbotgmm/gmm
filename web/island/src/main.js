@@ -366,6 +366,7 @@ function frameBody() {
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
   if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }
+  quality.hold = !ready;                            // 불러오는 동안 느린 것은 자동 낮추기에 세지 않음
   quality.frame(dt, now, unitViews.casting > 0 || lifeViews.anims.length > 0 || buildingViews.animating);
   poolFor(worldRoot).sync(camera, sun);             // 묶어 그리는 나무·바위·밭 틀: 화면·그림자 범위에 든 것만 인스턴스로
   renderer.render(scene, camera); requestAnimationFrame(frame);

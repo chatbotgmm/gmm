@@ -1,7 +1,7 @@
 // 그래픽 설정 5단계: 최고 품질 → 높음 → 보통 → 낮음 → 성능 우선.
 // 단계마다 바뀌는 것(main.js·views·decor·groundChunks가 cfg를 읽어 적용):
 //  · 해상도(pixel ratio)와 자동 낮추기: 느리면 ① 그림자를 덜 자주 그리고 ② 해상도를 조금씩 내리고(바닥 1.0배 — 그 아래는 화면이 뭉개져 보임)
-//    ③ 그래도 느리면 그림자 지도를 반으로. 빨라지면 해상도 → 그림자 간격 순으로 되돌림(그림자 지도 크기는 설정을 다시 고를 때까지 그대로)
+//    ③ 그래도 느리면 그림자 지도를 반으로. 54fps 넘게 버티면 해상도 → 그림자 지도 → 그림자 간격 순으로 한 걸음씩 되돌려 보고, 되돌리자마자 다시 느려지면 다음 시도를 두 배씩 늦춤(4초 → 최대 2분)
 //  · 휴대폰(터치): 높음은 2배까지(느리면 1.5배로), 소품 텍스처는 2k까지(화면이 작아 4k와 차이가 안 보이고 4k 13장은 추정 1.1 GB라 탭이 죽을 수 있음. 메모리 8 GB 이상 기기의 최고 품질만 4k)
 //  · 그림자 지도 크기·부드러움·다시 그리는 간격(N프레임에 한 번), 성능 우선은 그림자 끔(발밑 원판)
 //  · 땅 상세도(가까운 칸당 조각 수, 상세도 거리 배율, 멀리서 볼 때 한 단계 낮추기)
@@ -50,7 +50,7 @@ export class Quality {
     let saved = null; try { saved = localStorage.getItem(KEY); } catch { /* 저장 못 해도 됨 */ }
     saved = OLD[saved] && !QUALITY[saved] ? OLD[saved] : saved;
     this.mode = QUALITY[saved] ? saved : (IS_TOUCH && MEM <= 2 ? "low" : "medium");   // 처음: 보통(메모리 2 GB 이하 폰은 낮음)
-    this.ema = 16; this.lastCheck = 0; this.pr = 1; this.frameNo = 0; this.lastFrame = 0; this.lastShadow = 0; this.kick = true; this.adapt = 0;   // adapt: 자동 낮추기 단계(0 · 1 그림자 덜 자주 · 2 그림자 지도 반)
+    this.ema = 16; this.lastCheck = 0; this.pr = 1; this.frameNo = 0; this.lastFrame = 0; this.lastShadow = 0; this.kick = true; this.adapt = 0; this.hold = false; this.wait = 4; this.retryAt = 0; this.raisedAt = -1e9;   // wait: 되돌려 보기까지 기다리는 초(실패하면 두 배). adapt: 자동 낮추기 단계(0 · 1 그림자 덜 자주 · 2 그림자 지도 반)
     this.apply();
   }
   get cfg() { return QUALITY[this.mode]; }
@@ -58,7 +58,7 @@ export class Quality {
   next() { this.set(ORDER[(ORDER.indexOf(this.mode) + 1) % ORDER.length]); return this.mode; }
   apply() {
     const c = this.cfg, r = this.renderer;
-    this.pr = c.maxPR; r.setPixelRatio(this.pr); r.setSize(innerWidth, innerHeight); this.adapt = 0;
+    this.pr = c.maxPR; r.setPixelRatio(this.pr); r.setSize(innerWidth, innerHeight); this.adapt = 0; this.wait = 4; this.retryAt = 0;
     r.shadowMap.enabled = c.shadows; this.shadowMap(c.shadow, c.soft);
     r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = true;                 // 그림자는 shadowEvery 프레임마다(frame)
     this.sun.castShadow = c.shadows;
@@ -89,16 +89,22 @@ export class Quality {
     const c = this.cfg, every = moving ? c.shadowEvery * (this.adapt ? 2 : 1) : STILL_EVERY;
     if (c.shadows && (this.kick || this.frameNo - this.lastShadow >= every)) { this.renderer.shadowMap.needsUpdate = true; this.lastShadow = this.frameNo; this.kick = false; }
     this.ema += (dt * 1000 - this.ema) * 0.08;
+    if (this.hold) { this.ema = 16; return; }                                       // 불러오는 동안(모델 풀기·셰이더 준비로 잠깐 느림)은 재지 않음
     if (!c.dynamic || now - this.lastCheck < 1000) return;
     this.lastCheck = now;
     let pr = this.pr;
     if (this.ema > 26) {                                                            // 40fps 아래: ① 그림자 덜 자주 → ② 해상도(바닥까지) → ③ 그림자 지도 반(딱딱한 가장자리)
+      if (now - this.raisedAt < 8000) this.wait = Math.min(120, this.wait * 2);     // 되돌리자마자 다시 느려짐 → 이 기기엔 무리. 다음 시도는 두 배 뒤에(최대 2분)
+      this.retryAt = now + this.wait * 1000; this.raisedAt = -1e9;
       if (!this.adapt && c.shadows) this.adapt = 1;
       else if (pr > c.minPR) pr = Math.max(c.minPR, pr - 0.15);
       else if (this.adapt === 1 && c.shadow > 1024) { this.adapt = 2; this.shadowMap(c.shadow / 2, false); }
-    } else if (this.ema < 15) {                                                     // 66fps 넘으면 해상도부터 되돌림
+    } else if (this.ema < 18.5 && now >= this.retryAt && (pr < c.maxPR || this.adapt)) {   // 54fps 넘게 버티면 한 걸음씩 되돌려 봄: 해상도 → 그림자 지도 → 그림자 간격
+      // (전에는 66fps를 넘어야 되돌렸는데 60Hz 화면은 60fps가 한계라, 한 번 낮아지면 다시 열 때까지 그대로였음)
       if (pr < c.maxPR) pr = Math.min(c.maxPR, pr + 0.1);
-      else if (this.adapt === 1) this.adapt = 0;
+      else if (this.adapt === 2) { this.adapt = 1; this.shadowMap(c.shadow, c.soft); }
+      else this.adapt = 0;
+      this.raisedAt = now; this.retryAt = now + 2000;
     }
     if (Math.abs(pr - this.pr) > 0.01) { this.pr = pr; this.renderer.setPixelRatio(pr); this.renderer.setSize(innerWidth, innerHeight); }
   }
