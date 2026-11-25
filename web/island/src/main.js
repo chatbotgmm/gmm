@@ -16,9 +16,8 @@ import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD, wishText } from "./world/wishes.js";
-import { FRIEND_STAGES } from "./units/mind.js";
-import { josa } from "./util.js";
 import { RANK_REWARD } from "./world/rank.js";
+import { newsFor, awayLetter, newsPages } from "./world/news.js";
 import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
@@ -155,15 +154,17 @@ function mount(w) {
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`); });
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
-  world.on("season", s => { tintGround(); hud?.status(`${SEASONS[s].icon} ${SEASONS[s].name}이에요 · ${SEASON_NOTE[s]}`); });
-  world.on("weather", e => { const w = WEATHER[e.kind]; hud?.status(`${w.icon} 날씨: ${w.name}${WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""}`); });
+  // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말
+  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`); };
+  world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
+  world.on("weather", e => say("weather", e, WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""));
   world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`); });
-  world.on("friendship", ({ a, b, stage }) => { const d = FRIEND_STAGES[stage]; hud?.status(`${d.icon} ${josa(a.name, "과", "와")} ${josa(b.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요! (📱 관계도)`); if (stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
+  world.on("friendship", e => { say("friendship", e, " (📱 관계도)"); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
   world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`));
-  world.on("rank", ({ def }) => { hud?.status(`🏅 마을 등급이 올랐어요: ${def.icon} ${def.name}! ${def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
-  world.on("beachcomb", ({ u, item }) => hud?.status(`✨ ${u.name}이 바닷가에서 ${item.name}을 주웠어요 (📖 도감)`));
-  world.on("fish", ({ u, fish }) => { if (fish.season) hud?.status(`🎣 ${u.name}이 제철 ${fish.name}을 낚았어요! (📖 도감)`); });
-  world.on("wishDone", ({ wish, u, def }) => hud?.status(`♥ ${u.name}의 소원 "${wishText(def, world, u, wish)}"이 이루어졌어요!${world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""}`));
+  world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
+  world.on("beachcomb", e => say("beachcomb", e, " (📖 도감)"));
+  world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
+  world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }
@@ -181,13 +182,23 @@ const charPool = charSet ? preloadCharacters(charSet, loadTools(PROPS), charSet.
 // 저장: 이 브라우저에 1분마다·화면을 떠날 때 자동 저장, 다시 열면 이어서(저장이 없거나 망가졌으면 새 섬)
 let lastSaved = 0, resumed = false;
 function saveNow(quiet = true) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize())); lastSaved = Date.now(); if (!quiet) hud?.status("저장했어요(이 브라우저에만 · 1분마다 자동 저장)"); return true; }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize(Date.now()))); lastSaved = Date.now(); if (!quiet) hud?.status("저장했어요(이 브라우저에만 · 1분마다 자동 저장)"); return true; }
   catch (e) { if (!quiet) hud?.status("저장하지 못했어요: " + e.message); return false; }
 }
 let oldMap = false;
 function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const j = JSON.parse(s); if (j.grid?.w !== GRID_W) { oldMap = true; return null; } const w = World.fromJSON(j); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }   // 지도 크기가 바뀐 예전 저장은 새 섬으로
 const savedWorld = loadSaved(); resumed = !!savedWorld;
+/** 다녀온 사이 편지: 저장한 때부터 지금까지 지난 실제 시간(기기 시계 그대로 → 설정의 시간 배수와 상관없음)을 월드에 넘겨 가볍게 쳐 주고, 편지 글을 만듦.
+ *  섬을 올린(mount) 뒤에 부름(계절이 정해진 뒤). 10분이 안 지났거나 예전 저장(시각 없음)이면 null. */
+function welcomeBack(w) {
+  if (!w.savedAt) return null;
+  const news = newsPages(w.newsLog, 3)[0]?.heads ?? [], r = w.applyAway(Date.now() - w.savedAt); w.savedAt = null;   // 같은 저장으로 두 번 쳐 주지 않게
+  if (!r) return null;
+  const wishes = w.wishes.map(x => { const u = w.units.find(o => o.unitId === x.unitId), d = WISH_BY_ID[x.id]; return u && d ? { who: u.name, text: wishText(d, w, u, x) } : null; }).filter(Boolean);
+  return awayLetter(r, { post: !!w.postB(), news, wishes });
+}
 const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 기본 갈매미 한 마리 → 🥚 소환으로 더
+const backLetter = savedWorld ? welcomeBack(world) : null;                        // 다 불러온 뒤에 보여 줌
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
 addEventListener("visibilitychange", () => { if (document.hidden && ready) saveNow(); });
 addEventListener("pagehide", () => { if (ready) saveNow(); });
@@ -196,7 +207,7 @@ new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가�
 tools.applyControls();                              // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대)
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
-  onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
+  onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
   onReset: () => { if (!confirm("지금 섬을 버리고 새 섬을 만들까요? (자동 저장도 새 섬으로 바뀌어요)")) return; mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
@@ -226,6 +237,7 @@ Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 🏠 건물 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)");
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`);
   else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)");
+  hud.showLetter(backLetter);
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
 });
 

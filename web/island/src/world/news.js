@@ -1,0 +1,87 @@
+// 마을 소식지 + 다녀온 사이 편지(순수 계산: 화면·기기 시계를 모름).
+// 소식: 월드가 알리는 일(emit) 가운데 기억할 만한 것을 { day, t, icon, text, weight }로 모음. 알림 줄(main.js)도 같은 문장을 씀.
+// 편지: 게임을 꺼 둔 동안 지난 실제 시간(밀리초)을 밖에서 받아, 가볍게 셈한 일(익은 밭·낚은 물고기)을 글로 적음.
+import { BUILDINGS, FURNITURE, RARITY } from "../data/catalog.js";
+import { SEASONS, WEATHER } from "./season.js";
+import { wishText } from "./wishes.js";
+import { FRIEND_STAGES } from "../units/mind.js";
+import { josa } from "../util.js";
+
+export const NEWS_DAY_SECS = 600;       // 마을 하루 = 마을 시간(world.time) 600초
+export const NEWS_KEEP_DAYS = 7;        // 소식지는 최근 7일치만
+export const NEWS_MAX = 80;             // 모두 합쳐 80건까지(넘치면 덜 중요한 것·오래된 것부터 버림)
+export const NEWS_HEADLINES = 4;        // 하루 머릿기사 수(중요한 순)
+
+/** 마을 시간(초) → 몇째 날(1부터) */
+export const newsDay = time => Math.floor(Math.max(0, time || 0) / NEWS_DAY_SECS) + 1;
+
+const FISH_WEIGHT = { common: 0, rare: 3, epic: 5, legend: 7 };
+const builtWeight = d => d.house ? 3 : d.deco || d.stairs || d.bridge || d.pier ? 1 : 4;   // 시설 > 집 > 길·장식
+/** 일마다 소식 한 줄: (알림 내용, 월드) → { icon, text, weight }. weight 0은 알림 줄에만 쓰고 소식지에는 안 실음. */
+const NEWS_MAKERS = {
+  fish: ({ u, fish }) => ({ icon: "🎣", text: `${josa(u.name, "이", "가")} ${fish.season ? "제철 " : ""}${josa(fish.name, "을", "를")} 낚았어요!`, weight: (FISH_WEIGHT[fish.rarity] ?? 0) + (fish.season ? 2 : 0) }),
+  beachcomb: ({ u, item }) => ({ icon: "✨", text: `${josa(u.name, "이", "가")} 바닷가에서 ${josa(item.name, "을", "를")} 주웠어요`, weight: 2 }),
+  wishDone: ({ wish, u, def }, w) => ({ icon: "♥", text: `${u.name}의 소원 "${wishText(def, w, u, wish)}"이 이루어졌어요!`, weight: 5 }),
+  rank: ({ def }) => ({ icon: "🏅", text: `마을 등급이 올랐어요: ${def.icon} ${def.name}!`, weight: 8 }),
+  friendship: ({ a, b, stage }) => { const d = FRIEND_STAGES[stage]; return { icon: d.icon, text: `${josa(a.name, "과", "와")} ${josa(b.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!`, weight: stage >= 2 ? 5 : 3 }; },
+  season: s => SEASONS[s] ? { icon: SEASONS[s].icon, text: `${SEASONS[s].name}이에요`, weight: 6 } : null,
+  // 날씨: 폭풍과 첫눈(땅에 눈이 없을 때 내리기 시작한 눈)만 소식지에
+  weather: ({ kind }, w) => { const d = WEATHER[kind]; if (!d) return null; const first = kind === "snow" && (w.snow || 0) < 0.02;
+    return { icon: d.icon, text: first ? "첫눈이 내려요!" : `날씨: ${d.name}`, weight: first ? 5 : kind === "storm" ? 2 : 0 }; },
+  buildingDone: b => { const d = BUILDINGS[b.defId]; return d ? { icon: d.house ? "🏠" : "🔨", text: `${josa(d.name, "이", "가")} 다 지어졌어요`, weight: builtWeight(d) } : null; },
+  furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
+};
+/** 이 일의 소식 한 줄(없으면 null) */
+export const newsFor = (ev, arg, world) => NEWS_MAKERS[ev]?.(arg, world) ?? null;
+
+/** 소식 하나를 넣고 정리: 같은 날 같은 글은 한 번만, 오래된 날은 버리고, 너무 많으면 덜 중요한 것(같으면 오래된 것)부터 버림. 넣었으면 true. */
+export function addNews(log, time, n) {
+  const day = newsDay(time);
+  if (!n || !(n.weight > 0) || log.some(e => e.day === day && e.text === n.text)) return false;
+  log.push({ day, t: Math.round(time), icon: n.icon, text: n.text, weight: n.weight });
+  for (let i = log.length - 1; i >= 0; i--) if (log[i].day <= day - NEWS_KEEP_DAYS) log.splice(i, 1);
+  while (log.length > NEWS_MAX) { let k = 0; for (let i = 1; i < log.length; i++) if (log[i].weight < log[k].weight) k = i; log.splice(k, 1); }
+  return true;
+}
+/** 저장에서 읽은 소식(예전 저장엔 없음 → 빈 소식지). 모양이 맞는 것만. */
+export const newsFromSave = list => (Array.isArray(list) ? list : []).filter(e => e && e.day > 0 && typeof e.text === "string")
+  .map(e => ({ day: e.day, t: e.t || 0, icon: e.icon || "📰", text: e.text, weight: e.weight || 1 })).slice(-NEWS_MAX);
+/** 날짜별 소식지(새 날부터): [{ day, heads: 중요한 순 top건, more: 그 밖의 소식 수 }] */
+export function newsPages(log, top = NEWS_HEADLINES) {
+  const days = [...new Set(log.map(e => e.day))].sort((a, b) => b - a);
+  return days.map(day => { const list = log.filter(e => e.day === day).sort((a, b) => b.weight - a.weight || b.t - a.t); return { day, heads: list.slice(0, top), more: Math.max(0, list.length - top) }; });
+}
+
+// ---- 다녀온 사이
+export const AWAY_MIN_MS = 10 * 60000;          // 10분은 지나야 편지가 옴
+export const AWAY_CAP_HOURS = 8;                // 쳐 주는 시간은 8시간까지
+export const AWAY_ABSURD_MS = 366 * 86400000;   // 1년 넘게 벌어진 시계는 믿지 않음(기기 시계가 바뀐 것으로 봄)
+export const AWAY_FISH_CAP = 6;                 // 그동안 낚시는 많아야 6번 던짐
+/** 꺼 둔 실제 시간(밀리초) → 쳐 줄 시간(시간 단위, 0이면 아무 일 없음). 10분 안쪽·거꾸로 간 시계·말이 안 되는 값은 0. */
+export function awayHours(ms) {
+  if (!Number.isFinite(ms) || ms < AWAY_MIN_MS || ms > AWAY_ABSURD_MS) return 0;
+  return Math.min(AWAY_CAP_HOURS, ms / 3600000);
+}
+/** 그동안 낚싯대를 던진 횟수: 1번 + 한 시간에 1번, 많아야 AWAY_FISH_CAP번 */
+export const awayCasts = hours => hours > 0 ? Math.min(AWAY_FISH_CAP, 1 + Math.floor(hours)) : 0;
+/** "3시간 20분" 같은 글 */
+export function awaySpan(ms) {
+  const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
+  return d ? `${d}일${h ? ` ${h}시간` : ""}` : h ? `${h}시간${mm ? ` ${mm}분` : ""}` : `${mm}분`;
+}
+/** 편지: report = world.applyAway의 결과. 우체국이 있으면(post) 집배원이 자세히 적어 줌(낚은 물고기 하나하나·지난 소식·기다리는 소원).
+ *  돌려주는 값: { title, lines: [글 줄], sign } */
+export function awayLetter(report, { post = false, news = [], wishes = [] } = {}) {
+  const { ms, hours, ripened, catches } = report, lines = [`${awaySpan(ms)} 만이에요. 마을은 잘 있었어요!`];
+  if (ms / 3600000 > hours) lines.push(`(오래 비운 날은 ${AWAY_CAP_HOURS}시간까지만 셈해요)`);
+  if (ripened) lines.push(`🌾 밭 ${ripened}칸이 다 익어서 거두기만 기다려요.`);
+  if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
+  if (!ripened && !catches.length) lines.push("별일 없이 조용한 하루였어요.");
+  if (post) {
+    for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? ` (${RARITY[c.fish.rarity]?.name ?? ""}!)` : ""}${c.item ? ` + ${c.item.name}` : ""}`);
+    if (news.length) { lines.push("📰 떠나기 전 마을 소식"); for (const n of news) lines.push(`· ${n.icon} ${n.text}`); }
+    for (const x of wishes) lines.push(`💭 ${x.who}: "${x.text}" 소원이 기다리고 있어요.`);
+    lines.push("📮 우체국이 있어서 꼼꼼히 적어 보냈어요.");
+  } else lines.push("📮 우체국이 생기면 더 자세한 편지를 보내 드릴게요.");
+  return { title: "💌 다녀온 사이에", lines, sign: post ? "— 갈매미 우체국 드림" : "— 마을 갈매미들 드림" };
+}

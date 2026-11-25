@@ -921,3 +921,82 @@ test("친구 사이: 잠깐 멀어졌다 다시 같은 단계가 되면 또 알�
   const w2 = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1)), [c, d] = w2.units, seen2 = []; w2.on("friendship", e => seen2.push(e.stage));
   assert.equal(w2.befriend(c, d, 1), 0); M.befriend(c, d, -3); assert.equal(w2.befriend(c, d, 3), 0); assert.deepEqual(seen2, []);
 });
+
+test("소식지: 기억할 만한 일만 날짜별로 모으고, 하루 머릿기사는 중요한 순, 저장·예전 저장", async () => {
+  const N = await import("../src/world/news.js");
+  assert.equal(N.newsDay(0), 1); assert.equal(N.newsDay(N.NEWS_DAY_SECS - 1), 1); assert.equal(N.newsDay(N.NEWS_DAY_SECS), 2);
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("미니"); const [a, b] = w.units;
+  assert.deepEqual(w.newsLog, [], "새 마을은 빈 소식지");
+  w.setSeason("autumn"); assert.equal(w.newsLog.length, 0, "처음 정해진 계절은 소식이 아님");
+  w.setWeather("rain"); assert.equal(w.newsLog.length, 0, "비는 싣지 않음");
+  w.setWeather("storm"); assert.equal(w.newsLog.at(-1).text, "날씨: 폭풍");
+  w.emit("fish", { u: a, fish: { name: "멸치", rarity: "common" }, item: null }); assert.equal(w.newsLog.length, 1, "흔한 물고기는 싣지 않음");
+  w.emit("fish", { u: a, fish: { name: "참치", rarity: "epic" }, item: null }); assert.match(w.newsLog.at(-1).text, /^기본이 참치를 낚았어요!$/);
+  w.befriend(a, b, 8); assert.match(w.newsLog.at(-1).text, /단짝이 됐어요/); assert.equal(w.newsLog.at(-1).icon, "💞");
+  w.emit("rank", { rank: 1, def: { icon: "🏘", name: "어촌", unlock: [] } });
+  w.emit("buildingDone", { defId: "house" }); w.emit("buildingDone", { defId: "house" });
+  assert.equal(w.newsLog.filter(e => e.text === "작은 집이 다 지어졌어요").length, 1, "같은 날 같은 소식은 한 번만");
+  for (const e of w.newsLog) assert.deepEqual(Object.keys(e).sort(), ["day", "icon", "t", "text", "weight"]);
+  let pages = N.newsPages(w.newsLog);
+  assert.equal(pages.length, 1); assert.equal(pages[0].day, 1); assert.match(pages[0].heads[0].text, /마을 등급이 올랐어요/, "가장 큰 일이 맨 위");
+  assert.equal(pages[0].heads.length, N.NEWS_HEADLINES); assert.equal(pages[0].more, 1, "폭풍은 머릿기사에서 밀림");
+  // 계절이 바뀌면 소식, 다음 날로 넘어가면 새 쪽(새 날이 먼저)
+  w.time = N.NEWS_DAY_SECS + 5; w.setSeason("winter"); w.setWeather("snow");
+  pages = N.newsPages(w.newsLog); assert.equal(pages[0].day, 2); assert.deepEqual(pages[0].heads.map(e => e.text), ["겨울이에요", "첫눈이 내려요!"]);
+  w.snow = 0.5; w.setWeather("clear"); w.setWeather("snow"); assert.equal(w.newsLog.filter(e => /눈/.test(e.text)).length, 1, "눈이 쌓인 뒤의 눈은 첫눈이 아님");
+  // 저장 → 불러오기: 소식이 남고, 불러온 뒤 같은 계절은 다시 싣지 않음
+  const j = JSON.parse(JSON.stringify(w.serialize())), back = World.fromJSON(j, seededRandom(2));
+  assert.deepEqual(back.newsLog, w.newsLog); back.setSeason("winter"); assert.deepEqual(back.newsLog, w.newsLog);
+  delete j.newsLog; delete j.newsSeason; delete j.savedAt;
+  const old = World.fromJSON(j, seededRandom(2)); assert.deepEqual(old.newsLog, [], "예전 저장은 빈 소식지"); assert.equal(old.savedAt, null);
+  old.setSeason("winter"); assert.equal(old.newsLog.length, 0);
+  // 오래된 날은 버리고, 넘치면 덜 중요한 것부터
+  const log = []; for (let i = 0; i < 200; i++) N.addNews(log, i * 100, { icon: "x", text: `소식 ${i}`, weight: 1 + i % 5 });
+  assert.ok(log.length <= N.NEWS_MAX); assert.ok(log.every(e => e.day > N.newsDay(199 * 100) - N.NEWS_KEEP_DAYS));
+  const many = []; for (let i = 0; i < N.NEWS_MAX + 10; i++) N.addNews(many, 10, { icon: "x", text: `일 ${i}`, weight: i < 10 ? 1 : 3 });
+  assert.equal(many.length, N.NEWS_MAX); assert.ok(many.every(e => e.weight === 3), "가벼운 소식부터 버림");
+  assert.equal(N.addNews(many, 10, { icon: "x", text: "알림만", weight: 0 }), false);
+});
+
+test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간만 쳐 주고, 밭이 익고 어부가 몇 마리 낚음(돈·시세는 그대로)", async () => {
+  const N = await import("../src/world/news.js"), H = 3600000;
+  assert.equal(N.awayHours(9 * 60000), 0, "10분 안쪽"); assert.equal(N.awayHours(-5 * H), 0, "거꾸로 간 시계"); assert.equal(N.awayHours(NaN), 0); assert.equal(N.awayHours(Infinity), 0);
+  assert.equal(N.awayHours(5 * 365 * 24 * H), 0, "말이 안 되게 벌어진 시계"); assert.equal(N.awayHours(30 * 60000), 0.5);
+  assert.equal(N.awayHours(8 * H), 8); assert.equal(N.awayHours(72 * H), N.AWAY_CAP_HOURS, "8시간까지만");
+  assert.equal(N.awayCasts(0), 0); assert.equal(N.awayCasts(0.2), 1); assert.equal(N.awayCasts(3), 4); assert.equal(N.awayCasts(8), N.AWAY_FISH_CAP);
+  assert.equal(N.awaySpan(25 * 60000), "25분"); assert.equal(N.awaySpan(3 * H + 20 * 60000), "3시간 20분"); assert.equal(N.awaySpan(50 * H), "2일 2시간");
+
+  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("꽃"); w.addUnitByName("물방울"); w.setSeason("autumn");
+  const c = w.center; let fd = null;
+  for (let r = 4; r < 30 && !fd; r++) for (let dz = -r; dz <= r && !fd; dz++) for (let dx = -r; dx <= r && !fd; dx++) if (w.check("field", c.x + dx, c.z + dz, 0).ok) fd = [c.x + dx, c.z + dz];
+  assert.ok(w.placeBuilding("field", fd[0], fd[1], 0).ok); if (!w.spots.length) w.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null });
+  const farmer = w.units.find(u => u.job === "farmer"), fisher = w.units.find(u => u.job === "fisher");
+  w.farmPlot(w.plots[0], farmer); w.farmPlot(w.plots[1], farmer); assert.equal(w.plots.filter(p => p.stage === "growing").length, 2);
+  const snap = () => JSON.stringify([w.bank, w.prices, w.priceHist, w.units.map(u => u.coins), w.res.coins, w.time, w.weather, w.granary]);
+  const before = snap(), fish0 = fisher.inv.fish, seen0 = Object.values(w.collection).reduce((a, b) => a + b, 0);
+  assert.equal(w.applyAway(5 * 60000, seededRandom(5)), null, "5분은 아무 일 없음"); assert.equal(w.applyAway(-H, seededRandom(5)), null);
+  assert.equal(w.plots.filter(p => p.stage === "growing").length, 2);
+  const r = w.applyAway(100 * H, seededRandom(5));
+  assert.equal(r.hours, 8); assert.equal(r.ripened, 2); assert.equal(w.plots.filter(p => p.stage === "ripe").length, 2);
+  assert.ok(r.catches.length >= 1 && r.catches.length <= N.AWAY_FISH_CAP, `낚은 수 ${r.catches.length}`);
+  assert.ok(r.catches.every(x => x.who === fisher.name && x.fish.name));
+  assert.equal(Object.values(w.collection).reduce((a, b) => a + b, 0) - seen0, r.catches.length, "도감에 기록");
+  assert.equal(fisher.inv.fish - fish0, r.catches.filter(x => x.fish.rarity === "common").length, "흔한 물고기는 어부 가방에");
+  assert.equal(snap(), before, "은행·시세·돈·마을 시간은 그대로");
+  assert.match(w.newsLog.at(-1).text, /^다녀온 사이에 밭 2칸이 익고 물고기 \d마리를 낚았어요$/);
+  assert.deepEqual(w.applyAway(100 * H, seededRandom(5)).ripened, 0, "익을 밭이 더 없음");
+  // 같은 난수면 같은 결과(월드는 시계를 읽지 않음), 어부가 없으면 낚시 없음
+  const mk = () => { const x = World.create(7, seededRandom(3), { wild: true }); x.addUnitByName("물방울"); x.setSeason("autumn"); if (!x.spots.length) x.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null }); return x; };
+  assert.deepEqual(mk().applyAway(4 * H, seededRandom(8)), mk().applyAway(4 * H, seededRandom(8)));
+  const lone = World.create(7, seededRandom(3), { wild: true }); assert.deepEqual(lone.applyAway(4 * H, seededRandom(8)).catches, []);
+  // 저장 시각은 밖에서 넣어 줌
+  assert.equal(World.fromJSON(JSON.parse(JSON.stringify(w.serialize(1234567))), seededRandom(1)).savedAt, 1234567); assert.equal(w.serialize().savedAt, null);
+
+  // 편지: 우체국이 있으면 더 길게
+  const rep = { ms: 100 * H, hours: 8, ripened: 2, catches: [{ who: "물방울", fish: { name: "참치", rarity: "epic" }, item: null }, { who: "물방울", fish: { name: "멸치", rarity: "common" }, item: { name: "유리병" } }] };
+  const short = N.awayLetter(rep), long = N.awayLetter(rep, { post: true, news: [{ icon: "🏅", text: "마을 등급이 올랐어요: 🏘 어촌!" }], wishes: [{ who: "기본", text: "시장이 있으면 좋겠어요" }] });
+  assert.ok(long.lines.length > short.lines.length); assert.match(short.lines[0], /^4일 4시간 만이에요/); assert.ok(short.lines.some(l => /8시간까지만/.test(l)));
+  assert.ok(short.lines.some(l => /밭 2칸/.test(l)) && short.lines.some(l => /물고기 2마리/.test(l)));
+  assert.ok(long.lines.some(l => /참치 \(영웅!\)/.test(l)) && long.lines.some(l => /멸치 \+ 유리병/.test(l)) && long.lines.some(l => /어촌/.test(l)) && long.lines.some(l => /시장이 있으면/.test(l)));
+  assert.ok(N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [] }).lines.some(l => /조용한/.test(l)));
+});

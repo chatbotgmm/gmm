@@ -10,6 +10,9 @@ import { WISH_BY_ID, WISH_REWARD, wishText } from "../world/wishes.js";
 import { RANKS, RANK_REWARD, rankScore } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
+import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
+
+const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
 const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
   [UnitState.Zoomies]: "신나서 뛰는 중", [UnitState.Flee]: "도망치는 중", [UnitState.Avoid]: "혼자 있고 싶어",
@@ -108,8 +111,8 @@ export class Hud {
   }
   openApp(app) {
     this.app = app;
-    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel" };
-    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도" };
+    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews" };
+    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null;
@@ -168,11 +171,36 @@ export class Hud {
         (rows ? `<table class="tbl">${rows}</table>` : `<p class="dim">지금은 바라는 게 없어요.</p>`) + `<p>이룬 소원: <b>${w.wishDone}</b>개</p>`;
     } else if (this.app === "rel") {
       this.drawRelations();
+    } else if (this.app === "news") {
+      this.drawNews();
     } else if (this.app === "files") {
       document.getElementById("saveInfo").textContent = this.savedLabel?.() || "";
     } else if (this.app === "summon") {
       this.setSummon(w);
     }
+  }
+  /** 📱 소식지: 마을 날짜별(새 날부터) 머릿기사. 하루 = 마을 시간 NEWS_DAY_SECS초, 최근 NEWS_KEEP_DAYS일치. */
+  drawNews() {
+    const w = this.world, body = document.getElementById("newsBody"), today = newsDay(w.time), log = w.newsLog, last = log[log.length - 1];
+    const key = `${today}|${log.length}|${last?.t}|${last?.text}`;
+    if (key === this.newsKey && body.firstChild) return;                            // 바뀐 게 없으면 다시 안 그림(읽는 중에 화면이 튀지 않게)
+    this.newsKey = key;
+    const pages = newsPages(log).map(p => `<section class="newsday"><h4>${p.day === today ? "오늘" : p.day === today - 1 ? "어제" : `${today - p.day}일 전`} <span class="dim">마을 ${p.day}일째</span></h4>` +
+      `<ul>${p.heads.map((e, i) => `<li class="${i ? "" : "top"}"><span class="ico">${e.icon}</span><span>${escHtml(e.text)}</span></li>`).join("")}</ul>` +
+      (p.more ? `<p class="dim">그 밖의 소식 ${p.more}건</p>` : "") + `</section>`).join("");
+    body.innerHTML = `<p class="dim">오늘은 마을 <b>${today}일째</b>예요. 마을에서 일어난 큰일을 하루에 ${NEWS_HEADLINES}건까지 골라 실어요(최근 ${NEWS_KEEP_DAYS}일).</p>` +
+      (pages || `<p class="dim">아직 실을 소식이 없어요. 집을 짓거나, 소원을 들어주거나, 귀한 물고기를 낚으면 여기에 실려요.</p>`);
+  }
+  /** 💌 다녀온 사이 편지(없으면 아무것도 안 함) */
+  showLetter(letter) {
+    if (!letter) return;
+    const box = document.getElementById("letter");
+    document.getElementById("letterTitle").textContent = letter.title;
+    document.getElementById("letterBody").innerHTML = letter.lines.map(l => `<p>${escHtml(l)}</p>`).join("") + `<p class="sign">${escHtml(letter.sign)}</p>`;
+    box.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 });
+    const close = () => { box.hidden = true; };
+    document.getElementById("letterClose").onclick = close; document.getElementById("letterNews").onclick = () => { close(); this.openPhone(); this.openApp("news"); };
+    box.onpointerdown = e => { if (e.target === box) close(); };
   }
   /** 📱 관계도: 갈매미를 원 위에 놓고 친한 사이를 선으로(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로. */
   drawRelations() {

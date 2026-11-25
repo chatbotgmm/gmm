@@ -18,6 +18,7 @@ import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
 import * as RD from "./roads.js";
+import { newsFor, addNews, newsFromSave, awayHours, awayCasts } from "./news.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -54,6 +55,8 @@ export class World {
     this.snow = extra.snow || 0;                                                  // 쌓인 눈(0~1): 겨울에 눈이 오면 늘고 봄·비에 녹음
     this.rank = extra.rank || 0; this.rankClock = 0;                               // 마을 등급(오르기만 함)
     this.granary = extra.granary || 0;                                            // 저장고에 쌓인 음식
+    // 소식지: 기억할 만한 일 { day, t, icon, text, weight } · 마지막으로 알린 계절 · 저장한 실제 시각(밖에서 넣어 줌, 다녀온 사이 편지용)
+    this.newsLog = newsFromSave(extra.newsLog); this.newsSeason = extra.newsSeason ?? null; this.savedAt = Number.isFinite(extra.savedAt) ? extra.savedAt : null;
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -82,7 +85,13 @@ export class World {
     const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z); this.emit("unitAdded", u); return u;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
-  emit(ev, arg) { for (const fn of this.listeners[ev] || []) fn(arg); }
+  emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); }
+  /** 소식지에 적기(news.js가 고른 일만). 계절은 바뀔 때만: 처음 정해질 때·불러온 뒤 같은 계절은 소식이 아님. */
+  noteNews(ev, arg) {
+    const n = newsFor(ev, arg, this); if (!n) return;
+    if (ev === "season") { const was = this.newsSeason; this.newsSeason = arg; if (!was || was === arg) return; }
+    addNews(this.newsLog, this.time, n);
+  }
   after(secs, fn) { this.timers.push({ t: secs, fn }); }
   /** 근처 갈매미들이 알아차릴 일(호기심): kind = building | tree | fish | drop | site */
   notice(x, z, kind, src = null) {
@@ -433,13 +442,34 @@ export class World {
   catchFish(u) {
     const fishFx = this.fx.fish; if (fishFx <= 0) return null;                       // 폭풍: 못 낚음
     if (this.rnd() >= Math.min(0.95, J.catchChance(u) * fishFx)) return null;
-    const f = J.rollFish(u, this.rnd, this.season); if (!this.economy) this.res.fish++;
+    const { fish: f, item } = this.landFish(u, this.rnd);
+    this.emit("fish", { u, fish: f, item }); if (f.rarity !== "common" || item) this.notice(u.x, u.z, "fish", u);
+    return { fish: f, item };
+  }
+  /** 낚은 것을 챙김(알림 없이): 물고기를 뽑아 도감·가방(흔하면 음식, 희귀 이상이면 보물)에 넣고, 가끔 물건도. */
+  landFish(u, rnd) {
+    const f = J.rollFish(u, rnd, this.season); if (!this.economy) this.res.fish++;
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
     let item = null;
-    if (this.rnd() < J.itemChance(u)) { item = J.rollItem(u, this.rnd, this.season); this.items[item.id] = (this.items[item.id] || 0) + 1; }
-    this.emit("fish", { u, fish: f, item }); if (f.rarity !== "common" || item) this.notice(u.x, u.z, "fish", u);
+    if (rnd() < J.itemChance(u)) { item = J.rollItem(u, rnd, this.season); this.items[item.id] = (this.items[item.id] || 0) + 1; }
     return { fish: f, item };
+  }
+  /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌. 마을을 돌리지 않고 딱 두 가지만:
+   *  자라던 밭이 익고(10분이면 어느 계절·날씨에도 다 익음), 어부가 낚싯대를 몇 번(awayCasts) 던짐. 돈·시세·시장은 그대로.
+   *  돌려주는 값: { ms, hours, ripened, catches: [{ who, fish, item }] } 또는 null(10분 안쪽·이상한 시각) */
+  applyAway(ms, rnd = this.rnd) {
+    const hours = awayHours(ms); if (!hours) return null;
+    let ripened = 0; const catches = [];
+    for (const p of this.plots) if (p.stage === "growing") { p.stage = "ripe"; p.t = 0; ripened++; this.emit("plot", p); }
+    const fishers = this.spots.length ? this.units.filter(u => u.job === "fisher") : [];
+    for (let i = 0, n = fishers.length ? awayCasts(hours) : 0; i < n; i++) {
+      const u = fishers[i % fishers.length]; if (rnd() >= J.catchChance(u)) continue;
+      catches.push({ who: u.name, ...this.landFish(u, rnd) });
+    }
+    const fished = catches.length ? `물고기 ${catches.length}마리를 낚았어요` : "", did = ripened ? `밭 ${ripened}칸이 ${fished ? `익고 ${fished}` : "익었어요"}` : fished;
+    if (did) addNews(this.newsLog, this.time, { icon: "💌", text: `다녀온 사이에 ${did}`, weight: 3 });
+    return { ms, hours, ripened, catches };
   }
 
   // ---- 시장(상인만): 남는 자재·음식·보물·물건을 팔고, 공사에 모자란 나무·돌·철을 사 온다. 상인 희귀도만큼 비싸게 팔고 싸게 산다.
@@ -662,12 +692,13 @@ export class World {
   }
 
   // ---- 저장/불러오기
-  serialize() {
+  /** savedAt: 저장하는 실제 시각(ms). 월드는 기기 시계를 모르므로 화면이 넣어 줌. */
+  serialize(savedAt = null) {
     return { version: 2, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units) })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units) })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
