@@ -2,7 +2,7 @@
 // 뷰는 u.anim(틀 애니메이션 이름)·u.tool(손에 든 도구)·u.emoteText(말풍선)·u.fishing(찌 위치)을 읽어 그린다.
 //
 // 할 일이 없으면(Idle) 성격(PERSONA) 비중으로 하나를 고른다:
-//   쉬기 · 산책 · 씨앗 먹기 · 친구에게 가서 인사 · 신나서 뛰기 · 벌목 · 채광 · 낚시 · 집 짓기(공사장) · 건물 들어가기
+//   쉬기(피곤할 때만: 기력 50 아래) · 산책 · 씨앗 먹기 · 친구에게 가서 인사 · 신나서 뛰기 · 벌목 · 채광 · 낚시 · 집 짓기(공사장) · 건물 들어가기
 // 반사 행동: 겁 많은 갈매미(미니)는 큰 갈매미가 다가오면 도망, 혼자 있고 싶은 갈매미(그림자)는 쉬다가 붐비면 자리를 피함.
 import { UnitState as US } from "../data/types.js";
 import { UNIT_SPEED, WATER_Y } from "../config.js";
@@ -66,7 +66,7 @@ export function setIdle(u, rnd, world = null, secs = null) {
   release(u);
   if (u.improve && world) { for (const [x, z] of u.improve.cells) world.improveClaims?.delete(`${x},${z}`); u.improve = null; }   // 고치던 일을 그만두면 찜 풀기
   if (u.sitOn && world) standUp(u, world);                                // 앉아 있다가 다른 일을 하면 일어남
-  u.running = false; u.state = US.Idle; u.timer = secs ?? 1 + rnd() * 3; u.path = null; u.pathIndex = 0; u.goal = null; if (!u.sailing) u.ferry = null;
+  u.running = false; u.state = US.Idle; u.timer = secs ?? M.pauseSecs(rnd); u.path = null; u.pathIndex = 0; u.goal = null; if (!u.sailing) u.ferry = null;
   u.targetBuildingId = null; u.moveT = 0; u.lookAt = undefined; u.swimming = false; u.swimGoal = null;   // 물속에서 그만두면 다음 프레임에 가까운 땅으로 올라옴
 }
 
@@ -222,7 +222,11 @@ function startActivity(u, kind, world, rnd) {
 function startActivityInner(u, kind, world, rnd) {
   const g = world.grid, persona = PERSONA[u.name] || PERSONA["기본"];
   switch (kind) {
-    case "rest": if (rnd() < 0.6 && sitBench(u, world)) return true; setIdle(u, rnd, world, 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
+    case "rest": {                                                                // 쉬기: 가까운 빈 벤치가 있으면 앉고, 없으면 서서. 피곤하면 기력이 REST_UNTIL까지 찰 때까지
+      if (sitBench(u, world)) return true;
+      const lack = M.REST_UNTIL - (u.needs?.energy ?? 100);
+      setIdle(u, rnd, world, lack > 0 ? Math.min(30, Math.max(2, lack / (0.6 + M.REST_GAIN))) : 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
+    }
     case "sleep": {                                                               // 지치면: 가까운 완성된 집에 들어가 자거나, 그 자리에서 잠
       const home = nearest(u, [...world.buildings.values()].filter(b => world.canEnter(u, b) && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 14), b => [b.door.x, b.door.z]);
       if (home && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, "졸려…"); return true; }
@@ -248,7 +252,7 @@ function startActivityInner(u, kind, world, rnd) {
     }
     case "visit": {
       // 가깝고 친한 친구일수록 먼저(호감 1당 6칸 거리만큼 더 가도 감)
-      const cands = world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [US.Idle, US.Wander].includes(o.state) && M.affinity(u, o) > -2);
+      const cands = world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [US.Idle, US.Wander, US.Sit, US.Fish, US.Trade].includes(o.state) && !o.once && M.affinity(u, o) > -2);   // 쉬거나 산책·벤치·낚시·장사 중인 친구(한자리에 있는 친구)
       const f = cands.sort((a, b) => (Math.hypot(a.x - u.x, a.z - u.z) - 6 * M.affinity(u, a)) - (Math.hypot(b.x - u.x, b.z - u.z) - 6 * M.affinity(u, b)))[0];
       if (!f) return false;
       const [fx, fz] = cellOf(f);
@@ -477,7 +481,8 @@ function chooseNext(u, world, rnd) {
   if (festAwake(u, world) && !u.committed && rnd() < FESTIVAL_JOIN_CHANCE && startGather(u, world, rnd)) return;
   if (sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { if (goToBed(u, world, rnd)) return; }   // 잘 시간: 집에 가서 잠(야행성은 낮에)
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
-  if (world.economy) {
+  // 피곤하면(기력 TIRED 아래) 심부름(가공·은행·시장·저장고·장보기)을 새로 시작하지 않고 아래에서 먼저 쉼: 상인이 가공 → 은행을 쉬지 않고 이어 가다 기력이 바닥나지 않게
+  if (world.economy && (u.needs?.energy ?? 100) >= M.TIRED) {
     if (u.job === "merchant") {                                                  // 상인: 가공품은 은행에, 원자재는 가공
       if (E.total(u.goods) > 0 && startActivity(u, "deposit", world, rnd)) return;
       if (E.total(u.raw) >= 3 && startActivity(u, "process", world, rnd)) return;
@@ -500,18 +505,33 @@ function chooseNext(u, world, rnd) {
     }
   }
   // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 시장/은행까지 돌길 · 장식 주문. 낮을수록 더 자주
-  if (world.economy && (u.sat ?? 100) < 75 && !u.committed && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
+  if (world.economy && (u.sat ?? 100) < 75 && !u.committed && (u.needs?.energy ?? 100) >= M.TIRED && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy < 20 && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠
+  if (u.needs && u.needs.energy < M.TIRED) { startActivity(u, "rest", world, rnd); emote(u, pick(["🥱 좀 쉬자", "😮‍💨 피곤해", "후…"], rnd)); return; }   // 피곤하면 쉼(기력이 찰 때까지)
   // 성격 + 직업 특기 × 욕구(급한 욕구를 채우는 일) × 배운 취향(해 보니 좋았던 일)
   const opts = J.activityWeights(u).map(([k, w]) => [k, w * M.needMult(u, k) * M.prefMult(u, k)]);
-  for (let tries = 0; tries < 3; tries++) {
-    let r = rnd() * opts.reduce((s, [, w]) => s + w, 0), kind = "rest";
-    for (const [k, w] of opts) if ((r -= w) <= 0) { kind = k; break; }
+  // 고른 일을 못 하면(공사장 없음·자리 없음…) 그 일을 빼고 다시 뽑음. 제 직업 일이 안 되면 먼저 대신 도울 일(J.helpJobs)을 해 봄.
+  // 끝내 할 일이 없으면 쉬지 않고 산책(안 피곤한데 서서 쉬지 않게), 그것도 안 되면 잠깐 숨만 고르고 다시 고름.
+  const skill = J.jobOf(u)?.skill; let helped = false;
+  while (opts.length) {
+    let r = rnd() * opts.reduce((s, [, w]) => s + w, 0), i = opts.length - 1;
+    for (let k = 0; k < opts.length; k++) if ((r -= opts[k][1]) <= 0) { i = k; break; }
+    const kind = opts[i][0];
     if (startActivity(u, kind, world, rnd)) return;
+    opts.splice(i, 1);
+    if (kind === skill && !helped) { helped = true; if (helpOut(u, world, rnd)) return; }
   }
-  startActivity(u, "rest", world, rnd);
+  if (!helped && helpOut(u, world, rnd)) return;
+  if (startActivity(u, "wander", world, rnd)) return;
+  setIdle(u, rnd, world);
 }
+/** 제 일거리가 없을 때 다른 일을 도움(일손 돕기). 시작했으면 true */
+function helpOut(u, world, rnd) {
+  for (const k of J.helpJobs(u, world.res)) if (startActivity(u, k, world, rnd)) { emote(u, pick(HELP_SAY[k] || ["일손 돕기!"], rnd), 2); return true; }
+  return false;
+}
+const HELP_SAY = { chop: ["🪓 나무 해 올게!", "일손 돕기!"], mine: ["⛏ 돌 캐 올게!", "일손 돕기!"], fish: ["🎣 낚시 도울게!", "일손 돕기!"] };
 
 export function enterBuilding(u, b, rnd) {
   release(u);
@@ -604,6 +624,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         const near = world.units.find(o => o !== u && visible(o) && Math.hypot(o.x - u.x, o.z - u.z) < 3);
         u.lookAt = near && rnd() < 0.6 ? Math.atan2(near.x - u.x, near.z - u.z) : u.heading + (rnd() * 2 - 1) * 1.2;
       }
+      if (u.activity === "rest" && u.needs) u.needs.energy = Math.min(100, u.needs.energy + M.REST_GAIN * dt);   // 쉬기로 고른 쉼은 더 빨리 참
       if (u.activity === "rest" && u.timer <= 0) { M.learn(u, "rest", 0.3 + (100 - (u.needs?.energy ?? 100)) / 200); u.activity = null; }
       if (u.lookAt !== undefined) { let d = u.lookAt - u.heading; d = Math.atan2(Math.sin(d), Math.cos(d)); u.heading += d * Math.min(1, 1.5 * dt); }
       if (u.timer <= 0) chooseNext(u, world, rnd);
@@ -639,7 +660,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case US.Visit: {
       const f = u.focus;
-      if (!visible(f) || f.once || [US.Flee, US.Greet].includes(f.state)) { setIdle(u, rnd, world); break; }
+      // 음식을 사러(얻으러) 가는 길(activity "eat")은 상대가 잠깐 동작 중(밭일·낚시의 한 동작, 인사)이어도 그대로 감: 예전엔 그때마다 그만두고 0.3~1초 뒤 다시 골라 제자리에서 "음식 사러!"만 되풀이함
+      if (!visible(f) || f.state === US.Flee || ((f.once || f.state === US.Greet) && u.activity !== "eat")) { setIdle(u, rnd, world); break; }
       const close = Math.hypot(f.x - u.x, f.z - u.z) < 1.6, arrived = followPath(u, dt, world, rnd);
       if (u.state !== US.Visit) break;                                         // 길이 막혀 그만둠
       if (arrived || close) {
@@ -801,7 +823,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoSit: {
       const b = world.buildings.get(u.sitOn); if (!b) { standUp(u, world); setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = 7 + rnd() * 7; u.path = null;
+        const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = Math.min(30, Math.max(7 + rnd() * 7, (M.REST_UNTIL - (u.needs?.energy ?? 100)) / (0.6 + M.BENCH_GAIN))); u.path = null;   // 피곤하면 기력이 찰 때까지
         u.x = cx + 0.5 + (b.door.x - cx) * 0.2; u.z = cz + 0.5 + (b.door.z - cz) * 0.2;   // 좌판 앞쪽(다리가 앞으로 내려오게)
         u.heading = Math.atan2(b.door.x - cx, b.door.z - cz); u.sitY = b.seatY ?? (b.elevation ?? 0) + 0.33;   // 좌판 높이(그림이 모델에서 잰 값). 엉덩이를 여기 맞추는 건 views.js u.anim = "Sit"; emote(u, pick(["후~", "♪", "좋다"], rnd));
       }
@@ -809,7 +831,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case US.Sit:
       u.anim = "Sit";
-      if (u.needs) { u.needs.energy = Math.min(100, u.needs.energy + 1.2 * dt); u.needs.fun = Math.min(100, u.needs.fun + 0.6 * dt);
+      if (u.needs) { u.needs.energy = Math.min(100, u.needs.energy + M.BENCH_GAIN * dt); u.needs.fun = Math.min(100, u.needs.fun + 0.6 * dt);
         if (world.units.some(o => o !== u && o.state === US.Sit && Math.hypot(o.x - u.x, o.z - u.z) < 2.5)) u.needs.social = Math.min(100, u.needs.social + 1.5 * dt); }   // 옆 벤치 친구와 수다
       if (u.timer <= 0) { u.anim = null; standUp(u, world); done(u, 0.9, rnd, world); }
       break;

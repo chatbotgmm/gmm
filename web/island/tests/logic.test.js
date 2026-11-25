@@ -807,9 +807,9 @@ test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리
   const w = World.create(7, seededRandom(8), { wild: true, firstGull: true }); w.instantBuild = true;
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q = spot("bench", c.x + 3, c.z + 6), b = w.placeBuilding("bench", q[0], q[1], 0).building, u = w.units[0];
-  let sat = false, stood = false, e0 = null;
+  let sat = false, stood = false, e0 = null; u.needs.energy = 25;                 // 쉬기는 피곤할 때만(기력 50 아래) 고름 → 피곤한 갈매미로 시험
   for (let t = 0; t < 900 && !stood; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sit") { if (!sat) e0 = u.needs.energy; sat = true; assert.equal(b.sitter, u.unitId); } else if (sat) stood = true; }
-  assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null);
+  assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null); assert.ok(u.needs.energy > e0 + 20, "앉아 있는 동안 기력이 참");
 });
 
 test("밤·낮과 피로: 밤엔 집에 들어가 계속 자고(야행성은 밤에 일함), 일하면 피로가 쌓이고 쉬면 풀림", async () => {
