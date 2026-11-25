@@ -659,7 +659,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case US.Visit: {
       const f = u.focus;
-      if (!visible(f) || f.once || [US.Flee, US.Greet].includes(f.state)) { setIdle(u, rnd, world); break; }
+      // 음식을 사러(얻으러) 가는 길(activity "eat")은 상대가 잠깐 동작 중(밭일·낚시의 한 동작, 인사)이어도 그대로 감: 예전엔 그때마다 그만두고 0.3~1초 뒤 다시 골라 제자리에서 "음식 사러!"만 되풀이함
+      if (!visible(f) || f.state === US.Flee || ((f.once || f.state === US.Greet) && u.activity !== "eat")) { setIdle(u, rnd, world); break; }
       const close = Math.hypot(f.x - u.x, f.z - u.z) < 1.6, arrived = followPath(u, dt, world, rnd);
       if (u.state !== US.Visit) break;                                         // 길이 막혀 그만둠
       if (arrived || close) {

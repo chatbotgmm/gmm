@@ -74,3 +74,19 @@ test("밤잠은 그대로: 잘 시간이면 안 피곤해도 자러 감(야행�
   for (let k = 0; k < 120 * 30; k++) { for (const o of w.units) o.full = 90; w.update(1 / 30); if (u.state === "Sleep") uSleep++; if (n.state === "Sleep") nSleep++; }
   assert.ok(uSleep > 120 * 30 * 0.8, `밤: 보통 갈매미는 잠(${uSleep}/3600)`); assert.ok(nSleep < 120 * 30 * 0.2, `밤: 야행성은 깨어 있음(${nSleep}/3600)`);
 });
+
+test("음식 사러 가는 길: 파는 갈매미가 동작 중(밭일·낚시 한 동작)이어도 그만두지 않고 가서 삼(제자리에서 '음식 사러!'만 되풀이하지 않음)", () => {
+  const w = village(7, ["꽃"]), u = w.units.find(o => o.name === "기본"), host = w.units.find(o => o.name === "꽃");
+  assert.equal(host.job, "farmer"); assert.ok(w.economy, "은행이 있어 사고팖");
+  host.inv.food = 6; u.inv.food = 0; u.inv.fish = 0; u.coins = 20; u.full = 20; u.state = "Idle"; u.timer = 0; u.activity = null;
+  let sales = 0, quits = 0, tries = 0, prev = u.state; w.on("foodSale", () => sales++);
+  for (let k = 0; k < 20 * 30 && !sales; k++) {
+    host.once = { key: "Attack", t: 0, len: 1e9, hit: 1e9, onHit: null, then: null };   // 파는 갈매미는 내내 동작 중(밭일 한 동작처럼)
+    u.full = 20; w.update(1 / 30);
+    if (prev !== "Visit" && u.state === "Visit") tries++; if (prev === "Visit" && u.state === "Idle") quits++;
+    prev = u.state;
+  }
+  assert.equal(sales, 1, `동작 중인 농부에게서 음식을 삼(가려던 횟수 ${tries}, 그만둔 횟수 ${quits})`);
+  assert.equal(tries, 1, "한 번 가서 삼"); assert.equal(quits, 0, "가다가 그만두지 않음");
+  assert.equal(u.inv.food, 1); assert.equal(host.inv.food, 5);
+});
