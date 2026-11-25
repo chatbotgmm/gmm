@@ -31,7 +31,10 @@ export class QuarterCam {
   now() { const c = this.camera.position, t = this.controls.target; return quarterOrbit({ x: c.x - t.x, y: c.y - t.y, z: c.z - t.z }); }
   /** 지금 카메라 각도(도) — 화면 확인·시험용 */
   state() { const o = this.now(); return { locked: this.locked, yaw: +(o.yaw / QUARTER_RAD).toFixed(2), pitch: +(o.pitch / QUARTER_RAD).toFixed(2), moving: !!this.tween }; }
-  quick() { return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches; }
+  quick() {                                                                       // 움직임 줄이기: 설정(html[data-motion])이 있으면 그것, 없으면 기기 설정
+    const m = typeof document !== "undefined" ? document.documentElement?.dataset?.motion : null; if (m) return m === "reduce";
+    return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
   go(yaw, pitch) { const o = this.now(); this.tween = { t: 0, yaw0: o.yaw, dYaw: quarterDelta(o.yaw, yaw), pitch0: o.pitch, dPitch: pitch - o.pitch }; if (this.quick() || this.duration <= 0) this.update(1e9); }
   /** 건설 모드로: 보던 각도를 기억하고 고정 쿼터뷰로 */
   enter() {

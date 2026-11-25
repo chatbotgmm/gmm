@@ -103,7 +103,8 @@ export class Tools {
     else if (this.heightOp === "level") this.world.reshape(x, z, "flatten", this.levelH, 1);
     else this.world.reshape(x, z, this.heightOp, this.flatTarget, 1);
   }
-  buzz() { this.onEdit?.(this.mode); if (TOOLS_TOUCH && navigator.vibrate) { const t = performance.now(); if (t - (this.lastBuzz || 0) > 60) { this.lastBuzz = t; navigator.vibrate(6); } } }
+  buzz() { this.onEdit?.(this.mode); if (TOOLS_TOUCH && navigator.vibrate && document.documentElement.dataset.vibe !== "off") {   // 설정 → 조작 → 진동을 끄면 조용히
+    const t = performance.now(); if (t - (this.lastBuzz || 0) > 60) { this.lastBuzz = t; navigator.vibrate(6); } } }
   // ---- 십자선 모드: 화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함
   setCross(on) { this.cross = on; this.cancelStroke(); this.applyControls(); this.onCross?.(on); this.refresh(); }
   tick() {

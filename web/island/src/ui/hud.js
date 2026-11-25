@@ -32,9 +32,18 @@ const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: 
 const SKY_HINT = { rainbow: "낮에 비가 갠 뒤 가끔 · 물건을 더 잘 찾아요", meteor: "맑은 밤에 아주 가끔 · 별조각이 떨어져요", firstSnow: "겨울마다 처음 내리는 눈" };
 
 const hex = n => "#" + n.toString(16).padStart(6, "0");
-// 화면 모양: 가로 폰(높이 480 미만) → 세로 폰(폭 600 미만) → 중간(1200 미만) → 넓음 순서로 판정. CSS는 html[data-form]을 봄(같은 판정을 한곳에서)
-const HUD_FORM_QUERIES = [["landscape", "(max-height: 479px) and (orientation: landscape)"], ["portrait", "(max-width: 599px)"], ["medium", "(max-width: 1199px)"]];
-const hudFormNow = () => (HUD_FORM_QUERIES.find(([, q]) => matchMedia(q).matches) || ["wide"])[0];
+// 화면 모양: 가로 폰(높이 480 미만) → 세로 폰(폭 600 미만) → 중간(1200 미만) → 넓음 순서로 판정. CSS는 html[data-form]을 봄(같은 판정을 한곳에서).
+// 폭·높이는 배율로 나눈 값(k = 글자·버튼 크기) — 1280×800에서 150%면 853×533으로 보고 「중간」 배치가 됨. 눕힌 휴대폰(실제 높이 480 미만)은 작게(75%) 해도 가로 폰 배치 그대로
+const hudFormNow = (k = 1) => { const w = innerWidth / k, h = innerHeight / k; return Math.min(h, innerHeight) < 480 && innerWidth > innerHeight ? "landscape" : w < 600 ? "portrait" : w < 1200 ? "medium" : "wide"; };
+// ---- 화면 맞춤 설정: 이 기기(브라우저)에만 기억하고 섬 저장과는 다른 칸에 둠. 배율은 galmaemiman-uiscale(%), 나머지는 galmaemiman-uiprefs
+const UI_SCALE_KEY = "galmaemiman-uiscale", UI_PREFS_KEY = "galmaemiman-uiprefs";
+const UI_SCALE_RANGE = [75, 150, 130];                                           // 가장 작게 · 가장 크게 · 터치 화면에서 가장 크게(%)
+const UI_PREFS_DEFAULT = { keyhint: "auto", hand: "right", motion: "auto", vibe: "on" };   // 키 힌트 auto|on|off · 손 right|left · 움직임 auto(기기 설정)|reduce|full · 진동 on|off
+const uiCoarse = () => matchMedia("(pointer: coarse)").matches;
+const uiScaleMax = () => uiCoarse() ? UI_SCALE_RANGE[2] : UI_SCALE_RANGE[1];
+const uiScaleClamp = v => Math.max(UI_SCALE_RANGE[0], Math.min(uiScaleMax(), Math.round((Number(v) || 100) / 5) * 5));
+// 아주 큰 PC 화면(1920×1080보다 큼 · 마우스)에서는 글자가 작아 보이지 않게 저절로 키움(최대 2배, 0.05 단위). 휴대폰·보통 화면은 1
+const uiAutoScale = () => uiCoarse() ? 1 : Math.max(1, Math.min(2, Math.floor(Math.min(innerHeight / 1080, innerWidth / 1920) * 20) / 20));
 // 건설 갤러리의 분류(화면에서만 쓰는 표 — 건물 정의에는 분류가 없음)
 const BUILD_CATS = [["all", "전체"], ["home", "집"], ["work", "시설"], ["deco", "장식"], ["road", "교통"]];
 const buildCatOf = d => d.house ? "home" : d.deco ? "deco" : d.stairs || d.bridge || d.pier ? "road" : "work";
@@ -49,7 +58,7 @@ export class Hud {
     crossGo.addEventListener("pointerdown", e => { e.preventDefault(); crossGo.setPointerCapture(e.pointerId); tools.crossPress(true); });
     for (const ev of ["pointerup", "pointercancel"]) crossGo.addEventListener(ev, () => tools.crossPress(false));
     const bar = document.getElementById("tools"), sub = document.getElementById("sub");
-    this.setForm();
+    this.initUiPrefs();
     // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]. 건설 모드에서만 보이고, 맨 앞 ✓ 완료(view)를 누르면 평소 화면으로
     const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"]];
     this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn(m === "view" ? "done" : "", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
@@ -161,8 +170,66 @@ export class Hud {
   }
   /** 화면 모양을 정해 html[data-form]에 적음(창 크기가 바뀔 때만) */
   setForm() {
-    const f = hudFormNow(); this.form = f; this.phoneForm = f === "portrait" || f === "landscape";
-    if (document.documentElement.dataset.form !== f) document.documentElement.dataset.form = f;
+    const root = document.documentElement, auto = uiAutoScale(), k = auto * (this.uiScale || 100) / 100;
+    if (this.uiAuto !== auto) { this.uiAuto = auto; if (auto === 1) root.style.removeProperty("--ui-auto"); else root.style.setProperty("--ui-auto", String(auto)); }
+    const f = hudFormNow(k); this.form = f; this.phoneForm = f === "portrait" || f === "landscape";
+    if (root.dataset.form !== f) root.dataset.form = f;
+    root.toggleAttribute("data-narrow", f === "medium" && innerWidth / k < 900);   // 중간 화면 가운데 좁은 창(건설 판을 한 칸으로)
+    root.toggleAttribute("data-short", !this.phoneForm && innerHeight / k < 600);   // 낮은 창(건물 갤러리를 한 줄로)
+  }
+  // ---- 화면 맞춤 설정(글자·버튼 크기 · 키 힌트 · 왼손 배치 · 움직임 줄이기 · 진동)
+  /** 저장해 둔 값을 읽어 바로 적용(첫 화면이 그려지기 전) */
+  initUiPrefs() {
+    this.uiScale = 100; this.uiPrefs = { ...UI_PREFS_DEFAULT };
+    try { const v = localStorage.getItem(UI_SCALE_KEY); if (v !== null) this.uiScale = uiScaleClamp(v); } catch { /* 저장을 못 쓰는 곳: 기본값으로 */ }
+    try { const j = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "null"); if (j && typeof j === "object") for (const k of Object.keys(UI_PREFS_DEFAULT)) if (typeof j[k] === "string") this.uiPrefs[k] = j[k]; } catch { /* 무시 */ }
+    this.applyUiPrefs();
+    const $ = id => document.getElementById(id), range = $("uiScale");
+    range.max = String(uiScaleMax());
+    // 막대는 손을 뗐을 때 적용(끄는 동안 화면이 커지면 막대가 손가락 밑에서 달아남) · －/＋는 5%씩 바로
+    range.oninput = () => { $("uiScaleLab").textContent = `크기: ${range.value}%`; };
+    range.onchange = () => this.setUiScale(range.value);
+    $("uiScaleDown").onclick = () => this.setUiScale(this.uiScale - 5);
+    $("uiScaleUp").onclick = () => this.setUiScale(this.uiScale + 5);
+    $("uiScaleReset").onclick = () => this.setUiScale(100);
+    $("segKeyhint").onclick = e => { const b = e.target.closest?.("button[data-v]"); if (b) this.setUiPref("keyhint", b.dataset.v); };
+    $("motionBtn").onclick = () => this.setUiPref("motion", document.documentElement.dataset.motion === "reduce" ? "full" : "reduce");
+    $("leftHand").onclick = () => this.setUiPref("hand", this.uiPrefs.hand === "left" ? "right" : "left");
+    $("vibeBtn").onclick = () => { this.setUiPref("vibe", this.uiPrefs.vibe === "off" ? "on" : "off"); if (this.uiPrefs.vibe === "on") try { navigator.vibrate?.(12); } catch { /* 무시 */ } };
+    $("vibeBtn").hidden = typeof navigator.vibrate !== "function";                 // 진동이 없는 기기(아이폰 등)에선 칸을 숨김
+    try { matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => this.applyUiPrefs()); } catch { /* 옛 브라우저 */ }
+    this.drawUiPrefs();
+  }
+  /** 글자·버튼 크기(%)를 바꾸고 이 기기에 기억 */
+  setUiScale(v) {
+    this.uiScale = uiScaleClamp(v);
+    try { localStorage.setItem(UI_SCALE_KEY, String(this.uiScale)); } catch { /* 무시 */ }
+    this.applyUiPrefs(); this.drawUiPrefs();
+  }
+  setUiPref(key, v) {
+    this.uiPrefs[key] = v;
+    try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(this.uiPrefs)); } catch { /* 무시 */ }
+    this.applyUiPrefs(); this.drawUiPrefs();
+  }
+  /** 설정 값을 html에 적음: --ui-user(배율) · data-keyhint · data-hand · data-motion · data-vibe. CSS와 tools.js(진동)·quarterView.js(화면 돌리기)가 봄 */
+  applyUiPrefs() {
+    const root = document.documentElement, p = this.uiPrefs, k = String(this.uiScale / 100);
+    if (this.uiScale === 100) root.style.removeProperty("--ui-user"); else if (root.style.getPropertyValue("--ui-user") !== k) root.style.setProperty("--ui-user", k);
+    let calm = false; try { calm = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* 무시 */ }
+    const set = (name, v) => { if (root.dataset[name] !== v) root.dataset[name] = v; };
+    set("keyhint", ["on", "off"].includes(p.keyhint) ? p.keyhint : "auto"); set("hand", p.hand === "left" ? "left" : "right");
+    set("motion", p.motion === "reduce" || (p.motion !== "full" && calm) ? "reduce" : "full"); set("vibe", p.vibe === "off" ? "off" : "on");
+    this.setForm();
+  }
+  /** 설정 화면의 칸을 지금 값에 맞춤 */
+  drawUiPrefs() {
+    const $ = id => document.getElementById(id), root = document.documentElement, max = uiScaleMax();
+    $("uiScale").value = String(this.uiScale); $("uiScaleLab").textContent = `크기: ${this.uiScale}%${this.uiScale === 100 ? " (기본)" : ""}`;
+    $("uiScaleDown").disabled = this.uiScale <= UI_SCALE_RANGE[0]; $("uiScaleUp").disabled = this.uiScale >= max; $("uiScaleReset").disabled = this.uiScale === 100;
+    $("uiScaleNote").textContent = `75%~${max}% · 이 기기에만 기억해요(섬 저장과는 따로예요).${this.uiAuto > 1 ? ` 큰 화면이라 기본 크기를 ${Math.round(this.uiAuto * 100)}%로 맞춰 뒀어요.` : ""}`;
+    for (const b of $("segKeyhint").children) { const on = b.dataset.v === root.dataset.keyhint; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
+    const sw = (id, on) => { const b = $(id); b.classList.toggle("off", !on); b.setAttribute("aria-pressed", String(on)); };
+    sw("motionBtn", root.dataset.motion === "reduce"); sw("leftHand", root.dataset.hand === "left"); sw("vibeBtn", root.dataset.vibe !== "off");
   }
   /** 섬에서 집을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기) */
   houseCard(b) {
