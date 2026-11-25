@@ -10,7 +10,7 @@ import { checkPlacement } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
-import { initMind } from "../units/mind.js";
+import { initMind, befriend, FRIEND_STAGES, friendsToNames, friendsFromNames } from "../units/mind.js";
 import { seededRandom } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
@@ -369,6 +369,14 @@ export class World {
     this.prices.food = E.foodPriceFor(spare, hungry, this.fx.foodPrice);
   }
 
+  // ---- 친구 사이
+  /** 서로 친해짐(amt만큼). 사이 단계가 오르면(서먹 → 친구 → 단짝) 둘 다 말풍선을 띄우고 알림. */
+  befriend(a, b, amt) {
+    const stage = befriend(a, b, amt); if (!stage) return 0;
+    const d = FRIEND_STAGES[stage]; emote(a, `${d.icon} ${d.name}!`, 3); emote(b, `${d.icon} ${d.name}!`, 3);
+    this.emit("friendship", { a, b, stage }); return stage;
+  }
+
   // ---- 소원
   wishOf(u) { return this.wishes.find(x => x.unitId === u.unitId) || null; }
   makeWish() {
@@ -379,7 +387,7 @@ export class World {
       const cands = WISHES.filter(d => !this.wishes.some(x => x.id === d.id) && d.ok(this, u));
       if (!cands.length) continue;
       const d = cands[Math.floor(this.wrnd() * cands.length)];
-      const wish = { id: d.id, unitId: u.unitId, base: d.base ? d.base(this) : this.units.length, age: 0 };
+      const wish = { id: d.id, unitId: u.unitId, base: d.base ? d.base(this, u) : this.units.length, age: 0 };
       this.wishes.push(wish); emote(u, `💭 ${d.icon}`, 3); this.emit("wish", { wish, u }); return wish;
     }
     return null;
@@ -391,6 +399,7 @@ export class World {
       const u = this.units.find(o => o.unitId === wish.unitId), d = WISH_BY_ID[wish.id];
       if (!u || !d) { this.wishes.splice(this.wishes.indexOf(wish), 1); continue; }
       wish.age += step;
+      if (!d.done(this, u, wish) && d.lost?.(this, u, wish)) { this.wishes.splice(this.wishes.indexOf(wish), 1); this.emit("wishLost", { wish, u, def: d }); continue; }   // 이제 이룰 수 없는 소원은 접음
       if (d.done(this, u, wish)) {
         this.wishes.splice(this.wishes.indexOf(wish), 1); this.wishDone++;
         if (this.economy) this.issue(u, WISH_REWARD * (this.postB() ? 2 : 1));   // 우체국이 있으면 축하 편지와 함께 두 배
@@ -656,7 +665,7 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units) })), bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -669,7 +678,7 @@ export class World {
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
-    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; }
+    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units); }   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
     if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
     w.nextId = j.nextId; return w;
   }

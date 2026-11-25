@@ -826,3 +826,85 @@ test("밤·낮과 피로: 밤엔 집에 들어가 계속 자고(야행성은 밤
   tickNeeds(z, 10, "Chop", false); assert.ok(Math.abs(z.needs.energy - 74.5) < 1e-6, "일 10초 = 기력 −5.5(피로 +5.5)");
   tickNeeds(z, 10, "Sit", false); assert.ok(z.needs.energy > 74.5, "앉아 쉬면 풀림"); const e1 = z.needs.energy; void e1; tickNeeds(z, 10, "Sleep", false); assert.equal(z.needs.energy, 100, "자면 10초에 다 풀림(초당 +6)");
 });
+
+test("친구 사이: 단계(서먹·친구·단짝)가 오르면 알리고, 이름으로 저장·불러오고, 예전 저장도 열림", async () => {
+  const M = await import("../src/units/mind.js");
+  assert.deepEqual([-5, 0, 2.9, 3, 6.9, 7, 10].map(M.friendStage), [0, 0, 0, 1, 1, 2, 2], "기준: 3부터 친구, 7부터 단짝");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("목수"); w.addUnitByName("미니");
+  const [a, b, c] = w.units, seen = []; w.on("friendship", e => seen.push([e.a.name, e.b.name, e.stage]));
+  assert.equal(w.befriend(a, b, 2), 0, "아직 서먹"); assert.equal(seen.length, 0);
+  a.emoteText = b.emoteText = null;
+  assert.equal(w.befriend(a, b, 1), 1, "친구가 됨"); assert.deepEqual(seen, [[a.name, b.name, 1]]);
+  assert.ok(a.emoteText.includes("친구") && b.emoteText.includes("친구"), "둘 다 말풍선");
+  assert.equal(w.befriend(a, b, 1), 0, "같은 단계에선 다시 안 알림"); assert.equal(w.befriend(a, b, -2), 0, "내려갈 땐 안 알림");
+  for (let i = 0; i < 8; i++) w.befriend(a, b, 1);
+  assert.equal(seen.filter(s => s[2] === 2).length, 1, "단짝은 한 번만 알림"); assert.equal(M.affinity(a, b), 10, "최대 10");
+  assert.equal(M.bestieOf(a, w.units), b); assert.equal(M.bestieOf(c, w.units), null); assert.equal(M.bestiePairs(w.units), 1);
+  M.befriend(a, c, 4);
+  // 저장은 이름으로
+  const j = JSON.parse(JSON.stringify(w.serialize()));
+  assert.deepEqual(j.units.find(u => u.name === a.name).friends, { [b.name]: 10, [c.name]: 4 });
+  const back = World.fromJSON(j, seededRandom(9)), by = n => back.units.find(u => u.name === n);
+  assert.equal(M.affinity(by(a.name), by(b.name)), 10); assert.equal(M.affinity(by(b.name), by(a.name)), 10); assert.equal(M.affinity(by(c.name), by(a.name)), 4);
+  assert.equal(M.affinity(by(b.name), by(c.name)), 0);
+  // 마을에 없는 이름·이상한 값은 버림, friends가 없는 예전 저장도 열림
+  j.units[0].friends = { "없는갈매미": 5, [b.name]: 99, [c.name]: "x" }; for (const u of j.units.slice(1)) delete u.friends;
+  const old = World.fromJSON(j, seededRandom(9)), o0 = old.units.find(u => u.name === j.units[0].name);
+  assert.deepEqual(Object.values(o0.friends), [10], "없는 이름·숫자 아닌 값은 버리고 10까지만");
+  assert.ok(old.units.slice(1).every(u => Object.keys(u.friends).length === 0));
+});
+
+test("관계도: 1~8마리를 그림 안 원 위에 놓고, 호감이 0보다 큰 쌍만 선으로", async () => {
+  const M = await import("../src/units/mind.js");
+  const mk = n => UNITS.slice(0, n).map((d, i) => ({ unitId: `u${i + 1}`, name: d.name, friends: {} }));
+  const one = M.relationGraph(mk(1)); assert.deepEqual([one.nodes[0].x, one.nodes[0].y], [150, 150], "한 마리는 가운데"); assert.equal(one.links.length, 0);
+  assert.deepEqual(M.relationGraph([]), { nodes: [], links: [] });
+  for (let n = 2; n <= 8; n++) {
+    const us = mk(n), g = M.relationGraph(us); assert.equal(g.nodes.length, n);
+    for (const p of g.nodes) assert.ok(p.x >= 40 && p.x <= 260 && p.y >= 40 && p.y <= 260, `${n}마리: 그림 안`);
+    for (let i = 0; i < n; i++) for (let k = i + 1; k < n; k++) assert.ok(Math.hypot(g.nodes[i].x - g.nodes[k].x, g.nodes[i].y - g.nodes[k].y) > 60, `${n}마리: 겹치지 않음`);
+  }
+  const us = mk(4); M.befriend(us[0], us[1], 8); M.befriend(us[0], us[2], 3); M.befriend(us[1], us[3], 1); M.befriend(us[2], us[3], -1);
+  assert.deepEqual(M.relationGraph(us).links.map(l => [l.a, l.b, l.stage]), [[0, 1, 2], [0, 2, 1], [1, 3, 0]]);
+});
+
+test("소원: 단짝 옆집에 살고 싶어요 — 둘 다 가까운 집이 생기면 이루어지고, 못 이루게 되면 접음. 단짝 쌍은 등급 점수", async () => {
+  const { WISH_BY_ID, NEIGHBOR_DIST, areNeighbors, wishText } = await import("../src/world/wishes.js"); const { rankScore } = await import("../src/world/rank.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("미니");
+  const [a, b, c] = w.units, d = WISH_BY_ID.neighbor, score0 = rankScore(w).score;
+  assert.equal(d.ok(w, a), false, "단짝이 없으면 안 빎");
+  w.befriend(a, b, 8); assert.equal(d.ok(w, a), true); assert.equal(d.ok(w, c), false);
+  assert.equal(rankScore(w).score, score0 + 3, "단짝 한 쌍 = 3점");
+  const wish = { id: "neighbor", unitId: a.unitId, base: d.base(w, a), age: 0 }; assert.equal(wish.base, b.name);
+  assert.equal(wishText(d, w, a, wish), `${b.name} 옆집에 살고 싶어요`); assert.equal(wishText(WISH_BY_ID.home, w, a, null), "내 집이 갖고 싶어요");
+  const sites = []; const c0 = w.center;
+  for (let r = 5; r < 60 && sites.length < 40; r += 2) for (let k = 0; k < 48; k++) { const an = k / 48 * 6.28, x = Math.floor(c0.x + Math.cos(an) * r), z = Math.floor(c0.z + Math.sin(an) * r); if (w.check("house", x, z, 0).ok) { const q = w.placeBuilding("house", x, z, 0, null, 1e9); if (q.ok) sites.push(q.building); } }
+  let near = null, far = null;
+  for (const p of sites) for (const q of sites) { if (p === q) continue; if (!near && areNeighbors(p, q)) near = [p, q]; if (!far && Math.hypot(p.door.x - q.door.x, p.door.z - q.door.z) > NEIGHBOR_DIST * 2) far = [p, q]; }
+  assert.ok(near && far, "가까운 집 한 쌍과 먼 집 한 쌍");
+  assert.equal(areNeighbors(near[0], near[0]), false, "같은 집은 옆집이 아님");
+  const own = (u, h) => { if (u.home) w.buildings.get(u.home).owner = null; u.home = h ? h.id : null; if (h) h.owner = u.unitId; };
+  w.wishes = [wish]; const done0 = w.wishDone, coins = a.coins || 0;
+  own(b, near[1]); w.stepWishes(1.1); assert.equal(w.wishes.length, 1, "한쪽만 집이 있으면 아직");
+  own(a, near[0]); w.stepWishes(1.1); assert.equal(w.wishes.length, 0); assert.equal(w.wishDone, done0 + 1, "옆집에 살게 되면 이루어짐"); assert.ok((a.coins || 0) > coins, "축하금");
+  assert.equal(d.ok(w, a), false, "둘 다 집이 있으면 다시 안 빎");
+  // 둘 다 먼 집을 사 버리면 접음(이룬 것으로 세지 않음)
+  own(a, far[0]); own(b, far[1]); const lost = []; w.on("wishLost", e => lost.push(e.u.name));
+  w.wishes = [{ id: "neighbor", unitId: a.unitId, base: b.name, age: 0 }]; w.stepWishes(1.1);
+  assert.equal(w.wishes.length, 0); assert.equal(w.wishDone, done0 + 1); assert.deepEqual(lost, [a.name]);
+});
+
+test("집 사기: 단짝 옆집이 팔리면 더 싼 집보다 그 집을 먼저 고름", async () => {
+  const { areNeighbors } = await import("../src/world/wishes.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금");
+  const [a, b] = w.units, c0 = w.center, put = (def, test) => { for (let r = 5; r < 70; r++) for (let k = 0; k < 64; k++) { const an = k / 64 * 6.28, x = Math.floor(c0.x + Math.cos(an) * r), z = Math.floor(c0.z + Math.sin(an) * r);
+    if (!w.check(def, x, z, 0).ok) continue; const q = w.placeBuilding(def, x, z, 0, null, 1e9); if (!q.ok) continue; if (test(q.building)) return q.building; w.removeBuilding?.(q.building.id); } return null; };
+  const mk = put("market", () => true); assert.ok(mk && w.marketB());
+  const home = put("house", () => true); home.owner = b.unitId; b.home = home.id;
+  const nextDoor = put("cottage", h => areNeighbors(h, home)), cheapFar = put("house", h => !areNeighbors(h, home));
+  assert.ok(nextDoor && cheapFar, "단짝 옆 2층집(🪙50)과 먼 작은 집(🪙30)");
+  w.befriend(a, b, 8); a.coins = 200; a.full = 90; a.needs.energy = 100; a.inv.food = 5;
+  w.units.forEach(o => { o.timer = 1e9; }); a.timer = 0;
+  for (let i = 0; i < 600 && !a.shop; i++) w.update(0.1);
+  assert.equal(a.shop?.b, nextDoor.id, "단짝 옆집을 사러 감");
+});

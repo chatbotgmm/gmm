@@ -6,7 +6,7 @@ import * as M from "../units/mind.js";
 import { TRIBES } from "../data/catalog.js";
 import * as E from "../world/economy.js";
 import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
-import { WISH_BY_ID, WISH_REWARD } from "../world/wishes.js";
+import { WISH_BY_ID, WISH_REWARD, wishText } from "../world/wishes.js";
 import { RANKS, RANK_REWARD, rankScore } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
@@ -108,8 +108,8 @@ export class Hud {
   }
   openApp(app) {
     this.app = app;
-    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor" };
-    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원", town: "🏅 마을", decor: "🛋 집 꾸미기" };
+    const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel" };
+    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null;
@@ -163,14 +163,42 @@ export class Hud {
           : `<p class="dim">저장고가 없어요. 🪚 목수가 있으면 🏠 건설에서 <b>저장고</b>를 지을 수 있어요.</p>`) +
         `<h4>등급별 건물</h4><table class="tbl">${RANKS.slice(1).map((r, i) => `<tr><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} (${r.need}점)</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
     } else if (this.app === "wish") {
-      const rows = w.wishes.map(x => { const d = WISH_BY_ID[x.id], u = w.units.find(o => o.unitId === x.unitId); return `<tr><td>${d.icon} <b>${u?.name ?? ""}</b>: ${d.text}</td><td class="dim">${d.hint}</td></tr>`; }).join("");
+      const rows = w.wishes.map(x => { const d = WISH_BY_ID[x.id], u = w.units.find(o => o.unitId === x.unitId); return `<tr><td>${d.icon} <b>${u?.name ?? ""}</b>: ${wishText(d, w, u, x)}</td><td class="dim">${d.hint}</td></tr>`; }).join("");
       document.getElementById("wishBody").innerHTML = `<p class="dim">갈매미가 가끔 마을에 바라는 것을 말해요. 들어주면 기뻐하고 ${w.economy ? `공식은행이 축하금 🪙${WISH_REWARD}을 줘요` : "배가 조금 불러요"}.</p>` +
         (rows ? `<table class="tbl">${rows}</table>` : `<p class="dim">지금은 바라는 게 없어요.</p>`) + `<p>이룬 소원: <b>${w.wishDone}</b>개</p>`;
+    } else if (this.app === "rel") {
+      this.drawRelations();
     } else if (this.app === "files") {
       document.getElementById("saveInfo").textContent = this.savedLabel?.() || "";
     } else if (this.app === "summon") {
       this.setSummon(w);
     }
+  }
+  /** 📱 관계도: 갈매미를 원 위에 놓고 친한 사이를 선으로(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로. */
+  drawRelations() {
+    const w = this.world, us = w.units, body = document.getElementById("relBody"), ST = M.FRIEND_STAGES;
+    if (!us.some(u => u.name === this.relSel)) this.relSel = null;
+    const g = M.relationGraph(us), sel = us.findIndex(u => u.name === this.relSel);
+    const key = `${this.relSel}|${us.map(u => u.name).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
+    if (key === this.relKey && body.firstChild) return;                             // 바뀐 게 없으면 다시 안 그림(누르기가 끊기지 않게)
+    this.relKey = key;
+    body.onclick = e => { const t = e.target.closest?.("[data-gull]"); if (!t) return; this.relSel = this.relSel === t.dataset.gull ? null : t.dataset.gull; this.drawRelations(); };
+    if (!us.length) { body.innerHTML = `<p class="dim">갈매미가 아직 없어요. 📱 → 🥚 소환으로 불러 보세요.</p>`; return; }
+    const lines = g.links.map(l => { const a = g.nodes[l.a], b = g.nodes[l.b], d = ST[l.stage], dim = sel >= 0 && l.a !== sel && l.b !== sel;
+      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${d.color}" stroke-width="${d.width}" stroke-linecap="round" opacity="${dim ? 0.2 : 1}"/>`; }).join("");
+    const dots = g.nodes.map((n, i) => `<g class="relnode" data-gull="${n.name}"><circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="26" fill="transparent"/>` +
+      `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="19" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
+      `<text class="ico" x="${n.x.toFixed(1)}" y="${n.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${JOBS[n.u.job]?.icon ?? n.name[0]}</text>` +
+      `<text x="${n.x.toFixed(1)}" y="${(n.y + 33).toFixed(1)}" text-anchor="middle">${n.name}</text></g>`).join("");
+    const count = s => g.links.filter(l => l.stage === s).length;
+    let text;
+    if (us.length === 1) text = `<p class="dim">${us[0].name} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
+    else if (sel < 0) text = `<p>💞 단짝 <b>${count(2)}</b>쌍 · 🧡 친구 <b>${count(1)}</b>쌍</p><p class="dim">갈매미를 누르면 누구와 얼마나 친한지 보여 줘요. 만나서 인사할 때마다 조금씩 친해져요(호감 ${ST[1].min}부터 친구, ${ST[2].min}부터 단짝).</p>`;
+    else { const u = us[sel], rows = us.filter(o => o !== u).map(o => [o, M.affinity(u, o)]).sort((a, b) => b[1] - a[1]).map(([o, v]) => { const d = ST[M.friendStage(v)];
+        return `<tr><td>${v ? d.icon : "·"} ${o.name}</td><td>${v ? `<b>${d.name}</b> <span class="dim">호감 ${Math.round(v * 10) / 10}</span>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
+      text = `<h4>${JOBS[u.job]?.icon ?? ""} ${u.name}의 사이</h4><table class="tbl">${rows}</table>`; }
+    body.innerHTML = `<svg viewBox="0 0 300 300" role="img" aria-label="갈매미 관계도">${lines}${dots}</svg>` +
+      `<div class="rellegend">${ST.map(d => `<span><i style="height:${d.width}px;background:${d.color}"></i>${d.name}</span>`).join("")}</div>${text}`;
   }
   /** 시세 칸: 지금 값 + 지난 기록과 비교한 화살표 + 작은 그래프(20초마다 한 점, 최근 16분) */
   priceCell(k) {
@@ -312,6 +340,6 @@ export class Hud {
         `<div class="needs">${bar("만족도", u.sat ?? 50, (u.sat ?? 50) < 35 ? "low" : "")}${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("피로도", 100 - (n.energy ?? 100), (n.energy ?? 100) < 25 ? "low" : "")}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
         (u.satParts ? `<div class="small dim">만족도: ${u.satParts.map(([n, v]) => `${n} ${v > 0 ? "+" : ""}${v}`).join(" · ")}</div>` : "") +
         (w.economy ? `<div class="ichips"><span>🪙 ${u.coins || 0}</span><span>${bag ? "🎒 " + bag : "🎒 비었음"}</span><span>${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") : "🏠 집 없음"}</span></div>` : "") +
-        `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · 단짝: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)} · 누르면 접기 ▴</div>`; }
+        `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · ${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)} · 누르면 접기 ▴</div>`; }
   }
 }

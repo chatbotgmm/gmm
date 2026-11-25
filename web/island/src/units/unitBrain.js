@@ -10,6 +10,7 @@ import { PERSONA, BUILDINGS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
 import * as M from "./mind.js";
+import { areNeighbors } from "../world/wishes.js";
 import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
 import * as IM from "../world/improve.js";
@@ -453,8 +454,9 @@ function chooseNext(u, world, rnd) {
     if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
-    if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼
-      const h = world.housesForSale(u).filter(b => (u.coins || 0) >= (BUILDINGS[b.defId].price || 30)).sort((a, c) => BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
+    if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝 옆집이 있으면 그 집부터, 다음은 싼 집)
+      const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => areNeighbors(b, palHome) ? 1 : 0;
+      const h = world.housesForSale(u).filter(b => (u.coins || 0) >= (BUILDINGS[b.defId].price || 30)).sort((a, c) => nearPal(c) - nearPal(a) || BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
       if (h && startActivity(u, "market", world, rnd)) { u.shop = { kind: "house", b: h.id }; emote(u, "집 사러!"); return; }
     }
     const home = u.home && world.buildings.get(u.home), shop = world.shopB();
@@ -603,13 +605,14 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (u.state !== US.Visit) break;                                         // 길이 막혀 그만둠
       if (arrived || close) {
         if (!close) { setIdle(u, rnd, world); break; }                        // 가 보니 친구가 떠남
-        u.path = null; face(u, f.x, f.z); u.state = US.Greet; M.befriend(u, f, 1);         // 인사하면 서로 친해짐
+        u.path = null; face(u, f.x, f.z); u.state = US.Greet; const palUp = world.befriend(u, f, 1);         // 인사하면 서로 친해짐
         let swap = null;                                                         // 음식 사기(돈) 또는 물물교환
         if (world.economy && u.wantFood === "buy" && world.buyFoodFrom(u, f)) swap = `🛒 음식 🪙${world.foodPrice()}`;
         else if (world.economy) swap = world.barter(u, f);
         u.wantFood = null;
-        if (swap) emote(u, swap, 2.4); else emote(u, M.affinity(u, f) >= 4 ? pick(["♥♥", "보고 싶었어!", "단짝!"], rnd) : pick(["♪", "♥", "안녕!"], rnd));
-        if ([US.Idle, US.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = US.Greet; face(f, u.x, u.z); emote(f, swap ? "🤝" : "!");
+        const hi = swap || (M.affinity(u, f) >= 4 ? pick(["♥♥", "보고 싶었어!", "단짝!"], rnd) : pick(["♪", "♥", "안녕!"], rnd));
+        if (!palUp) emote(u, hi, swap ? 2.4 : undefined);                         // 사이가 한 단계 올랐을 땐 그 말풍선(친구!·단짝!)을 그대로 둠
+        if ([US.Idle, US.Wander].includes(f.state)) { setIdle(f, rnd, world, 1.2); f.state = US.Greet; face(f, u.x, u.z); if (!palUp) emote(f, swap ? "🤝" : "!");
           doOnce(f, "Jump", null, () => setIdle(f, rnd, world)); }
         doOnce(u, "Jump", null, () => done(u, 0.8 + (100 - (u.needs?.social ?? 100)) / 120, rnd, world));
         if (u.needs) u.needs.social = Math.min(100, u.needs.social + 35); if (f.needs) f.needs.social = Math.min(100, f.needs.social + 25);

@@ -15,7 +15,9 @@ import { WeatherViews } from "./render/weather.js";
 import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
-import { WISH_BY_ID, WISH_REWARD } from "./world/wishes.js";
+import { WISH_BY_ID, WISH_REWARD, wishText } from "./world/wishes.js";
+import { FRIEND_STAGES } from "./units/mind.js";
+import { josa } from "./util.js";
 import { RANK_REWARD } from "./world/rank.js";
 import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
@@ -155,11 +157,13 @@ function mount(w) {
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
   world.on("season", s => { tintGround(); hud?.status(`${SEASONS[s].icon} ${SEASONS[s].name}이에요 · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => { const w = WEATHER[e.kind]; hud?.status(`${w.icon} 날씨: ${w.name}${WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""}`); });
-  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${d.text}" (${d.hint})`); });
+  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`); });
+  world.on("friendship", ({ a, b, stage }) => { const d = FRIEND_STAGES[stage]; hud?.status(`${d.icon} ${josa(a.name, "과", "와")} ${josa(b.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요! (📱 관계도)`); if (stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
+  world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`));
   world.on("rank", ({ def }) => { hud?.status(`🏅 마을 등급이 올랐어요: ${def.icon} ${def.name}! ${def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", ({ u, item }) => hud?.status(`✨ ${u.name}이 바닷가에서 ${item.name}을 주웠어요 (📖 도감)`));
   world.on("fish", ({ u, fish }) => { if (fish.season) hud?.status(`🎣 ${u.name}이 제철 ${fish.name}을 낚았어요! (📖 도감)`); });
-  world.on("wishDone", ({ u, def }) => hud?.status(`♥ ${u.name}의 소원 "${def.text}"이 이루어졌어요!${world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""}`));
+  world.on("wishDone", ({ wish, u, def }) => hud?.status(`♥ ${u.name}의 소원 "${wishText(def, world, u, wish)}"이 이루어졌어요!${world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""}`));
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }

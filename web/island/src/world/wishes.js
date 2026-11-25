@@ -2,11 +2,19 @@
 // ok(w, u): 지금 이 소원을 빌 만한가 · done(w, u, wish): 이루어졌나(빈 뒤의 상태로 판단)
 import { BUILDINGS } from "../data/catalog.js";
 import { owns, allFurniture } from "./furniture.js";
+import { bestieOf } from "../units/mind.js";
 
 const builtAny = (w, test) => [...w.buildings.values()].some(b => test(BUILDINGS[b.defId], b) && w.isDone(b));
 const builtCount = (w, test) => [...w.buildings.values()].filter(b => test(BUILDINGS[b.defId], b) && w.isDone(b)).length;
 const hasJob = (w, job) => w.units.some(u => u.job === job);
 
+export const NEIGHBOR_DIST = 7;                                                   // 옆집: 두 집 문 사이가 이 칸 수 이하
+/** 두 집이 옆집인가(문 앞 칸 사이 거리로) */
+export const areNeighbors = (a, b) => !!a && !!b && a !== b && Math.hypot(a.door.x - b.door.x, a.door.z - b.door.z) <= NEIGHBOR_DIST;
+const homeB = (w, u) => (u?.home && w.buildings.get(u.home)) || null;
+const wishPal = (w, wish) => w.units.find(o => o.name === wish.base) || null;     // 옆집 소원의 단짝(이름으로 기억)
+/** 소원 글(단짝 이름이 들어가는 소원은 함수) */
+export const wishText = (d, w, u, wish) => typeof d.text === "function" ? d.text(w, u, wish) : d.text;
 export const WISH_REWARD = 10;                                                    // 축하금(공식은행이 새로 찍음)
 export const WISHES = [
   { id: "market", icon: "🐚", text: "시장이 있으면 좋겠어요", hint: "🪚 목수가 시장을 지어요",
@@ -38,5 +46,12 @@ export const WISHES = [
     ok: (w, u) => w.rank >= 1 && !!u.home && !builtAny(w, d => d.power), done: w => builtAny(w, d => d.power) },
   { id: "giant", icon: "🏯", text: "내 몸에 맞는 큰 집이 필요해요", hint: "🔨 자이언트의 집",
     ok: (w, u) => u.name === "자이언트" && !u.home, done: (w, u) => !!u.home },
+  // 단짝 옆집: 단짝이 있고 둘 중 하나라도 아직 집이 없을 때(집은 한 번 사면 못 옮기니까). base = 단짝 이름.
+  // lost: 이제 이룰 수 없으면(단짝이 떠났거나 둘 다 먼 집을 삼) 조용히 접음.
+  { id: "neighbor", icon: "💞", text: (w, u, wish) => `${wish?.base ?? "단짝"} 옆집에 살고 싶어요`, hint: `단짝 집 가까이(${NEIGHBOR_DIST}칸 안)에 집을 지어 주세요`,
+    ok: (w, u) => { const f = bestieOf(u, w.units); return !!f && !!w.bankB() && (!u.home || !f.home); },
+    base: (w, u) => bestieOf(u, w.units)?.name ?? null,
+    done: (w, u, wish) => areNeighbors(homeB(w, u), homeB(w, wishPal(w, wish))),
+    lost: (w, u, wish) => { const f = wishPal(w, wish); return !f || (!!u.home && !!f.home && !areNeighbors(homeB(w, u), homeB(w, f))); } },
 ];
 export const WISH_BY_ID = Object.fromEntries(WISHES.map(x => [x.id, x]));

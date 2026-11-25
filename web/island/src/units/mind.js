@@ -53,11 +53,49 @@ export function favorite(u) {
   return best;
 }
 
+// 사이 단계: 호감이 min 이상이면 그 단계(기준은 여기 한 곳에만 둠). 선 색·굵기는 📱 관계도에서 씀.
+export const FRIEND_STAGES = [
+  { name: "서먹", icon: "🙂", min: -Infinity, color: "#b9a88a", width: 1.5 },
+  { name: "친구", icon: "🧡", min: 3, color: "#f0a04b", width: 3 },
+  { name: "단짝", icon: "💞", min: 7, color: "#e0573e", width: 5 },
+];
+/** 호감 값 → 사이 단계 번호(0 서먹 · 1 친구 · 2 단짝) */
+export const friendStage = v => { let s = 0; FRIEND_STAGES.forEach((d, i) => { if ((v || 0) >= d.min) s = i; }); return s; };
+/** 서로 친해짐(또는 멀어짐). 둘 사이 단계가 올랐으면 새 단계 번호를, 아니면 0을 돌려줌. */
 export function befriend(a, b, amt) {
+  const before = friendStage(affinity(a, b));
   a.friends[b.unitId] = clamp((a.friends[b.unitId] || 0) + amt, -5, 10);
   b.friends[a.unitId] = clamp((b.friends[a.unitId] || 0) + amt, -5, 10);
+  const after = friendStage(affinity(a, b));
+  return after > before ? after : 0;
 }
 export const affinity = (a, b) => a.friends?.[b.unitId] || 0;
+/** 이 갈매미의 단짝(여럿이면 호감이 가장 높은 쪽), 없으면 null */
+export function bestieOf(u, units) {
+  const f = bestFriend(u, units);
+  return f && friendStage(affinity(u, f)) >= 2 ? f : null;
+}
+/** 마을의 단짝 쌍 수 */
+export function bestiePairs(units) {
+  let n = 0;
+  for (let i = 0; i < units.length; i++) for (let k = i + 1; k < units.length; k++) if (friendStage(affinity(units[i], units[k])) >= 2) n++;
+  return n;
+}
+/** 관계도: 갈매미를 원 위에 고르게 놓고(한 마리면 가운데), 호감이 0보다 큰 쌍을 선으로 이음. size = 그림 한 변, pad = 가장자리 여백 */
+export function relationGraph(units, size = 300, pad = 52) {
+  const c = size / 2, r = units.length > 1 ? c - pad : 0;
+  const nodes = units.map((u, i) => { const a = -Math.PI / 2 + i / Math.max(1, units.length) * Math.PI * 2; return { u, name: u.name, x: c + Math.cos(a) * r, y: c + Math.sin(a) * r }; });
+  const links = [];
+  for (let i = 0; i < units.length; i++) for (let k = i + 1; k < units.length; k++) {
+    const v = affinity(units[i], units[k]); if (v > 0) links.push({ a: i, b: k, v, stage: friendStage(v) });
+  }
+  return { nodes, links };
+}
+/** 저장용: 호감을 이름으로(불러올 때 id가 달라져도 되게) · 불러오기: 이름 → 지금 id(마을에 없는 갈매미는 버림) */
+export const friendsToNames = (u, units) => Object.fromEntries(units.filter(o => o !== u && u.friends?.[o.unitId]).map(o => [o.name, u.friends[o.unitId]]));
+export function friendsFromNames(u, saved, units) {
+  for (const [name, v] of Object.entries(saved || {})) { const o = units.find(x => x.name === name); if (o && o !== u && Number.isFinite(v)) u.friends[o.unitId] = clamp(v, -5, 10); }
+}
 export function bestFriend(u, units) {
   let best = null, bv = 0.5;
   for (const o of units) if (o !== u && affinity(u, o) > bv) { bv = affinity(u, o); best = o; }
