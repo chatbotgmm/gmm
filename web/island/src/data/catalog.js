@@ -25,11 +25,11 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {
-    id: "cafe", builtBy: "carpenter", rank: 1, cost: { wood: 2, stone: 1 }, tier: 1, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "cafe", builtBy: "carpenter", rank: 1, cost: { wood: 2, stone: 1 }, tier: 1, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 3.0, asset: "assets/props/cafe_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4, d: 2.55 },   // 줄무늬 차양·커피잔 카페(사용자 제공, 문 +x → +z). 비율 그대로 — 5×3칸에 꽉 채우면 높이 약 3.5 m로 2층집(3.3 m)보다 높아져서 폭 3.7 m·깊이 2.4 m·높이 약 3.0 m로(양옆 빈자리는 그대로 둠)
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
   shop: {
-    id: "shop", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 2.55, asset: "assets/suburban/building-type-b.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "shop", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 3.0, asset: "assets/props/shop_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4, d: 2.75 },   // 큰 나무 두짝문·날개 지붕 잡화점(사용자 제공, 문 +x → +z). 비율 그대로 — 5×3칸에 꽉 채우면 높이 약 3.3 m로 2층집과 같아져서 폭 3.7 m·깊이 2.6 m·높이 약 3.0 m로(양옆 빈자리는 그대로 둠)
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
