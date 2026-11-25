@@ -23,12 +23,12 @@ export class InstancePool {
   }
   groupFor(m) {
     let g = this.groups.find(x => x.geo === m.geometry && x.main.material === m.material);
-    if (!g) { g = { geo: m.geometry, ents: [], main: null, shadow: null, cap: 0, nS: 0, dirty: true, cast: m.castShadow, receive: m.receiveShadow }; this.alloc(g, m.material, 16); this.groups.push(g); }
+    if (!g) { g = { geo: m.geometry, ents: [], main: null, shadow: null, cap: 0, nS: 0, dirty: true, cast: m.castShadow, receive: m.receiveShadow, order: m.renderOrder }; this.alloc(g, m.material, 16); this.groups.push(g); }
     return g;
   }
   alloc(g, mat, cap) {
     for (const k of ["main", "shadow"]) {
-      const old = g[k], im = new THREE.InstancedMesh(g.geo, old ? old.material : mat, cap); im.count = 0; im.visible = false; im.frustumCulled = false; im.name = `instances-${k}`;
+      const old = g[k], im = new THREE.InstancedMesh(g.geo, old ? old.material : mat, cap); im.count = 0; im.visible = false; im.frustumCulled = false; im.name = `instances-${k}`; im.renderOrder = g.order;
       if (old) { this.root.remove(old); old.dispose(); }
       this.root.add(im); g[k] = im;
     }

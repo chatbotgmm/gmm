@@ -35,7 +35,12 @@ export class BuildingViews {
       holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.2).applyMatrix4(holder.matrixWorld);
       const hit = new THREE.Raycaster(o, new THREE.Vector3(0, -1, 0)).intersectObject(model, true)[0]; if (hit) b.seatY = hit.point.y;
     }
-    v.height = new THREE.Box3().setFromObject(model).max.y + 0.35;                // 🐦 표시는 실제 지붕 위에
+    const box = new THREE.Box3().setFromObject(model); v.height = box.max.y + 0.35;   // 🐦 표시는 실제 지붕 위에
+    if (def.asset) {                                                                // 밑동 그늘: 건물·소품이 땅에 떠 보이지 않게 둘레에 옅은 그늘 판(모두 묶어 그리기 1번, 그림자를 끈 설정에서도 보임)
+      const g = v.ground = new THREE.Mesh(GROUND_GEO, groundShadeMat()); g.renderOrder = 1; g.userData.noToon = true;
+      g.position.set((box.min.x + box.max.x) / 2, holder.position.y + 0.025, (box.min.z + box.max.z) / 2); g.scale.set((box.max.x - box.min.x) * 1.4, 1, (box.max.z - box.min.z) * 1.4);
+      this.scene.add(g); poolFor(this.scene).add(g);
+    }
   }
   /** 공사 중인 건물은 진행만큼 아래에서부터 솟아오르고, 반투명한 비계 상자가 둘러싼다. */
   updateConstruction(dt, focus = null) {
@@ -66,7 +71,7 @@ export class BuildingViews {
       if (v.glow) v.glow.userData.on = on;
     }
   }
-  remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); v.badge.remove(); this.views.delete(id); }
+  remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); if (v.ground) this.scene.remove(v.ground); v.badge.remove(); this.views.delete(id); }
   setHighlight(id) {                                                              // 철거 도구가 가리키는 건물을 붉게
     for (const [bid, v] of this.views) v.holder.traverse(o => { if (o.isMesh) {
       if (!o.userData.baseMat) o.userData.baseMat = o.material;
@@ -87,6 +92,20 @@ export class BuildingViews {
       placeEl(v.badge, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); showEl(v.badge, true);   // 글자·자리는 바뀔 때만 씀(util.js)
     }
   }
+}
+
+// 밑동 그늘 판: 가운데는 진하고(건물에 가려짐) 가장자리로 갈수록 옅어지는 둥근 네모
+const GROUND_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+let GROUND_MAT = null;
+function groundShadeMat() {
+  if (GROUND_MAT) return GROUND_MAT;
+  const N = 64, c = document.createElement("canvas"); c.width = c.height = N; const g = c.getContext("2d"), img = g.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = Math.abs((x + 0.5) / N * 2 - 1), w = Math.abs((y + 0.5) / N * 2 - 1), d = Math.pow(u ** 4 + w ** 4, 0.25), t = Math.min(1, Math.max(0, (d - 0.55) / 0.45)), i = (y * N + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.round(255 * (1 - t * t * (3 - 2 * t)));
+  }
+  g.putImageData(img, 0, 0);
+  return (GROUND_MAT = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0x1d2b14, transparent: true, opacity: 0.34, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
 }
 
 /** 계단 모델: 문 쪽(+z)이 입구, -z로 올라감. 디딤판 높이는 World.stairStep과 같은 식. 바닥에서부터 꽉 찬 돌계단. */
