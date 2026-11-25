@@ -180,6 +180,48 @@
     .apps { grid-template-columns: repeat(4, 1fr); gap: 10px 4px; }   /* 휴대폰: 앱이 14개라 네 줄로(작은 화면에서도 밀지 않고 한눈에) */
     #minimap canvas { width: 120px; height: 120px; }
   }
+  /* ===== 디자인 토큰(UI 개편 1a): 값을 한곳에 모아 둠. 이 블록만으로는 화면이 바뀌지 않아요(아직 아무도 안 씀 + 기존 5변수는 같은 값의 별칭) ===== */
+  :root {
+    /* 배율: 나중에 JS가 --ui-auto(창 크기)·--ui-user(설정)를 넣음. 지금은 1 */
+    --ui-auto: 1; --ui-user: 1; --ui-scale: calc(var(--ui-auto) * var(--ui-user)); --u: calc(1px * var(--ui-scale));
+    /* 색: 따뜻한 크림 + 주황 방향은 그대로, 값만 통일 */
+    --c-sky: #cfeaf3; --c-ink: #2f3a44; --c-ink-2: #5c6772; --c-muted-old: #6b7783;
+    --c-surface: #fffaf2; --c-surface-2: #f4ead9; --c-btn: #fff; --c-panel: rgba(255,255,255,0.88); --c-hud: rgba(255,250,242,.94);
+    --c-line: #eadfcb; --c-line-strong: #e3d6c0;
+    --c-accent: #e0782b;            /* 아이콘·📱 버튼처럼 글자가 안 올라가는 곳 */
+    --c-accent-strong: #b85a14;     /* 흰 글자가 올라가는 주요 버튼 배경 · 켜짐 테두리 · 진행 막대 */
+    --c-accent-press: #9c4a0e;      /* 주요 버튼 누름·올려 둠 */
+    --c-accent-soft: #fde6d2; --c-accent-soft-2: #fbd7b8;   /* 켜짐(토글) 바탕 */
+    --c-on-accent: #fff;
+    --c-danger: #c0392b; --c-danger-press: #a32e22; --c-danger-soft: #fde3dd; --c-danger-ink: #a8322a;
+    --c-good: #6cb85a; --c-good-strong: #2e7d4f; --c-info: #2f6fb3;
+    --c-warm: #fff4d6; --c-warm-ink: #8a5a00; --c-peach: #fbe3cf; --c-stamp: #fff6ee;
+    --c-scrim: rgba(20,30,40,.3); --c-scrim-2: rgba(20,30,40,.4);
+    --c-focus: #1b5fd1; --c-focus-inner: #fff;
+    /* 간격(4 기반) + HUD 기본 틈 */
+    --s-1: calc(4*var(--u)); --s-2: calc(8*var(--u)); --s-3: calc(12*var(--u)); --s-4: calc(16*var(--u)); --s-5: calc(24*var(--u)); --s-6: calc(32*var(--u));
+    --gap: calc(6*var(--u));
+    /* 반경 */
+    --r-xs: calc(4*var(--u)); --r-sm: calc(8*var(--u)); --r-md: calc(12*var(--u)); --r-lg: calc(20*var(--u)); --r-pill: 999px;
+    /* 글자 6단계 + 아이콘 크기 */
+    --fs-cap: calc(12*var(--u)); --fs-sm: calc(13*var(--u)); --fs-body: calc(14*var(--u)); --fs-title: calc(17*var(--u)); --fs-h: calc(21*var(--u)); --fs-display: calc(28*var(--u));
+    --fs-icon: calc(20*var(--u)); --fs-icon-lg: calc(26*var(--u)); --fs-icon-xl: calc(34*var(--u));
+    --lh-body: 1.5; --lh-tight: 1.25;
+    /* 누르는 칸 크기(2단계부터 씀) */
+    --hit: calc(32*var(--u)); --hit-sm: calc(28*var(--u)); --hit-gap: calc(6*var(--u));
+    /* 그림자 3단계 */
+    --e-1: 0 1px 3px rgba(40,30,10,.16); --e-2: 0 3px 10px rgba(40,30,10,.20); --e-3: 0 10px 30px rgba(40,30,10,.26);
+    /* 층(아래 → 위). 월드 라벨 < 방 터치 < 방 말풍선 < HUD < 십자선 < 방 판 < 문맥 버튼(📱·당기기·칠하기·집 카드) < 확인 막대 < 시트(도감·폰) < 편지 모달 < 알림 < 툴팁 < 로딩 */
+    --z-overlay: 0; --z-roomtouch: 5; --z-roombubble: 8; --z-hud: 10; --z-cross: 12; --z-room: 15; --z-context: 20; --z-editbar: 30;
+    --z-sheet: 40; --z-modal: 50; --z-toast: 60; --z-tip: 70; --z-loading: 100;
+    /* 움직임 */
+    --t-fast: 120ms; --t-med: 200ms; --ease: cubic-bezier(.2,.8,.2,1);
+    /* 울트라와이드용 HUD 좌우 안쪽 여백(5단계에서 씀) */
+    --hud-inset-x: 0px;
+    /* 기존 변수 5개는 지우지 않고 별칭으로(JS·인라인이 쓸 수 있음) */
+    --bg: var(--c-sky); --ink: var(--c-ink); --panel: var(--c-panel); --accent: var(--c-accent); --muted: var(--c-muted-old);
+  }
+  @media (prefers-reduced-motion: reduce) { :root { --t-fast: 0ms; --t-med: 0ms; } }
 </style>
 </head>
 <body>
