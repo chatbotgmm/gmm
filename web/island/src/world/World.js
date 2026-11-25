@@ -261,7 +261,7 @@ export class World {
    *  b가 갈매미 주문 공사(b.order)면 금고가 아니라 주문한 갈매미 돈에서(payOrder), 다 지었으면 남은 돈을 돌려줌 */
   payWage(u, b = null) {
     if (!this.economy || !u) return;
-    if (b?.order) { const n = this.payOrder(b, E.WAGE); u.coins = (u.coins || 0) + n; if (this.isDone(b)) this.settleOrder(b); return; }
+    if (b?.order || b?.orderBy != null) { const n = this.payOrder(b, E.WAGE); u.coins = (u.coins || 0) + n; if (b.order && this.isDone(b)) this.settleOrder(b); return; }   // 이미 정산된 주문 공사(orderBy)의 마지막 품삯도 금고가 아니라 주문한 갈매미 지갑에서
     this.settleOwed();
     if (this.bank.vault >= E.WAGE && !(u.wageOwed > 0)) { this.bank.vault -= E.WAGE; this.bank.wages += E.WAGE; this.led("wages", E.WAGE); u.coins = (u.coins || 0) + E.WAGE; this.checkLow(); return; }
     u.wageOwed = (u.wageOwed || 0) + E.WAGE; this.bank.owed += E.WAGE;
@@ -279,7 +279,7 @@ export class World {
   openOrder(b, u, cost) { cost = Math.max(0, Math.min(cost, u.coins || 0)); u.coins -= cost; b.order = { by: u.unitId, left: cost }; }
   /** 주문 공사에서 n을 냄: 맡긴 돈 먼저, 모자라면 주문한 갈매미 지갑에서(있는 만큼). 실제로 낸 돈을 돌려줌 */
   payOrder(b, n) {
-    const o = b.order; if (!o || !(n > 0)) return 0;
+    const o = b.order || (b.orderBy != null ? { by: b.orderBy, left: 0 } : null); if (!o || !(n > 0)) return 0;   // 정산이 끝난 주문(orderBy)은 맡긴 돈 0 → 지갑에서
     let paid = Math.min(n, o.left); o.left -= paid;
     if (paid < n) { const by = this.units.find(x => x.unitId === o.by), more = by ? Math.min(n - paid, Math.max(0, by.coins || 0)) : 0; if (more) { by.coins -= more; paid += more; } }
     if (paid < n) o.unpaid = (o.unpaid || 0) + (n - paid);                    // 거의 안 생김(맡긴 돈에 여유를 둠): 그만큼 덜 받음, 금고는 대신 내지 않음
@@ -294,7 +294,7 @@ export class World {
   }
   /** 주문 끝(다 지음·철거): 남은 맡긴 돈을 주문한 갈매미에게 돌려줌(그 갈매미가 없으면 금고로) */
   settleOrder(b) {
-    const o = b.order; if (!o) return; b.order = null;
+    const o = b.order; if (!o) return; b.order = null; b.orderBy = o.by;       // orderBy: 정산 뒤에 치르는 품삯(다 짓고 마지막 바퀴가 끝나기 전에 날이 바뀐 경우)도 금고가 내지 않게
     if (!(o.left > 0)) return; const by = this.units.find(x => x.unitId === o.by);
     if (by) by.coins = (by.coins || 0) + o.left; else this.deposit(o.left);
   }

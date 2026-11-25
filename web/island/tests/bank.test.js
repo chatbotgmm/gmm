@@ -336,3 +336,19 @@ test("갈매미 주문 장식: 돈이 없으면 고치기 계획에 장식 주�
   b2.hits = b2.need; back.time = NEWS_DAY_SECS + 1; back.stepBank();
   assert.equal(b2.order, null); assert.ok(m2.coins >= mini.coins + 12 - BK.TAX_CAP, "맡긴 12를 돌려받음(그날 세금은 따로)");
 });
+
+test("갈매미 주문 장식: 다 지은 뒤 마지막 품삯 전에 날이 바뀌어 정산돼도(stepBank) 그 품삯은 금고가 아니라 주문한 갈매미 지갑에서(검토 회귀)", () => {
+  const { w, mini, boss } = town(50), h = readyHouse(w);
+  mini.coins = 30; boss.coins = 0; const deco = orderDeco(w, h, seededRandom(1), mini);
+  while (!w.isDone(deco)) w.hammer(deco, boss);                                // 망치질로 다 지음(마지막 바퀴 품삯은 아직)
+  assert.deepEqual(deco.order, { by: mini.unitId, left: 12 });
+  nextDay(w); assert.equal(deco.order, null, "날이 바뀌며 정산"); assert.equal(deco.orderBy, mini.unitId);
+  const v = w.bank.vault, wg = w.bank.wages, m = mini.coins, bc = boss.coins;
+  w.payWage(boss, deco);
+  assert.equal(w.bank.vault, v, "금고는 그대로"); assert.equal(w.bank.wages, wg); assert.equal(w.bank.owed, 0);
+  assert.equal(mini.coins, m - E.WAGE, "주문한 갈매미가 냄"); assert.equal(boss.coins, bc + E.WAGE);
+  // 주문한 갈매미 돈이 없으면 덜 받음(금고는 대신 내지 않음, 밀리지도 않음)
+  mini.coins = 0; w.payWage(boss, deco); assert.equal(w.bank.vault, v); assert.equal(boss.coins, bc + E.WAGE); assert.equal(boss.wageOwed || 0, 0);
+  // 플레이어가 놓은 건물은 그대로 금고에서
+  const hs = place(w, "house").building, v2 = w.bank.vault; w.payWage(boss, hs); assert.equal(w.bank.vault, v2 - E.WAGE);
+});
