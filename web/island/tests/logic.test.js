@@ -1222,3 +1222,15 @@ test("정(월드): 간직한 것은 안 팔고, 선물하면 하나 줄고 정·
   const w3 = World.fromJSON(j, seededRandom(1)), g3 = w3.units.find(u => u.name === "황금");
   assert.deepEqual([g3.bond, g3.bondGifts, g3.petDay, g3.petN], [0, 0, 0, 0]); assert.deepEqual(w3.keep, {}); assert.equal(w3.pet(g3).ok || g3.insideBuildingId != null, true);
 });
+
+test("정(월드): 간직하던 것의 마지막 하나를 선물하면 간직 표시도 지워짐(남아 있으면 그대로) → 나중에 얻은 것은 다시 팔림", () => {
+  const w = World.create(7, seededRandom(33)), merchant = w.units.find(u => u.job === "merchant"), u = w.units[0];
+  Object.assign(w.items, { pearl: 2 }); w.treasures.tuna = 1; w.toggleKeep("pearl"); w.toggleKeep("tuna");
+  w.giveGift(u, "pearl"); assert.equal(w.keep.pearl, true, "하나 남았으면 그대로");
+  w.giveGift(u, "pearl"); w.giveGift(u, "tuna"); assert.equal(w.keep.pearl, undefined); assert.equal(w.keep.tuna, undefined);
+  // 답례로 받은 유리병 편지(자동으로 간직)를 다시 선물해 버렸다면, 그 뒤에 주운 편지는 예전처럼 상인이 팖
+  const v = w.units[1]; w.items.bottle = 0; delete w.keep.bottle;
+  const got = w.addBond(v, 5); assert.equal(got[0].gift.id, "bottle"); assert.equal(w.keep.bottle, true); assert.equal(w.items.bottle, 1);
+  w.giveGift(v, "bottle"); assert.equal(w.keep.bottle, undefined);
+  w.items.bottle = 3; w.trade(merchant); assert.equal(w.items.bottle, 0);
+});

@@ -427,7 +427,8 @@ export class World {
   giveGift(u, id) {
     const item = giftDef(id), bag = item?.kind === "fish" ? this.treasures : this.items;
     if (!u || !item || !this.units.includes(u) || !((bag[id] || 0) > 0)) return null;
-    bag[id]--; const tier = giftTier(u.name, id), t = GIFT_TIERS[tier];
+    bag[id]--; if (!bag[id]) delete this.keep[id];                            // 마지막 하나를 건넸으면 간직 표시도 지움(가방에 없으면 끌 단추가 안 보이므로)
+    const tier = giftTier(u.name, id), t = GIFT_TIERS[tier];
     if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + t.fun);
     emote(u, t.say, 2.4); this.emit("gift", { u, item, tier });
     const thanks = this.addBond(u, t.bond);

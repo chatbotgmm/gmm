@@ -69,7 +69,7 @@ export class Hud {
     // 선물·쓰다듬기(따라가기 카드 위): 카드는 매 프레임 다시 그리므로 버튼은 따로 둠
     this.bondBar = document.getElementById("bondBar"); this.giftPick = document.getElementById("giftPick"); this.giftBtn = document.getElementById("giftBtn"); this.petBtn = document.getElementById("petBtn");
     this.giftBtn.onclick = () => { this.giftPick.hidden = !this.giftPick.hidden; if (!this.giftPick.hidden) this.drawGifts(); };
-    this.petBtn.onclick = () => { if (this.follow) this.onPet?.(this.follow); };
+    this.petBtn.onclick = () => { if (!this.follow) return; this.onPet?.(this.follow); this.showBond(this.follow); };   // 남은 횟수는 바로 고침(글자판은 1초에 5번만 그림)
     this.giftPick.onclick = e => { const b = e.target.closest?.("[data-gift]"), u = this.follow; if (!b || !u) return; this.onGift?.(u, b.dataset.gift); this.drawGifts(); };
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
     document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
@@ -401,7 +401,7 @@ export class Hud {
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
     // 따라가는 갈매미 정보
-    const u = this.follow; this.info.hidden = !u; this.showBond(u);
+    const u = this.follow; this.info.hidden = !u; if (!u) this.showBond(null);
     if (u) { const job = JOBS[u.job], r = RARITY[u.rarity];
       const n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
       // 따라가기 카드: 이름·직업 배지 / 지금 하는 일 / 욕구 막대 4개 / 돈·가방·집 칩 (긴 설명은 뺌)
@@ -410,13 +410,14 @@ export class Hud {
       const full = u.full ?? 80, note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
       const bag = E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${E.ITEM_ICON[k]}${u.inv[k]}`).join(" ");
       if (this.infoOpen === undefined) { this.infoOpen = !matchMedia("(max-width: 640px)").matches; this.info.onclick = () => { this.infoOpen = !this.infoOpen; }; }   // 휴대폰은 접힌 채(누르면 펼침)
-      if (!this.infoOpen) { this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${doing}</span><span class="hearts">${bondHearts(u.bond)}</span><span class="dim">😊${Math.round(u.sat ?? 50)} 🍗${Math.round(full)} ▾</span></div>`; this.info.classList.add("mini"); return; }
+      if (!this.infoOpen) { this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${doing}</span><span class="hearts">${bondHearts(u.bond)}</span><span class="dim">😊${Math.round(u.sat ?? 50)} 🍗${Math.round(full)} ▾</span></div>`; this.info.classList.add("mini"); this.showBond(u); return; }
       this.info.classList.remove("mini");
       this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="hearts" title="${BOND_STAGES[bondStage(u.bond)].name}">${bondHearts(u.bond)}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}</span></div>` +
         `<div class="doing">${doing}${note ? ` · <span class="warn">${note}</span>` : ""}</div>` +
         `<div class="needs">${bar("만족도", u.sat ?? 50, (u.sat ?? 50) < 35 ? "low" : "")}${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("피로도", 100 - (n.energy ?? 100), (n.energy ?? 100) < 25 ? "low" : "")}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
         (u.satParts ? `<div class="small dim">만족도: ${u.satParts.map(([n, v]) => `${n} ${v > 0 ? "+" : ""}${v}`).join(" · ")}</div>` : "") +
         (w.economy ? `<div class="ichips"><span>🪙 ${u.coins || 0}</span><span>${bag ? "🎒 " + bag : "🎒 비었음"}</span><span>${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") : "🏠 집 없음"}</span></div>` : "") +
-        `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · ${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)} · 누르면 접기 ▴</div>`; }
+        `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · ${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)} · 누르면 접기 ▴</div>`;
+      this.showBond(u); }                                                         // 카드를 그린 뒤에(카드 높이에 맞춰 바로 위에 놓음)
   }
 }
