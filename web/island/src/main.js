@@ -302,7 +302,17 @@ function keyCamera(dt) {
     .addScaledVector(right, (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0)).multiplyScalar(Math.max(4, off.length() * 0.6) * dt * (keys.has("Fast") ? 2.2 : 1));   // Shift = 빠르게
   t.add(mv); camera.position.copy(t).add(off);
 }
+// 한 프레임에서 오류가 나도 게임이 통째로 멈추지 않게: 오류는 기록하고(같은 오류는 5초에 한 번) 다음 프레임을 이어 감
+let frameErrAt = 0, frameErrMsg = "";
 function frame() {
+  try { frameBody(); }
+  catch (e) {
+    const now = performance.now(), msg = String(e?.message || e);
+    if (msg !== frameErrMsg || now - frameErrAt > 5000) { frameErrMsg = msg; frameErrAt = now; console.error("프레임 오류(계속 진행):", e); try { hud?.status("⚠️ 잠깐 문제가 있었지만 계속할게요"); } catch { /* 알림도 못 띄우면 넘어감 */ } }
+    requestAnimationFrame(frame);
+  }
+}
+function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   if (ready) for (let k = 0; k < simSpeed; k++) world.update(dt);                 // 불러오는 동안은 멈춤. 시간 배수(테스트)면 마을도 여러 번 돌림
