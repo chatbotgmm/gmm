@@ -296,7 +296,7 @@ export class RoomView {
           const m = v.lying ||= measureLying(v), len = m.zMax - m.zMin, fx = Math.sin(yaw), fz = Math.cos(yaw);
           const top = Math.max(-0.8, PILLOW_END - SHOULDER * len), shift = top - m.zMin;   // 머리 끝 z −0.8. 몸이 짧으면(미니) 어깨가 베개 바로 앞에 오게(이불이 베개를 덮지 않게)
           r.position.set(c.x + fx * shift, 0.52, c.z + fz * shift); r.rotation.set(-Math.PI / 2, yaw, 0, "YXZ");
-          const z0 = Math.max(-0.62, Math.min(top + SHOULDER * len, m.wingZ + shift - 0.1));   // 어깨(날개 뿌리 조금 앞)부터 덮음. 몸이 긴 자이언트는 날개가 머리 쪽에 붙어 있음
+          const z0 = Math.max(PILLOW_END - 0.03, Math.min(top + SHOULDER * len, m.wingZ + shift - 0.1));   // 어깨(날개 뿌리 조금 앞)부터 덮음(몸이 긴 자이언트는 날개가 머리 쪽). 베개 위는 안 덮음(미니 머리가 가려짐)
           const fit = { z0, zFeet: m.zMax + shift, peak: Math.max(0.04, m.yM - BLANKET_BASE + 0.03), halfW: m.xM, len };
           const hz = top + 0.18 * len; v.head = new THREE.Vector3(c.x + fx * hz, Math.max(m.headY, m.yM) + 0.12, c.z + fz * hz);   // 말풍선 자리(머리 위)
           if (!v.blanket || v.blanketFor !== o.id) { v.blanket?.parent?.remove(v.blanket); v.blanket = makeBlanket(f.colors?.[2] ?? 0x9fb7c9, fit); v.blanketFor = o.id; }
