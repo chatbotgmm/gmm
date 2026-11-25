@@ -908,3 +908,16 @@ test("집 사기: 단짝 옆집이 팔리면 더 싼 집보다 그 집을 먼저
   for (let i = 0; i < 600 && !a.shop; i++) w.update(0.1);
   assert.equal(a.shop?.b, nextDoor.id, "단짝 옆집을 사러 감");
 });
+
+test("친구 사이: 잠깐 멀어졌다 다시 같은 단계가 되면 또 알리지 않음(더 높은 단계는 알림)", async () => {
+  const M = await import("../src/units/mind.js");
+  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("미니");
+  const [a, b] = w.units, seen = []; w.on("friendship", e => seen.push(e.stage));
+  assert.equal(w.befriend(a, b, 3), 1); M.befriend(a, b, -0.6);                   // 친구가 됐다가 겁먹어 서먹으로
+  assert.equal(M.friendStage(M.affinity(a, b)), 0);
+  assert.equal(w.befriend(a, b, 1), 0, "다시 친구가 돼도 알림은 한 번만"); assert.deepEqual(seen, [1]);
+  assert.equal(w.befriend(a, b, 4), 2, "단짝은 처음이니 알림"); assert.deepEqual(seen, [1, 2]);
+  // 불러온 마을: 이미 단짝인 사이는 떨어졌다 돌아와도 조용히
+  const w2 = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1)), [c, d] = w2.units, seen2 = []; w2.on("friendship", e => seen2.push(e.stage));
+  assert.equal(w2.befriend(c, d, 1), 0); M.befriend(c, d, -3); assert.equal(w2.befriend(c, d, 3), 0); assert.deepEqual(seen2, []);
+});

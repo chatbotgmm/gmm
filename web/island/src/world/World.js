@@ -10,7 +10,7 @@ import { checkPlacement } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
-import { initMind, befriend, FRIEND_STAGES, friendsToNames, friendsFromNames } from "../units/mind.js";
+import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToNames, friendsFromNames } from "../units/mind.js";
 import { seededRandom } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
@@ -372,7 +372,9 @@ export class World {
   // ---- 친구 사이
   /** 서로 친해짐(amt만큼). 사이 단계가 오르면(서먹 → 친구 → 단짝) 둘 다 말풍선을 띄우고 알림. */
   befriend(a, b, amt) {
-    const stage = befriend(a, b, amt); if (!stage) return 0;
+    const top = (this.palTop ??= {}), key = [a.name, b.name].sort().join("|"), was = Math.max(top[key] ?? 0, friendStage(affinity(a, b)));
+    const stage = befriend(a, b, amt); top[key] = Math.max(was, stage);
+    if (stage <= was) return 0;                                                 // 겁먹어 잠깐 멀어졌다 다시 친해진 사이는 또 알리지 않음
     const d = FRIEND_STAGES[stage]; emote(a, `${d.icon} ${d.name}!`, 3); emote(b, `${d.icon} ${d.name}!`, 3);
     this.emit("friendship", { a, b, stage }); return stage;
   }

@@ -179,7 +179,7 @@ export class Hud {
     const w = this.world, us = w.units, body = document.getElementById("relBody"), ST = M.FRIEND_STAGES;
     if (!us.some(u => u.name === this.relSel)) this.relSel = null;
     const g = M.relationGraph(us), sel = us.findIndex(u => u.name === this.relSel);
-    const key = `${this.relSel}|${us.map(u => u.name).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
+    const key = `${this.relSel}|${us.map(u => u.name + u.job).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
     if (key === this.relKey && body.firstChild) return;                             // 바뀐 게 없으면 다시 안 그림(누르기가 끊기지 않게)
     this.relKey = key;
     body.onclick = e => { const t = e.target.closest?.("[data-gull]"); if (!t) return; this.relSel = this.relSel === t.dataset.gull ? null : t.dataset.gull; this.drawRelations(); };
