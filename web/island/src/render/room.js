@@ -13,6 +13,24 @@ import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 
 const ROOM_WALL_H = 2.4, ROOM_TAP_PX = 8;
+/** 이불: 침대(1×2칸, 베개 = −z) 위 누운 갈매미를 어깨 아래부터 덮는 천(머리는 베개 위로 나옴). 몸 위는 볼록, 양옆은 침대 밖으로 늘어짐, 발치는 납작. 원점 = 침대 가운데, 높이는 BLANKET_BASE 기준 */
+const BLANKET_BASE = 0.48;
+function makeBlanket(color) {
+  const g = new THREE.PlaneGeometry(1.0, 1.23, 20, 18); g.rotateX(-Math.PI / 2); g.translate(0, 0, 0.335);   // z −0.28(어깨) ~ 0.95(발치 끝). 머리는 밖으로
+  const pos = g.attributes.position, PEAK = 0.3;
+  const ss = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), ax = Math.abs(x) / 0.5;
+    const hump = ax < 0.84 ? Math.pow(Math.cos(ax / 0.84 * Math.PI / 2), 0.45) : 0, along = 1 - ss(0.0, 0.38, z);   // 몸 위(어깨~발)만 볼록, 그 뒤 발치는 납작
+    let y = 0.02 + (PEAK * along + 0.03) * hump + 0.012 * Math.sin(x * 17 + z * 6);
+    if (ax > 0.84) y = 0.02 - (ax - 0.84) / 0.16 * 0.2;                          // 침대 옆으로 늘어짐
+    if (z < -0.22) y += (-0.22 - z) * 0.35;                                       // 어깨 쪽 끝을 살짝 접어 올림
+    pos.setY(i, y);
+  }
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 0.95, side: THREE.DoubleSide })); m.castShadow = m.receiveShadow = true;
+  const grp = new THREE.Group(); grp.add(m); return grp;
+}
 /** 문 위 글씨(스프라이트) */
 function label(text) {
   const c = document.createElement("canvas"), x = c.getContext("2d"), f = 30; x.font = `bold ${f}px sans-serif`; const w = Math.ceil(x.measureText(text).width) + 24;
@@ -239,17 +257,22 @@ export class RoomView {
   play(v, key, speed = 1) { if (!v.acts?.[key] || v.cur === key) return; v.acts[v.cur]?.fadeOut(0.25); v.acts[key].reset().fadeIn(0.25).play(); v.acts[key].timeScale = speed; v.cur = key; }
   async syncGulls() {
     const w = this.world, b = this.b, levels = F.levels(b), inside = w.units.filter(u => u.insideBuildingId === b.id);
-    for (const [id, v] of this.gulls) if (!inside.some(u => u.unitId === id) && v.root?.parent) v.root.parent.remove(v.root);
+    for (const [id, v] of this.gulls) if (!inside.some(u => u.unitId === id)) { v.root?.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket); }
     let free = 0;
     for (const u of inside) {
       const v = await this.gullModel(u); if (!v.root || !this.isOpen) continue;
       const o = u.useFurni, li = o ? levels.findIndex(L => L.furniture.includes(o)) : 0;
-      if (li !== this.li) { if (v.root.parent) v.root.parent.remove(v.root); continue; }
+      if (li !== this.li) { if (v.root.parent) v.root.parent.remove(v.root); v.blanket?.parent?.remove(v.blanket); continue; }
       if (!v.root.parent) { this.root.add(v.root); this.toon.sweep(v.root); }
       const r = v.root; r.rotation.set(0, 0, 0);
+      if (v.blanket?.parent && !(o && FURNITURE[o.id].use === "sleep")) v.blanket.parent.remove(v.blanket);
       if (o) {
         const f = FURNITURE[o.id], sz = F.size(o.id, o.rot), c = this.cellCenter(o.x, o.z, sz), yaw = -o.rot * Math.PI / 2, use = f.use;
-        if (use === "sleep") { r.position.set(c.x, 0.52, c.z); r.rotation.set(-Math.PI / 2, yaw, 0, "YXZ"); this.play(v, "Idle", 0.35); }   // 머리가 베개(침대 뒤쪽 −z) 쪽, 천천히 숨쉬기          // 침대에 누워 새근새근(천천히 숨쉬기)
+        if (use === "sleep") {                                                     // 누워서 이불 덮고 자기: 머리가 베개에 오게 발치 쪽으로 조금 옮김
+          const fx = Math.sin(yaw), fz = Math.cos(yaw); r.position.set(c.x + fx * 0.22, 0.52, c.z + fz * 0.22); r.rotation.set(-Math.PI / 2, yaw, 0, "YXZ"); this.play(v, "Idle", 0.35);
+          if (!v.blanket || v.blanketFor !== o.id) { v.blanket?.parent?.remove(v.blanket); v.blanket = makeBlanket(f.colors?.[2] ?? 0x9fb7c9); v.blanketFor = o.id; }
+          v.blanket.position.set(c.x, BLANKET_BASE, c.z); v.blanket.rotation.y = yaw; if (!v.blanket.parent) { this.root.add(v.blanket); this.toon.sweep(v.blanket); }
+        }   // 머리가 베개(침대 뒤쪽 −z) 쪽, 천천히 숨쉬기          // 침대에 누워 새근새근(천천히 숨쉬기)
         else if (use === "sit") { r.position.set(c.x, f.id === "sofa" ? 0.36 : 0.42, c.z); r.rotation.y = yaw; this.play(v, "Sit"); }
         else { const fx = Math.sin(yaw), fz = Math.cos(yaw); r.position.set(c.x + fx * 0.75, 0, c.z + fz * 0.75); r.rotation.y = yaw + Math.PI; this.play(v, "Idle", 0.8); }   // 책장 앞에 서서 읽기
       } else {                                                                     // 쓸 가구가 없으면 빈자리에 서 있음
@@ -266,7 +289,7 @@ export class RoomView {
       const u = this.world.units.find(x => x.unitId === id), e = this.bubbleFor(id); seen.add(id);
       const show = !!(v.root?.parent && u && u.insideBuildingId === this.b.id && u.emoteT > 0 && u.emoteText); e.hidden = !show; if (!show) { e.dataset.t = ""; continue; }
       const lying = Math.abs(v.root.rotation.x) > 0.5; v.root.getWorldPosition(p);
-      if (lying) { p.y += 0.55; p.addScaledVector(new THREE.Vector3(-Math.sin(v.root.rotation.y), 0, -Math.cos(v.root.rotation.y)), 0.35); } else p.y += (v.root.rotation.x ? 0.9 : 1.05) + (v.cur === "Sit" ? 0 : 0.05);
+      if (lying) { p.y += 0.5; p.addScaledVector(new THREE.Vector3(-Math.sin(v.root.rotation.y), 0, -Math.cos(v.root.rotation.y)), 0.62); } else p.y += (v.root.rotation.x ? 0.9 : 1.05) + (v.cur === "Sit" ? 0 : 0.05);
       const dist = this.camera.position.distanceTo(p); p.project(this.camera); if (p.z > 1) { e.hidden = true; continue; }
       if (e.dataset.t !== u.emoteText) {
         e.dataset.t = u.emoteText; e.textContent = u.emoteText; const t = u.emoteText, think = t.startsWith("💭"), icon = [...t].length <= 2 || /^(…|zZ…|!\?)$/.test(t);
@@ -280,7 +303,8 @@ export class RoomView {
   bubbleFor(id) { let e = this.bubbles.get(id); if (!e) { e = document.createElement("div"); e.className = "emote"; e.hidden = true; this.bubbleBox.appendChild(e); this.bubbles.set(id, e); } return e; }
   update(dt) {
     if (!this.isOpen) return; this.controls.update(); this.cutWalls();
-    for (const v of this.gulls.values()) if (v.root?.parent) v.mixer.update(dt);
+    this.breath = (this.breath || 0) + dt;
+    for (const v of this.gulls.values()) { if (v.root?.parent) v.mixer.update(dt); if (v.blanket?.parent) v.blanket.scale.y = 1 + 0.04 * Math.sin(this.breath * 1.6); }   // 이불이 숨 쉬듯 오르내림
     this.drawBubbles();
     if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = 1; this.syncGulls(); }
     if (Math.abs(innerWidth / innerHeight - (this.lastAspect || 0)) > 0.01) this.fit();   // 화면을 돌리면 다시 맞춤
