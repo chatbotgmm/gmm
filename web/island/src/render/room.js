@@ -88,8 +88,8 @@ export class RoomView {
     this.touch.addEventListener("pointerup", e => { const p = this.press; this.press = null; if (p && p.id === e.pointerId && Math.hypot(e.clientX - p.x, e.clientY - p.y) < ROOM_TAP_PX) this.tap(e); });
     this.touch.addEventListener("pointermove", e => { if (e.pointerType === "mouse" && this.ghost && !this.press) this.hover(e); });
     addEventListener("keydown", e => { if (!this.isOpen) return; if (e.code === "KeyR") this.rotate(); if (e.code === "Escape") this.ghost || this.sel != null ? this.cancel() : this.close(); if (e.code === "Delete") this.stow(); });
-    this.ui.querySelector(".rexit").onclick = () => this.close();
-    for (const b of this.ui.querySelectorAll(".rtabs button")) b.onclick = () => { this.tab = b.dataset.tab; this.refreshUI(); };
+    for (const b of this.ui.querySelectorAll(".rexit")) b.onclick = () => this.close();   // 위 머리줄 + (세로 폰) 아래 탭 줄
+    for (const b of this.ui.querySelectorAll(".rtabs button[data-tab]")) b.onclick = () => { this.tab = b.dataset.tab; this.refreshUI(); };
   }
   get L() { return F.levels(this.b)[this.li] || F.levels(this.b)[0]; }
   /** 층 바꾸기(2층집·큰 집) */
@@ -255,13 +255,18 @@ export class RoomView {
     const owner = w.units.find(u => u.unitId === b.owner), inside = w.units.filter(u => u.insideBuildingId === b.id);
     this.ui.querySelector(".rtitle").textContent = `🏠 ${BUILDINGS[b.defId].name}${owner ? ` · 주인 ${owner.name}` : " · 주인 없음"} · 🛋 아늑함 ${F.comfort(b)}`;
     this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : "";
-    for (const t of this.ui.querySelectorAll(".rtabs button")) t.classList.toggle("on", t.dataset.tab === this.tab);
+    for (const t of this.ui.querySelectorAll(".rtabs button[data-tab]")) t.classList.toggle("on", t.dataset.tab === this.tab);
     const lvBox = this.ui.querySelector(".rlevels"), ls = F.levels(b); lvBox.innerHTML = "";
     if (ls.length > 1) ls.forEach((L, i) => { const bt = rel("button", i === this.li ? "on" : "", L.name); bt.onclick = () => this.setLevel(i); lvBox.appendChild(bt); });
     else lvBox.appendChild(rel("span", "dim", it.name));
     if (this.tab === "furniture") {
       const av = F.available(w, b), ids = Object.keys(av);
-      for (const id of ids) { const f = FURNITURE[id], bt = rel("button", this.ghost?.id === id && this.ghost.moving == null ? "on" : "", `${f.name} ×${av[id].n}`); bt.title = `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${av[id].from !== "stash" ? ` · ${roomFurniSource(av[id].item)}(마을 가방)` : ""}`; bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
+      for (const id of ids) {                                                        // 가구 카드: 색 · 이름 ×개수 · 크기 · 아늑함(글자로 — 툴팁에 기대지 않음)
+        const f = FURNITURE[id], bt = rel("button", "fcard" + (this.ghost?.id === id && this.ghost.moving == null ? " on" : "")), sw = rel("i", "fsw"), bag = av[id].from !== "stash";
+        sw.style.background = "#" + (f.colors?.[0] ?? 0xcccccc).toString(16).padStart(6, "0");
+        bt.append(sw, rel("b", "", `${f.name} ×${av[id].n}`), rel("small", "", `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${bag ? " · 🎒" : ""}`));
+        if (bag) bt.dataset.tip = `${roomFurniSource(av[id].item)}(마을 가방)`;
+        bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
       if (!ids.length) list.appendChild(rel("span", "dim", w.shopB() ? "놓을 가구가 없어요. 집주인이 돈이 모이면 잡화점에서 사 와요" : "놓을 가구가 없어요. 잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요 · 낚시·축제·도장 가게에서 얻은 가구도 놓을 수 있어요"));
     } else {
       const table = this.tab === "floor" ? FLOORS : WALLPAPERS, key = this.tab === "floor" ? "floor" : "wallpaper";
@@ -269,8 +274,9 @@ export class RoomView {
         bt.onclick = () => { it[key] = id; this.build(); this.refreshUI(); w.emit?.("furniture", { b }); }; list.appendChild(bt); }   // 바닥·벽지는 층마다
     }
     const add = (label, fn, cls = "") => { const bt = rel("button", cls, label); bt.onclick = fn; act.appendChild(bt); };
-    if (this.ghost) { add("✅ 놓기", () => this.commit(), this.ghostOk ? "go" : ""); add("↻ 돌리기", () => this.rotate()); add("✕ 취소", () => this.cancel()); }
-    else if (this.sel != null) { add("↔ 옮기기", () => this.startMove()); add("↻ 돌리기", () => this.rotate()); add("📦 치우기", () => this.stow()); add("✕", () => this.cancel()); }
+    // 행동 줄: 치우기는 왼쪽 끝에 따로, 주요 행동(놓기·옮기기)은 오른쪽 끝(엄지 쪽)
+    if (this.ghost) { add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("✅ 놓기", () => this.commit(), this.ghostOk ? "go" : ""); }
+    else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("↔ 옮기기", () => this.startMove(), "go"); }
   }
   // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)
   async gullModel(u) {

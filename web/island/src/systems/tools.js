@@ -1,5 +1,5 @@
 // 도구(입력): 둘러보기 / 바닥 칠하기 / 건물 짓기(고스트 미리보기) / 철거.
-// 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 시야 돌리기, 휠·두 손가락은 확대·축소.
+// 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 화면 옮기기(건설 모드는 고정 쿼터뷰라 돌리기 없음), 휠·두 손가락은 확대·축소.
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ, toGridX, toGridZ, WATER_Y } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
@@ -59,10 +59,11 @@ export class Tools {
   /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
   get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld && !this.cross; }   // 십자선 모드: 한 손가락은 화면 옮기기, 칠하기는 버튼으로
   /** 조작 배치: 도구 중에는 한 손가락·왼쪽 = 도구, 두 손가락 = 돌리기·확대, 오른쪽 = 돌리기, 가운데 = 확대.
-   *  둘러보기(또는 ✋)에서는 한 손가락 = 화면 옮기기, 두 손가락 = 돌리기·확대 / 마우스 왼쪽 = 돌리기, 오른쪽 = 옮기기. */
+   *  둘러보기(또는 ✋)에서는 한 손가락 = 화면 옮기기, 두 손가락 = 돌리기·확대 / 마우스 왼쪽 = 돌리기, 오른쪽 = 옮기기.
+   *  건설 모드의 고정 쿼터뷰(viewLock, main.js가 켬)에서는 돌리기가 없음: 오른쪽 = 옮기기, ✋·스페이스 + 왼쪽 = 옮기기, 두 손가락 = 옮기기·확대. */
   applyControls() {
-    const t = this.toolActive, M = THREE.MOUSE, T = THREE.TOUCH;
-    this.controls.mouseButtons = { LEFT: t ? null : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t ? M.ROTATE : M.PAN };
+    const t = this.toolActive, q = !!this.viewLock, M = THREE.MOUSE, T = THREE.TOUCH;
+    this.controls.mouseButtons = { LEFT: t ? null : q ? M.PAN : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t && !q ? M.ROTATE : M.PAN };
     this.controls.touches = { ONE: t ? null : T.PAN, TWO: null };                           // 터치: 한 손가락 = 옮기기, 두 손가락(비틀기 돌리기·벌려 확대)은 twoFinger.js
     this.dom.style.cursor = this.mode === "view" ? "" : t ? "crosshair" : "grab";
   }
@@ -271,7 +272,7 @@ export class Tools {
       this.ghostFloor.scale.set(def.footprint.w, def.footprint.d, 1); this.ghostFloor.position.y = 0.04;
       this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
       this.doorMark.visible = true; this.doorMark.position.set(toWorldX(r.door.x + 0.5), y + 0.35, toWorldZ(r.door.z + 0.5));
-      this.onStatus(!r.ok ? r.reason : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 누르면 옮김 · R 돌리기)` : `${def.name} · 눌러서 자리 정하기 · R 돌리기`);
+      this.onStatus(!r.ok ? r.reason : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 누르면 옮김 · ↻ 돌리기)` : `${def.name} · 눌러서 자리 정하기 · R 돌리기`);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);

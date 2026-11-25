@@ -35,6 +35,9 @@ const hex = n => "#" + n.toString(16).padStart(6, "0");
 // 화면 모양: 가로 폰(높이 480 미만) → 세로 폰(폭 600 미만) → 중간(1200 미만) → 넓음 순서로 판정. CSS는 html[data-form]을 봄(같은 판정을 한곳에서)
 const HUD_FORM_QUERIES = [["landscape", "(max-height: 479px) and (orientation: landscape)"], ["portrait", "(max-width: 599px)"], ["medium", "(max-width: 1199px)"]];
 const hudFormNow = () => (HUD_FORM_QUERIES.find(([, q]) => matchMedia(q).matches) || ["wide"])[0];
+// 건설 갤러리의 분류(화면에서만 쓰는 표 — 건물 정의에는 분류가 없음)
+const BUILD_CATS = [["all", "전체"], ["home", "집"], ["work", "시설"], ["deco", "장식"], ["road", "교통"]];
+const buildCatOf = d => d.house ? "home" : d.deco ? "deco" : d.stairs || d.bridge || d.pier ? "road" : "work";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 export class Hud {
@@ -56,10 +59,25 @@ export class Hud {
     this.lastEdit = "build";
     document.getElementById("editBtn").onclick = () => this.modeBtns.find(b => b.dataset.mode === this.lastEdit)?.click();
     this.sub = sub;
-    // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 돌리고 옮김(도구는 잠시 멈춤)
-    this.handBtn = this.toolBtn("hand", "✋", "화면 이동", "이동"); this.handBtn.dataset.tip = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
-    this.handBtn.onclick = () => tools.setHand(!tools.hand); bar.appendChild(this.handBtn);
-    tools.onHand = on => this.handBtn.classList.toggle("on", on);
+    // ---- 보조 줄(#ebar): 분류 칩(건물 짓기) · 철거 안내 · 보조 버튼(✋ 화면 이동 · ↶ ↷ · 🎯 십자선 · ⟲ ⟳ 화면 돌리기). 한 번만 만들고 도구에 따라 보이기만 바꿈
+    const ebar = document.getElementById("ebar"), aux = el("div", "eaux");
+    const auxBtn = (id, icon, label, tip) => { const b = el("button", "abtn", icon); if (id) b.id = id; b.setAttribute("aria-label", label); b.dataset.tip = tip; aux.appendChild(b); return b; };
+    this.buildCat = "all"; this.ecats = el("div", "ecats"); this.ecats.setAttribute("role", "group"); this.ecats.setAttribute("aria-label", "건물 분류");
+    this.catBtns = BUILD_CATS.map(([id, label]) => { const b = el("button", "", label); b.dataset.cat = id; b.onclick = () => { this.buildCat = id; this.sub.scrollLeft = this.sub.scrollTop = 0; this.filterBuild(); }; this.ecats.appendChild(b); return b; });
+    this.ehint = el("span", "ehint", "🧹 누른 건물이 바로 사라져요 · 되돌릴 수 없어요");
+    // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 옮김(도구는 잠시 멈춤)
+    this.handBtn = auxBtn("", "✋", "화면 이동", "켜면 드래그로 화면을 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 끌거나 오른쪽 버튼으로, 휴대폰은 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
+    this.handBtn.onclick = () => tools.setHand(!tools.hand);
+    tools.onHand = on => { this.handBtn.classList.toggle("on", on); this.handBtn.setAttribute("aria-pressed", String(on)); };
+    const undo = auxBtn("", "↶", "되돌리기", "되돌리기(Ctrl+Z)"), redo = auxBtn("", "↷", "다시하기", "다시하기(Ctrl+Shift+Z)"); undo.onclick = () => tools.undo(); redo.onclick = () => tools.redo();
+    undo.disabled = redo.disabled = true; this.undoBtns = [undo, redo];
+    this.crossBtn = auxBtn("", "🎯", "십자선", "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요");
+    this.crossBtn.onclick = () => { tools.setCross(!tools.cross); this.crossBtn.classList.toggle("on", tools.cross); this.crossBtn.setAttribute("aria-pressed", String(tools.cross)); };
+    aux.appendChild(el("i", "vsep"));
+    // ⟲ ⟳: 건설 모드는 내려다보는 각도가 고정이라, 화면은 이 버튼(Z · X)으로 90°씩 돌려 봄
+    this.viewBtns = [auxBtn("viewL", "⟲", "화면을 왼쪽으로 90° 돌리기", "화면을 왼쪽으로 90° 돌려요"), auxBtn("viewR", "⟳", "화면을 오른쪽으로 90° 돌리기", "화면을 오른쪽으로 90° 돌려요")];
+    this.viewBtns[0].onclick = () => this.onViewTurn?.(-1); this.viewBtns[1].onclick = () => this.onViewTurn?.(1);
+    ebar.append(this.ecats, this.ehint, aux);
     tools.onMode = (m, arg) => this.showMode(m, arg);
     // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
     const cf = document.getElementById("confirm"), cfBuild = document.getElementById("cfBuild");
@@ -402,56 +420,90 @@ export class Hud {
       nm.dataset.tip = `${RARITY[u.rarity]?.name} ${JOBS[u.job]?.name}: ${JOBS[u.job]?.desc}`;
       r.append(nm, el("span", "act"), el("span", "coins"), el("span", "full"));
       r.onclick = () => { this.onUnitClick?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });
-    this.follow = null; this.seen = null; this.badgeKey = null;                     // 새 섬·불러오기: 배지 기준도 새로
+    this.follow = null; this.seen = null; this.badgeKey = null; this.trayKey = null;   // 새 섬·불러오기: 배지 기준 · 건물 갤러리도 새로
   }
-  /** 칠하기·높이 공통: 모양(붓·길·네모) · 🎯 십자선 · ↶ ↷ */
+  /** 트레이의 묶음 하나(작은 이름 + 버튼들). 버튼을 담을 칸을 돌려줌 */
+  trayGroup(label) { const g = el("div", "tgrp"), box = el("div", "tgb"); g.setAttribute("role", "group"); g.setAttribute("aria-label", label); g.append(el("span", "lab", label), box); this.sub.appendChild(g); return box; }
+  /** 칠하기·높이 공통: 붓 크기(1×1 · 3×3 · 5×5 · 7×7, [ ] 키) → 모양(붓·길·네모). ↶ ↷ 🎯은 보조 줄에 */
   addEditTools() {
-    const t = this.tools; this.sub.appendChild(el("span", "lab", "모양"));
-    for (const [s, label] of [["brush", "🖌 붓"], ["line", "〰 길"], ["rect", "▭ 네모"]]) { const b = el("button", t.shape === s ? "on" : "", label); b.onclick = () => { t.setShape(s); this.showMode(t.mode, t.mode === "paint" ? t.paintType : t.heightOp); }; this.sub.appendChild(b); }
-    const c = el("button", t.cross ? "on" : "", "🎯 십자선"); c.dataset.tip = "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요"; c.onclick = () => { t.setCross(!t.cross); c.classList.toggle("on", t.cross); }; this.sub.appendChild(c);
-    const u = el("button", "", "↶"), r = el("button", "", "↷"); u.dataset.tip = "되돌리기(Ctrl+Z)"; r.dataset.tip = "다시하기(Ctrl+Shift+Z)"; u.onclick = () => t.undo(); r.onclick = () => t.redo();
-    u.disabled = !t.history.length; r.disabled = !t.redoStack.length; this.undoBtns = [u, r]; this.sub.append(u, r);
+    const t = this.tools, bb = this.trayGroup("붓 크기");
+    this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === t.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n; b.onclick = () => t.setBrush(n); bb.appendChild(b); return b; });
+    const sb = this.trayGroup("모양");
+    for (const [s, label] of [["brush", "🖌 붓"], ["line", "〰 길"], ["rect", "▭ 네모"]]) { const b = el("button", t.shape === s ? "on" : "", label); b.dataset.shape = s; b.onclick = () => { t.setShape(s); this.showMode(t.mode, t.mode === "paint" ? t.paintType : t.heightOp); }; sb.appendChild(b); }
+  }
+  /** 건물 카드 하나: 사진(실제 모델) + 크기 딱지 + 이름 + 재료(잠겼으면 그 이유를 글자로) */
+  buildCard(def) {
+    const w = this.world, rankLock = (def.rank || 0) > w.rank, locked = rankLock || !w.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
+    const who = def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가", size = `${def.footprint.w}×${def.footprint.d}`;
+    const cost = Object.entries(def.cost || {}).filter(([, n]) => n > 0).map(([k, n]) => `${E.ITEM_ICON[k] ?? k}${n}`).join(" ") || "재료 없음";
+    const why = rankLock ? `${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터` : locked ? `${who} 필요` : def.winterOnly && w.season !== "winter" ? "❄️ 겨울에만" : "";   // 잠긴 이유는 글자로(🔒 딱지는 사진 위에)
+    const b = el("button", "bcard" + (locked ? " locked" : "")); b.dataset.build = def.id; b.dataset.cat = buildCatOf(def);
+    // 사진: 미리 찍어 둔 그림을 먼저, 못 읽으면 그 자리에서 찍어 줌(그동안은 빈 칸이 반짝임). 한 번 만든 <img>는 다시 그려도 그대로 씀
+    this.thumbImgs ||= new Map(); let pic = this.thumbImgs.get(def.id);
+    if (!pic) {
+      pic = el("span", "bimg"); const img = new Image(); img.alt = ""; img.decoding = "async"; img.draggable = false;
+      img.onload = () => pic.classList.add("ok");
+      img.onerror = () => { img.onerror = null; this.thumbs?.request(def.id).then(u => { if (u) img.src = u; }); };
+      pic.appendChild(img); this.thumbImgs.set(def.id, pic);
+      if (this.thumbs) img.src = this.thumbs.url(def.id);
+    }
+    b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), el("span", "bmeta", why || cost)); if (locked) b.append(el("span", "block", "🔒"));
+    b.setAttribute("aria-label", `${def.name}, ${size}칸, 재료 ${cost}${why ? `, ${locked ? "잠김: " : ""}${why}` : ""}`);
+    b.dataset.tip = `${def.name} ${size}칸 · 재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
+    b.onclick = () => this.tools.setMode("build", def.id); return b;
+  }
+  /** 건물 갤러리: 잠금·계절이 바뀔 때만 카드를 다시 만들고, 고르기만 했으면 표시만 바꿈(사진이 깜빡이지 않고 밀어 둔 자리도 그대로) */
+  drawBuildTray(arg) {
+    const w = this.world, defs = Object.values(BUILDINGS).filter(d => d.menu !== false);   // 은행·예전 건물은 메뉴에서 뺌
+    const key = `${w.rank}|${w.season}|${defs.map(d => w.builderFor(d) ? 1 : 0).join("")}`;
+    if (key !== this.trayKey || w !== this.trayWorld) { this.trayKey = key; this.trayWorld = w; this.buildCards = defs.map(d => this.buildCard(d)); }
+    for (const c of this.buildCards) { const on = c.dataset.build === arg; c.classList.toggle("on", on); c.setAttribute("aria-pressed", String(on)); }
+    this.sub.append(...this.buildCards); this.filterBuild();
+  }
+  filterBuild() {
+    for (const b of this.catBtns) { const on = b.dataset.cat === this.buildCat; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
+    for (const c of this.buildCards || []) c.hidden = this.buildCat !== "all" && c.dataset.cat !== this.buildCat;
   }
   showMode(mode, arg) {
     document.getElementById("houseCard").hidden = true;                             // 도구를 바꾸면 집 카드는 닫음
     const dm = mode === "view" ? "browse" : "edit"; if (document.body.dataset.mode !== dm) document.body.dataset.mode = dm;   // 평소(browse) · 건설 모드(edit): 배치는 CSS가
     if (mode !== "view") this.lastEdit = mode;
-    this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
-    this.handBtn.hidden = mode === "view"; if (mode === "view" && this.tools.hand) this.tools.setHand(false);
-    this.sub.innerHTML = ""; this.sub.hidden = !["paint", "build", "height"].includes(mode);
+    this.modeBtns.forEach(b => { const on = b.dataset.mode === mode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+    if (mode === "view" && this.tools.hand) this.tools.setHand(false);
+    const terrain = mode === "paint" || mode === "height", sub = this.sub;
+    if (!terrain && this.tools.cross) this.tools.setCross(false);                   // 십자선은 칠하기·높이에서만(켜 둔 채 짓기로 가면 누르기가 안 먹던 것)
+    // 보조 줄: 도구에 맞는 것만
+    this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish"; this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
+    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
+    for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
+    // 트레이: 같은 도구 안에서 고르기만 했으면 밀어 둔 자리를 지킴
+    const keep = mode === this.shownMode ? [sub.scrollLeft, sub.scrollTop] : null; this.shownMode = mode;
+    sub.replaceChildren(); sub.hidden = !(terrain || mode === "build"); sub.dataset.kind = mode;
     if (mode === "height") {
-      this.lastHeight = arg;
+      this.lastHeight = arg; const ob = this.trayGroup("높이 바꾸기");
       for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["smooth", "〰 다듬기"], ["flatten", "▬ 평평하게"], ["level", "🎚 단 맞추기"]]) {
-        const b = el("button", op === arg ? "on" : "", label); b.onclick = () => this.tools.setMode("height", op); this.sub.appendChild(b); }
-      if (arg === "level") { this.sub.appendChild(el("span", "lab", "높이")); for (const hgt of [0, 0.5, 1, 1.5, 2]) { const b = el("button", this.tools.levelH === hgt ? "on" : "", `${hgt} m`); b.onclick = () => { this.tools.levelH = hgt; this.showMode("height", "level"); }; this.sub.appendChild(b); } }
-      this.sub.appendChild(el("span", "lab", "붓"));
-      this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
-        b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
+        const b = el("button", op === arg ? "on" : "", label); b.dataset.op = op; b.onclick = () => this.tools.setMode("height", op); ob.appendChild(b); }
+      if (arg === "level") { const lb = this.trayGroup("맞출 높이"); for (const hgt of [0, 0.5, 1, 1.5, 2]) { const b = el("button", this.tools.levelH === hgt ? "on" : "", `${hgt} m`); b.dataset.level = hgt; b.onclick = () => { this.tools.levelH = hgt; this.showMode("height", "level"); }; lb.appendChild(b); } }
       this.addEditTools();
       this.status(arg === "level" ? `🎚 단 맞추기: 문지른 곳을 ${this.tools.levelH} m 높이로 맞춰요(한 번에 여러 번 눌러 올릴 필요 없음)` : "붓 안 전체가 한 번에 0.5 m씩(옆과 턱이 생김 · 오르내리려면 🏠 계단) · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 바다 높이 아래로 파면 연못");
     }
     if (mode === "paint") {
-      this.lastPaint = arg;
-      for (const t of GROUND_TYPES) { const b = el("button", t === arg ? "on" : "");
+      this.lastPaint = arg; const pb = this.trayGroup("바닥");
+      for (const t of GROUND_TYPES) { const b = el("button", t === arg ? "on" : ""); b.dataset.ground = t;
         const sw = el("span", "sw"); sw.style.background = hex(GROUND_STYLE[t].colors[0]); b.append(sw, GROUND_STYLE[t].label);
-        b.onclick = () => this.tools.setMode("paint", t); this.sub.appendChild(b); }
-      const lab = el("span", "lab", "붓"); this.sub.appendChild(lab);           // 붓 크기 1×1 · 3×3 · 5×5 · 7×7 ( [ ] 키 )
-      this.brushBtns = [1, 3, 5, 7].map(n => { const b = el("button", n === this.tools.brush ? "on" : "", `${n}×${n}`); b.dataset.brush = n;
-        b.onclick = () => this.tools.setBrush(n); this.sub.appendChild(b); return b; });
+        b.onclick = () => this.tools.setMode("paint", t); pb.appendChild(b); }
       this.addEditTools();
     }
     if (mode === "build") {
       this.lastBuild = arg;
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
-      for (const def of Object.values(BUILDINGS)) {
-        if (def.menu === false) continue;                                           // 은행·예전 건물은 메뉴에서 뺌
-        const rankLock = (def.rank || 0) > this.world.rank, locked = rankLock || !this.world.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
-        const b = el("button", (def.id === arg ? "on " : "") + (locked ? "locked" : ""), `${locked ? "🔒 " : ""}${def.name} ${def.footprint.w}×${def.footprint.d}${rankLock ? ` ${RANKS[def.rank].icon}` : ""}`);
-        const who = def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가";
-        b.dataset.tip = `${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
-        b.onclick = () => this.tools.setMode("build", def.id); this.sub.appendChild(b); }
-      const r = el("button", "", "↻ 돌리기(R)"); r.onclick = () => this.tools.rotate(); this.sub.appendChild(r);   // ⚡ 바로 완공은 설정 → 🛠 개발자로 옮김
+      this.drawBuildTray(arg);                                                      // ↻ 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
     }
+    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 누르면 바로 사라져요 · 되돌릴 수 없으니 천천히 골라요");
+    if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
+    else if (mode === "build") { const c = this.buildCards.find(x => x.dataset.build === arg && !x.hidden); if (c) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 건물이 보이게
+    if (mode === "height" && arg === "level" && this.shownOp !== "level") { const g = sub.querySelector("[data-level]")?.closest(".tgrp"); if (g) { sub.scrollLeft = Math.max(0, g.offsetLeft - 64); sub.scrollTop = Math.max(0, g.offsetTop - 64); } }   // 🎚 단 맞추기를 고르면 「맞출 높이」가 바로 보이게(세로 폰은 옆으로 미는 한 줄)
+    this.shownOp = mode === "height" ? arg : null;
   }
   /** 🥚 소환 버튼: 마을에 있는 수 / 전체, 다 모이면 끔 */
   setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all;
@@ -536,7 +588,7 @@ export class Hud {
     if (opt?.kind === "warn" || opt?.kind === "error") this.logNote(text, kind);
     if (this.toastCur?.q) this.toastQ.unshift(this.toastCur);                     // 보이던 소식은 맨 앞으로 되돌려 안내 다음에 다시
     while (this.toastQ.length > 3) this.toastQ.pop();
-    this.toastShow({ text, kind, q: false, n: 1 }, 6000);
+    this.toastShow({ text, kind, q: false, n: 1 }, document.body.dataset.mode === "edit" ? 4000 : 6000);   // 건설 중 안내는 4초(화면을 덜 가리게)
   }
   notify(text, kind = "info") {
     if (!text) return; this.logNote(text, kind);

@@ -22,9 +22,8 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = def.stairs ? await stairsProp(def, b.ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, this.world.season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
+    const model = await buildingModel(def, { ramp: b.ramp, season: this.world.season });
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
-    if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
     if (def.id === "bench") {                                                       // 좌판 높이를 모델에서 직접 잼(앉을 때 엉덩이를 맞춤): 칸 가운데(앞쪽으로 0.12)에서 위→아래 광선
       holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.2).applyMatrix4(holder.matrixWorld);
@@ -77,6 +76,14 @@ export class BuildingViews {
       if (tmp.z > 1) v.badge.hidden = true;
     }
   }
+}
+
+/** 건물 종류 하나의 모델(문 = +z, 바닥 가운데가 원점). 섬에 놓인 건물과 건설 갤러리 사진(thumbs.js)이 같은 것을 씀.
+ *  ramp: 계단 높이({ h0, h1 }), season: 계절 장식의 모습 */
+export async function buildingModel(def, { ramp = null, season = null } = {}) {
+  const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
+  if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
+  return model;
 }
 
 /** 계단 모델: 문 쪽(+z)이 입구, -z로 올라감. 디딤판 높이는 World.stairStep과 같은 식. 바닥에서부터 꽉 찬 돌계단. */

@@ -28,6 +28,8 @@ import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { josa } from "./util.js";
 import { TwoFinger } from "./systems/twoFinger.js";
+import { QuarterCam } from "./systems/quarterView.js";
+import { BuildingThumbs } from "./render/thumbs.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { PROP_LOD } from "./render/assets.js";
@@ -234,13 +236,19 @@ setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
 addEventListener("visibilitychange", () => { if (document.hidden && ready) saveNow(); });
 addEventListener("pagehide", () => { if (ready) saveNow(); });
 tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
-new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
+const twoFinger = new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
+const quarterCam = new QuarterCam({ camera, controls });                        // 건설 모드: 고정 쿼터뷰(⟲ ⟳ 로 90°씩), 끝내면 보던 각도로
+const buildingThumbs = new BuildingThumbs(renderer);                            // 건설 갤러리의 건물 사진
 tools.applyControls();                              // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대)
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
   onReset: () => { mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
+// 건설 모드에 들어가고 나올 때: 카메라 고정·풀기 + 조작 배치(돌리기 대신 옮기기). 화면(HUD)은 hud.showMode가 그대로 맡음
+{ const showMode = tools.onMode; tools.onMode = (m, arg) => { showMode(m, arg); const on = m !== "view"; if (on === quarterCam.locked) return;
+  if (on) quarterCam.enter(); else quarterCam.exit(); tools.viewLock = twoFinger.lock = on; tools.applyControls(); }; }
+hud.onViewTurn = dir => quarterCam.turn(dir); hud.thumbs = buildingThumbs;
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
   onStatus: t => hud.status(t), onFollow: u => { hud.showFollow(u); world.watchId = u ? u.unitId : null; } });
 // 찌 당기기(같이 낚시하기): 따라가는 갈매미에게 입질(❗)이 왔을 때 🎣 당기기! 버튼이나 스페이스 키
@@ -356,11 +364,12 @@ function frameBody() {
   hud.showTug(!roomView.isOpen && world.canTug(unitControl.follow), unitControl.follow?.fishT);   // 입질 동안만 당기기 버튼
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
-  controls.update();
+  controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   quality.frame(dt, now);
+  buildingThumbs.pump();                             // 기다리는 건물 사진이 있으면 한 장(이어서 그리는 섬이 덮음)
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
@@ -392,5 +401,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get hud() { return hud; }, camera, controls, renderer, scene,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
