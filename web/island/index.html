@@ -65,6 +65,14 @@
   #info .small { font-size: 11.5px; }
   #info { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 2; width: min(330px, calc(100% - 100px));
     background: var(--panel); border-radius: 12px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; box-shadow: 0 1px 6px rgba(0,0,0,.12); box-sizing: border-box; }
+  /* 찌 당기기: 따라가기 카드 바로 위의 큰 버튼(입질 동안만), 아래 줄이 줄어들며 남은 시간을 알려 줌 */
+  #tugBtn { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: 120px; z-index: 3; min-width: 150px; min-height: 56px; padding: 10px 22px 14px; font-size: 20px; font-weight: 700;
+    color: #fff; background: #f08a3c; border: 3px solid #fff; border-radius: 18px; box-shadow: 0 3px 10px rgba(0,0,0,.25); overflow: hidden; touch-action: manipulation; animation: tugPulse .45s ease-in-out infinite alternate; }
+  #tugBtn::after { content: ""; position: absolute; left: 0; bottom: 0; height: 5px; width: 100%; background: #fff6; transform-origin: 0 50%; animation: tugLeft 1.5s linear forwards; }
+  #tugBtn[hidden] { display: none; }
+  @keyframes tugPulse { from { transform: scale(1); } to { transform: scale(1.07); } } @keyframes tugLeft { to { transform: scaleX(0); } }
+  .emote.icon.bite { font-size: 30px; padding: 4px 12px; background: #ffe27a; } .emote.bite::after { border-top-color: #ffe27a; }
+  body.inroom #tugBtn { display: none !important; }
   #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
   #top { z-index: 2; }
   #cross { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; z-index: 2; pointer-events: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.4); }
@@ -158,6 +166,7 @@
 <!-- 갈매폰 UI: 평소엔 오른쪽 위 칩(돈·마릿수)과 배고픈 갈매미 알림만, 📱를 누르면 앱 메뉴 -->
 <div id="chips"><span id="chipTime">☀️</span><button id="chipWeather" title="계절·날씨 효과 보기">🍂</button><button id="chipWish" hidden></button><span id="chipMoney">🪙 0</span><button id="chipRank" title="마을 등급·겨울 대비">🛖</button><button id="mapBtn" title="미니맵 보이기/숨기기">🗺 지도</button><span id="chipPop">🐦 0</span><button id="alert" hidden></button></div>
 <div id="info" hidden></div>
+<button id="tugBtn" hidden>🎣 당기기!</button>
 <button id="phoneBtn" title="갈매폰: 갈매미·은행·시장·건설·소환·도감·저장·설정">📱</button>
 <div id="phone" hidden>
   <div class="card">

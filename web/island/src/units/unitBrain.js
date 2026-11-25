@@ -49,7 +49,7 @@ function release(u) {
   const f = u.focus;
   if (f && f.claimed === u.unitId) f.claimed = null;
   if (f && f.busy === u.unitId && u.committed !== f.id) f.busy = null;   // 맡은 공사장(committed)은 끝날 때까지 찜 유지
-  u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined; u.processing = false;
+  u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined; u.bite = u.tugged = false; u.processing = false;
 }
 /** 맡은 공사를 내려놓음(완공·들어 올림·철거 때). */
 export function uncommit(u, world) {
@@ -644,15 +644,18 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case US.Fish: {
       if (u.fishT === undefined) break;
-      u.anim = "FishWait"; u.fishT -= dt;
+      u.anim = "FishWait";
+      // 찌 당기기: 따라가며 보고 있는 갈매미(world.watchId)만, 기다림의 끝 무렵에 입질(❗). 같이 당기면(world.tugFloat) 바로 낚고 희귀 보너스, 놓쳐도 평소와 똑같이 낚음
+      if (!u.bite && u.fishT > 0 && u.fishT <= J.BITE_SECS && world.watchId === u.unitId) { u.bite = true; emote(u, "❗", u.fishT + 0.2); }
+      u.fishT -= dt;
       if (u.fishT <= 0) {
-        u.fishT = undefined;
+        u.fishT = undefined; const bonus = u.tugged ? J.TUG_BONUS : 1; u.bite = u.tugged = false;
         doOnce(u, "FishReel", () => {
-          u.fishing = null; const r = world.catchFish(u);
+          u.fishing = null; const r = world.catchFish(u, bonus);
           u.lastReward = !r ? 0.05 : { common: 0.8, rare: 1.4, epic: 2, legend: 3 }[r.fish.rarity] + (r.item ? 1 : 0);
           if (!r) { emote(u, "💧"); return; }
           const star = { common: "", rare: "✨", epic: "🌟", legend: "👑" }[r.fish.rarity];
-          emote(u, r.item ? `🎁 ${r.item.name}!` : `${star}${r.fish.name}`, r.item || star ? 2.6 : 1.6);
+          emote(u, r.item ? `🎁 ${r.item.name}!` : `${bonus > 1 ? "🎵" : ""}${star}${r.fish.name}`, r.item || star ? 2.6 : 1.6);
         },
           () => done(u, u.lastReward ?? 0.5, rnd, world));
       }

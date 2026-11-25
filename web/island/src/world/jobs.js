@@ -59,8 +59,11 @@ export const catchChance = u => Math.min(0.95, 0.6 * skillMult(u, "fish"));
 /** 어떤 물고기를 낚았는지. 낚시꾼은 희귀 이상 물고기 비중이 배율만큼 커진다. */
 /** season: 지금 계절(그 계절 한정 물고기만 섞임, 없으면 한정 물고기 없음) */
 export const inSeason = (x, season) => !x.season || x.season === season;
-export function rollFish(u, rnd, season = null) {
-  const m = skillMult(u, "fish");
+/** 찌 당기기(같이 낚시하기): 따라가는 갈매미의 입질 때(기다림의 마지막 BITE_SECS초) 같이 당기면 그 한 번만 희귀 이상 비중이 TUG_BONUS배, 재미 +TUG_FUN */
+export const TUG_BONUS = 1.5, BITE_SECS = 1.5, TUG_FUN = 5;
+/** bonus: 희귀 이상 비중에 더 곱하는 배율(찌 당기기, 기본 1 = 그대로). 난수는 bonus와 상관없이 똑같이 한 번만 씀 */
+export function rollFish(u, rnd, season = null, bonus = 1) {
+  const m = skillMult(u, "fish") * bonus;
   const ws = FISH.map(f => inSeason(f, season) ? f.weight * (f.rarity === "common" ? 1 : m) : 0);
   let r = rnd() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < FISH.length; i++) if ((r -= ws[i]) <= 0) return FISH[i];
@@ -68,8 +71,8 @@ export function rollFish(u, rnd, season = null) {
 }
 /** 낚시할 때 물건을 건질 확률과 무엇을 건지는지(희귀할수록 드묾). */
 export const itemChance = u => 0.02 * skillMult(u, "fish") ** 2;
-export function rollItem(u, rnd, season = null) {
-  const w = { common: 50, rare: 30, epic: 15, legend: 5 }, m = skillMult(u, "fish");
+export function rollItem(u, rnd, season = null, bonus = 1) {
+  const w = { common: 50, rare: 30, epic: 15, legend: 5 }, m = skillMult(u, "fish") * bonus;
   const ws = ITEMS.map(i => inSeason(i, season) ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0);
   let r = rnd() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < ITEMS.length; i++) if ((r -= ws[i]) <= 0) return ITEMS[i];

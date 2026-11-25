@@ -63,6 +63,7 @@ export class Hud {
     for (const k of ORDER) { const b = el("button", "", QUALITY[k].name); b.dataset.q = k; b.title = QUALITY_NOTE[k]; b.onclick = () => this.setQuality(this.onQuality?.(k)); this.qBox.appendChild(b); }
     document.getElementById("dexClose").onclick = () => this.showDex(false);
     this.info = document.getElementById("info");
+    this.tugBtn = document.getElementById("tugBtn"); this.tugBtn.onclick = () => this.onTug?.();   // 찌 당기기(따라가는 갈매미에게 입질이 왔을 때만 보임)
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
     document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
     document.getElementById("load").onclick = () => { onLoad(); this.closePhone(); };
@@ -303,6 +304,12 @@ export class Hud {
   setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all;
     const left = UNITS.filter(d => !world.units.some(u => u.name === d.name)).map(d => d.name); document.getElementById("summonLast").textContent = left.length ? `아직 안 온 갈매미: ${left.join(", ")}` : ""; }
   showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); }
+  /** 🎣 당기기! 버튼: 따라가기 카드 바로 위에 붙여서 보여 줌(입질 동안만). 매 프레임 불러도 바뀔 때만 손댐 */
+  showTug(on) {
+    const b = this.tugBtn; if (b.hidden === !on) return;
+    if (on) b.style.bottom = `${Math.round(innerHeight - (this.info.hidden ? innerHeight - 60 : this.info.getBoundingClientRect().top) + 8)}px`;
+    b.hidden = !on;
+  }
   /** 도감(낚은 물고기)·가방(건진 물건) 창 */
   showDex(on) {
     const d = document.getElementById("dex"); d.hidden = !on; if (!on) return;

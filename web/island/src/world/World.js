@@ -439,20 +439,29 @@ export class World {
     this.after(20 + this.rnd() * 12, () => { o.alive = true; o.hp = 3; this.emit("oreGrow", o); });
   }
   /** 낚시 결과: 못 낚음 / 물고기(흔하면 음식, 희귀 이상이면 보물) + 가끔 물건. 도감에 기록. */
-  catchFish(u) {
+  /** bonus: 찌 당기기 배율(희귀 이상 비중에 곱함, 기본 1 = 예전 그대로) */
+  catchFish(u, bonus = 1) {
     const fishFx = this.fx.fish; if (fishFx <= 0) return null;                       // 폭풍: 못 낚음
     if (this.rnd() >= Math.min(0.95, J.catchChance(u) * fishFx)) return null;
-    const { fish: f, item } = this.landFish(u, this.rnd);
+    const { fish: f, item } = this.landFish(u, this.rnd, bonus);
     this.emit("fish", { u, fish: f, item }); if (f.rarity !== "common" || item) this.notice(u.x, u.z, "fish", u);
     return { fish: f, item };
   }
+  /** 찌 당기기: 입질이 온(u.bite) 갈매미와 같이 당김 → 바로 낚아 올리고 이번 한 번만 희귀 보너스. 입질이 아니면 아무 일도 없음(false) */
+  tugFloat(u) {
+    if (!u || !u.bite || u.tugged || u.state !== UnitState.Fish || !(u.fishT > 0)) return false;
+    u.tugged = true; u.fishT = 0;
+    if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + J.TUG_FUN);
+    emote(u, "영차! ♪", 1.2);
+    return true;
+  }
   /** 낚은 것을 챙김(알림 없이): 물고기를 뽑아 도감·가방(흔하면 음식, 희귀 이상이면 보물)에 넣고, 가끔 물건도. */
-  landFish(u, rnd) {
-    const f = J.rollFish(u, rnd, this.season); if (!this.economy) this.res.fish++;
+  landFish(u, rnd, bonus = 1) {
+    const f = J.rollFish(u, rnd, this.season, bonus); if (!this.economy) this.res.fish++;
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
     let item = null;
-    if (rnd() < J.itemChance(u)) { item = J.rollItem(u, rnd, this.season); this.items[item.id] = (this.items[item.id] || 0) + 1; }
+    if (rnd() < J.itemChance(u)) { item = J.rollItem(u, rnd, this.season, bonus); this.items[item.id] = (this.items[item.id] || 0) + 1; }
     return { fish: f, item };
   }
   /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌. 마을을 돌리지 않고 딱 두 가지만:

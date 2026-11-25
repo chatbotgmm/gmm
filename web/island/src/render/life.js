@@ -137,7 +137,7 @@ export class LifeViews {
       if (e.dataset.t !== u.emoteText) {                                          // 새 말: 모양 고르고 톡 튀어나오게
         e.dataset.t = u.emoteText; e.textContent = u.emoteText;
         const t = u.emoteText, think = t.startsWith("💭"), icon = [...t].length <= 2 || /^(…|zZ…|!\?)$/.test(t);
-        e.className = "emote" + (think ? " think" : icon ? " icon" : ""); void e.offsetWidth; e.classList.add("pop");
+        e.className = "emote" + (think ? " think" : icon ? " icon" : "") + (t === "❗" ? " bite" : "");   // 입질(❗)은 크게 void e.offsetWidth; e.classList.add("pop");
       }
       const sc = THREE.MathUtils.clamp(1.15 - dist / 90, 0.6, 1.1);                // 멀수록 작게
       e.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; e.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;

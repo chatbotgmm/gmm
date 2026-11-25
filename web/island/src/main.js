@@ -21,6 +21,7 @@ import { newsFor, awayLetter, newsPages } from "./world/news.js";
 import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
+import { josa } from "./util.js";
 import { TwoFinger } from "./systems/twoFinger.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
@@ -212,7 +213,11 @@ hud = new Hud({ tools, world,
   onReset: () => { if (!confirm("지금 섬을 버리고 새 섬을 만들까요? (자동 저장도 새 섬으로 바뀌어요)")) return; mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
-  onStatus: t => hud.status(t), onFollow: u => hud.showFollow(u) });
+  onStatus: t => hud.status(t), onFollow: u => { hud.showFollow(u); world.watchId = u ? u.unitId : null; } });
+// 찌 당기기(같이 낚시하기): 따라가는 갈매미에게 입질(❗)이 왔을 때 🎣 당기기! 버튼이나 스페이스 키
+const tugNow = () => { const u = unitControl.follow; if (!u || !world.tugFloat(u)) return false; hud.showTug(false); hud.status(`영차! ${josa(u.name, "과", "와")} 같이 당겼어요 · 귀한 물고기가 올 가능성이 커져요`); return true; };
+hud.onTug = tugNow;
+addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
 sfx.listener = { target: controls.target, camera };
@@ -287,6 +292,7 @@ function frame() {
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
+  hud.showTug(!!unitControl.follow?.bite && !unitControl.follow.tugged && !roomView.isOpen);   // 입질 동안만 당기기 버튼
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();

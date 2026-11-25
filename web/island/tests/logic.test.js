@@ -1000,3 +1000,41 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   assert.ok(long.lines.some(l => /참치 \(영웅!\)/.test(l)) && long.lines.some(l => /멸치 \+ 유리병/.test(l)) && long.lines.some(l => /어촌/.test(l)) && long.lines.some(l => /시장이 있으면/.test(l)));
   assert.ok(N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [] }).lines.some(l => /조용한/.test(l)));
 });
+
+test("찌 당기기: 보너스 없으면 예전과 똑같고(난수도 같은 만큼), 보너스면 희귀 이상 물고기 비중이 오름", async () => {
+  const J = await import("../src/world/jobs.js");
+  const u = { name: "기본", job: "builder", rarity: "common" }, N = 20000;
+  assert.equal(J.TUG_BONUS, 1.5); assert.ok(J.TUG_BONUS > 1 && J.TUG_BONUS <= 2, "보너스는 작게");
+  // 보너스 없음(기본값·1): 같은 씨앗이면 한 마리 한 마리가 똑같음
+  const a = seededRandom(5), b = seededRandom(5), c = seededRandom(5);
+  for (let i = 0; i < 2000; i++) { const f = J.rollFish(u, a, "summer"); assert.equal(J.rollFish(u, b, "summer", 1), f); J.rollFish(u, c, "summer", J.TUG_BONUS); }
+  const next = a(); assert.equal(b(), next); assert.equal(c(), next, "보너스가 있어도 난수는 똑같이 한 번만 씀");
+  const i1 = seededRandom(6), i2 = seededRandom(6); for (let i = 0; i < 500; i++) assert.equal(J.rollItem(u, i1, null), J.rollItem(u, i2, null, 1));
+  // 보너스: 희귀 이상 비중이 오르되, 흔한 물고기도 여전히 나옴
+  const share = bonus => { const rnd = seededRandom(11); let rare = 0; for (let i = 0; i < N; i++) if (J.rollFish(u, rnd, null, bonus).rarity !== "common") rare++; return rare / N; };
+  const base = share(1), tug = share(J.TUG_BONUS);
+  assert.ok(tug > base * 1.15, `${base} → ${tug}`); assert.ok(tug < base * 1.5 + 0.001 && tug < 1, `${base} → ${tug}`);
+  const itemShare = bonus => { const rnd = seededRandom(12); let rare = 0; for (let i = 0; i < N; i++) if (J.rollItem(u, rnd, null, bonus).rarity !== "common") rare++; return rare / N; };
+  assert.ok(itemShare(J.TUG_BONUS) > itemShare(1));
+});
+
+test("찌 당기기: 따라가는 갈매미만 입질(❗)이 오고, 같이 당기면 바로 낚으며 재미가 오름. 안 당겨도·안 따라가도 평소대로", async () => {
+  const J = await import("../src/world/jobs.js"); const { updateUnit } = await import("../src/units/unitBrain.js");
+  const setup = () => { const w = World.create(7, seededRandom(3)), u = w.units[0]; u.state = UnitState.Fish; u.fishT = 3; u.once = null; u.needs.fun = 40; u.full = 80; u.needs.energy = 100; return { w, u }; };
+  const step = (w, u, secs) => { for (let i = 0, n = Math.round(secs * 30); i < n; i++) updateUnit(u, 1 / 30, w, w.rnd); };
+  // 안 따라감: 입질 표시도 없고, 당겨도 아무 일 없음
+  { const { w, u } = setup(); step(w, u, 2); assert.ok(!u.bite && u.emoteText !== "❗"); assert.equal(w.tugFloat(u), false); assert.ok(u.fishT > 0.9); }
+  // 따라감: 마지막 BITE_SECS초에만 입질
+  const { w, u } = setup(); w.watchId = u.unitId;
+  step(w, u, 1); assert.ok(!u.bite, "아직 이름"); assert.equal(w.tugFloat(u), false, "입질 전에는 못 당김");
+  step(w, u, 0.6); assert.equal(u.bite, true); assert.equal(u.emoteText, "❗"); assert.ok(u.fishT > 0 && u.fishT <= J.BITE_SECS);
+  const fun = u.needs.fun; let bonus = null; const real = w.catchFish.bind(w); w.catchFish = (who, b) => { bonus = b; return real(who, b); };
+  assert.equal(w.tugFloat(u), true); assert.equal(w.tugFloat(u), false, "한 번만");
+  assert.ok(u.needs.fun >= fun + J.TUG_FUN - 0.01); assert.equal(u.fishT, 0);
+  step(w, u, 1.2); assert.equal(bonus, J.TUG_BONUS, "당긴 낚시는 보너스로"); assert.ok(!u.bite && !u.tugged);
+  // 따라가지만 안 당김: 보너스 없이 평소대로 낚음
+  { const { w, u } = setup(); w.watchId = u.unitId; let b2 = null; const r2 = w.catchFish.bind(w); w.catchFish = (who, b) => { b2 = b; return r2(who, b); };
+    step(w, u, 4.5); assert.equal(b2, 1); assert.ok(!u.bite && !u.tugged); }
+  // 저장에는 안 남음(잠깐의 상태)
+  const j = JSON.parse(JSON.stringify(w.serialize())); assert.ok(!("watchId" in j) && !j.units.some(x => "bite" in x)); assert.ok(World.fromJSON(j).units.length);
+});
