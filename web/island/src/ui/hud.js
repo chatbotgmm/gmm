@@ -32,6 +32,9 @@ const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: 
 const SKY_HINT = { rainbow: "낮에 비가 갠 뒤 가끔 · 물건을 더 잘 찾아요", meteor: "맑은 밤에 아주 가끔 · 별조각이 떨어져요", firstSnow: "겨울마다 처음 내리는 눈" };
 
 const hex = n => "#" + n.toString(16).padStart(6, "0");
+// 화면 모양: 가로 폰(높이 480 미만) → 세로 폰(폭 600 미만) → 중간(1200 미만) → 넓음 순서로 판정. CSS는 html[data-form]을 봄(같은 판정을 한곳에서)
+const HUD_FORM_QUERIES = [["landscape", "(max-height: 479px) and (orientation: landscape)"], ["portrait", "(max-width: 599px)"], ["medium", "(max-width: 1199px)"]];
+const hudFormNow = () => (HUD_FORM_QUERIES.find(([, q]) => matchMedia(q).matches) || ["wide"])[0];
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 export class Hud {
@@ -43,12 +46,14 @@ export class Hud {
     crossGo.addEventListener("pointerdown", e => { e.preventDefault(); crossGo.setPointerCapture(e.pointerId); tools.crossPress(true); });
     for (const ev of ["pointerup", "pointercancel"]) crossGo.addEventListener(ev, () => tools.crossPress(false));
     const bar = document.getElementById("tools"), sub = document.getElementById("sub");
-    const modes = [["view", "👀 둘러보기"], ["paint", "🖌 바닥 칠하기"], ["height", "⛰ 높이"], ["build", "🏠 건물 짓기"], ["demolish", "🧹 철거"]];
-    this.modeBtns = modes.map(([m, label]) => { const b = el("button", "", label); b.dataset.mode = m; bar.appendChild(b);
+    this.setForm();
+    // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]
+    const modes = [["view", "👀", "둘러보기", "둘러보기"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"]];
+    this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn("", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : null); return b; });
     this.sub = sub;
     // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 돌리고 옮김(도구는 잠시 멈춤)
-    this.handBtn = el("button", "hand", "✋ 화면 이동"); this.handBtn.title = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
+    this.handBtn = this.toolBtn("hand", "✋", "화면 이동", "이동"); this.handBtn.title = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
     this.handBtn.onclick = () => tools.setHand(!tools.hand); bar.appendChild(this.handBtn);
     tools.onHand = on => this.handBtn.classList.toggle("on", on);
     tools.onMode = (m, arg) => this.showMode(m, arg);
@@ -104,16 +109,25 @@ export class Hud {
     const tm = document.getElementById("timeMode"); tm.onclick = () => { const l = this.onTimeMode?.(); if (l) tm.textContent = `시간: ${l}`; };
     const tx = document.getElementById("timeMult"); tx.onclick = () => { const l = this.onTimeMult?.(); if (l) tx.textContent = `시간 배수: ${l}`; };
     const tb = document.getElementById("toonBtn"); tb.onclick = () => { const l = this.onToon?.(); if (l) tb.textContent = `그림체: ${l}`; };
-    addEventListener("resize", () => this.layout());
+    addEventListener("resize", () => { this.setForm(); this.layout(); });
     this.setWorld(world); this.showMode("view"); this.layout();
   }
-  /** 섬에서 집을 눌렀을 때 작은 카드 */
+  /** 도구 막대 버튼 하나: 아이콘 + 이름(휴대폰은 짧은 이름). 읽어 주기는 언제나 원래 이름 */
+  toolBtn(cls, icon, label, short) {
+    const b = el("button", (cls ? cls + " " : "") + "tbtn"); b.append(el("span", "ti", icon), el("span", "tl", label), el("span", "ts", short)); b.setAttribute("aria-label", label); return b;
+  }
+  /** 화면 모양을 정해 html[data-form]에 적음(창 크기가 바뀔 때만) */
+  setForm() {
+    const f = hudFormNow(); this.form = f; this.phoneForm = f === "portrait" || f === "landscape";
+    if (document.documentElement.dataset.form !== f) document.documentElement.dataset.form = f;
+  }
+  /** 섬에서 집을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기) */
   houseCard(b) {
     const c = document.getElementById("houseCard"); if (!b) { c.hidden = true; return; }
     const w = this.world, owner = w.units.find(u => u.unitId === b.owner);
     c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
     c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
-    clearTimeout(this.hcT); this.hcT = setTimeout(() => { c.hidden = true; }, 6000);
+    this.layout();
   }
   setSeasonLabel(t) { if (t) this.seasonBtn.textContent = `계절: ${t}`; }
   // ---- 갈매폰
@@ -132,10 +146,12 @@ export class Hud {
     document.getElementById("phoneBack").hidden = app === null;
     this.refreshApp();
   }
-  /** 휴대폰: 도구 막대가 아래에 있으면 📱·따라가기 카드를 그 위로 */
+  /** 휴대폰: 도구 막대가 아래에 있으면 📱·따라가기 카드·집 카드·칠하기 버튼을 그 위로 */
   layout() {
     const top = document.getElementById("top").getBoundingClientRect(), low = top.top > innerHeight / 2, b = low ? `${innerHeight - top.top + 10}px` : "";
     this.phoneBtn.style.bottom = b; this.info.style.bottom = b;
+    const hc = document.getElementById("houseCard"); if (hc.style.bottom !== b) hc.style.bottom = b;
+    const cg = document.getElementById("crossGo"), cgB = low ? `${innerHeight - top.top + 10}px` : ""; if (cg.style.bottom !== cgB) cg.style.bottom = cgB;
     const mm = document.getElementById("minimap"); if (mm) mm.style.bottom = low ? `${innerHeight - top.top + 74}px` : "";   // 미니맵은 📱 위
   }
   refreshApp() {
@@ -298,6 +314,7 @@ export class Hud {
     u.disabled = !t.history.length; r.disabled = !t.redoStack.length; this.undoBtns = [u, r]; this.sub.append(u, r);
   }
   showMode(mode, arg) {
+    document.getElementById("houseCard").hidden = true;                             // 도구를 바꾸면 집 카드는 닫음
     this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
     this.handBtn.hidden = mode === "view"; if (mode === "view" && this.tools.hand) this.tools.setHand(false);
     this.sub.innerHTML = ""; this.sub.hidden = !["paint", "build", "height"].includes(mode);
@@ -355,7 +372,8 @@ export class Hud {
     const on = !!u && this.tugBtn.hidden, bar = this.bondBar;
     if (!on || u !== this.bondU) this.giftPick.hidden = true;                       // 다른 갈매미로 바꾸면 고르는 판은 닫음
     this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!on) return;
-    const bottom = `${Math.round(innerHeight - this.info.getBoundingClientRect().top + 6)}px`; if (bar.style.bottom !== bottom) bar.style.bottom = bottom;
+    const ir = this.info.getBoundingClientRect(), bottom = `${Math.round(this.form === "landscape" ? innerHeight - ir.bottom : innerHeight - ir.top + 6)}px`;   // 가로 폰은 카드 옆(아래 끝 맞춤)
+    if (bar.style.bottom !== bottom) bar.style.bottom = bottom;
     const left = petsLeft(u, newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
     if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
     if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
@@ -421,7 +439,7 @@ export class Hud {
       `<span>🧩 땅 ${chunkInfo.tris ? Math.round(chunkInfo.tris / 1000) + "천 삼각형 · " : ""}${chunkInfo.fps ? `${chunkInfo.fps} fps` : ""}</span>`;
     this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.title = "갈매미들이 가진 돈 합계";
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
-    const small = innerWidth <= 640;
+    const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주
     this.chipPop.textContent = small ? `🐦${w.units.length} ${face}${sat.toFixed(0)} ${mood}${avg.toFixed(0)}` : `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.title = "갈매미 수 · 평균 만족도 · 평균 포만감";
     document.getElementById("chipRank").textContent = small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
     document.getElementById("mapBtn").textContent = small ? "🗺" : "🗺 지도";
@@ -447,7 +465,7 @@ export class Hud {
       const bar = (label, v, cls = "") => `<div class="need"><span>${label}</span><i class="${cls}"><b style="width:${Math.max(0, Math.min(100, v))}%"></b></i><em>${Math.round(v)}</em></div>`;
       const full = u.full ?? 80, note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
       const bag = E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${E.ITEM_ICON[k]}${u.inv[k]}`).join(" ");
-      if (this.infoOpen === undefined) { this.infoOpen = !matchMedia("(max-width: 640px)").matches; this.info.onclick = () => { this.infoOpen = !this.infoOpen; }; }   // 휴대폰은 접힌 채(누르면 펼침)
+      if (this.infoOpen === undefined) { this.infoOpen = !this.phoneForm; this.info.onclick = () => { this.infoOpen = !this.infoOpen; }; }   // 휴대폰은 접힌 채(누르면 펼침)
       if (!this.infoOpen) { this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${doing}</span><span class="hearts">${bondHearts(u.bond)}</span><span class="dim">😊${Math.round(u.sat ?? 50)} 🍗${Math.round(full)} ▾</span></div>`; this.info.classList.add("mini"); this.showBond(u); return; }
       this.info.classList.remove("mini");
       this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="hearts" title="${BOND_STAGES[bondStage(u.bond)].name}">${bondHearts(u.bond)}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}</span></div>` +

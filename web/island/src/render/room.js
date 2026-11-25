@@ -6,11 +6,17 @@
 //  · 섬 조작과 섞이지 않게 화면 전체를 덮는 #roomTouch가 손가락을 받음. 마을 시간은 계속 흐름.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { FURNITURE, FLOORS, WALLPAPERS, BUILDINGS } from "../data/catalog.js";
+import { FURNITURE, FLOORS, WALLPAPERS, BUILDINGS, ITEMS } from "../data/catalog.js";
+import { DONATE_GIFTS } from "../world/aquarium.js";
 import * as F from "../world/furniture.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+
+// 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
+const roomFurniSource = itemId => { const it = ITEMS.find(i => i.id === itemId); if (!it) return "마을 가방의 가구";
+  if (it.stamp) return "도장 가게에서 바꾼 가구"; if (it.fest) return "계절 축제 기념 가구";
+  return DONATE_GIFTS.some(g => g.item === it.id) ? "낚시로 건졌거나 수족관 기념으로 받은 가구" : "낚시로 건진 가구"; };
 
 const ROOM_WALL_H = 2.4, ROOM_TAP_PX = 8;
 /** 이불: 침대(1×2칸, 베개 = −z) 위 누운 갈매미를 어깨 아래부터 덮는 천(머리는 베개 위로 나옴). 몸 위는 볼록(몸 크기에 맞춤), 양옆은 침대 밖으로 늘어짐, 발치는 납작. 원점 = 침대 가운데, 높이는 BLANKET_BASE 기준 */
@@ -255,8 +261,8 @@ export class RoomView {
     else lvBox.appendChild(rel("span", "dim", it.name));
     if (this.tab === "furniture") {
       const av = F.available(w, b), ids = Object.keys(av);
-      for (const id of ids) { const f = FURNITURE[id], bt = rel("button", this.ghost?.id === id && this.ghost.moving == null ? "on" : "", `${f.name} ×${av[id].n}`); bt.title = `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${av[id].from !== "stash" ? " · 낚시로 건진 가구(마을 가방)" : ""}`; bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
-      if (!ids.length) list.appendChild(rel("span", "dim", w.shopB() ? "놓을 가구가 없어요. 집주인이 돈이 모이면 잡화점에서 사 와요" : "놓을 가구가 없어요. 잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요 · 낚시로 건진 가구도 놓을 수 있어요"));
+      for (const id of ids) { const f = FURNITURE[id], bt = rel("button", this.ghost?.id === id && this.ghost.moving == null ? "on" : "", `${f.name} ×${av[id].n}`); bt.title = `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${av[id].from !== "stash" ? ` · ${roomFurniSource(av[id].item)}(마을 가방)` : ""}`; bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
+      if (!ids.length) list.appendChild(rel("span", "dim", w.shopB() ? "놓을 가구가 없어요. 집주인이 돈이 모이면 잡화점에서 사 와요" : "놓을 가구가 없어요. 잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요 · 낚시·축제·도장 가게에서 얻은 가구도 놓을 수 있어요"));
     } else {
       const table = this.tab === "floor" ? FLOORS : WALLPAPERS, key = this.tab === "floor" ? "floor" : "wallpaper";
       for (const [id, d] of Object.entries(table)) { const bt = rel("button", it[key] === id ? "on" : "", d.name); const sw = rel("span", "sw"); sw.style.background = "#" + d.color.toString(16).padStart(6, "0"); bt.prepend(sw);
