@@ -35,7 +35,10 @@ export function installKeys({ hud, tools, roomView }) {
   let inputAt = 0, lastKey = false;
   const setInput = v => { if (root.dataset.input === v) return; const now = performance.now(); if (now - inputAt < 800) return; inputAt = now; root.dataset.input = v; if (v === "touch") hideTip(); };
   root.dataset.input = matchMedia("(pointer: coarse)").matches ? "touch" : "mouse";
-  addEventListener("pointerdown", e => { lastKey = false; setInput(e.pointerType === "mouse" ? "mouse" : "touch"); hideTip(); }, true);
+  // 표시 바꾸기는 손을 뗀 뒤에(click이 끝난 다음): 누르는 순간 바꾸면 키 힌트가 사라지며 칩이 옆으로 밀려, 키를 쓰다가 처음 누른 칩 대신 옆 칩이 눌림
+  let inputNext = null;
+  addEventListener("pointerdown", e => { lastKey = false; inputNext = e.pointerType === "mouse" ? "mouse" : "touch"; hideTip(); }, true);
+  for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { const v = inputNext; inputNext = null; if (v) setTimeout(() => setInput(v), 0); }, true);
 
   // ---- 키 힌트: 버튼 끝에 작은 <span class="kbd">(터치에서는 CSS가 숨김)
   for (const [sel, k] of KEY_HINTS) { const b = document.querySelector(sel); if (!b || b.querySelector(".kbd")) continue; const s = document.createElement("span"); s.className = "kbd"; s.textContent = k; s.setAttribute("aria-hidden", "true"); b.append(s); b.dataset.kbd = k; }
