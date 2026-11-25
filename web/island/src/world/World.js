@@ -276,7 +276,7 @@ export class World {
   /** 오늘 장부 칸에 더함(최근 LEDGER_DAYS일) */
   led(key, n) {
     const d = newsDay(this.time), L = this.bank.ledger; let e = L[L.length - 1];
-    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
+    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0, refunds: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
     e[key] += n;
   }
   /** 금고에 돈이 들어옴: kind "returned"(갈매미가 낸 돈) | "tax". 들어올 때마다 밀린 품삯부터 갚음 */
@@ -938,7 +938,7 @@ export class World {
   }
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
-    if (b.fee && !this.isDone(b)) { this.bank.vault += b.fee; this.bank.fees -= b.fee; this.led("fees", -b.fee); b.fee = 0; this.settleOwed(); }   // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로)
+    if (b.fee && !this.isDone(b)) { this.bank.vault += b.fee; this.bank.fees -= b.fee; this.led("refunds", b.fee); b.fee = 0; this.settleOwed(); }   // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로)
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
     for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) u.committed = null; }   // 짓던 갈매미는 그만
     this.grid.release(id); this.buildings.delete(id); this.emit("buildingRemoved", b);

@@ -258,3 +258,13 @@ test("밀린 품삯을 갚아 금고가 30 아래로 내려가도 '얼마 안 �
   w.bank.low = 0; boss.wageOwed = 50; w.bank.owed = 50;
   w.deposit(45); assert.equal(w.bank.vault, 0); assert.equal(boss.wageOwed, 5); assert.deepEqual(seen, [0]); assert.equal(w.bank.low, 1);
 });
+
+test("장부: 전날 놓은 공사장을 오늘 철거하면 오늘 칸에 환불(refunds)로 적고 설계비는 음수가 되지 않음(검토 회귀)", () => {
+  const { w } = town(100);
+  const site = place(w, "house").building; assert.equal(w.bank.ledger.at(-1).fees, 10);
+  w.time = NEWS_DAY_SECS + 5; w.removeBuilding(site.id);
+  assert.deepEqual(w.bank.ledger.map(e => [e.day, e.fees, e.refunds]), [[1, 10, 0], [2, 0, 10]]);
+  assert.equal(w.bank.fees, 0, "누계는 환불을 뺌"); assert.equal(w.bank.vault, 100);
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize()))); assert.equal(back.bank.ledger.at(-1).refunds, 10);
+  assert.equal(BK.bankFromSave({ ledger: [{ day: 1, fees: 3 }] }).ledger[0].refunds, 0, "예전 장부엔 없음 → 0");
+});
