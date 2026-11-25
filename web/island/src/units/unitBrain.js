@@ -15,6 +15,7 @@ import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
 import * as IM from "../world/improve.js";
 import { FURNITURE } from "../data/catalog.js";
+import { FESTIVAL_JOIN_CHANCE, FESTIVAL_FUN, FESTIVAL_PAL } from "../world/festival.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
@@ -441,9 +442,29 @@ function goToBed(u, world, rnd) {
   if (home && world.isDone(home) && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지", 2.4); return true; }
   return startActivityInner(u, "sleep", world, rnd);
 }
+/** 축제 모이기: 광장 둘레(1.5~4칸)의 빈 자리로 걸어감. 갈 수 있으면 true */
+function startGather(u, world, rnd) {
+  const f = world.festival;
+  for (let k = 0; k < 6; k++) {
+    const a = rnd() * Math.PI * 2, d = 1.5 + rnd() * 2.5, spot = nearestWalkable(world.grid, Math.floor(f.x + Math.cos(a) * d), Math.floor(f.z + Math.sin(a) * d), 2);
+    if (spot && !world.grid.doorOwner(spot[0], spot[1]) && startPath(u, world, spot[0], spot[1])) { u.state = US.GoFest; return true; }
+  }
+  return false;
+}
+/** 광장에 닿음: 함께한 갈매미로 적고, 광장을 보며 폴짝 뛰고(♪·🎉), 재미·친구 욕구가 차고, 곁에 있는 축제 친구와 조금 친해짐. 가끔은 신나서 뛰어다님 */
+function partyAt(u, world, rnd) {
+  const f = world.festival; if (!f.who.includes(u.unitId)) f.who.push(u.unitId);
+  u.path = null; face(u, f.x, f.z); u.state = US.Greet;
+  if (u.needs) { u.needs.fun = Math.min(100, u.needs.fun + FESTIVAL_FUN); u.needs.social = Math.min(100, u.needs.social + FESTIVAL_FUN); }
+  const pal = nearest(u, world.units.filter(o => o !== u && visible(o) && f.who.includes(o.unitId) && Math.hypot(o.x - u.x, o.z - u.z) < 4), o => [o.x - 0.5, o.z - 0.5]);
+  if (!(pal && world.befriend(u, pal, FESTIVAL_PAL))) emote(u, pick(["♪", "🎉", "✨", "♪♪", "축제다!"], rnd), 2);   // 사이가 한 단계 올랐으면 그 말풍선을 그대로 둠
+  doOnce(u, "Jump", null, () => { setIdle(u, rnd, world, 0.6 + rnd() * 1.8); if (rnd() < 0.3) startActivity(u, "zoomies", world, rnd); });
+}
 function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
   if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
+  // 축제의 날: 맡은 공사가 없고 너무 지치지 않았으면 광장에 모여 놂(이날만은 잘 시간에도 늦게까지)
+  if (world.festival && !u.committed && (u.needs?.energy ?? 100) >= 20 && rnd() < FESTIVAL_JOIN_CHANCE && startGather(u, world, rnd)) return;
   if (sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { if (goToBed(u, world, rnd)) return; }   // 잘 시간: 집에 가서 잠(야행성은 낮에)
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
   if (world.economy) {
@@ -581,8 +602,12 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     case US.Sleep:
       if ((u.emoteT ?? 0) <= 0) emote(u, "💤", 2.5);
-      if (u.timer <= 0 && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY) { u.timer = 8; break; }   // 집이 없으면 밖에서 계속 잠
+      if (u.timer <= 0 && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY && !world.festival) { u.timer = 8; break; }   // 집이 없으면 밖에서 계속 잠
       if (u.timer <= 0 || ((u.needs?.energy ?? 100) >= 95 && !sleepTime(u, world))) { u.activity = "sleep"; done(u, 1, rnd, world); emote(u, "잘 잤다!"); }
+      break;
+    case US.GoFest:                                                                 // 축제 광장으로 가는 중(그사이 축제가 끝나면 그만둠)
+      if (!world.festival) { setIdle(u, rnd, world); break; }
+      if (followPath(u, dt, world, rnd)) partyAt(u, world, rnd);
       break;
     case US.Zoomies:
       if (followPath(u, dt, world, rnd)) {

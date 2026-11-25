@@ -21,6 +21,7 @@ import * as RD from "./roads.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
+import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -66,6 +67,8 @@ export class World {
     // 드문 하늘: 지금 떠 있는 것 { kind, t 남은 초 }(저장하지 않음 → 불러오면 끝난 것으로) · 본 횟수 · 첫눈을 본 겨울(해, 화면이 winterYear를 넣어 줌)
     this.sky = null; this.skySeen = skySeenFromSave(extra.skySeen); this.firstSnowYear = extra.firstSnowYear ?? null; this.winterYear = null;
     this.skyRnd = seededRandom(skySeed(extra.seed ?? 7, extra.time)); this.skyClock = 0; this.starClock = 0;   // 하늘만 쓰는 난수(다른 일의 순서를 바꾸지 않음. 불러올 때마다 같은 순서로 되풀이되지 않게 마을 시간을 섞음)
+    // 계절 축제의 날: 이번 축제 열쇠 "해-계절"(화면이 기기 날짜로 넣어 줌, 저장 안 함) · 열리는 중인 축제 { id, t 남은 초, x, z 광장, who 함께한 갈매미 id } · 지난 축제 도장 { 열쇠: true }
+    this.festKey = null; this.festival = festivalFromSave(extra.festival); this.festivals = festivalsFromSave(extra.festivals); this.festClock = 0;
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -120,7 +123,7 @@ export class World {
     const s = createUnitAIState(`u${i + 1}`, def.name, x, z, 0.5 + r() * 2); s.scale = def.scale;
     J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
     s.coins = 0; s.inv = E.newBag(); s.home = null;                            // 돈·가방·내 집
-    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0;                      // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
+    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(은행)
     if (this.profiles) this.applyProfile(s);
@@ -495,6 +498,38 @@ export class World {
     return { ok: true, left: PET_DAILY - u.petN, thanks };
   }
 
+  // ---- 계절 축제의 날(festival.js)
+  /** 축제 소원을 올림: 이번 계절 축제를 아직 안 열었고 마을 등급이 되면 한 번(소원 2개 제한과 따로). 난수를 쓰지 않음(소원이 없는 갈매미 중 마을 시간으로 고름) */
+  wishFestival() {
+    const key = this.festKey;
+    if (!festivalOf(key) || this.festivals[key] || this.festival || this.rank < FESTIVAL_RANK || this.wishes.some(x => x.id === "festival")) return null;
+    const free = this.units.filter(u => !this.wishOf(u)); if (!free.length) return null;
+    const u = free[Math.floor(this.time) % free.length], wish = { id: "festival", unitId: u.unitId, base: key, had: festiveCount(this), age: 0 };
+    this.wishes.push(wish); emote(u, "💭 🎉", 3); this.emit("wish", { wish, u }); return wish;
+  }
+  /** 축제를 엶(광장이 있어야 함). 밖에서 깨어 있는 갈매미가 환호함. 열었으면 true */
+  startFestival(key = this.festKey) {
+    const f = festivalOf(key), plaza = festivalPlaza(this); if (!f || this.festival || plaza.x === null) return false;
+    this.festival = { id: key, t: FESTIVAL_SECS, x: plaza.x, z: plaza.z, who: [] };
+    for (const u of this.units) if (!u.insideBuildingId && ![UnitState.Sleep, UnitState.Held].includes(u.state)) emote(u, `🎉 ${f.def.icon}`, 3);
+    this.emit("festival", { key, def: f.def, festival: this.festival }); return true;
+  }
+  /** 축제를 마침: 함께한 갈매미는 여운(만족도 덤)이 남고, 마을 가방에 그 계절 기념 가구 하나. 그 계절 도장을 찍어 다시 열리지 않음 */
+  endFestival() {
+    const fest = this.festival, f = fest && festivalOf(fest.id); if (!f) { this.festival = null; return false; }
+    this.festival = null; this.festivals[fest.id] = true;
+    const joined = this.units.filter(u => fest.who.includes(u.unitId));
+    for (const u of joined) { u.cheer = FESTIVAL_CHEER_SECS; if (!u.insideBuildingId && u.state !== UnitState.Sleep) emote(u, "♥ 즐거웠어!", 3); }
+    const item = festivalGift(fest.id); if (item) this.items[item.id] = (this.items[item.id] || 0) + 1;
+    this.emit("festivalEnd", { key: fest.id, def: f.def, item, n: joined.length }); return true;
+  }
+  stepFestival(dt) {
+    if (this.festival && (this.festival.t -= dt) <= 0) this.endFestival();
+    if ((this.festClock += dt) < 1) return; const step = this.festClock; this.festClock = 0;
+    for (const u of this.units) if (u.cheer > 0) u.cheer = Math.max(0, u.cheer - step);
+    this.wishFestival();
+  }
+
   // ---- 소원
   wishOf(u) { return this.wishes.find(x => x.unitId === u.unitId) || null; }
   makeWish() {
@@ -523,6 +558,7 @@ export class World {
         if (this.economy) this.issue(u, WISH_REWARD * (this.postB() ? 2 : 1));   // 우체국이 있으면 축하 편지와 함께 두 배
         u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘어요!", 3);
         this.emit("wishDone", { wish, u, def: d });
+        if (wish.id === "festival") this.startFestival(wish.base);                // "축제 하자!"가 이루어지면 바로 축제가 열림
       } else if (Math.floor(wish.age) % 20 === 0) emote(u, `💭 ${d.icon}`, 2.5);   // 20초마다 말풍선으로 다시 알림
     }
   }
@@ -797,7 +833,7 @@ export class World {
     for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt * grow) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
     if ((this.histClock += dt) >= 20) { this.histClock = 0; this.priceHist.push({ t: Math.round(this.time), ...this.prices }); if (this.priceHist.length > 48) this.priceHist.shift(); }
-    this.stepWishes(dt);
+    this.stepWishes(dt); this.stepFestival(dt);
     if ((this.rankClock += dt) >= 2) { this.rankClock = 0; this.updateRoads(); this.stepRank(); }
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);
@@ -825,8 +861,9 @@ export class World {
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0 })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0) })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
+      festival: this.festival, festivals: this.festivals,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -841,7 +878,7 @@ export class World {
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
-      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); }                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
+      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); }                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
     if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
     w.nextId = j.nextId; return w;
   }

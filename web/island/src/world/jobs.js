@@ -73,7 +73,7 @@ export function rollFish(u, rnd, season = null, bonus = 1) {
 export const itemChance = u => 0.02 * skillMult(u, "fish") ** 2;
 export function rollItem(u, rnd, season = null, bonus = 1) {
   const w = { common: 50, rare: 30, epic: 15, legend: 5 }, m = skillMult(u, "fish") * bonus;
-  const ws = ITEMS.map(i => inSeason(i, season) && !i.sky ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0);
+  const ws = ITEMS.map(i => inSeason(i, season) && !i.sky && !i.fest ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0);
   let r = rnd() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < ITEMS.length; i++) if ((r -= ws[i]) <= 0) return ITEMS[i];
   return ITEMS[0];

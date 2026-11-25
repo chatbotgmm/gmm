@@ -1302,3 +1302,90 @@ test("드문 하늘: 무지개(낮에 비가 갠 뒤)·유성우(맑은 밤)·�
   { const at = t => World.fromJSON({ ...j, time: t }, seededRandom(2)).skyRnd(); assert.equal(at(500), at(500)); assert.notEqual(at(500), at(900)); assert.equal(mk().skyRnd(), mk().skyRnd()); }
   assert.equal(w.firstSnow(true), true, "시험용으로는 다시 알릴 수 있음");
 });
+
+// ---------------------------------------------------------------- 계절 축제의 날
+test("축제 열쇠: 해 + 계절(겨울은 12월이 든 해), 광장은 축제 장식 4개가 6칸 안", async () => {
+  const Fe = await import("../src/world/festival.js");
+  assert.equal(Fe.festivalKey(new Date(2026, 10, 25)), "2026-autumn"); assert.equal(Fe.festivalKey(new Date(2026, 11, 3)), "2026-winter");
+  assert.equal(Fe.festivalKey(new Date(2027, 1, 10)), "2026-winter", "1~2월은 지난해 겨울과 같은 축제"); assert.equal(Fe.festivalKey(new Date(2027, 2, 1)), "2027-spring");
+  assert.equal(Fe.festivalOf("2026-autumn").def, Fe.FESTIVALS.autumn); assert.equal(Fe.festivalOf("2026-monsoon"), null); assert.equal(Fe.festivalOf(null), null);
+  for (const s of Object.keys(Fe.FESTIVALS)) { const it = Fe.festivalGift(`2026-${s}`); assert.ok(it?.fest && it.furniture, `${s} 기념 가구`); }
+  const { FURNITURE, ITEMS } = await import("../src/data/catalog.js"); const J2 = await import("../src/world/jobs.js");
+  for (const it of ITEMS.filter(i => i.fest)) assert.ok(FURNITURE[it.furniture], "가구 정의가 있음");
+  const r = seededRandom(5), u = { job: "fisher", rarity: "legend" }; for (let i = 0; i < 400; i++) assert.ok(!J2.rollItem(u, r, "winter", 3).fest, "기념 가구는 낚시로 안 나옴");
+  const w = World.create(7, seededRandom(1), { empty: true }); w.instantBuild = true; w.addUnitByName("기본");
+  const c = w.center, spots = []; for (let z = Math.floor(c.z) - 12; z < c.z + 12 && spots.length < 5; z += 2) for (let x = Math.floor(c.x) - 3; x < c.x + 3 && spots.length < 5; x += 2) if (w.check("bunting", x, z, 0).ok && spots.every(s => Math.hypot(s[0] - x, s[1] - z) <= 5)) spots.push([x, z]);
+  assert.equal(spots.length, 5, "놓을 자리");
+  for (const [i, id] of ["bunting", "festLantern", "seasonDeco"].entries()) assert.ok(w.placeBuilding(id, ...spots[i], 0).ok);
+  let p = Fe.festivalPlaza(w); assert.equal(p.ok, false); assert.equal(p.n, 3); assert.equal(Fe.festiveCount(w), 3);
+  assert.ok(w.placeBuilding("bunting", ...spots[3], 0).ok); p = Fe.festivalPlaza(w); assert.ok(p.ok); assert.equal(p.n, 4);
+  assert.ok(Math.abs(p.x - (spots.slice(0, 4).reduce((s, q) => s + q[0], 0) / 4 + 0.5)) < 1e-9, "광장 가운데 = 장식들의 한가운데");
+  assert.equal(Fe.festivalPlaza(World.create(7, seededRandom(1), { empty: true })).x, null);
+});
+
+/** 축제 시험용 마을: 갈매미 넷 + 광장 둘레에 장식을 놓을 자리들 */
+function festTown() {
+  const w = World.create(7, seededRandom(3), { empty: true }); w.instantBuild = true;
+  for (const n of ["기본", "미니", "꽃", "물방울"]) w.addUnitByName(n);
+  const c = w.center, spots = []; for (let z = Math.floor(c.z) + 6; z < c.z + 20 && spots.length < 6; z += 2) for (let x = Math.floor(c.x) - 3; x < c.x + 3 && spots.length < 6; x += 2) if (w.check("bunting", x, z, 0).ok && spots.every(s => Math.hypot(s[0] - x, s[1] - z) <= 5)) spots.push([x, z]);
+  assert.ok(spots.length >= 5, "놓을 자리"); return { w, spots };
+}
+test("축제 소원: 실제 계절마다 한 번·등급이 되면 생기고, 광장을 꾸미면(새 장식 하나 이상) 축제가 열림", async () => {
+  const Fe = await import("../src/world/festival.js"); const { WISH_BY_ID } = await import("../src/world/wishes.js");
+  const { w, spots } = festTown(), seen = []; w.on("festival", e => seen.push(e.key)); w.on("wish", e => seen.push("wish:" + e.wish.id));
+  w.stepFestival(1.1); assert.equal(w.wishes.length, 0, "열쇠(기기 날짜)가 없으면 아무 일도 없음");
+  w.festKey = "2026-autumn"; w.rank = 0; w.stepFestival(1.1); assert.equal(w.wishes.length, 0, "갯마을(첫 등급)에서는 아직");
+  assert.equal(WISH_BY_ID.festival.ok(w, w.units[0]), false, "제비뽑기 소원으로는 안 나옴");
+  w.wishes = [{ id: "friend", unitId: w.units[0].unitId, base: 99, age: 0 }, { id: "market", unitId: w.units[1].unitId, base: 0, age: 0 }];
+  w.rank = Fe.FESTIVAL_RANK; w.stepFestival(1.1);
+  const wish = w.wishes.find(x => x.id === "festival"); assert.ok(wish, "소원 2개가 차 있어도 축제 소원은 따로"); assert.equal(wish.base, "2026-autumn"); assert.equal(wish.had, 0);
+  assert.ok(![w.units[0].unitId, w.units[1].unitId].includes(wish.unitId), "소원이 없는 갈매미가 빎"); assert.deepEqual(seen, ["wish:festival"]);
+  w.stepFestival(1.1); assert.equal(w.wishes.filter(x => x.id === "festival").length, 1, "한 번만");
+  w.wishes = [wish];
+  for (let i = 0; i < 3; i++) w.placeBuilding(i % 2 ? "festLantern" : "bunting", ...spots[i], 0);
+  w.stepWishes(1.1); assert.equal(w.festival, null, "장식 3개로는 아직");
+  const done0 = w.wishDone; w.placeBuilding("seasonDeco", ...spots[3], 0); w.stepWishes(1.1);
+  assert.equal(w.wishes.length, 0); assert.equal(w.wishDone, done0 + 1); assert.equal(w.festival.id, "2026-autumn"); assert.equal(w.festival.t, Fe.FESTIVAL_SECS); assert.deepEqual(w.festival.who, []);
+  assert.ok(seen.includes("2026-autumn")); assert.ok(w.newsLog.some(n => n.text.includes("가을 달맞이 축제가 열렸어요")), "소식지 머릿기사");
+  w.stepFestival(1.1); assert.ok(!w.wishes.some(x => x.id === "festival"), "열리는 동안엔 다시 빌지 않음");
+  // 다음 계절: 지난 장식이 그대로 있으면 새 장식을 하나 놓아야 이루어짐 · 계절이 넘어가면 못 이룬 소원은 접음
+  w.endFestival(); w.festKey = "2026-winter"; w.stepFestival(1.1); const next = w.wishes.find(x => x.id === "festival"); assert.equal(next.had, 4);
+  w.stepWishes(1.1); assert.equal(w.festival, null, "지난 장식만으로는 아직");
+  const lost = []; w.on("wishLost", e => lost.push(e.wish.base)); w.festKey = "2027-spring"; w.stepWishes(1.1); assert.deepEqual(lost, ["2026-winter"]);
+  w.stepFestival(1.1); w.placeBuilding("bunting", ...spots[4], 0); w.stepWishes(1.1); assert.equal(w.festival?.id, "2027-spring");
+});
+
+test("축제: 한가한 갈매미가 광장에 모여 놀고, 끝나면 여운(만족도)·기념 가구·도장. 그 계절엔 다시 안 열림", async () => {
+  const Fe = await import("../src/world/festival.js"); const { satisfaction } = await import("../src/world/roads.js"); const Fu = await import("../src/world/furniture.js");
+  const { w, spots } = festTown(); w.festKey = "2026-summer"; w.rank = 1;
+  assert.equal(w.startFestival(), false, "광장(장식)이 없으면 못 엶");
+  for (let i = 0; i < 4; i++) w.placeBuilding(i % 2 ? "festLantern" : "bunting", ...spots[i], 0);
+  for (const u of w.units) { u.full = 100; u.needs.energy = 100; u.needs.fun = 30; u.needs.social = 30; u.timer = 0; }
+  const fun0 = w.units.map(u => u.needs.fun), ended = []; w.on("festivalEnd", e => ended.push(e));
+  assert.ok(w.startFestival()); const f = w.festival; let went = false;
+  for (let i = 0; i < 30 * 100; i++) { w.update(1 / 30); for (const u of w.units) { u.full = 100; if (u.state === UnitState.GoFest) went = true; } }
+  assert.ok(went, "광장으로 걸어감"); assert.ok(f.who.length >= 3, `대부분 함께함(${f.who.length})`);
+  assert.ok(w.units.some((u, i) => f.who.includes(u.unitId) && u.needs.fun > fun0[i]), "재미가 참");
+  const a = w.units.find(u => f.who.includes(u.unitId)), pals = w.units.filter(o => o !== a && (a.friends[o.unitId] || 0) > 0);
+  assert.ok(pals.length > 0, "곁에서 놀던 갈매미와 조금 친해짐");
+  // 저장·불러오기: 열리는 중인 축제와 함께한 갈매미
+  const mid = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(4));
+  assert.equal(mid.festival.id, "2026-summer"); assert.deepEqual(mid.festival.who, f.who); assert.ok(Math.abs(mid.festival.t - f.t) < 1e-6); assert.equal(mid.festival.x, f.x);
+  for (let i = 0; i < 30 * 90 && w.festival; i++) w.update(1 / 30);
+  assert.equal(w.festival, null, "정해진 시간이 지나면 끝남"); assert.equal(ended.length, 1); assert.equal(ended[0].item.id, "festSummer"); assert.equal(ended[0].n, f.who.length);
+  assert.equal(w.items.festSummer, 1, "기념 가구는 마을 가방으로"); assert.deepEqual(w.festivals, { "2026-summer": true });
+  assert.ok(a.cheer > 0 && satisfaction(w, a).parts.some(p => p[0].includes("축제") && p[1] === Fe.FESTIVAL_SAT), "함께한 갈매미는 만족도 덤");
+  const out = w.units.find(u => !f.who.includes(u.unitId)); if (out) assert.ok(!satisfaction(w, out).parts.some(p => p[0].includes("축제")));
+  assert.ok(w.newsLog.some(n => n.text.includes("여름 바다 축제가 끝났어요") && n.text.includes("파도 깔개")));
+  const home = { defId: "house", interior: {} }; assert.equal(Fu.available(w, home).waveRug?.n, 1, "집 꾸미기에서 놓을 수 있음"); assert.ok(Fu.place(w, home, "waveRug", 0, 0, 0)); assert.equal(w.items.festSummer, 0);
+  w.placeBuilding("bunting", ...spots[4], 0); for (let i = 0; i < 5; i++) { w.stepFestival(1.1); w.stepWishes(1.1); }
+  assert.ok(!w.wishes.some(x => x.id === "festival") && !w.festival, "같은 계절엔 다시 안 열림");
+  const c0 = a.cheer; w.stepFestival(1.5); assert.ok(a.cheer < c0, "여운은 시간이 지나면 옅어짐");
+  // 저장·불러오기: 도장·여운 · 예전 저장(축제 칸 없음)
+  const j = JSON.parse(JSON.stringify(w.serialize())), b = World.fromJSON(j, seededRandom(4));
+  assert.deepEqual(b.festivals, { "2026-summer": true }); assert.equal(b.festival, null); assert.equal(b.units.find(u => u.name === a.name).cheer, Math.round(a.cheer)); assert.equal(b.festKey, null, "열쇠는 저장하지 않음(화면이 날짜로 넣음)");
+  assert.deepEqual(Fe.festivalStamps({ "2027-spring": true, "2026-winter": true, "2026-summer": true, junk: true }).map(x => x.key), ["2026-summer", "2026-winter", "2027-spring"]);
+  delete j.festival; delete j.festivals; for (const u of j.units) delete u.cheer;
+  const old = World.fromJSON(j, seededRandom(4)); assert.deepEqual(old.festivals, {}); assert.equal(old.festival, null); assert.ok(old.units.every(u => u.cheer === 0));
+  assert.equal(Fe.festivalFromSave({ id: "2026-summer", t: 9999, x: 1, z: 2 }).t, Fe.FESTIVAL_SECS); assert.equal(Fe.festivalFromSave({ id: "x", t: 5, x: 1, z: 2 }), null);
+});

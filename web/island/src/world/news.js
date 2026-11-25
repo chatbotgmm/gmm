@@ -39,6 +39,9 @@ const NEWS_MAKERS = {
   firstSnow: ({ def }) => ({ icon: def.icon, text: def.text, weight: 5 }),
   sky: ({ kind, def }) => ({ icon: def.icon, text: def.text, weight: kind === "meteor" ? 6 : 5 }),
   starPiece: ({ u, item }) => ({ icon: "⭐", text: `${josa(u.name, "이", "가")} 별똥별이 떨어진 자리에서 ${josa(item.name, "을", "를")} 주웠어요!`, weight: 5 }),
+  // 계절 축제의 날: 열림 · 끝남(기념 가구)
+  festival: ({ def }) => ({ icon: def.icon, text: `${josa(def.name, "이", "가")} 열렸어요! 갈매미들이 광장으로 모여요`, weight: 8 }),
+  festivalEnd: ({ def, item, n }) => ({ icon: "🎁", text: `${josa(def.name, "이", "가")} 끝났어요. ${n ? `갈매미 ${n}마리가 즐겼고, ` : ""}기념으로 ${item ? josa(item.name, "을", "를") : "추억을"} 받았어요!`, weight: 7 }),
   buildingDone: b => { const d = BUILDINGS[b.defId]; return d ? { icon: d.house ? "🏠" : "🔨", text: `${josa(d.name, "이", "가")} 다 지어졌어요`, weight: builtWeight(d) } : null; },
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };

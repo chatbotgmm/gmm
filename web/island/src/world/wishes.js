@@ -3,6 +3,7 @@
 import { BUILDINGS } from "../data/catalog.js";
 import { owns, allFurniture } from "./furniture.js";
 import { bestieOf } from "../units/mind.js";
+import { festivalPlaza, festiveCount, FESTIVAL_NEED, FESTIVAL_RADIUS } from "./festival.js";
 
 const builtAny = (w, test) => [...w.buildings.values()].some(b => test(BUILDINGS[b.defId], b) && w.isDone(b));
 const builtCount = (w, test) => [...w.buildings.values()].filter(b => test(BUILDINGS[b.defId], b) && w.isDone(b)).length;
@@ -53,5 +54,10 @@ export const WISHES = [
     base: (w, u) => bestieOf(u, w.units)?.name ?? null,
     done: (w, u, wish) => areNeighbors(homeB(w, u), homeB(w, wishPal(w, wish))),
     lost: (w, u, wish) => { const f = wishPal(w, wish); return !f || (!!u.home && !!f.home && !areNeighbors(homeB(w, u), homeB(w, f))); } },
+  // 계절 축제의 날: 제비뽑기로는 안 나오고(ok 없음) 월드가 계절마다 한 번 직접 올림(World.stepFestival). base = 축제 열쇠(해-계절), had = 빌 때 있던 축제 장식 수.
+  // 광장(축제 장식 FESTIVAL_NEED개가 FESTIVAL_RADIUS칸 안)이 있고, 빈 뒤에 장식을 하나라도 새로 놓았으면 이루어짐. 계절이 넘어가면 접음.
+  { id: "festival", icon: "🎉", text: "축제 하자!", hint: `🔨 축제 장식(깃발 줄·축제 등불·계절 장식·눈사람) ${FESTIVAL_NEED}개를 ${FESTIVAL_RADIUS}칸 안에 모아 광장을 꾸며요(새 장식 하나 이상)`,
+    ok: () => false, done: (w, u, wish) => festivalPlaza(w).ok && festiveCount(w) > (wish.had ?? -1),
+    lost: (w, u, wish) => !!w.festKey && wish.base !== w.festKey },
 ];
 export const WISH_BY_ID = Object.fromEntries(WISHES.map(x => [x.id, x]));

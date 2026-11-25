@@ -22,7 +22,7 @@ export class BuildingViews {
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
     const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
-    const model = def.stairs ? await stairsProp(def, b.ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
+    const model = def.stairs ? await stairsProp(def, b.ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, this.world.season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
@@ -132,8 +132,29 @@ function glowTex() { if (GLOW) return GLOW; const c = document.createElement("ca
 const DM = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
 const dpart = (g, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
 /** 장식: 벤치·꽃밭·분수·눈사람(상자·원기둥 모양) */
-function decoModel(shape) {
+function decoModel(shape, season = null) {
   const g = new THREE.Group();
+  // 축제 장식: 깃발 줄(기둥 둘 + 세모 깃발) · 축제 등불(빛나는 등) · 계절 장식(지을 때의 계절 모습)
+  const FLAG = [0xff6b8a, 0xffd23f, 0x6fc8e8, 0x7fd08a, 0xb07cff];
+  if (shape === "bunting") { const wood = DM(0xb98352);
+    for (const x of [-0.42, 0.42]) { dpart(g, new THREE.CylinderGeometry(0.03, 0.04, 1.5, 6), wood, x, 0.75, 0); dpart(g, new THREE.SphereGeometry(0.05, 8, 6), DM(0xffd23f), x, 1.52, 0); }
+    dpart(g, new THREE.BoxGeometry(0.84, 0.015, 0.015), DM(0xf7f2e8), 0, 1.4, 0);
+    for (let i = 0; i < 5; i++) { const f = dpart(g, new THREE.ConeGeometry(0.075, 0.17, 3), DM(FLAG[i]), -0.3 + i * 0.15, 1.31 - Math.sin((i + 0.5) / 5 * Math.PI) * 0.05, 0); f.rotation.x = Math.PI; f.scale.z = 0.25; } }
+  if (shape === "festLantern") { const glow = new THREE.MeshStandardMaterial({ color: 0xffb35c, emissive: 0xff8a2a, emissiveIntensity: 0.9, roughness: 0.5 });
+    dpart(g, new THREE.CylinderGeometry(0.16, 0.2, 0.08, 10), DM(0x8a6a45), 0, 0.04, 0); dpart(g, new THREE.CylinderGeometry(0.03, 0.03, 0.75, 6), DM(0x8a6a45), 0, 0.42, 0);
+    const l = dpart(g, new THREE.SphereGeometry(0.2, 12, 10), glow, 0, 0.98, 0); l.scale.y = 1.15; l.castShadow = false;
+    for (const y of [0.76, 1.2]) dpart(g, new THREE.CylinderGeometry(0.1, 0.1, 0.05, 10), DM(0x7b3b2e), 0, y, 0); }
+  if (shape === "seasonDeco") {
+    if (season === "winter") return decoModel("snowman");                             // 겨울: 눈사람
+    if (season === "summer") { dpart(g, new THREE.CylinderGeometry(0.025, 0.025, 1.2, 6), DM(0xf7f2e8), 0, 0.6, 0);   // 여름: 파라솔 + 돗자리
+      for (let i = 0; i < 8; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.24, 8, 1, true, i * Math.PI / 4, Math.PI / 4), new THREE.MeshStandardMaterial({ color: i % 2 ? 0xffffff : 0xff6b6b, roughness: 0.85, side: THREE.DoubleSide })); c.position.y = 1.2; c.castShadow = true; g.add(c); }
+      dpart(g, new THREE.BoxGeometry(0.7, 0.02, 0.4), DM(0x6fc8e8), 0, 0.01, 0.2); }
+    else if (season === "autumn") { const pk = DM(0xf08a2a);                          // 가을: 호박 더미
+      for (const [x, y, z, r] of [[-0.18, 0.17, 0.05, 0.2], [0.2, 0.14, 0.1, 0.16], [0.02, 0.13, -0.2, 0.15], [0, 0.4, 0.02, 0.14]]) { dpart(g, new THREE.SphereGeometry(r, 10, 8), pk, x, y, z).scale.y = 0.78; dpart(g, new THREE.CylinderGeometry(0.015, 0.02, 0.07, 5), DM(0x5a7a2e), x, y + r * 0.78, z); }
+      dpart(g, new THREE.BoxGeometry(0.8, 0.03, 0.8), DM(0xd9b56a), 0, 0.015, 0); }
+    else { const vine = DM(0x5aa845), arch = dpart(g, new THREE.TorusGeometry(0.4, 0.035, 6, 14, Math.PI), vine, 0, 0.7, 0); arch.castShadow = true;   // 봄(계절을 모르면 이 모습): 꽃 아치
+      for (const x of [-0.4, 0.4]) dpart(g, new THREE.CylinderGeometry(0.035, 0.035, 0.7, 6), vine, x, 0.35, 0);
+      for (let i = 0; i < 9; i++) { const a = i / 8 * Math.PI; dpart(g, new THREE.SphereGeometry(0.065, 6, 5), DM(i % 2 ? 0xffb7cf : 0xffffff), Math.cos(a) * 0.4, 0.7 + Math.sin(a) * 0.4, i % 2 ? 0.04 : -0.04); } } }
   if (shape === "bench") { const w = DM(0xb98352), iron = DM(0x4a4a4a);
     for (let i = 0; i < 3; i++) dpart(g, new THREE.BoxGeometry(0.85, 0.04, 0.09), w, 0, 0.38, -0.1 + i * 0.1);
     for (let i = 0; i < 2; i++) dpart(g, new THREE.BoxGeometry(0.85, 0.08, 0.035), w, 0, 0.55 + i * 0.12, -0.2).rotation.x = -0.15;

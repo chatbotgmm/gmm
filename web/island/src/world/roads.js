@@ -7,6 +7,7 @@ import { GroundType } from "../data/types.js";
 import { BUILDINGS } from "../data/catalog.js";
 import { comfort } from "./furniture.js";
 import { yardFlat } from "./improve.js";
+import { FESTIVAL_SAT } from "./festival.js";
 
 export const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 export function isPaved(world, x, z) {
@@ -53,6 +54,7 @@ export function satisfaction(world, u, net = world.roads?.net) {
     if (world.powered?.(home)) parts.push(["⚡ 전기", 8]);
     if (yardFlat(world, home)) parts.push(["🏡 고른 마당", 5]);
   }
+  if ((u.cheer || 0) > 0) parts.push(["🎉 축제의 여운", FESTIVAL_SAT]);
   return { value: Math.max(0, Math.min(100, parts.reduce((s, p) => s + p[1], 0))), parts };
 }
 /** 포장도로로 시장이나 은행과 이어진 집 수 */

@@ -69,7 +69,12 @@ export const BUILDINGS = {
   bench:     { id: "bench", builtBy: "builder", deco: true, asset: "assets/props/bench_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 0.85, d: 0.85 }, cost: { wood: 1 }, tier: 1, name: "벤치", footprint: { w: 1, d: 1 }, work: 1, height: 0.6, placeholder: { wall: 0xb98352, roof: 0xb98352, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   flowerbed: { id: "flowerbed", builtBy: "builder", deco: true, cost: { wood: 1 }, tier: 1, name: "화단", footprint: { w: 1, d: 1 }, work: 1, height: 0.45, asset: "assets/props/flower_box_{T}.glb", fit: { w: 0.9, d: 0.9 }, placeholder: { wall: 0x8a6a45, roof: 0x8a6a45, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   fountain:  { id: "fountain", builtBy: "carpenter", deco: true, decoShape: "fountain", rank: 1, cost: { stone: 3 }, tier: 1, name: "분수", footprint: { w: 2, d: 2 }, work: 4, height: 1.2, asset: null, placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
-  snowman:   { id: "snowman", builtBy: "builder", deco: true, decoShape: "snowman", winterOnly: true, cost: {}, tier: 1, name: "눈사람", footprint: { w: 1, d: 1 }, work: 1, height: 1.0, asset: null, placeholder: { wall: 0xffffff, roof: 0xffffff, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  snowman:   { id: "snowman", builtBy: "builder", deco: true, festive: true, decoShape: "snowman", winterOnly: true, cost: {}, tier: 1, name: "눈사람", footprint: { w: 1, d: 1 }, work: 1, height: 1.0, asset: null, placeholder: { wall: 0xffffff, roof: 0xffffff, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  // 축제 장식(festive): 계절 축제의 날 광장을 꾸밈. 값싸고 건축가가 금방 지음. 눈사람도 축제 장식으로 침(world/festival.js)
+  bunting:     { id: "bunting", builtBy: "builder", deco: true, festive: true, decoShape: "bunting", cost: { wood: 1 }, tier: 1, name: "깃발 줄", footprint: { w: 1, d: 1 }, work: 1, height: 1.5, asset: null, placeholder: { wall: 0xb98352, roof: 0xff6b8a, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  festLantern: { id: "festLantern", builtBy: "builder", deco: true, festive: true, decoShape: "festLantern", cost: { wood: 1 }, tier: 1, name: "축제 등불", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0x8a6a45, roof: 0xffb35c, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
+  // 계절 장식: 지금 계절에 따라 모습이 달라짐(봄 꽃 아치 · 여름 파라솔 · 가을 호박 더미 · 겨울 눈사람)
+  seasonDeco:  { id: "seasonDeco", builtBy: "builder", deco: true, festive: true, decoShape: "seasonDeco", cost: { wood: 1 }, tier: 1, name: "계절 장식", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0xf2a49a, roof: 0xf2a49a, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 풍차 발전소: 둘레 18칸 안의 집에 전기(밤에 창이 밝아지고 만족도 +8)
   windmill:  { id: "windmill", builtBy: "carpenter", power: true, rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
@@ -117,6 +122,11 @@ export const FURNITURE = {
   coralTable: { id: "coralTable", name: "산호 테이블", footprint: { w: 1, d: 1 }, height: 0.6, comfort: 3, shape: "table", colors: [0xff8f7a] },
   wreckShelf: { id: "wreckShelf", name: "난파선 책장", footprint: { w: 2, d: 1 }, height: 1.5, comfort: 4, use: "read", useLabel: "난파선 책장에서 책 읽기", shape: "bookshelf", colors: [0x5a4232] },
   shellBed:   { id: "shellBed", name: "조개 침대", footprint: { w: 1, d: 2 }, height: 0.5, comfort: 6, use: "sleep", useLabel: "조개 침대에서 낮잠", shape: "bed", colors: [0xf7c6d0, 0xfff6f0, 0xffd9e3] },
+  // 계절 축제 기념 가구(계절마다 하나, 축제가 끝나면 마을 가방으로. ITEMS의 fest)
+  blossomPot: { id: "blossomPot", name: "벚꽃 화분", footprint: { w: 1, d: 1 }, height: 0.9, comfort: 3, shape: "plant", colors: [0xf7e3d0, 0xffb7cf] },
+  waveRug:    { id: "waveRug", name: "파도 깔개", footprint: { w: 2, d: 2 }, height: 0.02, comfort: 3, layer: "floor", shape: "rug", colors: [0x4fa3c7, 0xe6f4f7] },
+  mapleLamp:  { id: "mapleLamp", name: "단풍 등불", footprint: { w: 1, d: 1 }, height: 1.5, comfort: 3, shape: "floorLamp", colors: [0x7b4b2e, 0xffa04a], light: true },
+  snowSofa:   { id: "snowSofa", name: "눈꽃 소파", footprint: { w: 2, d: 1 }, height: 0.8, comfort: 4, use: "sit", useLabel: "눈꽃 소파에서 뒹굴", shape: "sofa", colors: [0xbfdcf2, 0xffffff] },
 };
 export const SHOP_FURNITURE = Object.values(FURNITURE).filter(f => f.price).map(f => f.id);
 // 실내 바닥·벽지 색
@@ -259,6 +269,11 @@ export const ITEMS = [
   { id: "iceshell", name: "얼음 조개",    rarity: "rare",   price: 15, season: "winter" },
   // 하늘에서 온 물건(sky: 낚시로는 안 나옴. 유성우가 오는 밤에 깨어 있는 야행성 갈매미가 주움)
   { id: "stardust", name: "별조각",       rarity: "epic",   price: 30, sky: true },
+  // 계절 축제 기념 가구(fest: 낚시로는 안 나옴. 그 계절 축제가 끝나면 하나 받음)
+  { id: "festSpring", name: "벚꽃 화분", rarity: "epic", furniture: "blossomPot", fest: true },
+  { id: "festSummer", name: "파도 깔개", rarity: "epic", furniture: "waveRug",    fest: true },
+  { id: "festAutumn", name: "단풍 등불", rarity: "epic", furniture: "mapleLamp",  fest: true },
+  { id: "festWinter", name: "눈꽃 소파", rarity: "epic", furniture: "snowSofa",   fest: true },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };
