@@ -221,3 +221,16 @@ test("흐름: 넓은 섬 보통 놀이 3일 — 금고가 마르지 않고, 집�
   assert.equal(Math.round(w.bank.vault), BK.VAULT_START + w.bank.taxed + w.bank.returned - w.bank.fees - w.bank.wages, "금고 = 시작 + 세금 + 돌아온 돈 − 설계비 − 품삯");
   void E;
 });
+
+test("첫 시장은 설계비 없음: 시장을 짓기 전에 금고를 다 써도 빠져나올 길이 있음(검토 회귀)", () => {
+  const w = World.create(7, seededRandom(3), { wild: true });
+  for (const n of ["목수", "미니", "황금"]) w.addUnitByName(n);
+  assert.equal(w.economy, true); assert.equal(w.marketB(), null);
+  w.bank.vault = 0; for (const u of w.units) u.coins = 0;
+  assert.equal(w.feeFor("market"), 0, "시장이 하나도 없으면 0");
+  const s = spotFor(w, "market"), c = w.check("market", s[0], s[1], 0); assert.equal(c.ok, true); assert.equal(c.fee, 0);
+  const r = w.placeBuilding("market", s[0], s[1], 0); assert.ok(r.ok); assert.equal(r.building.fee, 0); assert.equal(w.bank.vault, 0);
+  assert.equal(w.feeFor("market"), BK.FEE.market, "공사 중인 시장이 있으면 둘째부터는 설계비");
+  const s2 = spotFor(w, "market"); assert.match(w.check("market", s2[0], s2[1], 0).reason, /금고/);
+  w.removeBuilding(r.building.id); assert.equal(w.feeFor("market"), 0, "철거하면 다시 첫 시장");
+});

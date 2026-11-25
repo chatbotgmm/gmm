@@ -309,7 +309,11 @@ export class World {
   /** 화면용: "ok" | "low" | "empty" */
   vaultState() { const bk = this.bank; return bk.short || bk.vault < E.WAGE ? "empty" : bk.vault < BK.VAULT_LOW ? "low" : "ok"; }
   /** 화면용: 이 건물을 놓을 때 금고에서 낼 설계비(경제가 없으면 0) */
-  feeFor(defId) { return this.economy ? BK.feeOf(defId) : 0; }
+  feeFor(defId) {
+    if (!this.economy) return 0;
+    if (BUILDINGS[defId]?.market && ![...this.buildings.values()].some(b => BUILDINGS[b.defId].market)) return 0;   // 첫 시장은 설계비 없음: 금고로 돈이 돌아오는 첫 건물이라, 금고가 바닥나도 빠져나올 길을 남김
+    return BK.feeOf(defId);
+  }
   /** 집 거래 판단 { ok, price, down, loan, reason }(난수 안 씀) */
   houseDeal(u, b) { return BK.houseDealFor(BUILDINGS[b.defId].price || 30, u.coins, this.bank.vault, this.economy); }
   /** 화면용: 갈매미 대출 { left, per, days } 또는 null */
