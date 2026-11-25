@@ -33,6 +33,7 @@ import { Quality } from "./render/quality.js";
 import { PROP_LOD } from "./render/assets.js";
 import { RoomView } from "./render/room.js";
 import { Minimap } from "./ui/minimap.js";
+import { installKeys } from "./ui/keys.js";
 import { Sfx } from "./audio/sfx.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
@@ -237,7 +238,7 @@ tools.applyControls();                              // 처음부터 조작 배�
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
-  onReset: () => { if (!confirm("지금 섬을 버리고 새 섬을 만들까요? (자동 저장도 새 섬으로 바뀌어요)")) return; mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
+  onReset: () => { mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
   onStatus: t => hud.status(t), onFollow: u => { hud.showFollow(u); world.watchId = u ? u.unitId : null; } });
@@ -263,6 +264,9 @@ roomView.onSound = n => sfx.play(n, { vol: 0.7 });
 hud.sfx = sfx; hud.initSound?.();
 addEventListener("pointerdown", e => { if (e.target.closest?.("button")) sfx.play("click", { vol: 0.35 }); }, true);   // 버튼 누를 때 작은 소리
 const minimap = new Minimap({ getWorld: () => world, camera, controls });   // 넓은 지도: 미니맵(누르면 그곳으로)
+// 키보드·포인터 층(Esc 단계 닫기 · 열린 창 뒤로 키 안 새게 · 단축키 · 툴팁) + 새 섬·불러오기 확인창은 hud.confirm
+hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
+installKeys({ hud, tools, roomView });
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };

@@ -53,7 +53,7 @@ export class Hud {
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : null); return b; });
     this.sub = sub;
     // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 돌리고 옮김(도구는 잠시 멈춤)
-    this.handBtn = this.toolBtn("hand", "✋", "화면 이동", "이동"); this.handBtn.title = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
+    this.handBtn = this.toolBtn("hand", "✋", "화면 이동", "이동"); this.handBtn.dataset.tip = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
     this.handBtn.onclick = () => tools.setHand(!tools.hand); bar.appendChild(this.handBtn);
     tools.onHand = on => this.handBtn.classList.toggle("on", on);
     tools.onMode = (m, arg) => this.showMode(m, arg);
@@ -73,7 +73,7 @@ export class Hud {
     document.getElementById("dexBtn").onclick = () => this.showDex(true);
     // 그래픽 설정 5단계(설정 앱): 누르면 바로 바뀜
     this.qBox = document.getElementById("quality");
-    for (const k of ORDER) { const b = el("button", "", QUALITY[k].name); b.dataset.q = k; b.title = QUALITY_NOTE[k]; b.onclick = () => this.setQuality(this.onQuality?.(k)); this.qBox.appendChild(b); }
+    for (const k of ORDER) { const b = el("button", "", QUALITY[k].name); b.dataset.q = k; b.dataset.tip = QUALITY_NOTE[k]; b.onclick = () => this.setQuality(this.onQuality?.(k)); this.qBox.appendChild(b); }
     document.getElementById("dexClose").onclick = () => this.showDex(false);
     this.info = document.getElementById("info");
     this.tugBtn = document.getElementById("tugBtn"); this.tugBtn.onclick = () => this.onTug?.();   // 찌 당기기(따라가는 갈매미에게 입질이 왔을 때만 보임)
@@ -84,8 +84,13 @@ export class Hud {
     this.giftPick.onclick = e => { const b = e.target.closest?.("[data-gift]"), u = this.follow; if (!b || !u) return; this.onGift?.(u, b.dataset.gift); this.drawGifts(); };
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); this.onZones?.(!zb.classList.contains("off")); };
     document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
-    document.getElementById("load").onclick = () => { onLoad(); this.closePhone(); };
-    document.getElementById("reset").onclick = () => { onReset(); this.closePhone(); };
+    // 불러오기는 보통 확인, 새 섬은 위험 확인(지금 섬이 사라짐). 취소하면 갈매폰은 그대로
+    document.getElementById("load").onclick = async () => {
+      if (this.hasSave?.() !== false && !await this.confirm({ title: "📂 마지막 저장을 불러올까요?", body: `${this.savedLabel?.() || ""} · 그 뒤에 바뀐 것은 돌아가요(1분마다 자동 저장돼요).`, ok: "불러오기" })) return;
+      onLoad(); this.closePhone(); };
+    document.getElementById("reset").onclick = async () => {
+      if (!await this.confirm({ title: "🏝 새 섬을 만들까요?", body: "지금 섬과 갈매미들은 사라지고, 자동 저장도 새 섬으로 바뀌어요. 되돌릴 수 없어요.", ok: "새 섬 만들기", danger: true })) return;
+      onReset(); this.closePhone(); };
     this.list = document.getElementById("units"); this.stats = document.getElementById("stats"); this.msg = document.getElementById("msg");
     // ---- 갈매폰: 📱 → 앱 메뉴(갈매미·은행·시장·건설·소환·도감·저장·설정·도움말)
     this.phone = document.getElementById("phone"); this.phoneBtn = document.getElementById("phoneBtn");
@@ -129,6 +134,21 @@ export class Hud {
     c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
     this.layout();
   }
+  /** 확인창(브라우저 confirm 대신): 취소에 먼저 포커스, Esc·바깥 누르기 = 취소. 결과는 Promise<boolean> */
+  confirm({ title, body = "", ok = "확인", cancel = "취소", danger = false } = {}) {
+    const box = document.getElementById("ask"), yes = document.getElementById("askYes"), no = document.getElementById("askNo");
+    this.askDone?.(false);                                                         // 이미 떠 있던 것은 취소로 닫음
+    document.getElementById("askTitle").textContent = title; document.getElementById("askBody").textContent = body;
+    yes.textContent = ok; yes.className = danger ? "danger" : "go"; no.textContent = cancel;
+    const back = document.activeElement; box.hidden = false; no.focus({ preventScroll: true });
+    return new Promise(res => {
+      this.askDone = v => { this.askDone = null; box.hidden = true; yes.onclick = no.onclick = box.onpointerdown = null;
+        if (back?.isConnected && !back.closest("[hidden]")) back.focus({ preventScroll: true }); res(v); };
+      yes.onclick = () => this.askDone(true); no.onclick = () => this.askDone(false);
+      box.onpointerdown = e => { if (e.target === box) this.askDone(false); };
+    });
+  }
+  askCancel() { this.askDone?.(false); }
   setSeasonLabel(t) { if (t) this.seasonBtn.textContent = `계절: ${t}`; }
   // ---- 갈매폰
   openPhone() { this.phone.hidden = false; this.openApp(null); this.sfx?.play("phoneOpen", { vol: 0.5 }); }
@@ -300,7 +320,7 @@ export class Hud {
     // 줄마다: 직업 아이콘 · 이름(희귀도 색) · 하는 일 · 포만감
     this.rows = world.units.map(u => { const r = el("div", "row"), nm = el("span", "nm");
       nm.append(el("span", "job", JOBS[u.job]?.icon ?? ""), u.name); nm.style.color = RARITY[u.rarity]?.color;
-      nm.title = `${RARITY[u.rarity]?.name} ${JOBS[u.job]?.name}: ${JOBS[u.job]?.desc}`;
+      nm.dataset.tip = `${RARITY[u.rarity]?.name} ${JOBS[u.job]?.name}: ${JOBS[u.job]?.desc}`;
       r.append(nm, el("span", "act"), el("span", "coins"), el("span", "full"));
       r.onclick = () => { this.onUnitClick?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });
     this.follow = null;
@@ -309,8 +329,8 @@ export class Hud {
   addEditTools() {
     const t = this.tools; this.sub.appendChild(el("span", "lab", "모양"));
     for (const [s, label] of [["brush", "🖌 붓"], ["line", "〰 길"], ["rect", "▭ 네모"]]) { const b = el("button", t.shape === s ? "on" : "", label); b.onclick = () => { t.setShape(s); this.showMode(t.mode, t.mode === "paint" ? t.paintType : t.heightOp); }; this.sub.appendChild(b); }
-    const c = el("button", t.cross ? "on" : "", "🎯 십자선"); c.title = "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요"; c.onclick = () => { t.setCross(!t.cross); c.classList.toggle("on", t.cross); }; this.sub.appendChild(c);
-    const u = el("button", "", "↶"), r = el("button", "", "↷"); u.title = "되돌리기(Ctrl+Z)"; r.title = "다시하기(Ctrl+Shift+Z)"; u.onclick = () => t.undo(); r.onclick = () => t.redo();
+    const c = el("button", t.cross ? "on" : "", "🎯 십자선"); c.dataset.tip = "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요"; c.onclick = () => { t.setCross(!t.cross); c.classList.toggle("on", t.cross); }; this.sub.appendChild(c);
+    const u = el("button", "", "↶"), r = el("button", "", "↷"); u.dataset.tip = "되돌리기(Ctrl+Z)"; r.dataset.tip = "다시하기(Ctrl+Shift+Z)"; u.onclick = () => t.undo(); r.onclick = () => t.redo();
     u.disabled = !t.history.length; r.disabled = !t.redoStack.length; this.undoBtns = [u, r]; this.sub.append(u, r);
   }
   showMode(mode, arg) {
@@ -347,11 +367,11 @@ export class Hud {
         const rankLock = (def.rank || 0) > this.world.rank, locked = rankLock || !this.world.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
         const b = el("button", (def.id === arg ? "on " : "") + (locked ? "locked" : ""), `${locked ? "🔒 " : ""}${def.name} ${def.footprint.w}×${def.footprint.d}${rankLock ? ` ${RANKS[def.rank].icon}` : ""}`);
         const who = def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가";
-        b.title = `${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
+        b.dataset.tip = `${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
         b.onclick = () => this.tools.setMode("build", def.id); this.sub.appendChild(b); }
       const r = el("button", "", "↻ 돌리기(R)"); r.onclick = () => this.tools.rotate(); this.sub.appendChild(r);
       const ib = el("button", this.instantBuild ? "on" : "", "⚡ 바로 완공");           // 끄면 갈매미가 나무·돌로 지음
-      ib.title = "켜면 놓자마자 완공, 끄면 갈매미가 나무 1·돌 1씩 들고 와서 망치질로 지어요";
+      ib.dataset.tip = "켜면 놓자마자 완공, 끄면 갈매미가 나무 1·돌 1씩 들고 와서 망치질로 지어요";
       ib.onclick = () => { this.instantBuild = !this.instantBuild; ib.classList.toggle("on", this.instantBuild); this.onInstant?.(this.instantBuild); };
       this.sub.appendChild(ib);
     }
@@ -392,7 +412,7 @@ export class Hud {
     const d = document.getElementById("dex"); d.hidden = !on; if (!on) return;
     const w = this.world, body = document.getElementById("dexBody"); body.innerHTML = "";
     // 간직하기: 켜 두면 상인이 팔지 않음(그 자리에서 글자만 바꿈 → 스크롤이 튀지 않게)
-    const keepBtn = id => { const b = el("button", "keep"), draw = () => { const on = !!w.keep[id]; b.textContent = on ? "💛 간직 중" : "🤍 간직하기"; b.classList.toggle("on", on); b.title = on ? "상인이 팔지 않아요 · 누르면 풀어요" : "켜 두면 상인이 팔지 않아요"; };
+    const keepBtn = id => { const b = el("button", "keep"), draw = () => { const on = !!w.keep[id]; b.textContent = on ? "💛 간직 중" : "🤍 간직하기"; b.classList.toggle("on", on); b.dataset.tip = on ? "상인이 팔지 않아요 · 누르면 풀어요" : "켜 두면 상인이 팔지 않아요"; };
       b.dataset.keep = id; b.onclick = () => { this.onKeep?.(id); draw(); }; draw(); return b; };
     const sec = (title, list, count, extra, more) => {
       body.append(el("h3", "", title)); const g = el("div", "dexgrid");
@@ -437,12 +457,13 @@ export class Hud {
     this.stats.innerHTML = `<span>${mood} 포만감 ${avg.toFixed(0)}</span><span>🏠 건물 ${w.buildings.size}${building ? ` (공사 ${building})` : ""}</span><span>🐦 ${w.units.length}마리 · 건물 안 ${inside}</span>` +
       (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🐚 ${w.res.coins}</span>`) +
       `<span>🧩 땅 ${chunkInfo.tris ? Math.round(chunkInfo.tris / 1000) + "천 삼각형 · " : ""}${chunkInfo.fps ? `${chunkInfo.fps} fps` : ""}</span>`;
-    this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.title = "갈매미들이 가진 돈 합계";
+    this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.dataset.tip = "갈매미들이 가진 돈 합계";
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
     const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주
-    this.chipPop.textContent = small ? `🐦${w.units.length} ${face}${sat.toFixed(0)} ${mood}${avg.toFixed(0)}` : `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.title = "갈매미 수 · 평균 만족도 · 평균 포만감";
+    this.chipPop.textContent = small ? `🐦${w.units.length} ${face}${sat.toFixed(0)} ${mood}${avg.toFixed(0)}` : `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";
     document.getElementById("chipRank").textContent = small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
-    document.getElementById("mapBtn").textContent = small ? "🗺" : "🗺 지도";
+    const mb = document.getElementById("mapBtn"), mt = small ? "🗺" : "🗺 지도";       // 글자만 바꿈(키 힌트 칸은 그대로)
+    if (mb.firstChild?.nodeType === 3) { if (mb.firstChild.nodeValue !== mt) mb.firstChild.nodeValue = mt; } else mb.prepend(mt);
     if (this.timeLabel) this.chipTime.textContent = this.timeLabel();
     if (this.weatherLabel) this.chipWeather.textContent = small ? this.weatherLabel().replace(/ [가-힣]+(?= · |$)/g, "").replace(/ · /g, " ") : this.weatherLabel();   // 휴대폰: 아이콘만
     const nw = this.world.wishes.length; this.wishBtn.hidden = !nw; this.wishBtn.textContent = small ? `💭${nw}` : `💭 소원 ${nw}`;
