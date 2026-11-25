@@ -111,7 +111,8 @@ test("집 대출: 계약금 40% + 금고 대출, 금고가 모자라면 거절(�
   // 금고 37 < 18 + 20 → 거절
   const { w: w2, mini: m2 } = town(37), h2 = readyHouse(w2);
   m2.coins = 29; assert.equal(w2.houseDeal(m2, h2).reason, "vault"); assert.equal(w2.buyHouse(m2, h2), false);
-  assert.equal(m2.loanRefused, true); assert.match(m2.emoteText, /은행에 돈이 없대/); assert.equal(w2.bank.short, 1); assert.equal(bankNews(w2), 1);
+  assert.equal(m2.loanRefused, true); assert.match(m2.emoteText, /은행에 돈이 없대/);
+  assert.equal(w2.bank.short, 0, "금고 37 ≥ 30: 대출 거절이지만 바닥 사태는 아님"); assert.equal(bankNews(w2), 0); assert.equal(w2.vaultState(), "ok");
   w2.updateRoads(); assert.ok(m2.satParts.some(p => /집 대출을 못 받음/.test(p[0]) && p[1] === -10));
   m2.emoteText = ""; assert.equal(w2.buyHouse(m2, h2), false); assert.equal(m2.emoteText, "", "한 사태에 한 번만 말풍선");
   // 금고 38이면 빌려줌
@@ -233,4 +234,21 @@ test("첫 시장은 설계비 없음: 시장을 짓기 전에 금고를 다 써�
   assert.equal(w.feeFor("market"), BK.FEE.market, "공사 중인 시장이 있으면 둘째부터는 설계비");
   const s2 = spotFor(w, "market"); assert.match(w.check("market", s2[0], s2[1], 0).reason, /금고/);
   w.removeBuilding(r.building.id); assert.equal(w.feeFor("market"), 0, "철거하면 다시 첫 시장");
+});
+
+test("대출 거절 ≠ 바닥 사태: 금고가 넉넉하면 비싼 집 하나 거절로 사태·기사가 나지 않고, 금고가 30 아래면 사태(검토 회귀)", () => {
+  // 검토 REPRO A: 2층집(대출 30 → 50 필요)만 팔리고 금고 48
+  const { w, mini, boss } = town(48), h = readyHouse(w, "cottage");
+  mini.coins = 20; assert.equal(w.buyHouse(mini, h), false); assert.equal(mini.loanRefused, true); assert.equal(w.bank.need, 50);
+  assert.equal(w.bank.short, 0); assert.equal(w.vaultState(), "ok"); assert.equal(bankNews(w), 0);
+  w.payWage(boss); assert.equal(boss.wageOwed || 0, 0, "품삯은 그대로 나감"); assert.equal(w.bank.vault, 46);
+  w.updateRoads(); assert.ok(mini.satParts.some(p => /집 대출을 못 받음/.test(p[0])), "거절된 갈매미 만족도는 그대로");
+  w.deposit(4); assert.equal(mini.loanRefused, false, "금고가 50이 되면 거절 표시를 풂"); assert.equal(w.bank.need, 0);
+  assert.equal(w.buyHouse(mini, h), true);
+  // 금고 25: 대출 거절이 바닥 사태(기사 한 번), 금고 30이 되면 사태 끝(need 38은 따로)
+  const { w: w2, mini: m2 } = town(25), h2 = readyHouse(w2);
+  m2.coins = 12; assert.equal(w2.buyHouse(m2, h2), false); assert.equal(w2.bank.short, 1); assert.equal(bankNews(w2), 1);
+  assert.ok(w2.newsLog.some(e => /집 대출이 멈췄어요/.test(e.text))); assert.equal(w2.vaultState(), "empty");
+  w2.deposit(5); assert.equal(w2.bank.short, 0, "밀린 품삯 없고 30 → 사태 끝"); assert.equal(m2.loanRefused, true, "38까지는 아직 거절");
+  w2.deposit(8); assert.equal(m2.loanRefused, false);
 });

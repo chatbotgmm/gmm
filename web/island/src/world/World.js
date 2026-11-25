@@ -294,14 +294,12 @@ export class World {
       bk.vault -= n; bk.wages += n; bk.owed -= n; this.led("wages", n); u.coins = (u.coins || 0) + n; u.wageOwed -= n;
       if (!u.insideBuildingId) emote(u, `밀린 품삯 받았다! 🪙${n}`, 2); this.emit("wagePaid", { u, n });
     }
-    if (bk.short && bk.owed <= 0 && bk.vault >= Math.max(BK.VAULT_LOW, bk.need)) {
-      bk.short = 0; bk.need = 0; for (const u of this.units) u.loanRefused = false;
-      this.emit("vaultOk", { vault: Math.floor(bk.vault) });
-    }
+    if (bk.need && (bk.vault >= bk.need || !this.units.some(u => u.loanRefused))) { bk.need = 0; for (const u of this.units) u.loanRefused = false; }   // 거절한 대출만큼 차면 다시 빌려줄 수 있음
+    if (bk.short && bk.owed <= 0 && bk.vault >= BK.VAULT_LOW) { bk.short = 0; this.emit("vaultOk", { vault: Math.floor(bk.vault) }); }
   }
-  /** 금고 바닥 사태(품삯 밀림·대출 거절). 소식지는 사태마다 한 번 */
-  vaultShort(kind, u = null, need = 0) {
-    const bk = this.bank; bk.need = Math.max(bk.need || 0, need);
+  /** 금고 바닥 사태(품삯 밀림, 또는 금고가 VAULT_LOW 아래일 때 대출 거절). 소식지는 사태마다 한 번. 밀린 품삯이 없고 금고가 VAULT_LOW만큼 차면 끝남 */
+  vaultShort(kind, u = null) {
+    const bk = this.bank;
     if (bk.short) return; bk.short = 1; this.emit("vaultShort", { kind, u });
   }
   /** 금고가 줄었을 때: VAULT_LOW 아래로 처음 내려가면 알림(VAULT_REARM만큼 차면 다시 알림) */
@@ -318,10 +316,10 @@ export class World {
   houseDeal(u, b) { return BK.houseDealFor(BUILDINGS[b.defId].price || 30, u.coins, this.bank.vault, this.economy); }
   /** 화면용: 갈매미 대출 { left, per, days } 또는 null */
   loanInfo(u) { const l = u?.loan; return l && l.left > 0 ? { left: l.left, per: l.per, days: Math.ceil(l.left / l.per) } : null; }
-  /** 대출 거절 표시(사태마다 한 마리 한 번): 말풍선 · 만족도(roads.js) · 바닥 사태 */
+  /** 대출 거절 표시(금고가 거절한 대출만큼 찰 때까지 한 마리 한 번): 말풍선 · 만족도(roads.js). 금고가 VAULT_LOW보다 적을 때만 바닥 사태(금고가 넉넉한데 비싼 집 하나가 거절된 건 사태가 아님) */
   refuseLoan(u, deal) {
-    if (u.loanRefused) return; u.loanRefused = true;
-    emote(u, "은행에 돈이 없대…", 2.5); this.emit("loanRefused", { u, loan: deal.loan }); this.vaultShort("loan", u, deal.loan + BK.LOAN_RESERVE);
+    if (u.loanRefused) return; u.loanRefused = true; const bk = this.bank; bk.need = Math.max(bk.need || 0, deal.loan + BK.LOAN_RESERVE);
+    emote(u, "은행에 돈이 없대…", 2.5); this.emit("loanRefused", { u, loan: deal.loan }); if (bk.vault < BK.VAULT_LOW) this.vaultShort("loan", u);
   }
   /** 마을 날이 바뀔 때 한 번(난수 안 씀): 대출 상환을 먼저 받고, 남은 돈으로 세금 */
   stepBank() {
