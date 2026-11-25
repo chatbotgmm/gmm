@@ -638,7 +638,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const s = u.focus;
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Fish; u.tool = "rod"; face(u, s.x + 0.5 + s.dir[0], s.z + 0.5 + s.dir[1]);
-        doOnce(u, "FishCast", null, () => { u.fishT = 3 + rnd() * 4; u.fishing = { x: s.x + 0.5 + s.dir[0] * 1.6, z: s.z + 0.5 + s.dir[1] * 1.6 }; }, 99);
+        doOnce(u, "FishCast", null, () => { u.fishT = 3 + rnd() * 4; u.bite = u.tugged = false; u.fishing = { x: s.x + 0.5 + s.dir[0] * 1.6, z: s.z + 0.5 + s.dir[1] * 1.6 }; }, 99);
       }
       break;
     }

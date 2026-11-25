@@ -448,8 +448,10 @@ export class World {
     return { fish: f, item };
   }
   /** 찌 당기기: 입질이 온(u.bite) 갈매미와 같이 당김 → 바로 낚아 올리고 이번 한 번만 희귀 보너스. 입질이 아니면 아무 일도 없음(false) */
+  /** 지금 같이 당길 수 있는지(입질 중이고 아직 안 당김). 당기기 버튼도 이것으로 보임 */
+  canTug(u) { return !!u && !!u.bite && !u.tugged && u.state === UnitState.Fish && u.fishT > 0; }
   tugFloat(u) {
-    if (!u || !u.bite || u.tugged || u.state !== UnitState.Fish || !(u.fishT > 0)) return false;
+    if (!this.canTug(u)) return false;
     u.tugged = true; u.fishT = 0;
     if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + J.TUG_FUN);
     emote(u, "영차! ♪", 1.2);

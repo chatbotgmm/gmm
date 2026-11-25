@@ -68,7 +68,7 @@
   /* 찌 당기기: 따라가기 카드 바로 위의 큰 버튼(입질 동안만), 아래 줄이 줄어들며 남은 시간을 알려 줌 */
   #tugBtn { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: 120px; z-index: 3; min-width: 150px; min-height: 56px; padding: 10px 22px 14px; font-size: 20px; font-weight: 700;
     color: #fff; background: #f08a3c; border: 3px solid #fff; border-radius: 18px; box-shadow: 0 3px 10px rgba(0,0,0,.25); overflow: hidden; touch-action: manipulation; animation: tugPulse .45s ease-in-out infinite alternate; }
-  #tugBtn::after { content: ""; position: absolute; left: 0; bottom: 0; height: 5px; width: 100%; background: #fff6; transform-origin: 0 50%; animation: tugLeft 1.5s linear forwards; }
+  #tugBtn::after { content: ""; position: absolute; left: 0; bottom: 0; height: 5px; width: 100%; background: #fff6; transform-origin: 0 50%; animation: tugLeft var(--tug, 1.5s) linear forwards; }
   #tugBtn[hidden] { display: none; }
   @keyframes tugPulse { from { transform: scale(1); } to { transform: scale(1.07); } } @keyframes tugLeft { to { transform: scaleX(0); } }
   .emote.icon.bite { font-size: 30px; padding: 4px 12px; background: #ffe27a; } .emote.bite::after { border-top-color: #ffe27a; }

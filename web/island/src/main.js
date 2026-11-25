@@ -292,7 +292,7 @@ function frame() {
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
-  hud.showTug(!!unitControl.follow?.bite && !unitControl.follow.tugged && !roomView.isOpen);   // 입질 동안만 당기기 버튼
+  hud.showTug(!roomView.isOpen && world.canTug(unitControl.follow), unitControl.follow?.fishT);   // 입질 동안만 당기기 버튼
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();

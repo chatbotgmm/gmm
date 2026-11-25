@@ -305,8 +305,9 @@ export class Hud {
     const left = UNITS.filter(d => !world.units.some(u => u.name === d.name)).map(d => d.name); document.getElementById("summonLast").textContent = left.length ? `아직 안 온 갈매미: ${left.join(", ")}` : ""; }
   showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); }
   /** 🎣 당기기! 버튼: 따라가기 카드 바로 위에 붙여서 보여 줌(입질 동안만). 매 프레임 불러도 바뀔 때만 손댐 */
-  showTug(on) {
+  showTug(on, secs = 1.5) {
     const b = this.tugBtn; if (b.hidden === !on) return;
+    if (on) b.style.setProperty("--tug", `${Math.max(0.1, secs).toFixed(2)}s`);   // 줄어드는 줄은 실제로 남은 시간만큼
     if (on) b.style.bottom = `${Math.round(innerHeight - (this.info.hidden ? innerHeight - 60 : this.info.getBoundingClientRect().top) + 8)}px`;
     b.hidden = !on;
   }

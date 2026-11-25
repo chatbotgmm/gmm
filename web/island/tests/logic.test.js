@@ -1035,6 +1035,9 @@ test("찌 당기기: 따라가는 갈매미만 입질(❗)이 오고, 같이 당
   // 따라가지만 안 당김: 보너스 없이 평소대로 낚음
   { const { w, u } = setup(); w.watchId = u.unitId; let b2 = null; const r2 = w.catchFish.bind(w); w.catchFish = (who, b) => { b2 = b; return r2(who, b); };
     step(w, u, 4.5); assert.equal(b2, 1); assert.ok(!u.bite && !u.tugged); }
+  // 입질 표시가 남은 채 낚시를 그만두면(다른 상태) 당길 수 없음: 버튼이 남지 않음
+  { const { w, u } = setup(); w.watchId = u.unitId; step(w, u, 1.6); assert.equal(w.canTug(u), true); u.state = UnitState.Idle; assert.equal(w.canTug(u), false); assert.equal(w.tugFloat(u), false);
+    assert.equal(w.canTug(null), false); assert.equal(w.canTug(undefined), false); }
   // 저장에는 안 남음(잠깐의 상태)
   const j = JSON.parse(JSON.stringify(w.serialize())); assert.ok(!("watchId" in j) && !j.units.some(x => "bite" in x)); assert.ok(World.fromJSON(j).units.length);
 });
