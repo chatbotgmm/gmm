@@ -114,6 +114,7 @@ function hookSounds(w) {
 // 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)
 function applyAssetTier(c) {
   PROP_LOD.level = c.lod ?? 0;                                                    // 소품 텍스처 단계(4k·2k·1k)
+  PROP_LOD.aniso = Math.min(renderer.capabilities.getMaxAnisotropy(), [4, 4, 2, 1][c.lod ?? 0] ?? 1);   // 텍스처 이방성 필터(새로 받는 모델부터)
   drawDist = c.drawDist ?? 200; lastCull = 0;   // 그리기 거리(보는 곳 둘레 반지름 = drawDist × 0.7), 끝은 안개로 가림(fitFog)
 }
 // 그리기 거리: 0.3초마다 나무·바위·건물·소품을 카메라와의 거리로 보이기/숨기기(멀리 있는 것은 그리지도, 그림자도 만들지 않음).
