@@ -8,7 +8,7 @@ import { Grid } from "./Grid.js";
 import { generateIsland, generateWildIsland } from "./islandGen.js";
 import { checkPlacement } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
-import { nearestWalkable } from "./pathfinding.js";
+import { nearestWalkable, findPath } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere, isNocturnal } from "../units/unitBrain.js";
 import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToNames, friendsFromNames } from "../units/mind.js";
 import { seededRandom } from "../util.js";
@@ -26,6 +26,7 @@ import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave,
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
+import * as P from "./population.js";
 import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -88,17 +89,34 @@ export class World {
       if (m.defId === "ore") this.ores.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
     }
   }
-  /** empty: 갈매미 없이 시작. wild: 넓은 섬(자연만 + 가운데 공식은행) + 기본 갈매미 한 마리(게임 화면). 시험은 기본값(예전 섬, 8마리 모두). */
-  static create(seed = 7, rnd = Math.random, { empty = false, wild = false } = {}) {
+  /** empty: 갈매미 없이 시작. wild: 넓은 섬(자연만 + 가운데 공식은행 + 다 지은 작은 집 한 채, 갈매미 없음 → 첫 갈매미는 🥚 소환으로. 게임 화면).
+   *  firstGull: 넓은 섬에 기본 갈매미를 미리 불러 둠(시험 받침). 시험은 기본값(예전 섬, 8마리 모두). */
+  static create(seed = 7, rnd = Math.random, { empty = false, wild = false, firstGull = false } = {}) {
     const g = wild ? generateWildIsland(seed) : generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
     w.seed = seed; w.wild = wild; w.sparkRnd = seededRandom(sparkleSeed(seed, 0));   // 반짝이 난수는 섬 씨앗으로(생성 결과 g에는 seed가 없음)
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
       w.hungerScale = 0.48; w.seedFood = 20;                                       // 넓은 지도: 오가는 길이 멀어 배고픔을 늦춤(본섬 지름 1.3배 → 0.6 × 0.8)
       const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
-      w.addUnitByName("기본");
+      w.placeStarterHouse();                                                       // 인구 = 집 수: 첫 갈매미가 올 집 한 채(다 지은 작은 집, 설계비 없음)
+      if (firstGull) w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
     return w;
+  }
+  /** 새 섬의 첫 집: 은행 옆(문이 은행 문과 같은 줄)에 가장 가까운 빈 평지에, 은행 문에서 걸어갈 수 있는 자리(난수 안 씀 → 섬 씨앗마다 같은 자리). 못 찾으면 null */
+  placeStarterHouse() {
+    const bank = this.bankB(), def = BUILDINGS.house; if (!bank) return null;
+    const px = bank.x + BUILDINGS.bank.footprint.w + 2, pz = bank.door.z - def.footprint.d, cands = [];   // 바라는 자리: 은행 오른쪽으로 두 칸 띄움
+    for (let dz = -14; dz <= 14; dz++) for (let dx = -18; dx <= 14; dx++) cands.push([Math.hypot(dx, dz), px + dx, pz + dz]);
+    cands.sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]);
+    for (const [, x, z] of cands) {
+      const r = checkPlacement(this.grid, def, x, z, 0, this.units); if (!r.ok || Math.abs(r.elevation - bank.elevation) > 1e-6) continue;
+      if (r.cells.some(([cx, cz]) => Math.abs(cx - bank.door.x) <= 1 && Math.abs(cz - bank.door.z) <= 1)) continue;   // 은행 문 앞은 비워 둠
+      const b = this.placeBuilding("house", x, z, 0, null, 1e9).building; b.hits = b.need;
+      if (findPath(this.grid, bank.door.x, bank.door.z, b.door.x, b.door.z)) return b;                               // 은행 문에서 집 문까지 걸어갈 수 있어야 함
+      this.removeBuilding(b.id);
+    }
+    return null;
   }
   get center() { return { x: this.grid.w / 2, z: this.grid.h / 2 }; }
   /** 이름으로 갈매미 하나를 가운데(은행 앞) 근처에 부름. */
@@ -160,11 +178,20 @@ export class World {
     if (this.profiles) this.applyProfile(s);
     this.units.push(s); return s;
   }
-  /** 🥚 소환: 아직 마을에 없는 갈매미 중 하나를 무작위로 광장 근처에 부름. 모두 있으면 null. */
+  // ---- 인구 = 집 수(population.js): 공식은행이 있는 섬에서는 다 지은 집 한 채당 갈매미 한 마리까지만 부를 수 있음
+  /** 화면용: 지금 🥚 소환할 수 있는가와 까닭(난수 안 씀).
+   *  { can, reason(못 부를 때 한국어 글, 부를 수 있으면 ""), houses(다 지은 보통 집), gulls(보통 갈매미), free(남은 집 자리), left(아직 안 온 갈매미 수),
+   *    next(다음에 올 갈매미 이름, 무작위면 null), candidates(올 수 있는 이름들), needHouse, needGiantHouse, gated(집 수 규칙이 켜진 섬인가) } */
+  summonInfo() { return P.summonInfoFor(this.units, [...this.buildings.values()].filter(b => this.isDone(b)), this.economy); }
+  /** 🥚 소환: 아직 마을에 없고 지금 올 수 있는(집 자리가 있는) 갈매미 하나를 광장 근처에 부름. 꼭 필요한 직업(건축가 → 목수 → 상인)이 없으면 그 갈매미부터, 아니면 무작위.
+   *  못 부르면 null(집이 모자라면 "summonBlocked"를 알리고, 밖에 있는 갈매미 하나가 말풍선으로 알려 줌) */
   summon() {
-    const left = UNITS.map((u, i) => [u, i]).filter(([u]) => !this.units.some(o => o.name === u.name));
-    if (!left.length) return null;
-    const [def, i] = left[Math.floor(this.rnd() * left.length)];
+    const info = this.summonInfo();
+    if (!info.can) {
+      if (info.left) { const who = this.units.find(u => !u.insideBuildingId); if (who) emote(who, info.needHouse ? "🏠 집이 더 있어야 친구가 와요" : "🏯 자이언트는 큰 집이 있어야 와요", 2.6); this.emit("summonBlocked", info); }
+      return null;
+    }
+    const name = info.next ?? info.candidates[Math.floor(this.rnd() * info.candidates.length)], i = UNITS.findIndex(d => d.name === name), def = UNITS[i];
     let spot = null;
     const c = this.center, d0 = this.wild ? 4 : 1;                                   // 넓은 섬은 은행 앞쪽
     for (let k = 0; k < 20 && !spot; k++) { const a = this.rnd() * Math.PI * 2, d = d0 + this.rnd() * 3; spot = nearestWalkable(this.grid, Math.floor(c.x + Math.cos(a) * d), Math.floor(c.z + 3 + Math.sin(a) * d), 4); }
@@ -338,7 +365,15 @@ export class World {
   feeFor(defId) {
     if (!this.economy) return 0;
     if (BUILDINGS[defId]?.market && ![...this.buildings.values()].some(b => BUILDINGS[b.defId].market)) return 0;   // 첫 시장은 설계비 없음: 금고로 돈이 돌아오는 첫 건물이라, 금고가 바닥나도 빠져나올 길을 남김
-    return BK.scaled(BK.feeOf(defId), this.priceMult());
+    const fee = BK.scaled(BK.feeOf(defId), this.priceMult());
+    return this.rescueHouse(defId, fee) ? 0 : fee;
+  }
+  /** 막힘 풀기(인구 = 집 수): 금고가 작은 집 설계비도 안 되고, 집이 모자라 소환이 막혀 있고, 짓는 중인 보통 집이 없으면 작은 집 한 채는 설계비 없이 놓을 수 있음.
+   *  (금고 0 · 갈매미 수 = 집 수에서 영영 못 빠져나오는 일을 막음. 품삯은 그대로 금고에서 → 밀렸다가 돈이 들어오면 갚음) */
+  rescueHouse(defId, fee = BK.scaled(BK.feeOf(defId), this.priceMult())) {
+    if (defId !== "house" || !this.economy || this.bank.vault >= fee) return false;
+    if ([...this.buildings.values()].some(b => !this.isDone(b) && BUILDINGS[b.defId].house && !BUILDINGS[b.defId].forUnit)) return false;
+    return this.summonInfo().needHouse;
   }
   /** 물가에 세는 다 지은 집·시설 수(bank.js growthCounts) */
   growthCount() { let n = 0; for (const b of this.buildings.values()) if (this.isDone(b) && BK.growthCounts(BUILDINGS[b.defId])) n++; return n; }

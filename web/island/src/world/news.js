@@ -51,6 +51,8 @@ const NEWS_MAKERS = {
   vaultShort: ({ kind }) => ({ icon: "🏦", text: kind === "loan" ? "은행 금고가 바닥나 가요 — 집 대출이 멈췄어요" : "은행 금고가 바닥났어요 — 품삯이 밀리고 집 대출이 멈췄어요", weight: 6 }),
   vaultOk: () => ({ icon: "🏦", text: "금고가 다시 찼어요. 밀린 품삯을 모두 치렀어요", weight: 4 }),
   vaultLow: ({ vault }) => ({ icon: "🏦", text: `금고에 조개가 얼마 안 남았어요 (🪙${vault})`, weight: 0 }),
+  // 인구 = 집 수: 집이 모자라 소환이 막힘(알림 줄에만. reason = population.js의 글)
+  summonBlocked: ({ reason }) => reason ? { icon: "🥚", text: reason, weight: 0 } : null,
   loanPaid: ({ u }) => ({ icon: "🏠", text: `${josa(u.name, "이", "가")} 집값을 다 갚았어요`, weight: 3 }),
   loanRefused: ({ u }) => ({ icon: "🏦", text: `${josa(u.name, "은", "는")} 금고가 비어 집 대출을 못 받았어요`, weight: 0 }),
   tax: ({ total, n }) => total ? { icon: "🏦", text: `세금 🪙${total}이 금고에 들어왔어요 (${n}마리)`, weight: 0 } : null,

@@ -7,6 +7,7 @@ import { newsDay, NEWS_DAY_SECS } from "../src/world/news.js";
 import { orderDeco, orderCost, canOrder, planImprovement } from "../src/world/improve.js";
 import * as BK from "../src/world/bank.js";
 import * as E from "../src/world/economy.js";
+import { UNITS } from "../src/data/catalog.js";
 
 const spotFor = (w, d) => {
   const c = w.center, v = w.bank.vault; w.bank.vault = 1e9;                    // 자리만 찾음(설계비 검사는 빼고)
@@ -16,7 +17,7 @@ const spotFor = (w, d) => {
 const place = (w, d) => { const s = spotFor(w, d); return w.placeBuilding(d, s[0], s[1], 0); };
 /** 넓은 섬 + 목수·미니(농부)·황금(상인) + 다 지은 시장. 금고는 vault로 맞춤 */
 function town(vault = BK.VAULT_START) {
-  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true;
   for (const n of ["목수", "미니", "황금"]) w.addUnitByName(n);
   w.bank.vault = 1e6; assert.ok(place(w, "market").ok); w.instantBuild = false;
   Object.assign(w.bank, { vault, fees: 0, ledger: [] });
@@ -27,8 +28,8 @@ const readyHouse = (w, d = "house") => { const s = spotFor(w, d); return w.place
 const bankNews = w => w.newsLog.filter(e => /금고가 바닥/.test(e.text)).length;
 const nextDay = w => { w.time = newsDay(w.time) * NEWS_DAY_SECS + 1; w.stepBank(); };
 
-test("금고: 새 넓은 섬은 🪙100, 은행 없는 섬은 설계비·금고가 꺼져 있음", () => {
-  const w = World.create(7, seededRandom(3), { wild: true });
+test("금고: 새 넓은 섬은 🪙60, 은행 없는 섬은 설계비·금고가 꺼져 있음", () => {
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true });
   assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(w.bank.day, 1); assert.equal(w.vaultState(), "ok");
   const old = World.create(7, seededRandom(3)); assert.equal(old.economy, false);
   assert.equal(old.feeFor("house"), 0);
@@ -122,7 +123,7 @@ test("집 대출: 계약금 40% + 금고 대출, 금고가 모자라면 거절(�
 });
 
 test("상환·세금: 마을 날이 바뀔 때 상환 먼저(10은 남김) → 세금(20 넘는 돈의 5%, 최대 8), 하루 한 번, 5일에 다 갚음", () => {
-  const { w, mini, boss, carp } = town(100);
+  const { w, mini, boss, carp } = town();
   const h = readyHouse(w); mini.coins = 12; assert.ok(w.buyHouse(mini, h));
   const merchant = w.units.find(u => u.name === "황금");
   mini.coins = 14; boss.coins = 200; carp.coins = 5; merchant.coins = 39;
@@ -194,7 +195,7 @@ test("화면용 API 모양(나중 UI)과 hud·main이 쓰는 이름이 그대로
 });
 
 test("결정성: 같은 씨앗이면 금고·돈이 같고, 세금·상환은 난수를 쓰지 않음", () => {
-  const run = () => { const w = World.create(7, seededRandom(5), { wild: true }); while (w.summon()); for (let t = 0; t < 700; t += 0.1) w.update(0.1); return [w.bank.vault, w.bank.taxed, ...w.units.map(u => u.coins)]; };
+  const run = () => { const w = World.create(7, seededRandom(5), { wild: true, firstGull: true }); for (const d of UNITS) w.addUnitByName(d.name); for (let t = 0; t < 700; t += 0.1) w.update(0.1); return [w.bank.vault, w.bank.taxed, ...w.units.map(u => u.coins)]; };
   const a = run(); assert.deepEqual(run(), a); assert.ok(a[1] > 0, "첫날이 지나 세금을 걷음");
   const { w, mini } = town(100); let n = 0; const r = w.rnd; w.rnd = () => { n++; return r(); };
   mini.coins = 12; w.buyHouse(mini, readyHouse(w)); for (const u of w.units) u.coins += 300;
@@ -202,11 +203,11 @@ test("결정성: 같은 씨앗이면 금고·돈이 같고, 세금·상환은 �
 });
 
 test("흐름: 넓은 섬 보통 놀이 3일 — 금고가 마르지 않고, 집이 팔리고(대출 포함), 세금이 들어오고, 날 끝엔 밀린 품삯이 없음", () => {
-  const w = World.create(7, seededRandom(3), { wild: true }), c = w.center;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }), c = w.center;
   const at = (d, cx, cz) => { const v = w.bank.vault; w.bank.vault = 1e9; let q = null;
     for (let r = 3; r < 40 && !q; r++) for (let k = 0; k < 64 && !q; k++) { const a = k / 64 * 6.28, x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) q = [x, z]; }
     w.bank.vault = v; return q && w.placeBuilding(d, q[0], q[1], 0).ok; };
-  const plan = [[0, () => at("house", c.x - 8, c.z + 8)], [120, () => { while (w.summon()); for (const d of ["market", "field", "house", "house"]) at(d, c.x + 6, c.z + 8); }],
+  const plan = [[0, () => at("house", c.x - 8, c.z + 8)], [120, () => { for (const d of UNITS) w.addUnitByName(d.name); for (const d of ["market", "field", "house", "house"]) at(d, c.x + 6, c.z + 8); }],
     [1200, () => { for (const d of ["storehouse", "house", "cottage"]) at(d, c.x + 6, c.z + 8); }]];
   const coinsSpent = []; let ends = [];
   for (let t = 0, i = 0; t < 3 * NEWS_DAY_SECS; t += 0.1) {
@@ -224,7 +225,7 @@ test("흐름: 넓은 섬 보통 놀이 3일 — 금고가 마르지 않고, 집�
 });
 
 test("첫 시장은 설계비 없음: 시장을 짓기 전에 금고를 다 써도 빠져나올 길이 있음(검토 회귀)", () => {
-  const w = World.create(7, seededRandom(3), { wild: true });
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true });
   for (const n of ["목수", "미니", "황금"]) w.addUnitByName(n);
   assert.equal(w.economy, true); assert.equal(w.marketB(), null);
   w.bank.vault = 0; for (const u of w.units) u.coins = 0;
@@ -275,12 +276,12 @@ test("물가: 배수 = 1 + 0.15 × (등급 − 1) + 0.06 × (다 지은 집·시
   assert.equal(BK.priceMult(2, 12), 1.39); assert.equal(BK.priceMult(3, 200), BK.PRICE_CAP);
   assert.equal(BK.scaled(10, 1.39), 14); assert.equal(BK.scaled(30, 1.39), 42); assert.equal(BK.scaled(0, 3), 0, "0은 0"); assert.equal(BK.scaled(1, 1.06), 1);
   const { w, mini } = town(1000);
-  assert.deepEqual(w.priceInfo(), { mult: 1, rank: 0, n: 1, free: 8, rankPart: 0, buildPart: 0, cap: 3, nextAt: 9 }, "새 섬: 시장 1채, 1배");
+  assert.deepEqual(w.priceInfo(), { mult: 1, rank: 0, n: 2, free: 8, rankPart: 0, buildPart: 0, cap: 3, nextAt: 9 }, "새 섬: 첫 집 + 시장 = 2채, 1배");
   assert.equal(w.feeFor("house"), 10); assert.equal(w.housePrice("house"), 30);
   // 장식·계단·짓는 중인 건물은 세지 않음
   w.instantBuild = true; place(w, "bench"); place(w, "stairs"); w.instantBuild = false; place(w, "house");
-  assert.equal(w.priceInfo().n, 1);
-  for (let k = 0; k < 11; k++) readyHouse(w);                                // 다 지은 집 11채 + 시장 = 12
+  assert.equal(w.priceInfo().n, 2);
+  for (let k = 0; k < 10; k++) readyHouse(w);                                // 첫 집 + 다 지은 집 10채 + 시장 = 12
   w.rank = 2;
   const pi = w.priceInfo(); assert.equal(pi.n, 12); assert.equal(pi.mult, 1.39); assert.equal(pi.rankPart, 0.15); assert.equal(pi.buildPart, 0.24); assert.equal(pi.nextAt, 13);
   assert.equal(w.feeFor("house"), 14); assert.equal(w.feeFor("cottage"), 21); assert.equal(w.feeFor("snowman"), 0); assert.equal(w.feeFor("bridge"), 1);
@@ -294,7 +295,7 @@ test("물가: 배수 = 1 + 0.15 × (등급 − 1) + 0.06 × (다 지은 집·시
   mini.coins = 20; const v1 = w.bank.vault; assert.equal(w.buyHouse(mini, h), true);
   assert.deepEqual(mini.loan, { left: 25, per: 5 }); assert.equal(mini.coins, 3); assert.ok(w.bank.vault - v1 >= 16, "금고엔 계약금(상인 몫 1 뺌)");
   // 첫 시장은 여전히 0(시장이 하나도 없을 때)
-  const w2 = World.create(7, seededRandom(3), { wild: true }); w2.addUnitByName("목수"); w2.rank = 3; assert.equal(w2.feeFor("market"), 0);
+  const w2 = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w2.addUnitByName("목수"); w2.rank = 3; assert.equal(w2.feeFor("market"), 0);
   // 은행 없는 섬은 늘 1배
   assert.equal(World.create(7, seededRandom(3)).priceMult(), 1);
 });

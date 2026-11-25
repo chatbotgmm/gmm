@@ -31,7 +31,7 @@ export const DAILY_POOL = [
   { id: "furniture", icon: "🛋", need: 1, text: () => "아무 집에나 가구 하나 놓기",
     ok: doneHouse, hit: (ev, e) => ev === "furniture" && e?.kind === "place" ? 1 : 0 },
   { id: "summon", icon: "🥚", need: 1, text: () => "새 갈매미 한 마리 부르기",
-    ok: w => w.units.length < Math.min(4, UNITS.length), hit: ev => ev === "unitAdded" ? 1 : 0 },
+    ok: w => w.units.length < Math.min(4, UNITS.length) && (w.summonInfo?.().can ?? true), hit: ev => ev === "unitAdded" ? 1 : 0 },
   { id: "seasonFish", icon: "🎣", need: 1, group: "fish", text: w => `제철 물고기 한 마리 낚기(${seasonFish(w).map(f => f.name).join("·")})`,
     ok: w => canFish(w) && seasonFish(w).length > 0, hit: (ev, e) => ev === "fish" && e?.fish?.season ? 1 : 0 },
   { id: "fish3", icon: "🐟", need: 3, group: "fish", text: () => "물고기 3마리 낚기(같이 당기면 더 귀한 게 와요)",

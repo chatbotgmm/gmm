@@ -272,7 +272,7 @@ test("계단 이어 놓기: 아래 계단 위쪽 칸에 같은 방향으로 놓�
 
 test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공해 은행에 팔고(새 돈), 음식은 농부·어부에게서 사고, 집은 시장에서", async () => {
   const E = await import("../src/world/economy.js");
-  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true;
   assert.deepEqual(w.units.map(u => u.name), ["기본"], "기본 한 마리로 시작");
   assert.ok(w.economy && w.bankB(), "가운데 공식은행"); assert.equal(w.seeds.length, 0, "씨앗 없음");
   const boss = w.units[0], c = w.center;
@@ -308,12 +308,12 @@ test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공
 });
 
 test("넓은 섬: 기본 혼자 첫 집을 짓고(나무는 직접 벰), 모두 소환해 오래 돌려도 굶지 않고 집이 팔린다", () => {
-  const w = World.create(7, seededRandom(3), { wild: true }), c = w.center;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }), c = w.center;
   const spot = (def, cx, cz) => { for (let r = 3; r < 30; r++) for (let k = 0; k < 48; k++) { const a = k / 48 * 6.28, x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r); if (w.check(def, x, z, 0).ok) return [x, z]; } return null; };
   const p = spot("house", c.x - 8, c.z + 8); const first = w.placeBuilding("house", p[0], p[1], 0).building;
   for (let t = 0; t < 120; t += 0.1) w.update(0.1);
   assert.ok(w.isDone(first), "기본 혼자 첫 집 완공");
-  while (w.summon());
+  for (const d of UNITS) w.addUnitByName(d.name);                              // 모두 부름(집 수와 상관없는 시험 받침. 🥚 소환은 집 한 채당 한 마리)
   for (const d of ["market", "field", "house", "house"]) { const q = spot(d, c.x + 6, c.z + 8); w.placeBuilding(d, q[0], q[1], 0); }
   let minFull = 999, sold = 0; w.on("market", e => { if (e.kind === "house") sold++; });
   for (let t = 0; t < 900; t += 0.1) { w.update(0.1); if (t > 30) for (const u of w.units) minFull = Math.min(minFull, u.full); }
@@ -556,7 +556,7 @@ test("계절·날씨: 날짜로 계절, 계절별 날씨, 폭풍엔 못 낚고 �
   assert.ok(!seen.has("snow"), "여름엔 눈 없음"); assert.ok(seen.has("rain") && seen.has("storm"));
   for (let i = 0; i < 200; i++) assert.notEqual(S.pickWeather("winter", r), "rain", "겨울엔 비 대신 눈");
   assert.equal(S.effects("winter", "clear").hunger, 1.25); assert.equal(S.effects("spring", "rain").grow, 1.25 * 1.5);
-  const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("autumn"); w.setWeather("storm");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.setSeason("autumn"); w.setWeather("storm");
   const u = w.units[0]; for (let i = 0; i < 50; i++) assert.equal(w.catchFish(u), null, "폭풍엔 못 낚음");
   // 밭: 비 오는 봄은 1.875배 빨리 자람
   w.setSeason("spring"); w.setWeather("rain"); w.weather.t = 1e9; w.plots.push({ x: 1, z: 1, stage: "growing", t: 10, grow: 10, claimed: null });
@@ -567,11 +567,12 @@ test("계절·날씨: 날짜로 계절, 계절별 날씨, 폭풍엔 못 낚고 �
 
 test("소원: 갈매미가 바라는 걸 말하고, 이루어지면 축하금(새 돈)", async () => {
   const E = await import("../src/world/economy.js");
-  const w = World.create(7, seededRandom(1), { wild: true }), u = w.units[0];
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }), u = w.units[0];
   const wish = w.makeWish(); assert.ok(wish, "소원이 생김"); assert.equal(wish.unitId, u.unitId); assert.equal(w.makeWish(), null, "한 마리에 하나(지금 한 마리)");
   // 친구 소원으로 바꿔서 확인: 소환하면 이루어짐
   w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0, issued = w.bank.issued;
   w.stepWishes(1.1); assert.equal(w.wishes.length, 1, "아직");
+  assert.equal(w.summon(), null, "집 1채에 갈매미 1마리: 집이 더 있어야 부를 수 있음"); w.placeStarterHouse();
   w.summon(); w.stepWishes(1.1);
   assert.equal(w.wishes.length, 0); assert.equal(w.wishDone, 1);
   assert.equal(u.coins, coins + 10); assert.equal(w.bank.issued, issued + 10 + (w.units[1].job === "merchant" ? E.MERCHANT_START : 0));
@@ -583,7 +584,7 @@ test("가격 변동: 상인 창고에 쌓이면 원자재 값이 내려가고, �
   assert.equal(E.marketPrice("iron", 0), 8); assert.equal(E.marketPrice("iron", 30), 3);
   for (const k of E.RAW) for (let n = 0; n < 40; n++) assert.ok(E.marketPrice(k, n) < E.BANK_PROCESSED[k], "상인이 손해 보지 않음");
   assert.equal(E.foodPriceFor(10, 0, 0), 3); assert.equal(E.foodPriceFor(1, 0, 0), 4); assert.equal(E.foodPriceFor(1, 0.5, 1), 5); assert.equal(E.foodPriceFor(20, 0, 0), 2);
-  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("황금"); const m = w.merchantU();
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.addUnitByName("황금"); const m = w.merchantU();
   m.raw.wood = 25; w.updatePrices(); assert.equal(w.prices.wood, 1);
   for (let i = 0; i < 25 * 60; i++) w.update(1 / 60);
   assert.ok(w.priceHist.length >= 1, "20초마다 시세 기록");
@@ -591,8 +592,8 @@ test("가격 변동: 상인 창고에 쌓이면 원자재 값이 내려가고, �
 
 test("마을 등급: 점수(갈매미·집·시설·소원)가 기준을 넘으면 오르고, 축하금·새 건물이 열림", async () => {
   const { RANKS, rankScore } = await import("../src/world/rank.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true;
-  assert.equal(w.rank, 0); assert.equal(rankScore(w).score, 10 + 10, "갈매미 1(10) + 배부름(10)");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true;
+  assert.equal(w.rank, 0); assert.equal(rankScore(w).score, 10 + 10 + 4 + 2, "갈매미 1(10) + 배부름(10) + 섬에 있던 첫 집(빈 집 4 + 기본 가구 아늑함 2)");
   const spot = (def) => { const c = w.center; for (let r = 4; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check(def, x, z, 0).ok) return [x, z]; } return null; };
   assert.equal(spot("cafe"), null, "갯마을에선 카페를 못 지음");
   w.addUnitByName("목수"); w.addUnitByName("미니"); w.addUnitByName("황금");          // 4마리 = 40 + 배부름 10
@@ -606,7 +607,7 @@ test("마을 등급: 점수(갈매미·집·시설·소원)가 기준을 넘으�
 
 test("저장고: 농부·어부의 남는 음식을 은행이 사서 쌓고, 배고픈 갈매미는 사거나 나눠 받음", async () => {
   const E = await import("../src/world/economy.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("미니");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("미니");
   const mini = w.units.find(u => u.name === "미니"), boss = w.units[0];
   const c = w.center; let q = null; for (let r = 4; r < 40 && !q; r++) for (let k = 0; k < 64 && !q; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check("storehouse", x, z, 0).ok) q = [x, z]; }
   assert.equal(w.stockFood(mini), 0, "저장고가 없으면 못 팖");
@@ -620,7 +621,7 @@ test("저장고: 농부·어부의 남는 음식을 은행이 사서 쌓고, 배
 
 test("계절 한정 수집: 그 계절 물고기·물건만 나오고, 바닷가에서 계절 물건을 주움", async () => {
   const { FISH, ITEMS } = await import("../src/data/catalog.js"); const J = await import("../src/world/jobs.js");
-  const w = World.create(7, seededRandom(1), { wild: true }), u = w.units[0], rnd = seededRandom(9);
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }), u = w.units[0], rnd = seededRandom(9);
   for (const season of ["spring", "summer", "autumn", "winter"]) {
     const seen = new Set(); for (let i = 0; i < 4000; i++) seen.add(J.rollFish({ ...u, rarity: "legend" }, rnd, season).id);
     for (const f of FISH.filter(f => f.season)) assert.equal(seen.has(f.id), f.season === season, `${season} ${f.name}`);
@@ -633,7 +634,7 @@ test("계절 한정 수집: 그 계절 물고기·물건만 나오고, 바닷가
 
 test("실내 꾸미기: 집마다 구조(방·문·계단), 놓기·옮기기·돌리기·치우기, 낚시 가구, 잡화점에서 사면 알아서 놓음", async () => {
   const F = await import("../src/world/furniture.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true;
   const spot = d => { const c = w.center; for (let r = 4; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q = spot("house"), h = w.placeBuilding("house", q[0], q[1], 0, null, 1e9).building, it = F.room(h), L = it.levels[0];
   assert.equal(it.levels.length, 1); assert.deepEqual([L.w, L.d], [5, 4], "작은 집 = 원룸 5×4");
@@ -678,7 +679,7 @@ test("실내 꾸미기: 집마다 구조(방·문·계단), 놓기·옮기기·�
 });
 
 test("저장: 등급·저장고·소원·가구·날씨·시세 기록까지 저장하고 그대로 불러옴", () => {
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; while (w.summon());
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; for (const d of UNITS) w.addUnitByName(d.name);
   for (let i = 0; i < 400; i++) w.update(0.1);
   w.rank = 2; w.granary = 17; w.wishDone = 3; w.makeWish(); w.setWeather("rain");
   const s = JSON.stringify(w.serialize()); assert.ok(s.length < 500000, `저장 크기 ${s.length}`);
@@ -690,7 +691,7 @@ test("저장: 등급·저장고·소원·가구·날씨·시세 기록까지 저
 
 test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어지고, 선착장이 있으면 배를 타고 먼 섬에 감", async () => {
   const { BUILDINGS } = await import("../src/data/catalog.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수");
   assert.equal(w.grid.w, 192); assert.equal(w.zones.filter(z => z.id.startsWith("islet-")).length, 5);
   const c = w.center, home = w.compAt(Math.floor(c.x), Math.floor(c.z) + 6);
   const zone = id => w.zones.find(z => z.id === id), compOf = z => w.compAt(Math.floor(z.x), Math.floor(z.z));
@@ -735,7 +736,7 @@ test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어
 
 test("포장도로: 돌길·나무 데크로 집과 시장·은행을 이으면 그 집 갈매미 만족도가 오르고, 흙길은 안 됨", async () => {
   const RD = await import("../src/world/roads.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수");
   const c = w.center, spot = (d, r0) => { for (let r = r0; r < 40; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + 4 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const hq = spot("house", 8), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", 14), mk = w.placeBuilding("market", mq[0], mq[1], 0).building;
   const u = w.units[0]; u.home = h.id; h.owner = u.unitId; u.full = 80;
@@ -752,7 +753,7 @@ test("포장도로: 돌길·나무 데크로 집과 시장·은행을 이으면 
 });
 
 test("장식·전기·카페·우체국: 집 근처 장식·풍차 전기·가까운 카페가 만족도를 올리고, 우체국은 소원 축하금 두 배, 눈사람은 겨울만", () => {
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.rank = 2; w.setSeason("autumn");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.rank = 2; w.setSeason("autumn"); w.bank.vault = 100;   // 설계비 합 81(새 섬 금고 60으로는 모자람)
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const hq = spot("house", c.x + 10, c.z + 8), h = w.placeBuilding("house", hq[0], hq[1], 0).building, u = w.units[0]; u.home = h.id; h.owner = u.unitId; u.full = 80;
   w.updateRoads(); const base = u.sat;
@@ -764,12 +765,12 @@ test("장식·전기·카페·우체국: 집 근처 장식·풍차 전기·가�
   assert.equal(w.canEnter(w.units[1], cafe), true, "카페는 누구나 들어감");
   // 우체국: 소원 축하금 두 배
   const po = spot("post", c.x - 12, c.z + 10); w.placeBuilding("post", po[0], po[1], 0);
-  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0; w.summon(); w.stepWishes(1.1);
+  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0; w.placeStarterHouse(); assert.ok(w.summon(), "집 3채에 갈매미 2마리"); w.stepWishes(1.1);
   assert.equal(u.coins - coins, 20, "축하금 10 × 2");
 });
 
 test("눈 깊이: 겨울 눈 오는 날 쌓이고(약 80초에 가득), 맑은 겨울은 0.55까지, 봄엔 녹고, 저장됨", () => {
-  const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("winter"); w.setWeather("snow"); w.weather.t = 1e9;
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.setSeason("winter"); w.setWeather("snow"); w.weather.t = 1e9;
   for (let i = 0; i < 400; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - 0.5) < 0.01, `40초 ${w.snow}`);
   for (let i = 0; i < 600; i++) w.stepSnow(0.1); assert.equal(w.snow, 1);
   w.setWeather("clear"); w.weather.t = 1e9; for (let i = 0; i < 3000; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - 0.55) < 1e-9, "맑은 겨울은 0.55로 천천히");
@@ -779,7 +780,7 @@ test("눈 깊이: 겨울 눈 오는 날 쌓이고(약 80초에 가득), 맑은 �
 
 test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고르고(높이·낮추기), 시장까지 돌길을 깔고, 장식을 주문해 만족도가 오름", async () => {
   const IM = await import("../src/world/improve.js");
-  const w = World.create(7, seededRandom(5), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
+  const w = World.create(7, seededRandom(5), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const hq = spot("house", c.x + 12, c.z + 10), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", c.x + 2, c.z + 14); w.placeBuilding("market", mq[0], mq[1], 0);
   const u = w.units.find(o => o.name === "불씨"); u.home = h.id; h.owner = u.unitId; u.inv.stone = 10; w.res.stone = 10;
@@ -793,7 +794,7 @@ test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고�
   for (let t = 0; t < 300; t += 0.1) { u.full = 90; w.update(0.1); }
   w.updateRoads(); assert.ok(u.sat > before, `만족도 ${before} → ${u.sat} (${u.satParts.map(p => p[0]).join(",")})`);
   // 돌이 없으면(길을 못 깖 — 돌을 캐지 않는 농부) 마당을 높이고 낮춰 고름
-  const w2 = World.create(7, seededRandom(6), { wild: true }); w2.instantBuild = true; w2.addUnitByName("꽃");
+  const w2 = World.create(7, seededRandom(6), { wild: true, firstGull: true }); w2.instantBuild = true; w2.addUnitByName("꽃");
   const sp2 = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w2.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q2 = sp2("house", c.x + 12, c.z + 10), h2 = w2.placeBuilding("house", q2[0], q2[1], 0).building, u2 = w2.units.find(o => o.name === "꽃"); u2.home = h2.id; h2.owner = u2.unitId; u2.inv.stone = 0; w2.res.stone = 0;
   const y2 = IM.yardCells(w2, h2); w2.applyHeight(y2.cells[0][0], y2.cells[0][1], y2.target + 0.5); w2.applyHeight(y2.cells[1][0], y2.cells[1][1], y2.target - 0.25);
@@ -803,7 +804,7 @@ test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고�
 });
 
 test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리만), 기력이 차오르고, 시간이 지나면 일어남", () => {
-  const w = World.create(7, seededRandom(8), { wild: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(8), { wild: true, firstGull: true }); w.instantBuild = true;
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q = spot("bench", c.x + 3, c.z + 6), b = w.placeBuilding("bench", q[0], q[1], 0).building, u = w.units[0];
   let sat = false, stood = false, e0 = null;
@@ -812,7 +813,7 @@ test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리
 });
 
 test("밤·낮과 피로: 밤엔 집에 들어가 계속 자고(야행성은 밤에 일함), 일하면 피로가 쌓이고 쉬면 풀림", async () => {
-  const w = World.create(7, seededRandom(9), { wild: true }); w.instantBuild = true; w.addUnitByName("그림자");
+  const w = World.create(7, seededRandom(9), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("그림자");
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q = spot("house", c.x + 6, c.z + 6), h = w.placeBuilding("house", q[0], q[1], 0).building, u = w.units.find(o => o.name === "기본"), n = w.units.find(o => o.name === "그림자");
   u.home = h.id; h.owner = u.unitId; w.isNight = true;
@@ -831,7 +832,7 @@ test("밤·낮과 피로: 밤엔 집에 들어가 계속 자고(야행성은 밤
 test("친구 사이: 단계(서먹·친구·단짝)가 오르면 알리고, 이름으로 저장·불러오고, 예전 저장도 열림", async () => {
   const M = await import("../src/units/mind.js");
   assert.deepEqual([-5, 0, 2.9, 3, 6.9, 7, 10].map(M.friendStage), [0, 0, 0, 1, 1, 2, 2], "기준: 3부터 친구, 7부터 단짝");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("목수"); w.addUnitByName("미니");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.addUnitByName("목수"); w.addUnitByName("미니");
   const [a, b, c] = w.units, seen = []; w.on("friendship", e => seen.push([e.a.name, e.b.name, e.stage]));
   assert.equal(w.befriend(a, b, 2), 0, "아직 서먹"); assert.equal(seen.length, 0);
   a.emoteText = b.emoteText = null;
@@ -871,7 +872,7 @@ test("관계도: 1~8마리를 그림 안 원 위에 놓고, 호감이 0보다 �
 
 test("소원: 단짝 옆집에 살고 싶어요 — 둘 다 가까운 집이 생기면 이루어지고, 못 이루게 되면 접음. 단짝 쌍은 등급 점수", async () => {
   const { WISH_BY_ID, NEIGHBOR_DIST, areNeighbors, wishText } = await import("../src/world/wishes.js"); const { rankScore } = await import("../src/world/rank.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("미니");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("미니");
   const [a, b, c] = w.units, d = WISH_BY_ID.neighbor, score0 = rankScore(w).score;
   assert.equal(d.ok(w, a), false, "단짝이 없으면 안 빎");
   w.befriend(a, b, 8); assert.equal(d.ok(w, a), true); assert.equal(d.ok(w, c), false);
@@ -897,7 +898,7 @@ test("소원: 단짝 옆집에 살고 싶어요 — 둘 다 가까운 집이 생
 
 test("집 사기: 단짝 옆집이 팔리면 더 싼 집보다 그 집을 먼저 고름", async () => {
   const { areNeighbors } = await import("../src/world/wishes.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금");
   const [a, b] = w.units, c0 = w.center, put = (def, test) => { for (let r = 5; r < 70; r++) for (let k = 0; k < 64; k++) { const an = k / 64 * 6.28, x = Math.floor(c0.x + Math.cos(an) * r), z = Math.floor(c0.z + Math.sin(an) * r);
     if (!w.check(def, x, z, 0).ok) continue; const q = w.placeBuilding(def, x, z, 0, null, 1e9); if (!q.ok) continue; if (test(q.building)) return q.building; w.removeBuilding?.(q.building.id); } return null; };
   const mk = put("market", () => true); assert.ok(mk && w.marketB());
@@ -912,7 +913,7 @@ test("집 사기: 단짝 옆집이 팔리면 더 싼 집보다 그 집을 먼저
 
 test("친구 사이: 잠깐 멀어졌다 다시 같은 단계가 되면 또 알리지 않음(더 높은 단계는 알림)", async () => {
   const M = await import("../src/units/mind.js");
-  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("미니");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.addUnitByName("미니");
   const [a, b] = w.units, seen = []; w.on("friendship", e => seen.push(e.stage));
   assert.equal(w.befriend(a, b, 3), 1); M.befriend(a, b, -0.6);                   // 친구가 됐다가 겁먹어 서먹으로
   assert.equal(M.friendStage(M.affinity(a, b)), 0);
@@ -926,7 +927,7 @@ test("친구 사이: 잠깐 멀어졌다 다시 같은 단계가 되면 또 알�
 test("소식지: 기억할 만한 일만 날짜별로 모으고, 하루 머릿기사는 중요한 순, 저장·예전 저장", async () => {
   const N = await import("../src/world/news.js");
   assert.equal(N.newsDay(0), 1); assert.equal(N.newsDay(N.NEWS_DAY_SECS - 1), 1); assert.equal(N.newsDay(N.NEWS_DAY_SECS), 2);
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("미니"); const [a, b] = w.units;
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("미니"); const [a, b] = w.units;
   assert.deepEqual(w.newsLog, [], "새 마을은 빈 소식지");
   w.setSeason("autumn"); assert.equal(w.newsLog.length, 0, "처음 정해진 계절은 소식이 아님");
   w.setWeather("rain"); assert.equal(w.newsLog.length, 0, "비는 싣지 않음");
@@ -967,7 +968,7 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   assert.equal(N.awayCasts(0), 0); assert.equal(N.awayCasts(0.2), 1); assert.equal(N.awayCasts(3), 4); assert.equal(N.awayCasts(8), N.AWAY_FISH_CAP);
   assert.equal(N.awaySpan(25 * 60000), "25분"); assert.equal(N.awaySpan(3 * H + 20 * 60000), "3시간 20분"); assert.equal(N.awaySpan(50 * H), "2일 2시간");
 
-  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("꽃"); w.addUnitByName("물방울"); w.setSeason("autumn");
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("꽃"); w.addUnitByName("물방울"); w.setSeason("autumn");
   const c = w.center; let fd = null;
   for (let r = 4; r < 30 && !fd; r++) for (let dz = -r; dz <= r && !fd; dz++) for (let dx = -r; dx <= r && !fd; dx++) if (w.check("field", c.x + dx, c.z + dz, 0).ok) fd = [c.x + dx, c.z + dz];
   assert.ok(w.placeBuilding("field", fd[0], fd[1], 0).ok); if (!w.spots.length) w.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null });
@@ -987,9 +988,9 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   assert.match(w.newsLog.at(-1).text, /^다녀온 사이에 밭 2칸이 익고 물고기 \d마리를 낚았어요$/);
   assert.deepEqual(w.applyAway(100 * H, seededRandom(5)).ripened, 0, "익을 밭이 더 없음");
   // 같은 난수면 같은 결과(월드는 시계를 읽지 않음), 어부가 없으면 낚시 없음
-  const mk = () => { const x = World.create(7, seededRandom(3), { wild: true }); x.addUnitByName("물방울"); x.setSeason("autumn"); if (!x.spots.length) x.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null }); return x; };
+  const mk = () => { const x = World.create(7, seededRandom(3), { wild: true, firstGull: true }); x.addUnitByName("물방울"); x.setSeason("autumn"); if (!x.spots.length) x.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null }); return x; };
   assert.deepEqual(mk().applyAway(4 * H, seededRandom(8)), mk().applyAway(4 * H, seededRandom(8)));
-  const lone = World.create(7, seededRandom(3), { wild: true }); assert.deepEqual(lone.applyAway(4 * H, seededRandom(8)).catches, []);
+  const lone = World.create(7, seededRandom(3), { wild: true, firstGull: true }); assert.deepEqual(lone.applyAway(4 * H, seededRandom(8)).catches, []);
   // 저장 시각은 밖에서 넣어 줌
   assert.equal(World.fromJSON(JSON.parse(JSON.stringify(w.serialize(1234567))), seededRandom(1)).savedAt, 1234567); assert.equal(w.serialize().savedAt, null);
 
@@ -1127,7 +1128,7 @@ test("수족관: 구경하는 갈매미는 재미가 차오른다", () => {
 
 test("수족관: 다녀온 사이에 낚은 첫 희귀 이상 물고기도 기증되고, 알림 없이 소식지·편지에만 적힌다", async () => {
   const N = await import("../src/world/news.js"); const { FISH } = await import("../src/data/catalog.js"); const H = 3600000;
-  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true; w.addUnitByName("물방울"); w.rank = 2;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("물방울"); w.rank = 2;
   if (!w.spots.length) w.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null });
   let at = null; const c = w.center; for (let rr = 2; rr < 30 && !at; rr++) for (let dz = -rr; dz <= rr && !at; dz++) for (let dx = -rr; dx <= rr && !at; dx++) if (w.placeBuilding("aquarium", c.x + dx, c.z + dz, 0, null, 1e9).ok) at = [c.x + dx, c.z + dz];
   assert.ok(w.aquariumB()); const ev = []; w.on("donate", e => ev.push(e)); w.on("donateGift", e => ev.push(e)); w.on("fishRecord", e => ev.push(e));
@@ -1243,7 +1244,7 @@ test("드문 하늘: 무지개(낮에 비가 갠 뒤)·유성우(맑은 밤)·�
   // 별조각: 가방 물건(팔 수 있고 선물할 수 있음)이지만 낚시로는 안 나옴
   const star = ITEMS.find(i => i.id === K.STAR_ITEM); assert.equal(star.name, "별조각"); assert.ok(star.price > 0 && !star.furniture); assert.equal(B.giftDef(star.id).cat, "shiny");
   { const r = seededRandom(5), u = { skill: {} }; for (let i = 0; i < 3000; i++) assert.notEqual(J.rollItem(u, r, null, 3).id, star.id); }
-  const mk = () => { const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("summer"); return w; };
+  const mk = () => { const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.setSeason("summer"); return w; };
   // 무지개: 비·폭풍 → 맑음일 때만, 낮에만 굴림. 확률은 RAINBOW_CHANCE(하늘 난수), 마을·날씨 난수는 안 씀
   let w = mk(), seen = 0, tries = 400;
   for (let i = 0; i < tries; i++) { w.sky = null; w.setWeather(i % 2 ? "storm" : "rain"); assert.equal(w.sky, null); w.setWeather("clear"); if (w.sky) { seen++; assert.equal(w.sky.kind, "rainbow"); assert.equal(w.sky.t, K.SKY_EVENTS.rainbow.secs); } }

@@ -6,7 +6,8 @@
 //  · 금고가 바닥나면: 대출 거절(집 없이 지냄·만족도 −10) · 품삯 밀림(일은 계속, 만족도 −10, 돈이 들어오면 나눠 갚음) · 말풍선·소식지.
 import { newsDay } from "./news.js";
 
-export const VAULT_START = 100;      // 새 섬 금고(첫날 설계비 ~50 + 품삯 ~54를 계약금·세금과 함께 버팀)
+export const VAULT_START = 60;       // 새 섬 금고 기본 돈(인구 = 집 수: 집 한 채 = 설계비 10 + 품삯 약 10 → 처음 세 채 몫. 첫 집 한 채는 섬에 지어져 있음)
+export const VAULT_LEGACY = 100;     // 금고가 생기기 전 저장을 불러올 때의 금고(예전 새 섬 값 그대로)
 export const VAULT_LOW = 30;         // 이보다 적으면 "얼마 안 남음" 알림(규칙은 그대로)
 export const VAULT_REARM = 60;       // 이만큼 다시 차면 "얼마 안 남음"을 또 알릴 수 있음
 export const LOAN_DOWN = 0.4;        // 계약금 비율(작은 집 30 → 12 + 대출 18)
@@ -75,12 +76,12 @@ export const newBank = (time = 0) => ({
   ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds }] (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
 });
 const num = v => Number.isFinite(+v) ? +v : 0;
-/** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_START + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
+/** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_LEGACY(100) + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
  *  세금 날은 불러온 날로(불러오자마자 걷지 않게). 이상한 값은 0 이상으로 */
 export function bankFromSave(j, time = 0) {
   const b = newBank(time); if (!j || typeof j !== "object") return b;
   for (const k of ["issued", "returned", "taxed", "fees", "wages", "lent", "repaid", "forgiven", "need"]) b[k] = Math.max(0, num(j[k]));
-  b.vault = "vault" in j ? Math.max(0, num(j.vault)) : VAULT_START + b.returned;
+  b.vault = "vault" in j ? Math.max(0, num(j.vault)) : VAULT_LEGACY + b.returned;
   if (Number.isFinite(j.day) && j.day >= 1) b.day = Math.floor(j.day);
   b.short = j.short ? 1 : 0; b.low = j.low ? 1 : 0;
   b.ledger = (Array.isArray(j.ledger) ? j.ledger : []).filter(e => e && e.day >= 1).slice(-LEDGER_DAYS)

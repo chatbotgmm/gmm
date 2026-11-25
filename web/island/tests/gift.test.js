@@ -33,7 +33,7 @@ const placeAny = (w, defId, hits = 1e9) => { const c = w.center; for (let rr = 2
 const buildAquarium = w => { const b = placeAny(w, "aquarium", 0); assert.ok(b && !w.isDone(b)); w.finishAll(); return b; };
 /** 경제 마을: 은행 + 시장 + 상인(황금) + 어부(물방울) */
 function econ() {
-  const w = World.create(7, seededRandom(1), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금"); w.addUnitByName("물방울");
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금"); w.addUnitByName("물방울");
   const q = spotFor(w, "market"); assert.ok(q, "시장 자리"); w.placeBuilding("market", q[0], q[1], 0, null, 1e9); assert.ok(w.marketB() && w.economy);
   return { w, gold: w.units.find(u => u.name === "황금"), fisher: w.units.find(u => u.name === "물방울") };
 }
@@ -83,7 +83,7 @@ test("소지품: 잡은 희귀 물고기·덤 물건·바닷가 물건·별조�
   w.setSeason("winter"); let got = null; for (let i = 0; i < 300 && !got; i++) got = w.beachcomb(u);
   assert.equal(got?.id, "iceshell"); assert.ok(u.stash.iceshell >= 1); assert.equal(w.items.iceshell, undefined);
   // 별조각: 주운 야행성 갈매미 것
-  const s = World.create(7, seededRandom(1), { wild: true }); s.setSeason("summer"); s.addUnitByName("불씨"); const fire = s.units.find(x => x.name === "불씨");
+  const s = World.create(7, seededRandom(1), { wild: true, firstGull: true }); s.setSeason("summer"); s.addUnitByName("불씨"); const fire = s.units.find(x => x.name === "불씨");
   s.weather = { kind: "clear", t: 1e9 }; s.isNight = true; s.skyRnd = () => 0; fire.state = UnitState.Idle; s.startSky("meteor", true);
   const stars = []; s.on("starPiece", e => stars.push(e.u.name)); s.stepSky(K.STAR_CHECK_SECS);
   assert.deepEqual(stars, ["불씨"]); assert.equal(fire.stash.stardust, 1); assert.equal(s.items.stardust, undefined);
@@ -127,7 +127,7 @@ test("팔기: 갈매미가 소지품을 시장에서 스스로 팖 — 조개는
   const q = spotFor(w, "house"); const h = w.placeBuilding("house", q[0], q[1], 0, null, 1e9).building; fisher.coins = 100;
   assert.ok(w.buyHouse(fisher, h)); assert.equal(fisher.stash.chair, undefined); assert.equal(F.room(h).stash.driftChair, 1);
   // 시장이 없으면 아무 일 없음
-  const w0 = World.create(7, seededRandom(1), { wild: true }); w0.addUnitByName("황금"); const b = w0.units[0]; b.stash = { tuna: 3 };
+  const w0 = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w0.addUnitByName("황금"); const b = w0.units[0]; b.stash = { tuna: 3 };
   assert.deepEqual(w0.sellStash(b), { n: 0, coins: 0, cut: 0, items: [], donated: [] }); assert.deepEqual(b.stash, { tuna: 3 });
   // 수족관이 있으면 팔기 전에 아껴 둔 종류를 기증
   w.rank = 2; fisher.stash = { octopus: 3 }; placeAny(w, "aquarium"); assert.equal(fisher.stash.octopus, 3, "놓자마자 완공은 기증 안 함");
@@ -150,7 +150,7 @@ test("옛 섬 가판대(trade)는 내 주머니의 반짝이·도장 선물을 �
 });
 
 test("반짝이: 20초 뒤 바닷가 1·마을 1, 칸 조건·간격, 하루에 많아야 6개·수명, 따로 굴리는 난수, 같은 씨앗이면 같은 자리, 줍기 → 내 주머니 → 선물", () => {
-  const w = World.create(7, seededRandom(1), { wild: true }), spawned = [], gone = [];
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }), spawned = [], gone = [];
   w.on("sparkleSpawn", s => spawned.push(s)); w.on("sparkleGone", s => gone.push(s));
   for (let i = 0; i < (S.SPARKLE_FIRST - 1) * 2; i++) w.update(0.5); assert.equal(w.sparkles.length, 0);
   for (let i = 0; i < 4; i++) w.update(0.5);
@@ -171,11 +171,11 @@ test("반짝이: 20초 뒤 바닷가 1·마을 1, 칸 조건·간격, 하루에 
   // 수명
   const first = w.sparkles[0]; first.t = 1; w.stepSparkles(1.5); assert.ok(!w.sparkles.includes(first)); assert.ok(gone.some(s => s.id === first.id));
   // 하루를 돌려도 많아야 6개, 다 사라지고 새로 생김
-  const v = World.create(9, seededRandom(2), { wild: true }); let most = 0, made = 0; v.on("sparkleSpawn", () => made++);
+  const v = World.create(9, seededRandom(2), { wild: true, firstGull: true }); let most = 0, made = 0; v.on("sparkleSpawn", () => made++);
   for (let i = 0; i < 1500; i++) { v.update(1); most = Math.max(most, v.sparkles.length); }
   assert.ok(most <= S.SPARKLE_MAX); assert.ok(made >= 14, `생긴 수 ${made}`); assert.ok(v.sparkles.every(s => s.t <= S.SPARKLE_LIFE));
   // 같은 씨앗이면 같은 자리·종류
-  const a = World.create(7, seededRandom(1), { wild: true }), b = World.create(7, seededRandom(5), { wild: true });
+  const a = World.create(7, seededRandom(1), { wild: true, firstGull: true }), b = World.create(7, seededRandom(5), { wild: true, firstGull: true });
   const pick = x => [x.spawnSparkles(), x.spawnSparkles()].flat().map(s => [s.k, s.x, s.z]);
   assert.deepEqual(pick(a), pick(b));
   // 줍기
@@ -203,13 +203,13 @@ test("도장 선물: 도장으로 사서 내 주머니로, 정이 두 배, 왕�
   assert.deepEqual(back.stampBought, { goldLetter: 1, crownCookie: 1, stampRug: 1 });
   assert.deepEqual(D.stampBoughtFromSave({ goldLetter: 2, crownCookie: -1, nope: 3 }), { goldLetter: 2 });
   // 부탁: 주머니에 선물거리가 있을 때만(지도에 반짝이만 있고 주머니가 비면 고르지 않음 — 줍지 못하면 그날 도장이 막힘)
-  const gift = D.DAILY_POOL.find(d => d.id === "gift"), v = World.create(7, seededRandom(1), { wild: true });
+  const gift = D.DAILY_POOL.find(d => d.id === "gift"), v = World.create(7, seededRandom(1), { wild: true, firstGull: true });
   assert.equal(gift.ok(v), false); v.spawnSparkles(); assert.ok(v.sparkles.length > 0); assert.equal(gift.ok(v), false, "반짝이만 있고 주머니는 빔");
   const s0 = v.sparkles[0]; assert.ok(v.pickSparkle(s0.id)); assert.equal(gift.ok(v), true, "주운 뒤엔 할 수 있음");
 });
 
 test("저장·불러오기: 소지품·반짝이·시계가 남고, 예전 저장은 한 번만 옮김(보물 → 낚시꾼, 간직 안 한 물건 → 갈매미, 별조각 → 야행성, 간직한 것·가구 → 내 가방)", () => {
-  const w = World.create(7, seededRandom(1), { wild: true }); for (const n of ["물방울", "불씨", "황금"]) w.addUnitByName(n);
+  const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); for (const n of ["물방울", "불씨", "황금"]) w.addUnitByName(n);
   const fisher = w.units.find(u => u.name === "물방울"), fire = w.units.find(u => u.name === "불씨");
   fisher.stash = { tuna: 2, chair: 1 }; w.spawnSparkles(); w.sparkClock = 77.5; w.sparkles[0].t = 123.25;
   const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.ownership, 1); assert.equal(j.version, 2);
@@ -280,6 +280,6 @@ test("검토 수리: ⚡ 바로 완공 수족관도 아껴 둔 물고기를 기�
     assert.equal(JSON.parse(JSON.stringify(w3.serialize())).ownership, 1);
     const w4 = World.fromJSON(j2, seededRandom(2)); const s = w4.summon(); assert.ok(s); assert.equal(Be.stashTotals(w4).tuna, 2, "소환으로 와도 옮김"); }
   // R4: 새 섬의 반짝이 난수는 섬 씨앗에 따라 다르고, 같은 씨앗이면 같음
-  { const a = World.create(7, seededRandom(1), { wild: true }), b = World.create(12345, seededRandom(1), { wild: true }), c = World.create(12345, seededRandom(9), { wild: true });
+  { const a = World.create(7, seededRandom(1), { wild: true, firstGull: true }), b = World.create(12345, seededRandom(1), { wild: true, firstGull: true }), c = World.create(12345, seededRandom(9), { wild: true, firstGull: true });
     const sb = [b.sparkRnd(), b.sparkRnd()]; assert.notDeepEqual([a.sparkRnd(), a.sparkRnd()], sb); assert.deepEqual([c.sparkRnd(), c.sparkRnd()], sb); }
 });

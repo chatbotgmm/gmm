@@ -26,7 +26,7 @@ export const WISHES = [
     ok: w => hasJob(w, "fisher") && !builtAny(w, d => d.dock), done: w => builtAny(w, d => d.dock) },
   { id: "home", icon: "🏠", text: "내 집이 갖고 싶어요", hint: "집을 지으면 시장에서 사요",
     ok: (w, u) => !u.home && !!w.bankB(), done: (w, u) => !!u.home },
-  { id: "friend", icon: "🥚", text: "친구가 더 있으면 좋겠어요", hint: "📱 소환",
+  { id: "friend", icon: "🥚", text: "친구가 더 있으면 좋겠어요", hint: "📱 소환(집이 모자라면 집을 한 채 더 지어요)",
     ok: w => w.units.length < 6, done: (w, u, wish) => w.units.length > wish.base },
   { id: "stairs", icon: "🪜", text: "높은 곳에 올라가 보고 싶어요", hint: "🔨 기본이 계단을 지어요",
     ok: w => !builtAny(w, d => d.id === "stairs"), done: w => builtAny(w, d => d.id === "stairs") },
