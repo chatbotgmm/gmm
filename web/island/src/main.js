@@ -335,7 +335,7 @@ function frameBody() {
     renderer.render(roomView.scene, roomView.camera); requestAnimationFrame(frame); return;
   }
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
-  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 2, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도
+  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 4, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도(프레임당 4 ms만큼만 나눠 만듦)
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   cullFar(now);
