@@ -108,6 +108,9 @@ function groundShadeMat() {
   return (GROUND_MAT = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0x1d2b14, transparent: true, opacity: 0.34, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
 }
 
+/** 밑동 그늘 세기(0~1): 밤에는 옅게(가로등 빛 웅덩이를 어둡게 덮지 않게) */
+export function setGroundShade(k) { if (GROUND_MAT) GROUND_MAT.opacity = 0.34 * k; }
+
 /** 계단 모델: 문 쪽(+z)이 입구, -z로 올라감. 디딤판 높이는 World.stairStep과 같은 식. 바닥에서부터 꽉 찬 돌계단. */
 const STONE = new THREE.MeshStandardMaterial({ color: 0xcfc6b6, roughness: 0.9 }), STONE2 = new THREE.MeshStandardMaterial({ color: 0xbdb3a2, roughness: 0.9 });
 function stairsModel(r) {
