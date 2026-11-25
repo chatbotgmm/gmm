@@ -40,6 +40,7 @@ export const QUALITY_NOTE = {
   perf: "그림자 끔, 30fps 상한. 오래된 휴대폰용",
 };
 const KEY = "galmaemiman-quality";
+const STILL_EVERY = 20;                                                         // 움직이는 것이 없을 때 그림자 다시 그리기 간격(프레임). 천천히 바뀌는 것(작물 자람·해 기울기)은 이걸로 따라감
 const OLD = { auto: "medium", high: "high", low: "low" };                       // 예전 저장값(자동·높음·낮음)
 
 export class Quality {
@@ -49,7 +50,7 @@ export class Quality {
     let saved = null; try { saved = localStorage.getItem(KEY); } catch { /* 저장 못 해도 됨 */ }
     saved = OLD[saved] && !QUALITY[saved] ? OLD[saved] : saved;
     this.mode = QUALITY[saved] ? saved : (IS_TOUCH && MEM <= 2 ? "low" : "medium");   // 처음: 보통(메모리 2 GB 이하 폰은 낮음)
-    this.ema = 16; this.lastCheck = 0; this.pr = 1; this.frameNo = 0; this.lastFrame = 0; this.adapt = 0;   // adapt: 자동 낮추기 단계(0 · 1 그림자 덜 자주 · 2 그림자 지도 반)
+    this.ema = 16; this.lastCheck = 0; this.pr = 1; this.frameNo = 0; this.lastFrame = 0; this.lastShadow = 0; this.kick = true; this.adapt = 0;   // adapt: 자동 낮추기 단계(0 · 1 그림자 덜 자주 · 2 그림자 지도 반)
     this.apply();
   }
   get cfg() { return QUALITY[this.mode]; }
@@ -79,11 +80,14 @@ export class Quality {
     if (now - this.lastFrame < 1000 / cap - 2) return true;
     this.lastFrame = now; return false;
   }
-  /** 매 프레임: 그림자 다시 그리기 간격, 자동 낮추기(1초마다 한 걸음씩) */
-  frame(dt, now) {
+  /** 그림자를 다음 프레임에 바로 다시 그림(해·그림자 범위가 옮겨졌을 때) */
+  kickShadow() { this.kick = true; }
+  /** 매 프레임: 그림자 다시 그리기 간격, 자동 낮추기(1초마다 한 걸음씩).
+   *  moving: 그림자를 드리우는 것이 움직이는 중인지(실제 그림자 갈매미·나무 흔들림·공사·풍차). 아니면 그림자 지도를 그대로 두고 STILL_EVERY 프레임에 한 번만 새로 그림 */
+  frame(dt, now, moving = true) {
     this.frameNo++;
-    const c = this.cfg;
-    if (c.shadows && this.frameNo % (c.shadowEvery * (this.adapt ? 2 : 1)) === 0) this.renderer.shadowMap.needsUpdate = true;
+    const c = this.cfg, every = moving ? c.shadowEvery * (this.adapt ? 2 : 1) : STILL_EVERY;
+    if (c.shadows && (this.kick || this.frameNo - this.lastShadow >= every)) { this.renderer.shadowMap.needsUpdate = true; this.lastShadow = this.frameNo; this.kick = false; }
     this.ema += (dt * 1000 - this.ema) * 0.08;
     if (!c.dynamic || now - this.lastCheck < 1000) return;
     this.lastCheck = now;

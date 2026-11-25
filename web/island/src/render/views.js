@@ -38,11 +38,12 @@ export class BuildingViews {
     v.height = new THREE.Box3().setFromObject(model).max.y + 0.35;                // 🐦 표시는 실제 지붕 위에
   }
   /** 공사 중인 건물은 진행만큼 아래에서부터 솟아오르고, 반투명한 비계 상자가 둘러싼다. */
-  updateConstruction(dt) {
+  updateConstruction(dt, focus = null) {
+    this.animating = false;                                                         // 그림자가 바뀌는 중인지(솟아오르는 공사 · 보는 곳 근처의 풍차 날개) → main이 그림자 다시 그리기 간격을 정함
     for (const v of this.views.values()) {
       const b = v.building, p = Math.min(1, b.hits / b.need);
       if (!v.model) continue;
-      v.shown = v.shown ?? p; v.shown += (p - v.shown) * Math.min(1, dt * 4);
+      v.shown = v.shown ?? p; if (Math.abs(p - v.shown) > 0.002) this.animating = true; v.shown += (p - v.shown) * Math.min(1, dt * 4);
       v.model.scale.y = v.baseY * Math.max(0.04, 0.08 + 0.92 * v.shown);
       if (p < 1 && !v.scaffold) {
         const def = BUILDINGS[b.defId], box = new THREE.Box3().setFromObject(v.model), size = box.getSize(new THREE.Vector3());
@@ -51,7 +52,9 @@ export class BuildingViews {
         v.scaffold.position.y = Math.max(0.6, v.height - 0.3) / 2; v.holder.add(v.scaffold); void size;
       }
       if (v.scaffold) v.scaffold.visible = p < 1;
-      if (p >= 1) v.model.traverse(o => { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else if (o.name === "fountainWater") o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; });   // 풍차 날개 돌기 · 분수 물
+      if (!v.spin) { v.spin = []; v.model.traverse(o => { if (o.name === "windBlades" || o.name === "fountainWater") v.spin.push(o); }); }   // 움직이는 부분은 한 번만 찾아 둠(매 프레임 모델 전체를 훑지 않게)
+      if (p >= 1) for (const o of v.spin) { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; }   // 풍차 날개 돌기 · 분수 물
+      if (p >= 1 && v.spin.length && focus && Math.abs(v.holder.position.x - focus.x) < 34 && Math.abs(v.holder.position.z - focus.z) < 34) this.animating = true;
     }
     // 전기가 들어온 집: 창가 불빛(밤에만 보임 — daylight.js가 houseGlow 세기를 정함). 2초마다 확인
     if ((this.glowT = (this.glowT || 0) - dt) > 0) return; this.glowT = 2;
@@ -294,7 +297,7 @@ export class UnitViews {
   /** 매 프레임: 위치·방향, 동작(AI가 정한 u.anim, 아니면 걷기·달리기·서 있기), 손의 도구, 낚싯줄과 찌. */
   sync(dt, playAnim, walkScale = 2.2, runScale = 1.5, speedBoost = 1, time = 0, camera = null) {
     if (camera) { projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projView); }
-    this.frameNo = (this.frameNo || 0) + 1;
+    this.frameNo = (this.frameNo || 0) + 1; this.casting = 0;                       // casting: 실제 그림자를 드리우는(밖에 나와 있는) 갈매미 수
     this.world.units.forEach((u, i) => {
       const v = this.views[i]; if (!v) return;                                     // 막 소환돼 아직 모습이 안 만들어진 갈매미
       const { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
@@ -304,6 +307,7 @@ export class UnitViews {
         const want = (this.shadowDist ?? 999) > 0 && camera.position.distanceTo(g.position) < (this.shadowDist ?? 999);
         if (v.castOn !== want) { v.castOn = want; v.ch.root.traverse(o => { if (o.isMesh) o.castShadow = want; }); }
       }
+      if (v.castOn && g.visible) this.casting++;
       this.swimLook(v, u, i, dt, time);
       if (u.state === "Sit" && v.ch) {                                               // 앉기: 몸통 바닥(엉덩이)이 좌판 높이(u.y)에 오게 모델을 내림. 자세가 잡힌 뒤 한 번 잼
         v.sitT = (v.sitT || 0) + dt;
