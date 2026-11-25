@@ -1123,3 +1123,20 @@ test("수족관: 구경하는 갈매미는 재미가 차오른다", () => {
   for (let i = 0; i < 20; i++) w.update(0.1);
   assert.ok(u.needs.fun > 20 + 2 * 2.3, `재미 ${u.needs.fun}`);
 });
+
+test("수족관: 다녀온 사이에 낚은 첫 희귀 이상 물고기도 기증되고, 알림 없이 소식지·편지에만 적힌다", async () => {
+  const N = await import("../src/world/news.js"); const { FISH } = await import("../src/data/catalog.js"); const H = 3600000;
+  const w = World.create(7, seededRandom(3), { wild: true }); w.instantBuild = true; w.addUnitByName("물방울"); w.rank = 2;
+  if (!w.spots.length) w.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null });
+  let at = null; const c = w.center; for (let rr = 2; rr < 30 && !at; rr++) for (let dz = -rr; dz <= rr && !at; dz++) for (let dx = -rr; dx <= rr && !at; dx++) if (w.placeBuilding("aquarium", c.x + dx, c.z + dz, 0, null, 1e9).ok) at = [c.x + dx, c.z + dz];
+  assert.ok(w.aquariumB()); const ev = []; w.on("donate", e => ev.push(e)); w.on("donateGift", e => ev.push(e)); w.on("fishRecord", e => ev.push(e));
+  const all = []; for (let s = 1; s <= 12; s++) { const r = w.applyAway(100 * H, seededRandom(s)); all.push(...r.catches); }
+  const gave = all.filter(x => x.donated); assert.ok(gave.length >= 3, `기증 ${gave.length}`); assert.equal(ev.length, 0, "그동안의 일은 알림 줄에 띄우지 않음");
+  assert.equal(new Set(gave.map(x => x.fish.id)).size, gave.length, "한 종류는 한 번만"); assert.deepEqual(Object.keys(w.donated).sort(), gave.map(x => x.fish.id).sort());
+  for (const f of FISH) if (f.rarity !== "common" && w.collection[f.id]) { assert.equal(w.donated[f.id], true); assert.equal(w.treasures[f.id] || 0, w.collection[f.id] - 1, `${f.name}: 기증한 한 마리만 빼고 보물`); }
+  assert.ok(all.every(x => x.size >= x.fish.cm[0] && x.size <= x.fish.cm[1] && w.fishRecord[x.fish.id] >= x.size));
+  assert.equal(w.donateGifts, 1 + (gave.length >= 6)); assert.equal(w.items.chair >= 1, true);
+  assert.ok(w.newsLog.some(n => /^물방울이 처음 낚은 .+ 수족관에 기증했어요!$/.test(n.text)), "소식지에 기증 소식"); assert.ok(w.newsLog.some(n => /기념으로 표류목 의자를 받았어요!$/.test(n.text)));
+  const letter = N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [gave[0]] }, { post: true });
+  assert.ok(letter.lines.some(l => l.includes(gave[0].fish.name) && l.endsWith("🐠 수족관에 기증")));
+});
