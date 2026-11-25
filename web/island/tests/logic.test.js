@@ -1389,3 +1389,36 @@ test("축제: 한가한 갈매미가 광장에 모여 놀고, 끝나면 여운(�
   const old = World.fromJSON(j, seededRandom(4)); assert.deepEqual(old.festivals, {}); assert.equal(old.festival, null); assert.ok(old.units.every(u => u.cheer === 0));
   assert.equal(Fe.festivalFromSave({ id: "2026-summer", t: 9999, x: 1, z: 2 }).t, Fe.FESTIVAL_SECS); assert.equal(Fe.festivalFromSave({ id: "x", t: 5, x: 1, z: 2 }), null);
 });
+
+test("축제 검토: 축제 소원은 소원 2개 제한에 안 세고, 장식을 옮겨 모아도 열리고, 밤에 집에서 자던 갈매미도 나옴", async () => {
+  const Fe = await import("../src/world/festival.js");
+  // 1) 축제 소원이 걸려 있어도 보통 소원은 2개까지
+  { const { w } = festTown(); w.festKey = "2026-autumn"; w.rank = 1; w.stepFestival(1.1);
+    assert.equal(w.wishes.length, 1); assert.equal(w.wishes[0].id, "festival");
+    for (let i = 0; i < 40; i++) w.makeWish();
+    assert.equal(w.wishes.filter(x => x.id !== "festival").length, 2, "보통 소원 2개"); assert.equal(w.wishes.length, 3); assert.equal(w.makeWish(), null, "그 이상은 안 생김"); }
+  // 1-2) 갈매미가 한 마리뿐이고 이미 소원이 있어도 축제 소원은 생김(기다리다 계절이 지나가지 않게)
+  { const w = World.create(7, seededRandom(3), { empty: true }); w.addUnitByName("기본"); w.festKey = "2026-autumn"; w.rank = 1;
+    w.wishes.push({ id: "bench", unitId: w.units[0].unitId, base: 0, age: 0 }); w.stepFestival(1.1);
+    assert.equal(w.wishes.find(x => x.id === "festival")?.unitId, w.units[0].unitId);
+    const none = World.create(7, seededRandom(3), { empty: true }); none.festKey = "2026-autumn"; none.rank = 1; none.stepFestival(1.1); assert.equal(none.wishes.length, 0, "갈매미가 없으면 조용히 넘어감"); }
+  // 2) 지난 축제 장식 4개가 광장으로 남아 있을 때: 하나를 치웠다가 다시 놓아도 "새 장식"
+  { const { w, spots } = festTown(); w.rank = 1;
+    const bs = spots.slice(0, 4).map(s => w.placeBuilding("bunting", ...s, 0).building);
+    w.festKey = "2026-autumn"; w.stepFestival(1.1); const wish = w.wishes.find(x => x.id === "festival"); assert.equal(wish.had, 4);
+    w.stepWishes(1.1); assert.equal(w.festival, null, "그대로는 아직");
+    w.removeBuilding(bs[3].id); w.stepFestival(1.1); assert.equal(wish.had, 3, "치운 만큼 낮춰 둠");
+    w.stepWishes(1.1); assert.equal(w.festival, null, "광장이 깨진 동안은 아직");
+    assert.ok(w.placeBuilding("festLantern", ...spots[3], 0).ok); w.stepWishes(1.1); assert.equal(w.festival?.id, "2026-autumn", "다시 놓으면 열림"); }
+  // 3) 밤: 집 안에서 자던 갈매미가 축제에 나오고, 너무 지친 갈매미는 계속 잠
+  { const { w, spots } = festTown(); w.festKey = "2026-summer"; w.rank = 1; w.isNight = true;
+    for (let i = 0; i < 4; i++) w.placeBuilding("bunting", ...spots[i], 0);
+    const [a, b] = w.units; const fake = "잠집";
+    for (const u of [a, b]) { u.full = 100; u.state = UnitState.Inside; u.insideBuildingId = fake; u.insideAct = "sleep"; u.timer = 0; u.path = null; }
+    a.needs.energy = 80; b.needs.energy = 5;
+    for (let i = 0; i < 60; i++) w.update(1 / 30);
+    assert.equal(a.state, UnitState.Inside, "축제가 없으면 밤엔 계속 잠"); assert.equal(b.state, UnitState.Inside);
+    assert.ok(w.startFestival());
+    for (let i = 0; i < 30 * 12; i++) { w.update(1 / 30); a.full = b.full = 100; b.needs.energy = 5; }
+    assert.equal(a.insideBuildingId, null, "기운이 있으면 자다가도 나옴"); assert.equal(b.insideBuildingId, fake, "너무 지쳤으면 그대로 잠"); assert.equal(Fe.FESTIVAL_SECS > 12, true); }
+});

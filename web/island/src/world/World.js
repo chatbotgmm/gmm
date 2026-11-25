@@ -499,11 +499,11 @@ export class World {
   }
 
   // ---- 계절 축제의 날(festival.js)
-  /** 축제 소원을 올림: 이번 계절 축제를 아직 안 열었고 마을 등급이 되면 한 번(소원 2개 제한과 따로). 난수를 쓰지 않음(소원이 없는 갈매미 중 마을 시간으로 고름) */
+  /** 축제 소원을 올림: 이번 계절 축제를 아직 안 열었고 마을 등급이 되면 한 번(소원 2개 제한과 따로). 난수를 쓰지 않음(소원이 없는 갈매미 중, 없으면 모두 중에서 마을 시간으로 고름) */
   wishFestival() {
     const key = this.festKey;
     if (!festivalOf(key) || this.festivals[key] || this.festival || this.rank < FESTIVAL_RANK || this.wishes.some(x => x.id === "festival")) return null;
-    const free = this.units.filter(u => !this.wishOf(u)); if (!free.length) return null;
+    const idle = this.units.filter(u => !this.wishOf(u)), free = idle.length ? idle : this.units; if (!free.length) return null;   // 모두 소원이 있으면(갈매미가 한두 마리뿐인 마을) 아무나 하나 더 빎
     const u = free[Math.floor(this.time) % free.length], wish = { id: "festival", unitId: u.unitId, base: key, had: festiveCount(this), age: 0 };
     this.wishes.push(wish); emote(u, "💭 🎉", 3); this.emit("wish", { wish, u }); return wish;
   }
@@ -527,13 +527,15 @@ export class World {
     if (this.festival && (this.festival.t -= dt) <= 0) this.endFestival();
     if ((this.festClock += dt) < 1) return; const step = this.festClock; this.festClock = 0;
     for (const u of this.units) if (u.cheer > 0) u.cheer = Math.max(0, u.cheer - step);
+    // 빈 뒤에 장식을 치웠으면 그만큼 낮춰 둠 → 흩어진 장식을 옮겨 모으거나 치웠다 다시 놓아도 "새 장식"으로 침
+    const fw = this.wishes.find(x => x.id === "festival"); if (fw) fw.had = Math.min(fw.had ?? 0, festiveCount(this));
     this.wishFestival();
   }
 
   // ---- 소원
   wishOf(u) { return this.wishes.find(x => x.unitId === u.unitId) || null; }
   makeWish() {
-    if (this.wishes.length >= 2 || !this.units.length) return null;
+    if (this.wishes.filter(x => x.id !== "festival").length >= 2 || !this.units.length) return null;   // 축제 소원은 2개 제한에 세지 않음
     const free = this.units.filter(u => !this.wishOf(u));
     for (let k = 0; k < 6 && free.length; k++) {
       const u = free[Math.floor(this.wrnd() * free.length)];
