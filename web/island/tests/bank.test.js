@@ -176,7 +176,7 @@ test("예전 저장: 금고가 없으면 100 + 돌아온 돈, 세금 날은 불�
   back.update(0.1); assert.equal(back.bank.taxed, 0, "불러오자마자 세금 없음");
   // 은행 기록이 아예 없는 예전 섬 저장
   const old = World.create(7, seededRandom(3)), oj = JSON.parse(JSON.stringify(old.serialize())); delete oj.bank;
-  const ob = World.fromJSON(oj); assert.equal(ob.bank.vault, BK.VAULT_START); assert.equal(ob.bank.issued, 0);
+  const ob = World.fromJSON(oj); assert.equal(ob.bank.vault, BK.VAULT_LEGACY); assert.equal(ob.bank.issued, 0);
   // 이상한 값
   assert.equal(BK.bankFromSave({ vault: -5 }).vault, 0); assert.equal(BK.bankFromSave({ vault: "x" }).vault, 0);
 });

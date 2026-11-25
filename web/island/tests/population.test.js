@@ -157,3 +157,10 @@ test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(1·21382
   const w7 = World.create(7, seededRandom(3), { wild: true }), c = w7.center;   // 가운데가 평평한 섬은 예전 그대로 한가운데
   assert.deepEqual([w7.bankB().x, w7.bankB().z], [c.x - Math.floor(BUILDINGS.bank.footprint.w / 2), c.z - Math.floor(BUILDINGS.bank.footprint.d / 2)]);
 });
+
+test("검토 회귀: 은행 기록이 아예 없는 예전 저장도 금고 100(금고 칸만 없는 저장과 같게), 새 섬은 60", () => {
+  assert.equal(BK.bankFromSave(undefined).vault, BK.VAULT_LEGACY); assert.equal(BK.bankFromSave(null, 50).vault, 100);
+  assert.equal(BK.bankFromSave({ returned: 7 }).vault, 107); assert.equal(BK.bankFromSave({ vault: 3 }).vault, 3); assert.equal(BK.newBank().vault, 60);
+  const w = fresh(), j = JSON.parse(JSON.stringify(w.serialize())); delete j.bank;
+  assert.equal(World.fromJSON(j, seededRandom(1)).bank.vault, 100);
+});

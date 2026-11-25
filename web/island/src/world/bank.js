@@ -79,7 +79,7 @@ const num = v => Number.isFinite(+v) ? +v : 0;
 /** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_LEGACY(100) + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
  *  세금 날은 불러온 날로(불러오자마자 걷지 않게). 이상한 값은 0 이상으로 */
 export function bankFromSave(j, time = 0) {
-  const b = newBank(time); if (!j || typeof j !== "object") return b;
+  const b = newBank(time); if (!j || typeof j !== "object") { b.vault = VAULT_LEGACY; return b; }   // 은행 기록이 아예 없는 예전 저장도 100
   for (const k of ["issued", "returned", "taxed", "fees", "wages", "lent", "repaid", "forgiven", "need"]) b[k] = Math.max(0, num(j[k]));
   b.vault = "vault" in j ? Math.max(0, num(j.vault)) : VAULT_LEGACY + b.returned;
   if (Number.isFinite(j.day) && j.day >= 1) b.day = Math.floor(j.day);
