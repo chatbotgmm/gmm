@@ -501,7 +501,8 @@ export class Hud {
     }
     if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 누르면 바로 사라져요 · 되돌릴 수 없으니 천천히 골라요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
-    else if (mode === "build") { const c = this.buildCards.find(x => x.dataset.build === arg && !x.hidden); if (c) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 건물이 보이게
+    else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
+    if (!keep && mode === "build") { const c = this.buildCards.find(x => x.dataset.build === arg && !x.hidden); if (c) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 건물이 보이게
     if (mode === "height" && arg === "level" && this.shownOp !== "level") { const g = sub.querySelector("[data-level]")?.closest(".tgrp"); if (g) { sub.scrollLeft = Math.max(0, g.offsetLeft - 64); sub.scrollTop = Math.max(0, g.offsetTop - 64); } }   // 🎚 단 맞추기를 고르면 「맞출 높이」가 바로 보이게(세로 폰은 옆으로 미는 한 줄)
     this.shownOp = mode === "height" ? arg : null;
   }

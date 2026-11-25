@@ -291,7 +291,7 @@
   html[data-form="landscape"] body[data-mode="edit"] { --edit-w: 286px; }   /* 가로 폰: 왼쪽 레일 + 세로 열의 폭만큼 비켜 줌 */
   body:has(#minimap:not([hidden])) { --mm-space: calc(var(--mm-w) + var(--s-2)); }
   html[data-form="portrait"] { --mm-w: 128px; } html[data-form="landscape"] { --mm-w: 112px; }
-  body[data-mode="browse"] #top, body[data-mode="edit"] #editBtn { display: none; }
+  html body[data-mode="browse"] #top, body[data-mode="edit"] #editBtn { display: none; }   /* html을 붙여 화면 모양별 #top { display } 규칙(세로 폰의 flex)보다 세게: 평소 화면에 건설 판이 비쳐 보이던 것 */
   :where(html[data-form="portrait"], html[data-form="landscape"]) body[data-mode="edit"] #phoneBtn { display: none; }   /* 휴대폰: 건설 중엔 📱 숨김(✓ 완료로 돌아오면 다시) */
   body[data-mode="edit"] :is(#stat > :not(#chipMoney), #chipWish) { display: none; }   /* 건설 중엔 상태 묶음을 돈만 */
   body[data-mode="edit"] #stat > #chipMoney { background: none; }
@@ -369,6 +369,10 @@
   .bcard.locked { opacity: 1; background: var(--c-surface-2); } .bcard.locked .bimg img { filter: grayscale(.85); opacity: .6; } .bcard.locked .bmeta { color: var(--c-danger-ink); font-weight: 600; }
   .bcard.on { box-shadow: inset 0 0 0 3px var(--c-accent-strong), var(--e-1); }
   #sub[data-kind="build"] { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 98px); grid-auto-columns: 104px; gap: var(--s-1); overflow-x: auto; align-items: stretch; }   /* 태블릿·PC: 두 줄 격자 */
+  /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 900px보다 좁으면 보조 줄을 탭 위 한 줄로 */
+  html[data-form="medium"] #top { grid-template-columns: max-content minmax(0, 1fr); }
+  html[data-form="medium"] #tools .tbtn { flex: none; } html[data-form="medium"] #tools .tbtn .tl { display: none; } html[data-form="medium"] #tools .tbtn .ts { display: inline; }
+  @media (max-width: 899px) { html[data-form="medium"] #top { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sub" "ebar" "tools"; } html[data-form="medium"] #tools .tbtn { flex: 1 1 auto; } }
   /* 세로 폰: 아래에 한 판 — 트레이(한 줄, 옆으로 밀기, 오른쪽 끝이 흐려짐) → 보조 줄 → 도구 탭 */
   html[data-form="portrait"] #top { width: auto; max-width: none; margin: 0; display: flex; flex-direction: column; align-items: stretch; gap: var(--s-1); }
   html[data-form="portrait"] #sub { order: 1; } html[data-form="portrait"] #ebar { order: 2; } html[data-form="portrait"] #tools { order: 3; }

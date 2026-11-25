@@ -61,8 +61,13 @@ export class BuildingViews {
   setHighlight(id) {                                                              // 철거 도구가 가리키는 건물을 붉게
     for (const [bid, v] of this.views) v.holder.traverse(o => { if (o.isMesh) {
       if (!o.userData.baseMat) o.userData.baseMat = o.material;
-      o.material = bid === id ? (o.userData.redMat ||= Object.assign(o.userData.baseMat.clone(), { emissive: new THREE.Color(0xd9433a), emissiveIntensity: 0.55,
-        onBeforeCompile: o.userData.baseMat.onBeforeCompile, customProgramCacheKey: o.userData.baseMat.customProgramCacheKey })) : o.userData.baseMat;   // 지붕 색 셰이더도 그대로
+      if (bid === id && !o.userData.redMat) {                                      // 붉은 재질은 처음 가리킬 때 한 번만 만듦(지붕 색 셰이더도 그대로)
+        const base = o.userData.baseMat, red = Object.assign(base.clone(), { onBeforeCompile: base.onBeforeCompile, customProgramCacheKey: base.customProgramCacheKey });
+        if (base.emissive) { red.emissive = new THREE.Color(0xd9433a); red.emissiveIntensity = 0.55; }
+        else if (red.color) red.color.lerp(new THREE.Color(0xd9433a), 0.55);         // 빛을 안 받는 재질(공사 비계·기본색 모델)은 emissive가 없음 → 넣으면 그릴 때 오류가 나서 화면이 멈췄음. 색을 붉게 섞음
+        o.userData.redMat = red;
+      }
+      o.material = bid === id ? o.userData.redMat : o.userData.baseMat;
     } });
   }
   // 건물 위 표시: 안에 있는 갈매미 수(건물 밖에서도 안의 상태가 유지됨을 보여 줌)
