@@ -19,3 +19,5 @@ export const SKY_LOOK_CHANCE = 0.5;       // 하늘 일이 시작될 때, 밖에
 export const skySeenFromSave = s => Object.fromEntries(Object.keys(SKY_EVENTS).map(k => [k, Math.max(0, Math.floor(+s?.[k] || 0))]));
 /** 이 날짜가 속한 겨울의 해(12월이 든 해: 1~2월은 지난해 겨울). 화면이 world.winterYear에 넣어 줌 */
 export const winterYearOf = date => date.getFullYear() - (date.getMonth() < 2 ? 1 : 0);
+/** 하늘 난수의 씨앗: 섬 씨앗 + 저장된 마을 시간(초). 시간을 섞지 않으면 불러올 때마다 똑같은 순서가 되풀이돼 같은 때에만 뜨거나 영영 안 뜸 */
+export const skySeed = (seed, time = 0) => ((+seed || 0) * 104729 + 31 + Math.floor(+time || 0) * 7919) >>> 0;

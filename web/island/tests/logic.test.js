@@ -1295,5 +1295,10 @@ test("드문 하늘: 무지개(낮에 비가 갠 뒤)·유성우(맑은 밤)·�
   old.setSeason("winter"); old.winterYear = 2026; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 1);
   j.snow = 0.6; old = World.fromJSON(j, seededRandom(2)); old.setSeason("winter"); old.winterYear = 2026; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 0, "눈이 쌓여 있던 예전 저장");
   old.winterYear = 2027; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 1);
+  // 눈이 쌓인 예전 저장을 겨울이 지난 뒤에 불러오면, 다음 겨울의 첫눈은 그대로 알림
+  old = World.fromJSON(j, seededRandom(2)); old.setSeason("spring"); assert.equal(old.firstSnowYear, null); old.setSeason("winter"); old.winterYear = 2026; old.setWeather("clear"); old.setWeather("snow"); assert.equal(old.skySeen.firstSnow, 1, "겨울이 지난 뒤 불러온 예전 저장");
+  // 하늘 난수: 새 섬은 씨앗대로, 불러온 섬은 저장된 마을 시간을 섞어 불러올 때마다 같은 순서를 되풀이하지 않음
+  assert.equal(K.skySeed(7), K.skySeed(7, 0)); assert.equal(K.skySeed(7, 0.9), K.skySeed(7)); assert.notEqual(K.skySeed(7, 100), K.skySeed(7, 101)); assert.equal(K.skySeed(null, undefined), K.skySeed(0));
+  { const at = t => World.fromJSON({ ...j, time: t }, seededRandom(2)).skyRnd(); assert.equal(at(500), at(500)); assert.notEqual(at(500), at(900)); assert.equal(mk().skyRnd(), mk().skyRnd()); }
   assert.equal(w.firstSnow(true), true, "시험용으로는 다시 알릴 수 있음");
 });

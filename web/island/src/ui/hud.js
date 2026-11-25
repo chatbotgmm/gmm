@@ -398,7 +398,7 @@ export class Hud {
     document.getElementById("chipRank").textContent = small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
     document.getElementById("mapBtn").textContent = small ? "🗺" : "🗺 지도";
     if (this.timeLabel) this.chipTime.textContent = this.timeLabel();
-    if (this.weatherLabel) this.chipWeather.textContent = small ? this.weatherLabel().replace(/ [가-힣]+ · /, " ").replace(/ [가-힣]+$/, "") : this.weatherLabel();   // 휴대폰: 아이콘만
+    if (this.weatherLabel) this.chipWeather.textContent = small ? this.weatherLabel().replace(/ [가-힣]+(?= · |$)/g, "").replace(/ · /g, " ") : this.weatherLabel();   // 휴대폰: 아이콘만
     const nw = this.world.wishes.length; this.wishBtn.hidden = !nw; this.wishBtn.textContent = small ? `💭${nw}` : `💭 소원 ${nw}`;
     if (this.app === "wish" || this.app === "market") { this.appT = (this.appT || 0) + 1; if (this.appT % 5 === 0) this.refreshApp(); }
     const hungry = w.units.filter(u => (u.full ?? 80) < J.HUNGRY).sort((a, b) => a.full - b.full)[0];

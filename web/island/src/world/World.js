@@ -20,7 +20,7 @@ import * as F from "./furniture.js";
 import * as RD from "./roads.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
-import { SKY_EVENTS, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
+import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -65,7 +65,7 @@ export class World {
     this.keep = keepFromSave(extra.keep);                                         // 간직하기: { 물건·보물 id: true } → 상인이 팔지 않음(예전 저장엔 없음)
     // 드문 하늘: 지금 떠 있는 것 { kind, t 남은 초 }(저장하지 않음 → 불러오면 끝난 것으로) · 본 횟수 · 첫눈을 본 겨울(해, 화면이 winterYear를 넣어 줌)
     this.sky = null; this.skySeen = skySeenFromSave(extra.skySeen); this.firstSnowYear = extra.firstSnowYear ?? null; this.winterYear = null;
-    this.skyRnd = seededRandom(((extra.seed ?? 7) * 104729 + 31) >>> 0); this.skyClock = 0; this.starClock = 0;   // 하늘만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
+    this.skyRnd = seededRandom(skySeed(extra.seed ?? 7, extra.time)); this.skyClock = 0; this.starClock = 0;   // 하늘만 쓰는 난수(다른 일의 순서를 바꾸지 않음. 불러올 때마다 같은 순서로 되풀이되지 않게 마을 시간을 섞음)
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -273,7 +273,7 @@ export class World {
   // ---- 계절·날씨
   /** 계절 × 날씨 효과 + 드문 하늘(item: 물건을 찾을 확률 배수, 무지개가 떠 있으면 1보다 큼) */
   get fx() { const f = S.effects(this.season, this.weather.kind); if (this.sky) f.item *= SKY_EVENTS[this.sky.kind].item; return f; }
-  setSeason(s) { if (s === this.season) return; if (this.season === "winter") this.firstSnowYear = null; this.season = s; this.emit("season", s); }   // 겨울이 지나가면 다음 겨울의 눈이 다시 첫눈
+  setSeason(s) { if (s === this.season) return; if (s !== "winter") this.firstSnowYear = null; this.season = s; this.emit("season", s); }   // 겨울이 지나가면 다음 겨울의 눈이 다시 첫눈
   setWeather(kind) {
     const prev = this.weather.kind; this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather);
     if (kind === "snow" && this.season === "winter") this.firstSnow();
