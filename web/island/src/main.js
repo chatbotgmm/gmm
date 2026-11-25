@@ -22,6 +22,7 @@ import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD, wishText } from "./world/wishes.js";
 import { RANK_REWARD } from "./world/rank.js";
 import { newsFor, awayLetter, newsPages } from "./world/news.js";
+import { dailyKey, STAMP_SHOP } from "./world/daily.js";
 import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
@@ -162,6 +163,7 @@ function mount(w) {
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
+  world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말
   const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`); };
   world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
@@ -187,6 +189,10 @@ function mount(w) {
   world.on("festival", e => { say("festival", e, ` · 마을 시간 ${Math.round(FESTIVAL_SECS / 60)}분 동안 열려요 (📱 마을)`); sfx.fanfare(); });
   world.on("festivalEnd", e => { say("festivalEnd", e, e.item ? " (🏠 집 꾸미기에서 놓아요 · 📱 마을에 도장)" : ""); sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
   world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
+  // 오늘의 부탁: 하나 끝날 때마다 알림(같은 일의 다른 알림에 묻히지 않게 한 박자 늦게), 모두 끝나면 도장
+  world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
+    hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`);
+    sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }
@@ -241,6 +247,9 @@ hud.onTug = tugNow;
 // 선물 · 쓰다듬기 · 간직하기(선물 알림은 월드가 알려 줌: gift · bondStage)
 hud.onGift = (u, id) => world.giveGift(u, id);
 hud.onKeep = id => world.toggleKeep(id);
+// 도장 가게(오늘의 부탁을 모두 들어주고 받은 도장으로 한정 가구 사기)
+hud.onStampBuy = id => { const ok = world.buyStamp(id); if (ok) sfx.play("bag", { vol: 0.7 });
+  hud.status(ok ? `🏪 도장 가게에서 ${josa(STAMP_SHOP.find(s => s.id === id).name, "을", "를")} 받아 왔어요 (🏠 집 꾸미기에서 놓아요)` : "도장이 모자라요 · 오늘의 부탁을 모두 들어주면 하나 받아요"); return ok; };
 hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
   if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘은 여기까지, 내일 또 만나요`);
   else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요 · 마을 날이 바뀌면 또 할 수 있어요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
@@ -313,7 +322,7 @@ function frame() {
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
-  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); }
+  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); world.setDay(dailyKey(new Date())); }
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);

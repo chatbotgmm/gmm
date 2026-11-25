@@ -1422,3 +1422,107 @@ test("축제 검토: 축제 소원은 소원 2개 제한에 안 세고, 장식�
     for (let i = 0; i < 30 * 12; i++) { w.update(1 / 30); a.full = b.full = 100; b.needs.energy = 5; }
     assert.equal(a.insideBuildingId, null, "기운이 있으면 자다가도 나옴"); assert.equal(b.insideBuildingId, fake, "너무 지쳤으면 그대로 잠"); assert.equal(Fe.FESTIVAL_SECS > 12, true); }
 });
+
+// ---- 오늘의 부탁 3개 · 도장 · 도장 가게
+test("오늘의 부탁: 날짜 열쇠로만 고르고(월드 난수 안 씀), 이 마을에서 할 수 있는 것만 3개", async () => {
+  const D = await import("../src/world/daily.js");
+  assert.equal(D.dailyKey(new Date(2026, 0, 5, 23, 59)), "2026-01-05"); assert.equal(D.dailyKey(new Date(2026, 10, 25)), "2026-11-25");
+  assert.notEqual(D.hashText("2026-01-05"), D.hashText("2026-01-06")); assert.equal(D.hashText("2026-01-05"), D.hashText("2026-01-05"));
+  let used = 0; const base = seededRandom(3), w = World.create(7, () => { used++; return base(); }, { empty: true }); w.instantBuild = true;
+  for (const n of ["기본", "미니", "꽃", "물방울"]) w.addUnitByName(n);
+  w.setSeason("autumn"); const before = used;
+  const a = D.rollDaily("2026-11-25", w), b = D.rollDaily("2026-11-25", w);
+  assert.deepEqual(a, b, "같은 날·같은 마을이면 같은 부탁"); assert.equal(used, before, "월드 난수를 쓰지 않음");
+  assert.equal(a.reqs.length, D.DAILY_COUNT); assert.equal(a.stamped, false);
+  const sets = new Set(), ids = new Set();
+  for (let d = 1; d <= 60; d++) {
+    const r = D.rollDaily(`2026-${String(1 + (d >> 5)).padStart(2, "0")}-${String(1 + d % 28).padStart(2, "0")}`, w);
+    assert.equal(r.reqs.length, 3); assert.equal(new Set(r.reqs.map(x => x.id)).size, 3, "겹치지 않음");
+    assert.ok(r.reqs.filter(x => ["seasonFish", "fish3", "tug"].includes(x.id)).length <= 1, "낚시 부탁은 하루에 하나만");
+    for (const x of r.reqs) { ids.add(x.id); assert.equal(x.have, 0); assert.ok(x.need > 0 && typeof x.text === "string" && x.text.length > 3); }
+    sets.add(r.reqs.map(x => x.id).sort().join());
+  }
+  assert.ok(sets.size > 5, "날마다 다른 묶음");
+  // 이 마을엔 집·선물할 물건·소원이 없고 갈매미가 4마리 → 그런 부탁은 안 나옴
+  for (const no of ["furniture", "gift", "wish", "summon"]) assert.ok(!ids.has(no), `${no}는 아직 못 하는 부탁`);
+  for (const yes of ["pet", "road", "deco"]) assert.ok(ids.has(yes), `${yes}는 할 수 있는 부탁`);
+  assert.ok(D.rollDaily("2026-11-25", w).reqs.every(x => x.id !== "seasonFish" || /전어|꽃게/.test(x.text)), "제철 물고기 이름이 글에 들어감");
+  // 갈매미가 없는 섬: 할 수 있는 것만(3개가 안 될 수도 있음), 낚시·쓰다듬기·장식은 없음
+  const none = World.create(7, seededRandom(3), { empty: true });
+  for (let d = 1; d <= 20; d++) { const r = D.rollDaily(`2027-03-${d}`, none); assert.ok(r.reqs.length >= 1 && r.reqs.every(x => ["road", "summon"].includes(x.id)), r.reqs.map(x => x.id).join()); }
+  // 조건이 생기면 나옴: 가방에 진주 → 선물, 소원이 걸려 있음 → 소원
+  w.items.pearl = 1; w.wishes.push({ id: "bench", unitId: w.units[0].unitId, base: 0, age: 0 });
+  const later = new Set(); for (let d = 1; d <= 28; d++) for (const x of D.rollDaily(`2027-05-${d}`, w).reqs) later.add(x.id);
+  assert.ok(later.has("gift") && later.has("wish"));
+});
+test("오늘의 부탁: 월드가 알린 일로 나아가고, 3개를 모두 끝내면 도장 하나(하루 한 번) · 날짜가 바뀌면 새로", async () => {
+  const D = await import("../src/world/daily.js"); const Fu = await import("../src/world/furniture.js");
+  const { w, spots } = festTown(); w.setSeason("autumn");
+  assert.equal(w.daily, null, "화면이 날짜를 넣어 주기 전엔 없음"); w.pet(w.units[0]); assert.equal(w.stamps, 0);
+  assert.equal(w.setDay("2026-11-25"), true); assert.equal(w.setDay("2026-11-25"), false, "같은 날은 그대로"); assert.equal(w.daily.reqs.length, 3);
+  const pick = ids => { w.daily = D.dailyFromSave({ key: "2026-11-25", reqs: ids.map(id => ({ id, text: id, have: 0 })) }); };
+  const seen = []; w.on("dailyDone", e => seen.push([e.req.id, e.all, e.stamps, e.left]));
+  pick(["pet", "road", "deco"]);
+  // 쓰다듬기 3번
+  w.pet(w.units[0]); w.pet(w.units[0]); assert.equal(w.daily.reqs[0].have, 2); assert.equal(seen.length, 0);
+  w.pet(w.units[1]); assert.deepEqual(seen, [["pet", false, 0, 2]]); w.pet(w.units[1]); assert.equal(w.daily.reqs[0].have, 3, "넘치지 않음");
+  // 포장도로 5칸: 잔디·같은 칸 다시 칠하기는 안 셈
+  const c = w.center, cells = []; for (let x = Math.floor(c.x) - 8; cells.length < 6; x++) if (w.canPaint(x, Math.floor(c.z) + 3)) cells.push([x, Math.floor(c.z) + 3]);
+  w.paint(...cells[0], GroundType.Dirt); assert.equal(w.daily.reqs[1].have, 0, "흙길은 포장이 아님");
+  for (const [x, z] of cells.slice(0, 4)) w.paint(x, z, GroundType.Cobble); w.paint(...cells[0], GroundType.Cobble);
+  assert.equal(w.daily.reqs[1].have, 4); w.paint(...cells[4], GroundType.WoodDeck); assert.equal(w.daily.reqs[1].have, 5); assert.equal(seen.length, 2);
+  // 장식: 공사 중엔 아직, 다 지으면 셈
+  w.instantBuild = false; assert.ok(w.placeBuilding("bunting", ...spots[0], 0).ok); assert.equal(w.daily.reqs[2].have, 0, "놓기만 해서는 아직");
+  w.finishAll(); assert.deepEqual(seen[2], ["deco", true, 1, 0]); assert.equal(w.stamps, 1); assert.equal(w.daily.stamped, true); assert.ok(D.dailyAllDone(w.daily));
+  w.instantBuild = true; w.placeBuilding("bunting", ...spots[1], 0); w.pet(w.units[2]); assert.equal(w.stamps, 1, "하루에 도장은 하나"); assert.equal(seen.length, 3);
+  // 바로 완공으로 놓은 장식도 셈 · 집은 장식이 아님
+  pick(["deco", "furniture", "gift"]); w.placeBuilding("festLantern", ...spots[2], 0); assert.equal(w.daily.reqs[0].have, 1);
+  let home = null; for (let z = Math.floor(c.z) - 20; z < c.z + 30 && !home; z += 3) for (let x = Math.floor(c.x) - 20; x < c.x + 20 && !home; x += 3) if (w.check("house", x, z, 0).ok) home = w.placeBuilding("house", x, z, 0).building;
+  assert.ok(home && w.isDone(home)); assert.equal(w.daily.reqs[1].have, 0, "새 집의 기본 가구(알아서 놓임)는 안 셈");
+  Fu.room(home).stash.plant = 1; const L = Fu.levels(home)[0]; let put = false;
+  for (let z = 0; z < L.d && !put; z++) for (let x = 0; x < L.w && !put; x++) put = Fu.place(w, home, "plant", x, z, 0);
+  assert.ok(put); assert.equal(w.daily.reqs[1].have, 1, "손으로 놓은 가구는 셈"); Fu.stow(w, home, Fu.allFurniture(home).length - 1); assert.equal(w.daily.reqs[1].have, 1);
+  w.items.pearl = 1; assert.ok(w.giveGift(w.units[0], "pearl")); assert.equal(w.daily.reqs[2].have, 1); assert.equal(w.stamps, 2, "다른 날의 부탁을 모두 끝내면 또 하나");
+  // 낚시: 물고기·제철 물고기·찌 당기기
+  pick(["fish3"]); const fisher = w.units.find(u => u.job === "fisher"), FISH = (await import("../src/data/catalog.js")).FISH;
+  w.emit("fish", { u: fisher, fish: FISH[0] }); assert.equal(w.daily.reqs[0].have, 1);
+  pick(["seasonFish"]); w.emit("fish", { u: fisher, fish: FISH[0] }); assert.equal(w.daily.reqs[0].have, 0, "흔한 물고기는 제철이 아님");
+  w.emit("fish", { u: fisher, fish: FISH.find(f => f.season === "autumn") }); assert.equal(w.daily.reqs[0].have, 1);
+  pick(["tug"]); fisher.state = UnitState.Fish; fisher.bite = true; fisher.tugged = false; fisher.fishT = 1; assert.ok(w.tugFloat(fisher)); assert.equal(w.daily.reqs[0].have, 1);
+  // 날짜가 바뀌면 새 부탁: 나아간 것은 처음부터, 도장은 그대로
+  const stamps = w.stamps; assert.equal(w.setDay("2026-11-26"), true); assert.equal(w.daily.key, "2026-11-26");
+  assert.ok(w.daily.reqs.every(r => r.have === 0)); assert.equal(w.daily.stamped, false); assert.equal(w.stamps, stamps);
+  // 마을 시간을 아무리 돌려도(시간 배수) 날짜는 안 바뀜
+  for (let i = 0; i < 30 * 60; i++) w.update(1 / 30); assert.equal(w.daily.key, "2026-11-26");
+});
+test("도장 가게·저장: 도장으로 한정 가구를 사고, 날짜·나아간 만큼·도장·산 것을 저장(예전 저장은 기본값)", async () => {
+  const D = await import("../src/world/daily.js"); const Fu = await import("../src/world/furniture.js"); const J2 = await import("../src/world/jobs.js");
+  const { FURNITURE, ITEMS } = await import("../src/data/catalog.js");
+  assert.ok(D.STAMP_SHOP.length >= 3 && D.STAMP_SHOP.length <= 4);
+  for (const s of D.STAMP_SHOP) { assert.ok(s.stamp >= 1 && FURNITURE[s.furniture], s.name); assert.ok(FURNITURE[FURNITURE[s.furniture].shape], "있는 모양을 다시 씀"); assert.ok(!FURNITURE[s.furniture].price, "잡화점에선 안 팖"); }
+  const r = seededRandom(5), fisher = { job: "fisher", rarity: "legend" }; for (let i = 0; i < 400; i++) assert.ok(!J2.rollItem(fisher, r, "winter", 3).stamp, "도장 가구는 낚시로 안 나옴");
+  const { w, spots } = festTown(); w.setSeason("autumn"); w.setDay("2026-11-25");
+  const cheap = D.STAMP_SHOP.find(s => s.stamp === 1), dear = D.STAMP_SHOP.find(s => s.stamp > 2);
+  assert.equal(w.buyStamp(cheap.id), false, "도장이 없으면 못 삼"); assert.equal(w.buyStamp("pearl"), false);
+  w.stamps = 3; const got = []; w.on("stampBuy", e => got.push(e.item.id));
+  assert.equal(w.buyStamp(cheap.id), true); assert.equal(w.stamps, 2); assert.equal(w.items[cheap.id], 1); assert.deepEqual(w.stampBought, { [cheap.id]: 1 }); assert.deepEqual(got, [cheap.id]);
+  assert.equal(w.buyStamp(dear.id), false, "모자라면 못 삼"); assert.equal(w.stamps, 2);
+  const home = { defId: "house", interior: {} }; assert.equal(Fu.available(w, home)[cheap.furniture]?.n, 1, "집 꾸미기에서 놓을 수 있음");
+  w.trade(w.units[0]); assert.equal(w.items[cheap.id], 1, "상인이 팔지 않음");
+  // 저장 → 불러오기
+  w.daily = D.dailyFromSave({ key: "2026-11-25", reqs: [{ id: "deco", text: "장식", have: 0 }, { id: "pet", text: "쓰다듬기", have: 2 }, { id: "road", text: "길", have: 5 }], stamped: false });
+  w.placeBuilding("bunting", ...spots[0], 0); assert.equal(w.daily.reqs[0].have, 1);
+  w.daily.reqs[0].have = 0;                                                        // 불러오며 다시 놓는 건물이 세지지 않는지 보려고 되돌려 둠
+  const j = JSON.parse(JSON.stringify(w.serialize(123))), w2 = World.fromJSON(j, seededRandom(3));
+  assert.deepEqual(w2.daily, w.daily); assert.equal(w2.daily.reqs[0].have, 0, "불러올 때 다시 놓인 장식은 안 셈"); assert.equal(w2.stamps, 2); assert.deepEqual(w2.stampBought, { [cheap.id]: 1 }); assert.equal(w2.items[cheap.id], 1);
+  assert.equal(w2.setDay("2026-11-25"), false, "같은 날 다시 열면 이어서"); assert.equal(w2.daily.reqs[1].have, 2);
+  w2.pet(w2.units[0]); assert.equal(w2.daily.reqs[1].have, 3); assert.equal(w2.setDay("2026-11-26"), true, "다음 날 열면 새 부탁");
+  // 예전 저장(새 칸이 없음)·망가진 값
+  for (const k of ["daily", "stamps", "stampBought"]) delete j[k];
+  const old = World.fromJSON(j, seededRandom(3)); assert.equal(old.daily, null); assert.equal(old.stamps, 0); assert.deepEqual(old.stampBought, {});
+  assert.equal(old.setDay("2026-11-25"), true); assert.equal(old.daily.reqs.length, 3);
+  assert.equal(D.dailyFromSave(null), null); assert.equal(D.dailyFromSave({ key: 5, reqs: [] }), null);
+  assert.deepEqual(D.dailyFromSave({ key: "k", reqs: [{ id: "없는부탁", text: "x", have: 1 }, { id: "pet", text: "쓰다듬기", have: 99 }, null], stamped: 1 }), { key: "k", reqs: [{ id: "pet", icon: "♥", text: "쓰다듬기", need: 3, have: 3 }], stamped: true });
+  assert.deepEqual(D.stampBoughtFromSave({ [cheap.id]: 2, pearl: 4, [dear.id]: -1 }), { [cheap.id]: 2 });
+  j.stamps = -4; assert.equal(World.fromJSON(j, seededRandom(3)).stamps, 0);
+});

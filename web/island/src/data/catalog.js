@@ -126,6 +126,11 @@ export const FURNITURE = {
   blossomPot: { id: "blossomPot", name: "벚꽃 화분", footprint: { w: 1, d: 1 }, height: 0.9, comfort: 3, shape: "plant", colors: [0xf7e3d0, 0xffb7cf] },
   waveRug:    { id: "waveRug", name: "파도 깔개", footprint: { w: 2, d: 2 }, height: 0.02, comfort: 3, layer: "floor", shape: "rug", colors: [0x4fa3c7, 0xe6f4f7] },
   mapleLamp:  { id: "mapleLamp", name: "단풍 등불", footprint: { w: 1, d: 1 }, height: 1.5, comfort: 3, shape: "floorLamp", colors: [0x7b4b2e, 0xffa04a], light: true },
+  // 도장 가게 한정 가구(오늘의 부탁을 모두 들어주면 받는 도장으로 바꿈. ITEMS의 stamp)
+  stampRug:   { id: "stampRug", name: "도장 무늬 깔개", footprint: { w: 2, d: 2 }, height: 0.02, comfort: 2, layer: "floor", shape: "rug", colors: [0xe0573e, 0xfff6ee] },
+  duskLamp:   { id: "duskLamp", name: "노을 스탠드", footprint: { w: 1, d: 1 }, height: 1.5, comfort: 3, shape: "floorLamp", colors: [0x6a4a7a, 0xffb38a], light: true },
+  mintShelf:  { id: "mintShelf", name: "민트 책장", footprint: { w: 2, d: 1 }, height: 1.5, comfort: 4, use: "read", useLabel: "민트 책장에서 책 읽기", shape: "bookshelf", colors: [0x8fd3c1] },
+  starBed:    { id: "starBed", name: "별밤 침대", footprint: { w: 1, d: 2 }, height: 0.5, comfort: 6, use: "sleep", useLabel: "별밤 침대에서 낮잠", shape: "bed", colors: [0x3b3f73, 0xf4f1ea, 0x6f78c9] },
   snowSofa:   { id: "snowSofa", name: "눈꽃 소파", footprint: { w: 2, d: 1 }, height: 0.8, comfort: 4, use: "sit", useLabel: "눈꽃 소파에서 뒹굴", shape: "sofa", colors: [0xbfdcf2, 0xffffff] },
 };
 export const SHOP_FURNITURE = Object.values(FURNITURE).filter(f => f.price).map(f => f.id);
@@ -274,6 +279,11 @@ export const ITEMS = [
   { id: "festSummer", name: "파도 깔개", rarity: "epic", furniture: "waveRug",    fest: true },
   { id: "festAutumn", name: "단풍 등불", rarity: "epic", furniture: "mapleLamp",  fest: true },
   { id: "festWinter", name: "눈꽃 소파", rarity: "epic", furniture: "snowSofa",   fest: true },
+  // 도장 가게 한정 가구(stamp = 도장 값: 낚시로는 안 나옴. 📱 소원 → 도장 가게에서 도장으로 바꿈)
+  { id: "stampRug",   name: "도장 무늬 깔개", rarity: "rare", furniture: "stampRug",  stamp: 1 },
+  { id: "stampLamp",  name: "노을 스탠드",   rarity: "rare", furniture: "duskLamp",  stamp: 2 },
+  { id: "stampShelf", name: "민트 책장",     rarity: "epic", furniture: "mintShelf", stamp: 3 },
+  { id: "stampBed",   name: "별밤 침대",     rarity: "epic", furniture: "starBed",   stamp: 5 },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

@@ -88,7 +88,7 @@ function take(world, b, id) {
 const lv = (b, li) => levels(b)[li] || levels(b)[0];
 export function place(world, b, id, x, z, rot = 0, li = 0) {
   const L = lv(b, li); if (!fits(L, id, x, z, rot) || !take(world, b, id)) return false;
-  L.furniture.push({ id, x, z, rot }); world.emit?.("furniture", { b }); return true;
+  L.furniture.push({ id, x, z, rot }); world.emit?.("furniture", { b, kind: "place" }); return true;   // kind "place": 내가 손으로 놓음(오늘의 부탁이 셈)
 }
 export function move(world, b, i, x, z, rot, li = 0) {
   const L = lv(b, li), o = L.furniture[i]; if (!o || !fits(L, o.id, x, z, rot, i)) return false;

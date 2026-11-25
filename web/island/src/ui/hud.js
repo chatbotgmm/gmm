@@ -15,6 +15,7 @@ import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
 import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftables, petsLeft, PET_DAILY } from "../world/bond.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
+import { STAMP_SHOP, DAILY_COUNT } from "../world/daily.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -125,7 +126,7 @@ export class Hud {
   openApp(app) {
     this.app = app;
     const pages = { null: "pageHome", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews" };
-    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지" };
+    const titles = { null: "📱 갈매폰", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null;
@@ -188,6 +189,7 @@ export class Hud {
           : `<p class="dim">저장고가 없어요. 🪚 목수가 있으면 🏠 건설에서 <b>저장고</b>를 지을 수 있어요.</p>`) +
         `<h4>등급별 건물</h4><table class="tbl">${RANKS.slice(1).map((r, i) => `<tr><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} (${r.need}점)</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
     } else if (this.app === "wish") {
+      this.drawDaily();
       const rows = w.wishes.map(x => { const d = WISH_BY_ID[x.id], u = w.units.find(o => o.unitId === x.unitId); return `<tr><td>${d.icon} <b>${u?.name ?? ""}</b>: ${wishText(d, w, u, x)}</td><td class="dim">${d.hint}</td></tr>`; }).join("");
       document.getElementById("wishBody").innerHTML = `<p class="dim">갈매미가 가끔 마을에 바라는 것을 말해요. 들어주면 기뻐하고 ${w.economy ? `공식은행이 축하금 🪙${WISH_REWARD}을 줘요` : "배가 조금 불러요"}.</p>` +
         (rows ? `<table class="tbl">${rows}</table>` : `<p class="dim">지금은 바라는 게 없어요.</p>`) + `<p>이룬 소원: <b>${w.wishDone}</b>개</p>`;
@@ -200,6 +202,22 @@ export class Hud {
     } else if (this.app === "summon") {
       this.setSummon(w);
     }
+  }
+  /** 📱 소원 앱 맨 위 「오늘」: 오늘의 부탁(나아간 만큼 막대) · 모은 도장 · 도장 가게. 바뀐 게 없으면 다시 안 그림(가게 단추가 눌리게) */
+  drawDaily() {
+    const w = this.world, d = w.daily, body = document.getElementById("dailyBody");
+    const key = `${d?.key}|${d?.reqs.map(r => r.id + r.have).join(",")}|${d?.stamped}|${w.stamps}|${STAMP_SHOP.map(s => w.stampBought[s.id] || 0).join(",")}`;
+    if (key === this.dailyDrawn && body.firstChild) return;
+    this.dailyDrawn = key; const open = body.querySelector("details")?.open || w.stamps > 0;   // 가게를 펼쳐 뒀으면 다시 그려도 그대로 · 도장이 있으면 펼쳐서 보여 줌
+    body.onclick = e => { const b = e.target.closest?.("[data-stamp]"); if (!b || b.disabled) return; this.onStampBuy?.(b.dataset.stamp); this.drawDaily(); };
+    const reqs = !d ? `<p class="dim">오늘의 부탁을 읽는 중이에요.</p>` : !d.reqs.length ? `<p class="dim">오늘은 부탁이 없어요. 갈매미를 불러 마을을 시작해 보세요.</p>`
+      : d.reqs.map(r => { const ok = r.have >= r.need; return `<div class="dreq${ok ? " done" : ""}" data-daily="${r.id}"><span class="ico">${ok ? "✅" : r.icon}</span><div><div class="dtx"><span>${escHtml(r.text)}</span><em>${r.have} / ${r.need}</em></div><div class="rbar"><i style="width:${Math.round(r.have / r.need * 100)}%"></i></div></div></div>`; }).join("");
+    const note = !d?.reqs.length ? "" : d.stamped ? `<p class="dnote"><b>오늘의 부탁을 모두 들어줬어요!</b> 도장 하나를 받았어요. 내일 새 부탁이 와요.</p>`
+      : `<p class="dim">${d.reqs.length >= DAILY_COUNT ? "세 가지" : "오늘의 부탁"}를 모두 들어주면 도장 하나를 받아요. 날짜가 바뀌면 새 부탁으로 바뀌어요.</p>`;
+    const shop = STAMP_SHOP.map(s => { const f = FURNITURE[s.furniture], n = w.stampBought[s.id] || 0;
+      return `<div class="sitem"><i style="background:${hex(f.colors[0])}"></i><div><b>${s.name}</b><span class="dim">가구 · 아늑함 +${f.comfort}${n ? ` · ${n}개 받았어요` : ""}</span></div><button data-stamp="${s.id}"${w.stamps < s.stamp ? " disabled" : ""}>도장 ${s.stamp}개</button></div>`; }).join("");
+    body.innerHTML = `<h4 class="dhead">📋 오늘의 부탁<span id="stampCount" title="모은 도장">도장 ${w.stamps}개</span></h4>${reqs}${note}` +
+      `<details class="sshop"${open ? " open" : ""}><summary>🏪 도장 가게 <span class="dim">도장으로만 바꾸는 한정 가구</span></summary>${shop}<p class="dim">받은 가구는 🏠 집 꾸미기에서 아무 집에나 놓아요.</p></details><h4>💭 갈매미의 소원</h4>`;
   }
   /** 📱 소식지: 마을 날짜별(새 날부터) 머릿기사. 하루 = 마을 시간 NEWS_DAY_SECS초, 최근 NEWS_KEEP_DAYS일치. */
   drawNews() {

@@ -22,6 +22,7 @@ import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromS
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
+import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP } from "./daily.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -69,6 +70,8 @@ export class World {
     this.skyRnd = seededRandom(skySeed(extra.seed ?? 7, extra.time)); this.skyClock = 0; this.starClock = 0;   // 하늘만 쓰는 난수(다른 일의 순서를 바꾸지 않음. 불러올 때마다 같은 순서로 되풀이되지 않게 마을 시간을 섞음)
     // 계절 축제의 날: 이번 축제 열쇠 "해-계절"(화면이 기기 날짜로 넣어 줌, 저장 안 함) · 열리는 중인 축제 { id, t 남은 초, x, z 광장, who 함께한 갈매미 id } · 지난 축제 도장 { 열쇠: true }
     this.festKey = null; this.festival = festivalFromSave(extra.festival); this.festivals = festivalsFromSave(extra.festivals); this.festClock = 0;
+    // 오늘의 부탁: 그날의 부탁 { key 실제 날짜, reqs, stamped }(화면이 setDay로 날짜를 넣어 줄 때 고름. 그 전엔 null) · 모은 도장 · 도장 가게에서 산 것 { id: 개수 }
+    this.daily = null; this.stamps = Math.max(0, extra.stamps | 0); this.stampBought = stampBoughtFromSave(extra.stampBought);
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -97,7 +100,24 @@ export class World {
     const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z); this.emit("unitAdded", u); return u;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
-  emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); }
+  emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); }
+  // ---- 오늘의 부탁(daily.js)
+  /** 실제 날짜 열쇠(YYYY-MM-DD)를 받음: 날짜가 바뀌었으면(처음이면) 새 부탁을 고름 → 나아간 것은 처음부터, 못 끝낸 부탁은 사라짐. 새로 골랐으면 true */
+  setDay(key) { if (!key || this.daily?.key === key) return false; this.daily = rollDaily(key, this); return true; }
+  /** 알린 일을 부탁에 셈(듣는 쪽이 다 들은 뒤에 → 부탁 알림이 그 일의 알림 뒤에 옴). 모두 끝나면 도장 하나(하루 한 번) */
+  noteDaily(ev, arg) {
+    const d = this.daily; if (!d) return;
+    for (const req of dailyNote(d, ev, arg, this)) {
+      const all = !d.stamped && dailyAllDone(d); if (all) { d.stamped = true; this.stamps++; }
+      this.emit("dailyDone", { req, all, stamps: this.stamps, left: d.reqs.filter(r => r.have < r.need).length });
+    }
+  }
+  /** 도장 가게: 도장으로 한정 가구를 사서 마을 가방에 넣음(🏠 집 꾸미기에서 아무 집에나 놓음). 샀으면 true */
+  buyStamp(id) {
+    const item = STAMP_SHOP.find(s => s.id === id); if (!item || this.stamps < item.stamp) return false;
+    this.stamps -= item.stamp; this.items[id] = (this.items[id] || 0) + 1; this.stampBought[id] = (this.stampBought[id] || 0) + 1;
+    this.emit("stampBuy", { item }); return true;
+  }
   /** 소식지에 적기(news.js가 고른 일만). 계절은 바뀔 때만: 처음 정해질 때·불러온 뒤 같은 계절은 소식이 아님. */
   noteNews(ev, arg) {
     const n = newsFor(ev, arg, this); if (!n) return;
@@ -494,7 +514,7 @@ export class World {
     if (u.petDay !== day) { u.petDay = day; u.petN = 0; }
     u.petN++; if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + PET_FUN);
     emote(u, bondStage(u.bond) >= 2 ? "♥ 좋아" : "♥", 1.6);
-    const thanks = this.addBond(u, PET_BOND);
+    const thanks = this.addBond(u, PET_BOND); this.emit("pet", { u });
     return { ok: true, left: PET_DAILY - u.petN, thanks };
   }
 
@@ -601,7 +621,7 @@ export class World {
     if (!this.canTug(u)) return false;
     u.tugged = true; u.fishT = 0;
     if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + J.TUG_FUN);
-    emote(u, "영차! ♪", 1.2);
+    emote(u, "영차! ♪", 1.2); this.emit("tug", { u });
     return true;
   }
   /** 낚은 것을 챙김(알림 없이): 물고기를 뽑아 도감·가방(흔하면 음식, 희귀 이상이면 보물)에 넣고, 가끔 물건도.
@@ -866,6 +886,7 @@ export class World {
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0) })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
+      daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -882,6 +903,7 @@ export class World {
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
       u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); }                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
     if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
+    w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)
     w.nextId = j.nextId; return w;
   }
 }
