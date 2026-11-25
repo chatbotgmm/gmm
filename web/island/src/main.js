@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { World, SPEED_BOOST } from "./world/World.js";
-import { GRID_W, toWorldX, toWorldZ } from "./config.js";
+import { GRID_W, toWorldX, toWorldZ, toGridX, toGridZ } from "./config.js";
 import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
@@ -54,7 +54,8 @@ function fitView() { camera.fov = portrait() ? 62 : 45; camera.aspect = innerWid
 fitView();
 camera.position.set(0, portrait() ? 70 : 54, portrait() ? 50 : 52);   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.46; controls.minDistance = 5; controls.maxDistance = 110;
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5;   // 낮게(거의 눈높이)·가까이(1.5 m)까지 볼 수 있게. 땅속으로는 못 들어감(아래 keepCameraAboveGround)
+ controls.maxDistance = 110;
 controls.screenSpacePanning = false; controls.target.set(0, 0, 4);
 const hemi = new THREE.HemisphereLight(0xdcefff, 0x8a8f5a, 0.85); scene.add(hemi);   // 하늘빛(위)·땅빛(아래)
 const sun = new THREE.DirectionalLight(0xffe2b8, 3.3);   // 따뜻한 햇빛
@@ -296,6 +297,12 @@ const WASD = { KeyW: "ArrowUp", KeyS: "ArrowDown", KeyA: "ArrowLeft", KeyD: "Arr
 addEventListener("keydown", e => { if (e.target?.tagName === "INPUT" || roomView?.isOpen || e.ctrlKey || e.metaKey) return; const code = WASD[e.code] || e.code; if (/^(KeyQ|KeyE|Arrow(Up|Down|Left|Right))$/.test(code)) { keys.add(code); if (code.startsWith("Arrow")) e.preventDefault(); } if (e.shiftKey) keys.add("Fast"); });
 addEventListener("keyup", e => { keys.delete(WASD[e.code] || e.code); if (!e.shiftKey) keys.delete("Fast"); });
 addEventListener("blur", () => keys.clear());
+/** 카메라가 땅(또는 물) 아래로 내려가지 않게: 낮은 각도·가까운 거리에서 언덕 뒤로 돌아가도 땅을 뚫지 않음 */
+function keepCameraAboveGround() {
+  const p = camera.position, h = world?.standHeight?.(toGridX(p.x), toGridZ(p.z));
+  const floor = (Number.isFinite(h) ? Math.max(0, h) : 0) + 0.35;
+  if (p.y < floor) p.y = floor;
+}
 function keyCamera(dt) {
   if (!keys.size || (keys.size === 1 && keys.has("Fast"))) return;
   const t = controls.target, off = camera.position.clone().sub(t);
@@ -350,6 +357,7 @@ function frameBody() {
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update();
+  keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   quality.frame(dt, now);
