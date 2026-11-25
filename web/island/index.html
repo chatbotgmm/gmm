@@ -106,7 +106,7 @@
   /* 선물·쓰다듬기: 따라가기 카드 바로 위의 버튼 두 개(선물을 누르면 그 위로 고르는 판이 열림) */
   #bondBar { position: fixed; left: var(--safe-l); bottom: 120px; z-index: var(--z-hud); width: min(330px, calc(100% - 100px)); display: flex; flex-direction: column; gap: var(--gap); pointer-events: none; }
   #bondBar[hidden], #giftPick[hidden] { display: none; }
-  #bondBar .brow { display: flex; gap: var(--gap); } #bondBar button { pointer-events: auto; min-height: max(40px, var(--hit-sm)); padding: 6px 12px; font-size: var(--fs-body); border-radius: var(--r-md); touch-action: manipulation; }
+  #bondBar .brow { display: flex; gap: var(--gap); } #bondBar .brow button { flex: none; }   /* 좁아도 두 버튼이 서로 덮지 않게 */ #bondBar button { pointer-events: auto; min-height: max(40px, var(--hit-sm)); padding: 6px 12px; font-size: var(--fs-body); border-radius: var(--r-md); touch-action: manipulation; }
   #petBtn { color: #b8355c; } #bondBar button:disabled { opacity: .55; }
   #giftPick { pointer-events: auto; background: var(--c-hud); border-radius: var(--r-md); padding: 8px 10px; box-shadow: var(--e-1); font-size: var(--fs-cap); max-height: 34vh; max-height: 34dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; }
   #giftPick p { margin: 0 0 6px; } #giftPick .gifts { display: flex; flex-wrap: wrap; gap: 5px; } #giftPick .gifts button { min-height: max(38px, var(--hit-sm)); font-size: var(--fs-sm); }
@@ -207,7 +207,9 @@
   :where(html[data-form="portrait"], html[data-form="landscape"]) #tools .tbtn .tl { display: none; }
   :where(html[data-form="portrait"], html[data-form="landscape"]) #tools .tbtn .ts { display: block; }
   :where(html[data-form="portrait"]) #tools { align-self: stretch; } :where(html[data-form="portrait"]) #tools .tbtn { flex: 1 1 0; min-width: 0; }
-  :where(html[data-form="landscape"]) #tools .tbtn { flex: none; min-width: 64px; }
+  :where(html[data-form="landscape"]) #tools .tbtn { flex: none; min-width: 52px; }
+  /* 좁은 가로 폰(640·667px 등): 칩 묶음을 줄여 도구 막대(짓기 중 ✋까지)가 밀지 않고 다 보이게 */
+  @media (max-width: 699px) { html[data-form="landscape"] { --chips-l: 240px; } }
   /* 가로 폰(높이가 낮음): 도구는 위 왼쪽 그대로, 칩은 위 오른쪽에 줄바꿈 묶음(아이콘 위주), 미니맵은 작게, 누르는 칸은 44px */
   html[data-form="landscape"] { --hit: var(--hit-sm); }   /* :root 토큰보다 앞서게 */
   :where(html[data-form="landscape"]) #top { right: calc(var(--safe-r) + var(--chips-l) + 8px); }
@@ -220,6 +222,7 @@
   /* 가로 폰: 따라가기 카드는 조금 넓고 낮게(넘치면 카드 안에서 밀기), 선물·쓰다듬기는 카드 위가 아니라 옆에 — 위쪽 도구 막대와 겹치지 않게 */
   :where(html[data-form="landscape"]) #info { width: min(400px, 48vw); max-height: calc(100dvh - 240px); overflow-y: auto; overscroll-behavior: contain; }
   :where(html[data-form="landscape"]) #bondBar { left: calc(var(--safe-l) + min(400px, 48vw) + 8px); width: min(330px, calc(100% - min(400px, 48vw) - 110px)); }
+  :where(html[data-form="landscape"]) body:has(#minimap:not([hidden])) #bondBar { width: min(330px, calc(100% - var(--safe-l) - min(400px, 48vw) - var(--safe-r) - 136px)); }   /* 미니맵을 켰으면 선물 판이 그 왼쪽까지만 */
   /* ===== 디자인 토큰: 색·간격·반경·글자·그림자·층을 한곳에. 위의 규칙들은 값을 직접 쓰지 않고 여기 이름을 씀 ===== */
   :root {
     /* 배율: 나중에 JS가 --ui-auto(창 크기)·--ui-user(설정)를 넣음. 지금은 1 */
