@@ -627,7 +627,7 @@ test("계절 한정 수집: 그 계절 물고기·물건만 나오고, 바닷가
     for (const it of ITEMS.filter(i => i.season)) assert.equal(items.has(it.id), it.season === season, `${season} ${it.name}`);
   }
   w.setSeason("winter"); let got = null; for (let i = 0; i < 200 && !got; i++) got = w.beachcomb(u);
-  assert.equal(got?.id, "iceshell"); assert.ok(w.items.iceshell >= 1);
+  assert.equal(got?.id, "iceshell"); assert.ok(u.stash.iceshell >= 1);
 });
 
 test("실내 꾸미기: 집마다 구조(방·문·계단), 놓기·옮기기·돌리기·치우기, 낚시 가구, 잡화점에서 사면 알아서 놓음", async () => {
@@ -1081,7 +1081,7 @@ test("수족관: 있을 때만 처음 낚은 희귀 이상 한 마리를 기증�
   const w = World.create(7, seededRandom(3), { empty: true }); w.instantBuild = true; const u = w.addUnit(UNITS[5], 5, w.center.x + 0.5, w.center.z + 0.5);
   const land = id => { const f = byId(id), seq = [0, 0.999]; let acc = 0; const ws = FISH.map(x => !x.season || x.season === w.season ? x.weight * (x.rarity === "common" ? 1 : 1.3) : 0), tot = ws.reduce((p, q) => p + q, 0);
     for (let i = 0; i < FISH.length; i++) { if (FISH[i] === f) { seq[0] = (acc + ws[i] / 2) / tot; break; } acc += ws[i]; } let k = 0; return w.landFish(u, () => seq[k++]); };
-  let r = land("flatfish"); assert.equal(r.fish.id, "flatfish"); assert.equal(r.donated, false); assert.equal(w.treasures.flatfish, 1); assert.deepEqual(w.donated, {});
+  let r = land("flatfish"); assert.equal(r.fish.id, "flatfish"); assert.equal(r.donated, false); assert.equal(u.stash.flatfish, 1); assert.deepEqual(w.donated, {});
   assert.equal(w.donateFish(byId("flatfish")), null, "수족관이 없으면 기증 안 함");
   const base = rankScore(w).score; w.rank = 2;
   let at = null; const c = w.center; for (let rr = 2; rr < 30 && !at; rr++) for (let dz = -rr; dz <= rr && !at; dz++) for (let dx = -rr; dx <= rr && !at; dx++) if (w.placeBuilding("aquarium", c.x + dx, c.z + dz, 0, null, 1e9).ok) at = [c.x + dx, c.z + dz];
@@ -1095,7 +1095,7 @@ test("수족관: 있을 때만 처음 낚은 희귀 이상 한 마리를 기증�
   assert.equal(ev.length, 1); assert.match(w.newsLog.at(-1).text, /광어를 수족관에 기증했어요!$/); assert.equal(w.newsLog.length, news0 + 1);
   // 처음 낚은 한 마리는 보물이 아니라 기증, 두 번째부터는 보물. 흔한 물고기는 기증하지 않음
   r = land("octopus"); assert.equal(r.fish.id, "octopus"); assert.equal(r.donated, true); assert.equal(w.treasures.octopus || 0, 0); assert.equal(w.collection.octopus, 1);
-  r = land("octopus"); assert.equal(r.donated, false); assert.equal(w.treasures.octopus, 1);
+  r = land("octopus"); assert.equal(r.donated, false); assert.equal(u.stash.octopus, 1);
   r = land("anchovy"); assert.equal(r.fish.id, "anchovy"); assert.equal(r.donated, false); assert.equal(w.donated.anchovy, undefined);
   assert.equal(rankScore(w).score, base + 8 + 2 * A.DONATE_SCORE, "기증한 종류마다 등급 점수");
   // 3번째 종류 → 표류목 의자(마을 가방 = 집 꾸미기에서 놓는 길)
@@ -1133,7 +1133,7 @@ test("수족관: 다녀온 사이에 낚은 첫 희귀 이상 물고기도 기�
   const all = []; for (let s = 1; s <= 12; s++) { const r = w.applyAway(100 * H, seededRandom(s)); all.push(...r.catches); }
   const gave = all.filter(x => x.donated); assert.ok(gave.length >= 3, `기증 ${gave.length}`); assert.equal(ev.length, 0, "그동안의 일은 알림 줄에 띄우지 않음");
   assert.equal(new Set(gave.map(x => x.fish.id)).size, gave.length, "한 종류는 한 번만"); assert.deepEqual(Object.keys(w.donated).sort(), gave.map(x => x.fish.id).sort());
-  for (const f of FISH) if (f.rarity !== "common" && w.collection[f.id]) { assert.equal(w.donated[f.id], true); assert.equal(w.treasures[f.id] || 0, w.collection[f.id] - 1, `${f.name}: 기증한 한 마리만 빼고 보물`); }
+  for (const f of FISH) if (f.rarity !== "common" && w.collection[f.id]) { assert.equal(w.donated[f.id], true); assert.equal(w.units.find(x => x.name === "물방울").stash[f.id] || 0, w.collection[f.id] - 1, `${f.name}: 기증한 한 마리만 빼고 보물`); }
   assert.ok(all.every(x => x.size >= x.fish.cm[0] && x.size <= x.fish.cm[1] && w.fishRecord[x.fish.id] >= x.size));
   assert.equal(w.donateGifts, 1 + (gave.length >= 6)); assert.equal(w.items.chair >= 1, true);
   assert.ok(w.newsLog.some(n => /^물방울이 처음 낚은 .+ 수족관에 기증했어요!$/.test(n.text)), "소식지에 기증 소식"); assert.ok(w.newsLog.some(n => /기념으로 표류목 의자를 받았어요!$/.test(n.text)));
@@ -1274,11 +1274,11 @@ test("드문 하늘: 무지개(낮에 비가 갠 뒤)·유성우(맑은 밤)·�
   // 별조각: 유성우 동안 밖에서 깨어 있는 야행성 갈매미만, 한 번에 STAR_MAX개까지
   w.addUnitByName("미니"); w.addUnitByName("불씨"); w.addUnitByName("그림자"); const fire = w.units.find(u => u.name === "불씨"), shade = w.units.find(u => u.name === "그림자");
   const stars = []; w.on("starPiece", e => stars.push(e.u.name)); shade.state = UnitState.Sleep; w.skyRnd = () => 0;
-  w.stepSky(K.STAR_CHECK_SECS - 1); assert.equal(stars.length, 0); w.stepSky(1); assert.deepEqual(stars, ["불씨"], "야행성이고 깨어 있는 갈매미만"); assert.equal(w.items.stardust, 1); assert.equal(fire.emoteText, "⭐");
+  w.stepSky(K.STAR_CHECK_SECS - 1); assert.equal(stars.length, 0); w.stepSky(1); assert.deepEqual(stars, ["불씨"], "야행성이고 깨어 있는 갈매미만"); assert.equal(fire.stash.stardust, 1); assert.equal(fire.emoteText, "⭐");
   assert.match(w.newsLog.at(-1).text, /불씨가 .*별조각을 주웠어요/);
-  w.stepSky(K.STAR_CHECK_SECS); w.stepSky(K.STAR_CHECK_SECS); assert.equal(w.items.stardust, K.STAR_MAX, "한 번에 많아야 STAR_MAX개");
+  w.stepSky(K.STAR_CHECK_SECS); w.stepSky(K.STAR_CHECK_SECS); assert.equal(fire.stash.stardust, K.STAR_MAX, "한 번에 많아야 STAR_MAX개");
   w.isNight = false; w.stepSky(0.1); assert.equal(w.sky, null, "날이 밝으면 끝");
-  { const coins = w.res.coins, n = w.items.stardust; w.trade(fire); assert.equal(w.items.stardust, 0, "상인이 팖"); assert.ok(w.res.coins >= coins + n * star.price); }
+  { assert.equal(w.items.stardust, undefined, "별조각은 내 가방이 아니라 주운 갈매미 것"); }
   // 첫눈: 겨울마다 한 번. 같은 겨울엔 다시 알리지 않고, 겨울이 지나가거나 해가 바뀌면 다시
   w = mk(); const snows = []; w.on("firstSnow", () => snows.push(w.winterYear)); w.setWeather("snow"); assert.equal(snows.length, 0, "겨울이 아니면 첫눈이 아님");
   w.setSeason("winter"); w.winterYear = 2026; w.setWeather("snow"); assert.deepEqual(snows, [2026]); assert.equal(w.skySeen.firstSnow, 1); assert.equal(w.newsLog.at(-1).text, "첫눈이 내려요!");

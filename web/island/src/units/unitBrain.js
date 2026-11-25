@@ -16,6 +16,7 @@ import * as F from "../world/furniture.js";
 import * as IM from "../world/improve.js";
 import { FURNITURE } from "../data/catalog.js";
 import { FESTIVAL_JOIN_CHANCE, FESTIVAL_FUN, FESTIVAL_PAL } from "../world/festival.js";
+import { STASH_SELL_AT, stashSellable } from "../world/belongings.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
@@ -312,6 +313,11 @@ function startActivityInner(u, kind, world, rnd) {
       if (!startPath(u, world, mk.door.x, mk.door.z)) return false;
       u.state = US.GoMarket; u.shop = { kind: "sell" }; return true;
     }
+    case "peddle": {                                                              // 소지품(잡거나 주운 것)을 시장에 팔러. 상인 자신도 됨
+      const mk = world.marketB(); if (!mk || !world.merchantU()) return false;
+      if (!startPath(u, world, mk.door.x, mk.door.z)) return false;
+      u.state = US.GoMarket; u.shop = { kind: "peddle" }; return true;
+    }
     case "process": {                                                             // 상인: 사 들인 원자재를 시장에서 가공
       const mk = world.marketB(); if (!mk || u.job !== "merchant" || E.total(u.raw) <= 0) return false;
       if (!startPath(u, world, mk.door.x, mk.door.z)) return false;
@@ -477,6 +483,7 @@ function chooseNext(u, world, rnd) {
     if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
+    if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀)
     if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝 옆집이 있으면 그 집부터, 다음은 싼 집)
       const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => areNeighbors(b, palHome) ? 1 : 0;
       const h = world.housesForSale(u).filter(b => (u.coins || 0) >= (BUILDINGS[b.defId].price || 30)).sort((a, c) => nearPal(c) - nearPal(a) || BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
@@ -769,6 +776,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const shop = u.shop || {}; u.shop = null;
       if (shop.kind === "sell") {
         const r = world.sellToMarket(u); emote(u, r.coins ? `🐚 원자재 🪙+${r.coins}` : "상인이 돈이 없대…", 2.2); done(u, r.coins ? 0.5 + r.coins / 20 : 0.1, rnd, world);
+      } else if (shop.kind === "peddle") {                                         // 소지품 팔기(조개는 내 것, 상인은 1개에 1조개)
+        const r = world.sellStash(u); emote(u, r.coins ? `🐚 소지품 ${r.n}개 🪙+${r.coins - r.cut}` : r.donated.length ? "🐠 수족관에 기증!" : "오늘은 안 팔래", 2.2); done(u, r.coins ? 0.5 + r.coins / 30 : 0.1, rnd, world);
       } else if (shop.kind === "process") {                                        // 가공: 개수만큼 망치질하는 시간
         const n = E.total(u.raw); u.state = US.Trade; u.processing = true; u.timer = 1.5 + n * 0.6; u.tool = "hammer"; u.anim = "Build"; emote(u, `🔨 가공 중(${n})`);
       } else if (shop.kind === "food") {

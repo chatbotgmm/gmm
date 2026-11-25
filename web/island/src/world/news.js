@@ -23,8 +23,12 @@ const NEWS_MAKERS = {
   fish: ({ u, fish }) => ({ icon: "🎣", text: `${josa(u.name, "이", "가")} ${fish.season ? "제철 " : ""}${josa(fish.name, "을", "를")} 낚았어요!`, weight: (FISH_WEIGHT[fish.rarity] ?? 0) + (fish.season ? 2 : 0) }),
   // 수족관: 크기 기록(알림 줄에만) · 기증 · 기증 기념 선물
   fishRecord: ({ u, fish, size, first }) => ({ icon: "📏", text: `${josa(u.name, "이", "가")} 낚은 ${fish.name} ${size}cm! ${first ? "첫 기록이에요" : "새 기록이에요"}`, weight: 0 }),
-  donate: ({ u, fish }) => ({ icon: "🐠", text: `${u ? `${josa(u.name, "이", "가")} 처음 낚은 ` : "아껴 둔 "}${josa(fish.name, "을", "를")} 수족관에 기증했어요!`, weight: 5 }),
+  donate: ({ u, fish, kept }) => ({ icon: "🐠", text: `${u ? `${josa(u.name, "이", "가")} ${kept ? "아껴 둔" : "처음 낚은"} ` : "아껴 둔 "}${josa(fish.name, "을", "를")} 수족관에 기증했어요!`, weight: 5 }),
   donateGift: ({ item, gift }) => ({ icon: "🎁", text: `수족관 기증 ${gift.label} 기념으로 ${josa(item.name, "을", "를")} 받았어요!`, weight: 6 }),
+  // 갈매미 소지품: 스스로 시장에 판 것(알림 줄에만)
+  stashSale: ({ u, items, coins, cut }) => ({ icon: "🐚", text: `${josa(u.name, "이", "가")} 소지품 ${items.reduce((s, x) => s + x.n, 0)}개를 팔았어요 🪙+${coins - cut}`, weight: 0 }),
+  // ✨ 반짝이를 주움(알림 줄에만)
+  sparkle: ({ item }) => ({ icon: "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
   beachcomb: ({ u, item }) => ({ icon: "✨", text: `${josa(u.name, "이", "가")} 바닷가에서 ${josa(item.name, "을", "를")} 주웠어요`, weight: 2 }),
   wishDone: ({ wish, u, def }, w) => ({ icon: "♥", text: `${u.name}의 소원 "${wishText(def, w, u, wish)}"이 이루어졌어요!`, weight: 5 }),
   rank: ({ def }) => ({ icon: "🏅", text: `마을 등급이 올랐어요: ${def.icon} ${def.name}!`, weight: 8 }),

@@ -284,6 +284,25 @@ export const ITEMS = [
   { id: "stampLamp",  name: "노을 스탠드",   rarity: "rare", furniture: "duskLamp",  stamp: 2 },
   { id: "stampShelf", name: "민트 책장",     rarity: "epic", furniture: "mintShelf", stamp: 3 },
   { id: "stampBed",   name: "별밤 침대",     rarity: "epic", furniture: "starBed",   stamp: 5 },
+  // ---- 여기부터는 플레이어 몫 선물거리(gift: 낚시·바닷가 줍기로는 안 나오고 상인도 안 팖. 값 없음). 맨 뒤에 붙여 기존 낚시 결과가 그대로
+  // ✨ 반짝이(sparkle: 하루 몇 번 바닷가·마을에 생기고 플레이어가 탭해서 주움 → 내 주머니). 계절은 season 대신 sparkleSeason(낚시 계절 물건과 섞이지 않게)
+  { id: "shell",    name: "조개껍데기",       rarity: "common", gift: true, sparkle: "beach" },
+  { id: "seaglass", name: "바다 유리",         rarity: "common", gift: true, sparkle: "beach" },
+  { id: "goby",     name: "웅덩이 망둥어",     rarity: "common", gift: true, sparkle: "beach" },
+  { id: "postcard", name: "바람에 날아온 엽서", rarity: "common", gift: true, sparkle: "village" },
+  { id: "blossom",  name: "벚꽃 가지",         rarity: "common", gift: true, sparkle: "village", sparkleSeason: "spring" },
+  { id: "clover",   name: "네잎클로버",         rarity: "common", gift: true, sparkle: "village", sparkleSeason: "summer" },
+  { id: "acorn",    name: "도토리",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "autumn" },
+  { id: "pinecone", name: "솔방울",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "winter" },
+  { id: "icicle",   name: "고드름",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "winter" },
+  // 도장 선물(stampGift = 도장 값: 도장 가게에서 사는 귀한 선물. 받으면 정이 두 배). stamp 키는 쓰지 않음(STAMP_SHOP은 가구만)
+  { id: "goldLetter",   name: "금박 편지지",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "starBrooch",   name: "별 브로치",         rarity: "epic", gift: true, stampGift: 1 },
+  { id: "bouquet",      name: "들꽃 꽃다발",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "rainbowShell", name: "무지개 소라",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "snowGlobe",    name: "눈꽃 스노볼",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "fishTin",      name: "황금 생선 통조림",  rarity: "epic", gift: true, stampGift: 1 },
+  { id: "crownCookie",  name: "갈매미 왕관 쿠키",  rarity: "epic", gift: true, stampGift: 2 },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

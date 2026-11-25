@@ -1,7 +1,7 @@
 // 오늘의 부탁(순수 계산: 화면·기기 시계를 모름).
 // 실제 날짜 열쇠 "YYYY-MM-DD"(화면이 기기 날짜로 넣어 줌)마다 부탁 DAILY_COUNT개를 고름. 고르는 난수는 날짜 열쇠로만 만듦(월드 난수를 쓰지 않음).
 // 부탁은 내가 직접 할 수 있는 일만: 월드가 알리는 일(emit)을 세어서 나아감. 이 마을에서 아직 할 수 없는 부탁(ok가 false)은 고르지 않음.
-// 모두 들어주면 도장 하나(world.stamps) → 도장 가게(STAMP_SHOP)에서 한정 가구로 바꿈. 날짜가 바뀌면 새 부탁으로(못 끝낸 부탁은 사라짐).
+// 모두 들어주면 도장 하나(world.stamps) → 도장 가게에서 한정 가구(STAMP_SHOP)나 귀한 선물(STAMP_GIFTS)로 바꿈. 날짜가 바뀌면 새 부탁으로(못 끝낸 부탁은 사라짐).
 import { BUILDINGS, FISH, ITEMS, UNITS } from "../data/catalog.js";
 import { seededRandom } from "../util.js";
 import { PAVED } from "./roads.js";
@@ -41,8 +41,13 @@ export const DAILY_POOL = [
 ];
 const DAILY_BY_ID = Object.fromEntries(DAILY_POOL.map(d => [d.id, d]));
 
-// 도장 가게: 도장으로만 바꾸는 한정 가구(ITEMS의 stamp = 도장 값). 사면 마을 가방으로 → 🏠 집 꾸미기에서 아무 집에나 놓음
+// 도장 가게: 도장으로만 바꾸는 한정 가구(ITEMS의 stamp = 도장 값). 사면 내 가방(world.items)으로 → 🏠 집 꾸미기에서 아무 집에나 놓음
 export const STAMP_SHOP = ITEMS.filter(i => i.stamp > 0);
+// 도장 선물: 도장으로 사는 귀한 선물(ITEMS의 stampGift = 도장 값). 사면 내 주머니로 → 갈매미에게 주면 정이 두 배(bond.js STAMP_GIFT_BOND).
+// STAMP_SHOP(가구)과 따로 둠: 화면(hud.js)이 STAMP_SHOP을 가구로 읽음
+export const STAMP_GIFTS = ITEMS.filter(i => i.stampGift > 0);
+/** 도장 가게에서 파는 것 하나의 도장 값(가구·선물 모두). 모르는 것은 0 */
+export const stampCost = item => item?.stamp || item?.stampGift || 0;
 
 /** 날짜 → 오늘의 부탁 열쇠 "YYYY-MM-DD"(기기의 그 날짜 그대로) */
 export const dailyKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -83,4 +88,4 @@ export function dailyFromSave(j) {
   return { key: j.key, reqs, stamped: !!j.stamped };
 }
 /** 저장에서 읽은 도장 가게에서 산 것(예전 저장엔 없음 → 빈 것): { 물건 id: 산 개수 } */
-export const stampBoughtFromSave = j => Object.fromEntries(STAMP_SHOP.map(s => [s.id, Math.max(0, (j && typeof j === "object" ? j[s.id] : 0) | 0)]).filter(([, n]) => n > 0));
+export const stampBoughtFromSave = j => Object.fromEntries(STAMP_SHOP.concat(STAMP_GIFTS).map(s => [s.id, Math.max(0, (j && typeof j === "object" ? j[s.id] : 0) | 0)]).filter(([, n]) => n > 0));

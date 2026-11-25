@@ -16,8 +16,15 @@ export const bondStage = v => { let s = 0; BOND_STAGES.forEach((d, i) => { if ((
 export const bondHearts = v => { const s = bondStage(v), n = BOND_STAGES.length - 1; return "♥".repeat(s) + "♡".repeat(n - s); };
 
 // 선물 갈래: 가방 물건마다 하나, 보물 물고기는 모두 "fish". 갈매미마다 좋아하는·꺼리는 갈래는 PERSONA의 likes·dislikes
-export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는 것", plant: "꽃과 잎", sea: "바다 조개", ice: "차가운 것", fish: "귀한 물고기" };
-const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice", stardust: "shiny" };
+// best: 도장 가게의 왕관 쿠키처럼 누구나 좋아하는 것(giftTier가 늘 2)
+export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는 것", plant: "꽃과 잎", sea: "바다 조개", ice: "차가운 것", fish: "귀한 물고기", best: "모두가 좋아하는 것" };
+const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice", stardust: "shiny",
+  // ✨ 반짝이(내 주머니): 갈매미마다 계절마다 좋아하는 반짝이가 하나 이상 있게 고름
+  shell: "sea", seaglass: "shiny", goby: "fish", postcard: "letter", blossom: "plant", clover: "plant", acorn: "plant", pinecone: "plant", icicle: "ice",
+  // 도장 선물(갈래마다 하나 + 누구나 좋아하는 왕관 쿠키)
+  goldLetter: "letter", starBrooch: "shiny", bouquet: "plant", rainbowShell: "sea", snowGlobe: "ice", fishTin: "fish", crownCookie: "best" };
+/** 도장 선물(ITEMS의 stampGift)을 받으면 오르는 정이 GIFT_TIERS의 이 배수 */
+export const STAMP_GIFT_BOND = 2;
 // 반응 3단계: 꺼리는 것 · 보통 · 좋아하는 것 → 말풍선, 오르는 정, 재미
 export const GIFT_TIERS = [
   { say: "음…", bond: 0.5, fun: 2 },
@@ -29,16 +36,20 @@ export function giftDef(id) {
   const it = ITEMS.find(i => i.id === id && !i.furniture); if (it) return { ...it, kind: "item", cat: GIFT_CATS[id] || null };
   const f = FISH.find(f => f.id === id && f.rarity !== "common"); return f ? { ...f, kind: "fish", cat: "fish" } : null;
 }
-/** 지금 선물할 수 있는 것들: [{ id, name, kind, cat, n }] (마을 가방의 물건 → 보물 물고기 순서) */
+/** 지금 선물할 수 있는 것들: [{ id, name, kind, cat, n }] (내 가방 world.items의 선물거리 → 예전 저장에 남은 보물 물고기 world.treasures 순서).
+ *  갈매미가 잡은 것은 더 이상 이 두 칸에 들어오지 않으므로(각자 u.stash) 사실상 "내 주머니"(주운 반짝이·도장 선물·답례 물건) */
 export function giftables(world) {
   const out = [];
   for (const i of ITEMS) { const n = world.items[i.id] || 0, d = n > 0 && giftDef(i.id); if (d) out.push({ ...d, n }); }
   for (const f of FISH) { const n = world.treasures[f.id] || 0, d = n > 0 && giftDef(f.id); if (d) out.push({ ...d, n }); }
   return out;
 }
+/** 내 주머니(플레이어 몫 선물거리)의 총 개수: world.items 가운데 선물할 수 있는 것. 갈매미가 잡은 것은 각자 u.stash에 있어 여기 안 셈 */
+export const pocketCount = world => ITEMS.reduce((s, i) => s + (giftDef(i.id) ? Math.max(0, world.items?.[i.id] || 0) : 0), 0);
 /** 이 갈매미가 이 선물을 받았을 때의 반응 단계(0 꺼림 · 1 보통 · 2 좋아함) */
 export function giftTier(name, id) {
   const p = PERSONA[name] || {}, cat = giftDef(id)?.cat;
+  if (cat === "best") return 2;
   return cat && p.likes?.includes(cat) ? 2 : cat && p.dislikes?.includes(cat) ? 0 : 1;
 }
 

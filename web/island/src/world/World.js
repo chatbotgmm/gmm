@@ -22,8 +22,10 @@ import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromS
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
-import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP } from "./daily.js";
-import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
+import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost } from "./daily.js";
+import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
+import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
+import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -38,7 +40,9 @@ export class World {
   constructor(grid, modules, rnd = Math.random, extra = {}) {
     this.grid = grid; this.modules = modules; this.rnd = rnd; this.time = 0;
     this.buildings = new Map(); this.units = []; this.nextId = 1; this.listeners = {}; this.timers = [];
-    // 자원: 나무·돌·철(자재), 음식(물고기·작물), 조개(돈). treasures: 팔 수 있는 희귀 물고기, collection: 도감(종류별로 잡은 수), items: 가방
+    // 자원: 나무·돌·철(자재), 음식(물고기·작물), 조개(돈). collection: 도감(종류별로 잡은 수, 마을 기록)
+    // items: 내 가방(플레이어 몫: 가구 + 선물거리 = 주운 반짝이·도장 선물·답례 물건). 갈매미가 잡은 것은 각자 u.stash(belongings.js)
+    // treasures: 예전 저장에 남은 보물 물고기 칸(새로 들어오는 것 없음. 예전 저장은 불러올 때 갈매미들에게 나눔 → migrateOwnership)
     this.res = { wood: START_WOOD, stone: START_STONE, iron: 0, food: 10, coins: 0, fish: 0, eaten: 0 };
     this.treasures = {}; this.collection = {}; this.items = {};
     this.bank = { issued: 0, returned: 0 };              // 공식은행: 지금까지 찍은 돈 · 시장에서 돌아온 돈
@@ -72,6 +76,9 @@ export class World {
     this.festKey = null; this.festival = festivalFromSave(extra.festival); this.festivals = festivalsFromSave(extra.festivals); this.festClock = 0;
     // 오늘의 부탁: 그날의 부탁 { key 실제 날짜, reqs, stamped }(화면이 setDay로 날짜를 넣어 줄 때 고름. 그 전엔 null) · 모은 도장 · 도장 가게에서 산 것 { id: 개수 }
     this.daily = null; this.stamps = Math.max(0, extra.stamps | 0); this.stampBought = stampBoughtFromSave(extra.stampBought);
+    // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
+    this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
+    this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -83,7 +90,7 @@ export class World {
   /** empty: 갈매미 없이 시작. wild: 넓은 섬(자연만 + 가운데 공식은행) + 기본 갈매미 한 마리(게임 화면). 시험은 기본값(예전 섬, 8마리 모두). */
   static create(seed = 7, rnd = Math.random, { empty = false, wild = false } = {}) {
     const g = wild ? generateWildIsland(seed) : generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
-    w.seed = seed; w.wild = wild;
+    w.seed = seed; w.wild = wild; w.sparkRnd = seededRandom(sparkleSeed(seed, 0));   // 반짝이 난수는 섬 씨앗으로(생성 결과 g에는 seed가 없음)
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
       w.hungerScale = 0.48; w.seedFood = 20;                                       // 넓은 지도: 오가는 길이 멀어 배고픔을 늦춤(본섬 지름 1.3배 → 0.6 × 0.8)
@@ -97,7 +104,8 @@ export class World {
   addUnitByName(name) {
     const i = UNITS.findIndex(u => u.name === name); if (i < 0 || this.units.some(o => o.name === name)) return null;
     const c = this.center, spot = nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z) + 4, 8) || nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z));
-    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z); this.emit("unitAdded", u); return u;
+    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z);
+    this.migrateLate(); this.emit("unitAdded", u); return u;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
   emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); }
@@ -112,10 +120,11 @@ export class World {
       this.emit("dailyDone", { req, all, stamps: this.stamps, left: d.reqs.filter(r => r.have < r.need).length });
     }
   }
-  /** 도장 가게: 도장으로 한정 가구를 사서 마을 가방에 넣음(🏠 집 꾸미기에서 아무 집에나 놓음). 샀으면 true */
+  /** 도장 가게: 도장으로 한정 가구(STAMP_SHOP)나 귀한 선물(STAMP_GIFTS)을 사서 내 가방에 넣음
+   *  (가구 → 🏠 집 꾸미기에서 아무 집에나, 선물 → 내 주머니). 샀으면 true */
   buyStamp(id) {
-    const item = STAMP_SHOP.find(s => s.id === id); if (!item || this.stamps < item.stamp) return false;
-    this.stamps -= item.stamp; this.items[id] = (this.items[id] || 0) + 1; this.stampBought[id] = (this.stampBought[id] || 0) + 1;
+    const item = STAMP_SHOP.concat(STAMP_GIFTS).find(s => s.id === id), cost = stampCost(item); if (!item || !cost || this.stamps < cost) return false;
+    this.stamps -= cost; this.items[id] = (this.items[id] || 0) + 1; this.stampBought[id] = (this.stampBought[id] || 0) + 1;
     this.emit("stampBuy", { item }); return true;
   }
   /** 소식지에 적기(news.js가 고른 일만). 계절은 바뀔 때만: 처음 정해질 때·불러온 뒤 같은 계절은 소식이 아님. */
@@ -142,7 +151,7 @@ export class World {
   addUnit(def, i, x, z, r = this.rnd) {
     const s = createUnitAIState(`u${i + 1}`, def.name, x, z, 0.5 + r() * 2); s.scale = def.scale;
     J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
-    s.coins = 0; s.inv = E.newBag(); s.home = null;                            // 돈·가방·내 집
+    s.coins = 0; s.inv = E.newBag(); s.home = null; s.stash = {};              // 돈·가방·내 집·소지품(잡거나 주운 것, belongings.js)
     s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(은행)
@@ -161,7 +170,7 @@ export class World {
     const u = this.addUnit(def, i, spot[0] + 0.5, spot[1] + 0.5);
     u.y = this.standHeight(u.x, u.z); emote(u, "안녕!", 2.2);
     for (const o of this.units) if (o !== u && !o.insideBuildingId && Math.hypot(o.x - u.x, o.z - u.z) < 9) o.curious = { x: u.x, z: u.z, kind: "drop" };   // 둘레 갈매미가 쳐다봄
-    this.emit("unitAdded", u); return u;
+    this.migrateLate(); this.emit("unitAdded", u); return u;
   }
 
   /** 모델 정보(web/village/models/chars.json)로 몸 크기와 걷기·달리기 속도(칸/초)를 맞춘다. */
@@ -266,7 +275,9 @@ export class World {
   buyHouse(u, b) {
     const price = BUILDINGS[b.defId].price || 30;
     if (!this.marketB() || b.owner || u.home || (u.coins || 0) < price || !this.canFit(u, b)) return false;
-    this.pay(u, price); b.owner = u.unitId; u.home = b.id; this.emit("market", { u, kind: "house", b }); return true;
+    this.pay(u, price); b.owner = u.unitId; u.home = b.id;
+    for (const [id, n] of Object.entries(u.stash || {})) { const fid = stashFurniture(id); if (!fid || !(n > 0)) continue; const it = F.room(b); it.stash[fid] = (it.stash[fid] || 0) + n; delete u.stash[id]; }   // 들고 다니던 낚시 가구는 새 집 창고로
+    this.emit("market", { u, kind: "house", b }); return true;
   }
   /** 물물교환: 배고픈데 먹을 게 없는 쪽이 자재(없으면 돈)를 내고 상대의 먹을 것 하나를 받음. 일어난 일을 글로 돌려줌. */
   barter(a, b) {
@@ -286,11 +297,11 @@ export class World {
   moneySupply() { return this.units.reduce((s, u) => s + (u.coins || 0), 0); }
   avgFull() { return this.units.reduce((a, u) => a + (u.full ?? 80), 0) / Math.max(1, this.units.length); }
 
-  /** 바닷가에서 먹이를 잡다가 가끔 계절 물건을 주움(도감·가방). 주운 물건을 돌려줌 */
+  /** 바닷가에서 먹이를 잡다가 가끔 계절 물건을 주움(그 갈매미 소지품). 주운 물건을 돌려줌 */
   beachcomb(u) {
     if (this.rnd() >= 0.2 * this.fx.item) return null;                               // 무지개가 뜨면 조금 더 잘 주움
-    const list = ITEMS.filter(i => i.season && i.season === this.season); if (!list.length) return null;
-    const it = list[Math.floor(this.rnd() * list.length)]; this.items[it.id] = (this.items[it.id] || 0) + 1;
+    const list = ITEMS.filter(i => i.season && i.season === this.season && !i.gift); if (!list.length) return null;
+    const it = list[Math.floor(this.rnd() * list.length)]; stashAdd(u, it.id);
     this.emit("beachcomb", { u, item: it }); this.notice(u.x, u.z, "fish", u); return it;
   }
   // ---- 계절·날씨
@@ -338,7 +349,7 @@ export class World {
     this.starClock = 0; const item = ITEMS.find(i => i.id === STAR_ITEM);
     for (const u of this.units) {                                                   // 깨어서 밖에 있는 야행성 갈매미가 별조각을 주움
       if (s.found >= STAR_MAX || !isNocturnal(u) || u.insideBuildingId || [UnitState.Sleep, UnitState.Held].includes(u.state) || this.skyRnd() >= STAR_CHANCE) continue;
-      s.found++; this.items[item.id] = (this.items[item.id] || 0) + 1; emote(u, "⭐", 2.5); this.emit("starPiece", { u, item });
+      s.found++; stashAdd(u, item.id); emote(u, "⭐", 2.5); this.emit("starPiece", { u, item });   // 주운 갈매미의 소지품
     }
   }
   /** 눈 깊이: 겨울 눈 오는 날 약 80초에 가득, 겨울 맑은 날은 0.55까지 천천히, 비·다른 계절엔 녹음 */
@@ -422,8 +433,35 @@ export class World {
     }
     return gifts;
   }
-  /** 기증 알림(알림 줄·소식지): 기증 한 줄 + 선물마다 한 줄 */
-  tellDonation(u, fish, gifts, size = null) { this.emit("donate", { u, fish, size }); for (const g of gifts) this.emit("donateGift", { ...g, count: Object.keys(this.donated).length }); }
+  /** 기증 알림(알림 줄·소식지): 기증 한 줄 + 선물마다 한 줄. kept: 갈매미가 아껴 둔(소지품의) 물고기를 기증 */
+  tellDonation(u, fish, gifts, size = null, kept = false) { this.emit("donate", { u, fish, size, kept }); for (const g of gifts) this.emit("donateGift", { ...g, count: Object.keys(this.donated).length }); }
+  /** 이 갈매미가 아껴 둔(소지품의) 아직 기증 안 한 희귀 이상 물고기를 종류마다 한 마리씩 기증(수족관이 있을 때). 기증한 물고기들을 돌려줌 */
+  donateFromStash(u) {
+    const out = []; if (!u?.stash || !this.aquariumB()) return out;
+    for (const f of FISH) {
+      if (!(u.stash[f.id] > 0) || this.donated[f.id]) continue;
+      const gifts = this.donateFish(f); if (!gifts) continue;
+      if (!--u.stash[f.id]) delete u.stash[f.id];
+      this.tellDonation(u, f, gifts, null, true); out.push(f);
+    }
+    return out;
+  }
+  /** 모든 갈매미가 아껴 둔 물고기를 기증(수족관이 다 지어졌을 때) */
+  donateStashes() { for (const u of this.units) this.donateFromStash(u); }
+  /** 갈매미가 스스로 소지품을 팖: 먼저 수족관 기증, 그다음 팔 것(belongings.js stashSellable)을 카탈로그 값에 팖.
+   *  조개는 주인에게(상인 몫 STASH_CUT/개, 상인 자신이 팔 땐 없음). 경제 마을이면 은행이 사들여 새 돈을 찍음(물건은 마을 밖으로).
+   *  시장(경제가 없으면 가판대)이나 상인이 없으면 아무 일 없음. 돌려주는 값: { n 판 개수, coins 판 값, cut 상인 몫, items [{ id, n }], donated [물고기] } */
+  sellStash(u) {
+    const m = this.merchantU(), place = this.economy ? this.marketB() : this.stall;
+    if (!u || !place || !m) return { n: 0, coins: 0, cut: 0, items: [], donated: [] };
+    const donated = this.donateFromStash(u), items = []; let n = 0, coins = 0;
+    for (const [id, k] of Object.entries(stashSellable(u))) { coins += stashPrice(id) * k; n += k; if (!(u.stash[id] -= k)) delete u.stash[id]; items.push({ id, n: k }); }
+    const cut = m !== u ? Math.min(coins, STASH_CUT * n) : 0;
+    if (cut) m.coins = (m.coins || 0) + cut;
+    u.coins = (u.coins || 0) + coins - cut; if (this.economy) this.bank.issued += coins;
+    if (n) this.emit("stashSale", { u, m, items, coins, cut });
+    return { n, coins, cut, items, donated };
+  }
   postB() { for (const b of this.buildings.values()) if (b.defId === "post" && this.isDone(b)) return b; return null; }
   // ---- 포장도로·만족도(2초마다 다시 셈)
   updateRoads() {
@@ -493,7 +531,8 @@ export class World {
     }
     return got;
   }
-  /** 선물 주기: 마을 가방의 물건(가구 빼고)이나 보물 물고기 하나를 건넴 → 정·재미가 오르고 취향에 따라 세 가지 반응.
+  /** 선물 주기: 내 주머니의 선물거리(가구 빼고)나 예전 저장에 남은 보물 물고기 하나를 건넴 → 정·재미가 오르고 취향에 따라 세 가지 반응.
+   *  도장 선물(ITEMS의 stampGift)이면 오르는 정이 STAMP_GIFT_BOND배.
    *  돌려주는 값: { item, tier(0 꺼림 · 1 보통 · 2 좋아함), say, bond, thanks } 또는 null(줄 수 없음) */
   giveGift(u, id) {
     const item = giftDef(id), bag = item?.kind === "fish" ? this.treasures : this.items;
@@ -502,7 +541,7 @@ export class World {
     const tier = giftTier(u.name, id), t = GIFT_TIERS[tier];
     if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + t.fun);
     emote(u, t.say, 2.4); this.emit("gift", { u, item, tier });
-    const thanks = this.addBond(u, t.bond);
+    const thanks = this.addBond(u, t.bond * (item.stampGift ? STAMP_GIFT_BOND : 1));
     return { item, tier, say: t.say, bond: u.bond, thanks };
   }
   /** 쓰다듬기: 정·재미가 조금 오름. 갈매미마다 마을 하루에 PET_DAILY번까지(실제 시계가 아니라 마을 날짜).
@@ -624,8 +663,9 @@ export class World {
     emote(u, "영차! ♪", 1.2); this.emit("tug", { u });
     return true;
   }
-  /** 낚은 것을 챙김(알림 없이): 물고기를 뽑아 도감·가방(흔하면 음식, 희귀 이상이면 보물)에 넣고, 가끔 물건도.
-   *  크기(cm)는 난수를 쓰지 않고 정해(aquarium.js) 종류별 기록을 고치고, 수족관이 있으면 처음 낚은 희귀 이상 한 마리는 보물 대신 기증.
+  /** 낚은 것을 챙김(알림 없이): 물고기를 뽑아 도감에 적고(흔하면 음식, 희귀 이상이면 낚은 갈매미의 소지품), 가끔 물건도(그 갈매미 소지품,
+   *  가구는 집이 있으면 그 집에 놓거나 창고로). 크기(cm)는 난수를 쓰지 않고 정해(aquarium.js) 종류별 기록을 고치고,
+   *  수족관이 있으면 처음 낚은 희귀 이상 한 마리는 소지품 대신 기증.
    *  돌려주는 값: { fish, item, size, record: 새 기록인지, first: 그 종류 첫 기록인지, donated, gifts: 기증했으면 받은 선물들(아니면 null) } */
   landFish(u, rnd, bonus = 1) {
     const f = J.rollFish(u, rnd, this.season, bonus); if (!this.economy) this.res.fish++;
@@ -633,10 +673,16 @@ export class World {
     const prev = this.fishRecord[f.id] || 0, record = size > prev; if (record) this.fishRecord[f.id] = size;
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     const gifts = this.donateFish(f);
-    if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else if (!gifts) this.treasures[f.id] = (this.treasures[f.id] || 0) + 1;
+    if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else if (!gifts) stashAdd(u, f.id);
     let item = null;
-    if (rnd() < J.itemChance(u) * this.fx.item) { item = J.rollItem(u, rnd, this.season, bonus); this.items[item.id] = (this.items[item.id] || 0) + 1; }
+    if (rnd() < J.itemChance(u) * this.fx.item) { item = J.rollItem(u, rnd, this.season, bonus); this.keepCatch(u, item); }
     return { fish: f, item, size, record, first: !prev, donated: !!gifts, gifts };
+  }
+  /** 낚시로 건진 물건을 그 갈매미가 챙김: 가구는 집이 있으면 그 집에 놓고(자리가 없으면 창고), 집이 없으면 들고 있다가 집을 사면 옮김. 나머지는 소지품 */
+  keepCatch(u, item) {
+    const home = item.furniture && u.home && this.buildings.get(u.home);
+    if (home) { if (!F.autoPlace(this, home, item.furniture)) { const it = F.room(home); it.stash[item.furniture] = (it.stash[item.furniture] || 0) + 1; } return; }
+    stashAdd(u, item.id);
   }
   /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌. 마을을 돌리지 않고 딱 두 가지만:
    *  자라던 밭이 익고(10분이면 어느 계절·날씨에도 다 익음), 어부가 낚싯대를 몇 번(awayCasts) 던짐. 돈·시세·시장은 그대로.
@@ -663,7 +709,7 @@ export class World {
     sell("wood", 20); sell("stone", 20); sell("iron", 10); sell("food", 30);
     for (const [id, n] of Object.entries(this.treasures)) { const f = FISH.find(f => f.id === id); if (!n || !f || this.keep[id]) continue; const gifts = this.donateFish(f); if (gifts) this.tellDonation(null, f, gifts);   // 수족관이 생기기 전에 아껴 둔 보물: 아직 기증 안 한 종류면 한 마리는 팔지 않고 기증
       const c = Math.round((n - (gifts ? 1 : 0)) * f.price * m); r.coins += c; log.sold += c; this.treasures[id] = 0; }
-    for (const [id, n] of Object.entries(this.items)) { const it = ITEMS.find(i => i.id === id); if (!n || !it || it.furniture || this.keep[id]) continue; const c = Math.round(n * it.price * m); r.coins += c; log.sold += c; this.items[id] = 0; }   // 가구·간직하는 것은 팔지 않고 모음
+    for (const [id, n] of Object.entries(this.items)) { const it = ITEMS.find(i => i.id === id); if (!n || !it || it.furniture || it.gift || this.keep[id]) continue; const c = Math.round(n * it.price * m); r.coins += c; log.sold += c; this.items[id] = 0; }   // 가구·간직하는 것·플레이어 몫 선물거리(gift)는 팔지 않음
     const building = [...this.buildings.values()].filter(b => !this.isDone(b));
     const buy = (key, want) => { while (r[key] < want) { const cost = Math.max(1, Math.round(PRICES[key] * 2 / m)); if (r.coins < cost) break; r.coins -= cost; r[key]++; log.bought += cost; } };
     if (building.length) { buy("wood", 4); buy("stone", 4); if (building.some(b => (BUILDINGS[b.defId].tier || 1) >= 3)) buy("iron", 2); }
@@ -765,7 +811,7 @@ export class World {
     if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
     this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
-    if (this.isDone(b)) this.completed(b);
+    if (this.isDone(b)) { this.completed(b); if (hits === null) this.builtNow(b); }   // ⚡ 바로 완공도 다 지은 것(불러오기·시험 받침은 hits를 넘김 → 아님)
     return { ok: true, building: b };
   }
   isDone(b) { return b.hits >= b.need; }
@@ -773,9 +819,11 @@ export class World {
     if (this.isDone(b)) return;
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
     b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
-    if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
+    if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
-  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); } }
+  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); } }
+  /** 공사가 끝나 다 지어졌을 때(망치질·finishAll·⚡ 바로 완공. 불러오기는 아님): 수족관이면 갈매미들이 아껴 둔 물고기를 기증 */
+  builtNow(b) { if (b.defId === "aquarium") this.donateStashes(); }
   /** 다 지었을 때: 계단·낚시터는 걸을 수 있게, 밭은 칸마다 밭(심고 거둠), 낚시터는 낚시 자리 */
   completed(b) {
     const def = BUILDINGS[b.defId];
@@ -850,7 +898,7 @@ export class World {
   update(dt) {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
-    this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt);
+    this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt); this.stepSparkles(dt);
     const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람
     for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt * grow) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
@@ -876,17 +924,75 @@ export class World {
     }
   }
 
+  // ---- ✨ 반짝이(sparkles.js): 하루 몇 번 생기고, 플레이어가 주우면 내 주머니로
+  /** 수명이 다했거나 그 칸을 이제 못 쓰면(그사이 건물·물) 지우고, SPARKLE_EVERY초마다 한 회차 */
+  stepSparkles(dt) {
+    for (let i = this.sparkles.length - 1; i >= 0; i--) {
+      const s = this.sparkles[i]; if ((s.t -= dt) > 0 && sparkleCellFree(this, s.x, s.z)) continue;
+      this.sparkles.splice(i, 1); this.emit("sparkleGone", s);
+    }
+    if ((this.sparkClock += dt) >= SPARKLE_EVERY) { this.sparkClock = 0; this.spawnSparkles(); }
+  }
+  /** 한 회차: 바닷가 1 + 마을 1(sparkRnd만 씀). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
+  spawnSparkles() {
+    if (this.sparkles.length >= SPARKLE_MAX) return [];
+    const made = rollSparkles(sparkleCells(this), this.sparkles, this.season, this.sparkRnd).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: SPARKLE_LIFE }));
+    for (const s of made) { this.sparkles.push(s); this.emit("sparkleSpawn", s); }
+    return made;
+  }
+  /** 반짝이 줍기: 내 주머니(world.items)에 하나 넣음. 주운 물건(ITEMS 줄)을 돌려줌, 없으면 null.
+   *  알림: sparkleGone({ ...s, picked: true }) → sparkle({ item, s }) */
+  pickSparkle(id) {
+    const i = this.sparkles.findIndex(s => s.id === id); if (i < 0) return null;
+    const s = this.sparkles[i], item = ITEMS.find(it => it.id === s.k); this.sparkles.splice(i, 1);
+    if (!item) return null;
+    this.items[item.id] = (this.items[item.id] || 0) + 1;
+    this.emit("sparkleGone", { ...s, picked: true }); this.emit("sparkle", { item, s }); return item;
+  }
+  /** 이 자리(격자 좌표, 연속값도 됨)에서 r칸 안의 가장 가까운 반짝이(칸 가운데와의 거리). 없으면 null */
+  sparkleNear(x, z, r = SPARKLE_PICK_R) {
+    let best = null, bd = r;
+    for (const s of this.sparkles) { const d = Math.hypot(s.x + 0.5 - x, s.z + 0.5 - z); if (d <= bd) { bd = d; best = s; } }
+    return best;
+  }
+
+  // ---- 예전 저장 옮기기(소지품 개편 전: 갈매미가 잡은 것이 마을 가방 world.treasures·items에 쌓였음). 난수를 쓰지 않음
+  /** 원칙: 갈매미가 잡은 것을 플레이어에게 주지 않고, 플레이어가 받은 것은 말없이 지우지 않음.
+   *  보물 물고기 → 낚시꾼(없으면 모두)에게 돌아가며 · 간직 표시 없는 물건 → 갈매미들에게(별조각은 야행성에게) · 간직한 물건·가구 → 내 가방에 그대로.
+   *  옮긴 수 { fish, items, kept }를 돌려주고 this.migrated에 적음(저장 안 함) */
+  /** 갈매미가 하나도 없어 미뤄 둔 예전 저장 옮기기: 첫 갈매미가 오면(summon·addUnitByName) 그때 옮기고, 수족관이 있으면 기증 */
+  migrateLate() { if (!this.ownershipPending) return; this.migrateOwnership(); if (!this.ownershipPending && this.aquariumB()) this.donateStashes(); }
+  migrateOwnership() {
+    const res = { fish: 0, items: 0, kept: 0 }, units = this.units;
+    this.ownershipPending = !units.length; if (!units.length) return res;      // 갈매미가 없으면 미뤄 둠(저장에 ownership 0) → 처음 부르는 갈매미 때 옮김(addUnitByName)
+    const fishers = units.filter(u => u.job === "fisher"), night = units.filter(isNocturnal);
+    const deal = (list, id, n) => { for (let k = 0; k < n; k++) stashAdd(list[k % list.length], id); };
+    for (const f of FISH) {
+      const n = Math.floor(+this.treasures[f.id] || 0); if (!(f.id in this.treasures)) continue;
+      delete this.treasures[f.id]; delete this.keep[f.id]; if (n <= 0 || !stashDef(f.id)) continue;
+      deal(fishers.length ? fishers : units, f.id, n); res.fish += n;
+    }
+    for (const it of ITEMS) {
+      const n = Math.floor(+this.items[it.id] || 0); if (n <= 0 || it.furniture || it.gift) continue;
+      if (this.keep[it.id]) { res.kept += n; continue; }
+      delete this.items[it.id]; deal(it.id === STAR_ITEM && night.length ? night : units, it.id, n); res.items += n;
+    }
+    if (res.fish + res.items) addNews(this.newsLog, this.time, { icon: "📦", text: `예전 마을 가방의 ${[res.fish ? `물고기 ${res.fish}마리` : "", res.items ? `물건 ${res.items}개` : ""].filter(Boolean).join("·")}를 갈매미들이 나눠 가졌어요. 선물은 이제 ✨ 반짝이를 주워서!`, weight: 4 });
+    this.migrated = res; return res;
+  }
+
   // ---- 저장/불러오기
   /** savedAt: 저장하는 실제 시각(ms). 월드는 기기 시계를 모르므로 화면이 넣어 줌. */
   serialize(savedAt = null) {
-    return { version: 2, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
+    return { version: 2, ownership: this.ownershipPending ? 0 : 1, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0) })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {} })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
+      sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -901,9 +1007,13 @@ export class World {
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
-      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); }                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
+      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash); }                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
     if (j.bank) Object.assign(w.bank, j.bank);                                    // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게)
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)
+    // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김). 시계가 없으면(예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
+    w.sparkles = sparklesFromSave(j.sparkles).filter(s => sparkleCellFree(w, s.x, s.z)).map(s => ({ id: w.sparkId++, ...s }));
+    if (Number.isFinite(j.sparkClock)) w.sparkClock = Math.min(SPARKLE_EVERY, Math.max(0, j.sparkClock));
+    if (!j.ownership) { w.migrateOwnership(); if (!w.ownershipPending && w.aquariumB()) w.donateStashes(); }   // 소지품 개편 전 저장: 한 번만(다시 저장하면 ownership 표시가 붙음). 수족관이 있으면 옮겨 받은 물고기를 바로 기증
     w.nextId = j.nextId; return w;
   }
 }

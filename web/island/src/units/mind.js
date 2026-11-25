@@ -103,4 +103,4 @@ export function bestFriend(u, units) {
 }
 
 export const ACTIVITY_NAME = { rest: "쉬기", wander: "산책", forage: "씨앗 찾기", visit: "친구 만나기", zoomies: "뛰어놀기", chop: "벌목", mine: "채광",
-  fish: "낚시", build: "집 짓기", enter: "집 구경", eat: "먹기", trade: "장사", farm: "밭일", swim: "헤엄", deposit: "은행에 팔기", market: "시장 보기" };
+  fish: "낚시", build: "집 짓기", enter: "집 구경", eat: "먹기", trade: "장사", farm: "밭일", swim: "헤엄", deposit: "은행에 팔기", market: "시장 보기", peddle: "소지품 팔기" };   // peddle은 라벨만(배우는 활동 목록 ACTIVITIES에는 넣지 않음: initMind가 바뀌지 않게)
