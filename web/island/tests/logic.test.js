@@ -771,7 +771,11 @@ test("눈 깊이: 겨울 눈 오는 날 쌓이고(약 80초에 가득), 맑은 �
   const w = World.create(7, seededRandom(1), { wild: true }); w.setSeason("winter"); w.setWeather("snow"); w.weather.t = 1e9;
   for (let i = 0; i < 400; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - 0.5) < 0.01, `40초 ${w.snow}`);
   for (let i = 0; i < 600; i++) w.stepSnow(0.1); assert.equal(w.snow, 1);
-  w.setWeather("clear"); w.weather.t = 1e9; for (let i = 0; i < 3000; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - 0.55) < 1e-9, "맑은 겨울은 0.55로 천천히");
+  w.setWeather("clear"); w.weather.t = 1e9; for (let i = 0; i < 3000; i++) w.stepSnow(0.1); assert.ok(Math.abs(w.snow - (1 - 300 / 1800)) < 1e-9, "맑은 겨울엔 쌓인 눈이 아주 천천히 녹음(300초에 1/6)");
+  { const c = World.create(7, seededRandom(1), { wild: true }); c.setSeason("winter"); c.setWeather("clear"); c.weather.t = 1e9; for (let i = 0; i < 3000; i++) c.stepSnow(0.1); assert.equal(c.snow, 0, "눈이 오지 않으면 겨울이라도 쌓이지 않음");
+    c.setWeather("storm"); c.weather.t = 1e9; for (let i = 0; i < 6000; i++) c.stepSnow(0.1); assert.ok(Math.abs(c.snow - 0.7) < 1e-9, "겨울 폭풍은 0.7까지");
+    c.snow = 0.9; c.stepSnow(10); assert.equal(c.snow, 0.9, "폭풍이 쌓인 눈을 녹이지 않음");
+    c.setWeather("rain"); c.weather.t = 1e9; for (let i = 0; i < 3000; i++) c.stepSnow(0.1); assert.equal(c.snow, 0, "겨울비엔 300초 안에 녹음"); }
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.ok(Math.abs(back.snow - w.snow) < 1e-9);
   w.setSeason("spring"); for (let i = 0; i < 600; i++) w.stepSnow(0.1); assert.equal(w.snow, 0, "봄엔 60초 안에 다 녹음");
 });

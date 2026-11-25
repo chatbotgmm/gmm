@@ -343,9 +343,11 @@ export class World {
   }
   /** 눈 깊이: 겨울 눈 오는 날 약 80초에 가득, 겨울 맑은 날은 0.55까지 천천히, 비·다른 계절엔 녹음 */
   stepSnow(dt) {
+    // 눈은 눈이 올 때만 쌓임(눈 1.0까지 80초, 겨울 폭풍 0.7까지 400초). 맑거나 흐린 겨울날엔 쌓인 눈이 아주 천천히 녹고(1.0이 다 녹는 데 1800초 = 마을 사흘),
+    // 겨울비엔 300초, 다른 계절엔 비 30초 · 그 밖 60초에 1.0씩 녹음
     const k = this.weather.kind, winter = this.season === "winter";
-    const goal = winter ? (k === "snow" ? 1 : k === "rain" ? 0.15 : k === "storm" ? 0.7 : 0.55) : 0;
-    const rate = goal > this.snow ? (k === "snow" ? 1 / 80 : 1 / 400) : (winter ? 1 / 300 : k === "rain" ? 1 / 30 : 1 / 60);
+    const goal = !winter ? 0 : k === "snow" ? 1 : k === "storm" ? Math.max(0.7, this.snow) : 0;
+    const rate = goal > this.snow ? (k === "snow" ? 1 / 80 : 1 / 400) : !winter ? (k === "rain" ? 1 / 30 : 1 / 60) : k === "rain" ? 1 / 300 : 1 / 1800;
     this.snow += Math.sign(goal - this.snow) * Math.min(Math.abs(goal - this.snow), rate * dt);
   }
   stepWeather(dt) { if ((this.weather.t -= dt) <= 0) this.setWeather(S.pickWeather(this.season || "autumn", this.wrnd, this.weather.kind)); }
