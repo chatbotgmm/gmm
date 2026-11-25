@@ -73,12 +73,14 @@ export class Daylight {
   lamp() {
     const lamp = this.scene.getObjectByName("lighthouseLamp"); if (!lamp) return;
     const v = 0.9 + 3.5 * this.night, m = lamp.material; m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
-    if (!this.light) { this.light = new THREE.PointLight(0xffd27a, 0, 26, 1.6); lamp.add(this.light); }
+    if (!this.light) this.light = new THREE.PointLight(0xffd27a, 0, 26, 1.6);
+    if (this.light.parent !== lamp) lamp.add(this.light);                          // 새 섬·불러오기로 등대가 새로 생기면 불빛도 새 램프로 옮김
     this.light.intensity = 30 * this.night;
     if (!this.lampHalo) {                                                          // 램프 둘레 빛 번짐(밤에 보임)
       this.lampHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffd98a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
-      this.lampHalo.scale.setScalar(4.5); this.lampHalo.renderOrder = 3; this.lampHalo.userData.noToon = true; lamp.add(this.lampHalo);
+      this.lampHalo.scale.setScalar(4.5); this.lampHalo.renderOrder = 3; this.lampHalo.userData.noToon = true;
     }
+    if (this.lampHalo.parent !== lamp) lamp.add(this.lampHalo);
     this.lampHalo.visible = this.night > 0.05; this.lampHalo.material.opacity = 0.85 * this.night;
   }
   /** 가로등: 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
