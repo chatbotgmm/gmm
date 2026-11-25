@@ -480,7 +480,10 @@
   html[data-keyhint="on"] .kbd { display: inline-block; }
   html[data-keyhint="off"] .kbd { display: none; }
   html[data-keyhint="on"]:is([data-form="portrait"], [data-form="landscape"]) :is(#confirm, #ebar) .kbd { display: none; }   /* 휴대폰 배치의 확인 막대·보조 줄엔 자리가 없음(「항상」이어도 화면 밖으로 밀리지 않게) */
+  html[data-keyhint="on"][data-form="landscape"] :is(#tools, #chips) .kbd { display: none; }   /* 가로 폰: 왼쪽 도구 줄이 화면 아래로 넘치고(130%에서 철거가 잘림) 칩 줄이 넓어져 보조 줄·미니맵을 밀어냄 */
   #confirm { max-width: calc(100vw - var(--safe-l) - var(--safe-r)); box-sizing: border-box; }
+  html[data-form="portrait"] #ebar .abtn { min-width: min(var(--hit-sm), 44px); }   /* 세로 폰 130%: ✋ ↶ ↷ 🎯 ⟲ ⟳ 여섯 칸이 줄보다 넓어 ✋가 왼쪽으로 잘리던 것 → 폭은 44px 그대로 두고 높이만 커짐 */
+  #tugBtn { min-height: max(calc(56*var(--u)), var(--hit)); }   /* 작게(75%) 해도 당기기는 44px 밑으로 안 줄어듦 */
   /* 작게 하면 누르는 칸(날씨·돈·등급)이 좁아지지 않게: 75%에서 폭 44px, 100%부터는 예전 그대로 30px(100%에선 줄에 남는 자리가 없어 넓히면 칩이 한 줄 더 생김) */
   @media (any-pointer: coarse) { #stat > button { min-width: clamp(30px, calc(44px - (var(--ui-scale) - 0.75) * 56px), 44px); } }
   button.sw2 { white-space: normal; text-align: left; }   /* 크게(130%) 한 좁은 화면에서 긴 이름은 두 줄로 */

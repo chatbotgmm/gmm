@@ -40,7 +40,8 @@ const UI_SCALE_KEY = "galmaemiman-uiscale", UI_PREFS_KEY = "galmaemiman-uiprefs"
 const UI_SCALE_RANGE = [75, 150, 130];                                           // 가장 작게 · 가장 크게 · 터치 화면에서 가장 크게(%)
 const UI_PREFS_DEFAULT = { keyhint: "auto", hand: "right", motion: "auto", vibe: "on" };   // 키 힌트 auto|on|off · 손 right|left · 움직임 auto(기기 설정)|reduce|full · 진동 on|off
 const uiCoarse = () => matchMedia("(pointer: coarse)").matches;
-const uiScaleMax = () => uiCoarse() ? UI_SCALE_RANGE[2] : UI_SCALE_RANGE[1];
+// 작은 화면은 덜 키움: 배율로 나눈 짧은 변이 300px 밑으로 가면 칩·카드·미니맵이 서로 덮음(320px 폭 130% = 246px) → 390px는 130%, 360px는 120%, 330px 미만은 100%까지
+const uiScaleMax = () => { const lim = Math.floor(Math.min(innerWidth, innerHeight) / 15) * 5; return Math.min(uiCoarse() ? UI_SCALE_RANGE[2] : UI_SCALE_RANGE[1], lim < 110 ? 100 : lim); };
 const uiScaleClamp = v => Math.max(UI_SCALE_RANGE[0], Math.min(uiScaleMax(), Math.round((Number(v) || 100) / 5) * 5));
 // 아주 큰 PC 화면(1920×1080보다 큼 · 마우스)에서는 글자가 작아 보이지 않게 저절로 키움(최대 2배, 0.05 단위). 휴대폰·보통 화면은 1
 const uiAutoScale = () => uiCoarse() ? 1 : Math.max(1, Math.min(2, Math.floor(Math.min(innerHeight / 1080, innerWidth / 1920) * 20) / 20));
@@ -224,7 +225,7 @@ export class Hud {
   /** 설정 화면의 칸을 지금 값에 맞춤 */
   drawUiPrefs() {
     const $ = id => document.getElementById(id), root = document.documentElement, max = uiScaleMax();
-    $("uiScale").value = String(this.uiScale); $("uiScaleLab").textContent = `크기: ${this.uiScale}%${this.uiScale === 100 ? " (기본)" : ""}`;
+    $("uiScale").max = String(max); $("uiScale").value = String(this.uiScale); $("uiScaleLab").textContent = `크기: ${this.uiScale}%${this.uiScale === 100 ? " (기본)" : ""}`;
     $("uiScaleDown").disabled = this.uiScale <= UI_SCALE_RANGE[0]; $("uiScaleUp").disabled = this.uiScale >= max; $("uiScaleReset").disabled = this.uiScale === 100;
     $("uiScaleNote").textContent = `75%~${max}% · 이 기기에만 기억해요(섬 저장과는 따로예요).${this.uiAuto > 1 ? ` 큰 화면이라 기본 크기를 ${Math.round(this.uiAuto * 100)}%로 맞춰 뒀어요.` : ""}`;
     for (const b of $("segKeyhint").children) { const on = b.dataset.v === root.dataset.keyhint; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
