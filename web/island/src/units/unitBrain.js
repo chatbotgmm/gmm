@@ -271,13 +271,13 @@ function startActivityInner(u, kind, world, rnd) {
       // 맡은 공사장이 있으면 그곳, 없으면 남이 안 맡은 공사장 중 많이 지어진 곳. 한 번 맡으면 100%까지 맡는다.
       let b = u.committed ? world.buildings.get(u.committed) : null;
       if (b && (world.isDone(b) || (b.busy && b.busy !== u.unitId))) { uncommit(u, world); b = null; }
-      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy && J.canBuild(u, BUILDINGS[b.defId]) && world.workSpot(b))
+      if (!b) b = [...world.buildings.values()].filter(b => !world.isDone(b) && !b.busy && J.canBuild(u, BUILDINGS[b.defId]) && world.workSpot(b) && !(u.noWay?.[b.id] > world.time))   // 방금 길이 없던 공사장은 잠깐 건너뜀(그 한 곳 때문에 다른 공사가 다 멈추지 않게)
         .sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
       if (!b) return false;
       u.committed = b.id; b.busy = u.unitId;
       if (!hasMaterials(world, b, u)) return gatherFor(u, world, b, rnd);          // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
       const spot = world.workSpot(b); if (!spot) { uncommit(u, world); return false; }   // 다리: 땅이나 다 지은 다리에 붙은 칸부터
-      if (!startPath(u, world, spot.x, spot.z)) { uncommit(u, world); return false; }
+      if (!startPath(u, world, spot.x, spot.z)) { (u.noWay ||= {})[b.id] = world.time + 60; uncommit(u, world); return false; }
       u.focus = b; u.state = US.GoBuild; return true;
     }
     case "eat": {                                                                 // 음식이 있으면 그 자리에서 먹고, 없으면 씨앗을 찾음
