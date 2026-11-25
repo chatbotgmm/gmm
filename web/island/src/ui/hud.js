@@ -155,10 +155,11 @@ export class Hud {
     yes.textContent = ok; yes.className = danger ? "danger" : "go"; no.textContent = cancel;
     const back = document.activeElement; box.hidden = false; no.focus({ preventScroll: true });
     return new Promise(res => {
-      this.askDone = v => { this.askDone = null; box.hidden = true; yes.onclick = no.onclick = box.onpointerdown = null;
+      this.askDone = v => { this.askDone = null; box.hidden = true; yes.onclick = no.onclick = box.onpointerdown = box.onclick = null;
         if (back?.isConnected && !back.closest("[hidden]")) back.focus({ preventScroll: true }); res(v); };
       yes.onclick = () => this.askDone(true); no.onclick = () => this.askDone(false);
-      box.onpointerdown = e => { if (e.target === box) this.askDone(false); };
+      // 바깥 누르기 = 취소. 누름과 뗌이 모두 바깥일 때 click에서 → 뗄 때의 click이 뒤의 갈매폰 버튼(새 섬 등)으로 새지 않게
+      let down = false; box.onpointerdown = e => { down = e.target === box; }; box.onclick = e => { if (e.target === box && down) this.askDone(false); down = false; };
     });
   }
   askCancel() { this.askDone?.(false); }
@@ -303,7 +304,7 @@ export class Hud {
     const cnt = this.phoneBtn.querySelector(".badge-count"), dot = this.phoneBtn.querySelector(".dot");
     cnt.hidden = !now.act; cnt.textContent = now.act || ""; dot.hidden = !!now.act || !(newNews || newDex);
     this.phoneBtn.setAttribute("aria-label", `갈매폰${now.act ? ` · 받을 수 있는 것 ${now.act}개` : ""}${newNews || newDex ? " · 새 소식" : ""}`);
-    const wb = this.appBtns?.wish; if (wb) { if (now.act) wb.dataset.count = now.act; else delete wb.dataset.count; }
+    const wb = this.appBtns?.wish; if (wb) for (const e of [wb, wb.firstElementChild]) { if (!e) continue; if (now.act) e.dataset.count = now.act; else delete e.dataset.count; }   // 숫자는 아이콘(span)의 ::after가 attr로 읽음
     this.appBtns?.news?.classList.toggle("new", newNews); this.appBtns?.dex?.classList.toggle("new", newDex);
   }
   /** 📱 소원 앱 맨 위 「오늘」: 오늘의 부탁(나아간 만큼 막대) · 모은 도장 · 도장 가게. 바뀐 게 없으면 다시 안 그림(가게 단추가 눌리게) */
@@ -343,7 +344,7 @@ export class Hud {
     box.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 });
     const close = () => { box.hidden = true; };
     document.getElementById("letterClose").onclick = close; document.getElementById("letterNews").onclick = () => { close(); this.openPhone(); this.openApp("news"); };
-    box.onpointerdown = e => { if (e.target === box) close(); };
+    let down = false; box.onpointerdown = e => { down = e.target === box; }; box.onclick = e => { if (e.target === box && down) close(); down = false; };   // 바깥 누르기: 뒤로 click이 새지 않게
   }
   /** 📱 관계도: 갈매미를 원 위에 놓고 친한 사이를 선으로(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로. */
   drawRelations() {
