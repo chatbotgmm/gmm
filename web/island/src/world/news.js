@@ -76,7 +76,7 @@ export function awayLetter(report, { post = false, news = [], wishes = [] } = {}
   if (ms / 3600000 > hours) lines.push(`(오래 비운 날은 ${AWAY_CAP_HOURS}시간까지만 셈해요)`);
   if (ripened) lines.push(`🌾 밭 ${ripened}칸이 다 익어서 거두기만 기다려요.`);
   if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
-  if (!ripened && !catches.length) lines.push("별일 없이 조용한 하루였어요.");
+  if (!ripened && !catches.length) lines.push("별일 없이 조용한 시간이었어요.");
   if (post) {
     for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? ` (${RARITY[c.fish.rarity]?.name ?? ""}!)` : ""}${c.item ? ` + ${c.item.name}` : ""}`);
     if (news.length) { lines.push("📰 떠나기 전 마을 소식"); for (const n of news) lines.push(`· ${n.icon} ${n.text}`); }

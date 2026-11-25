@@ -194,6 +194,7 @@ function welcomeBack(w) {
   if (!w.savedAt) return null;
   const news = newsPages(w.newsLog, 3)[0]?.heads ?? [], r = w.applyAway(Date.now() - w.savedAt); w.savedAt = null;   // 같은 저장으로 두 번 쳐 주지 않게
   if (!r) return null;
+  saveNow();                                       // 쳐 준 것을 바로 저장: 저장 전에 다시 불러와도 편지·낚은 물고기를 또 받지 않게
   const wishes = w.wishes.map(x => { const u = w.units.find(o => o.unitId === x.unitId), d = WISH_BY_ID[x.id]; return u && d ? { who: u.name, text: wishText(d, w, u, x) } : null; }).filter(Boolean);
   return awayLetter(r, { post: !!w.postB(), news, wishes });
 }
