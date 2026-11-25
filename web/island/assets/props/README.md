@@ -12,6 +12,7 @@
 | field_plot | 9,436 | tripo_convert_1547a90d… |
 | flower_box | 8,998 | flower_box_3d_model.glb |
 | palm | 9,528 | palm_tree_3d_model.glb |
+| post (우체국) | 14,388 | fantasy_house_3d_model.glb |
 | stairs_stone | 9,850 | tripo_convert_ca8a87b0… |
 | storehouse | 9,375 | stone_house_3d_model.glb |
 | street_lamp | 9,561 (+발광 마스크 256px) | tripo_convert_8a67f70c… |
@@ -25,3 +26,8 @@
 - tree_2k: 4,034면 · 2048px (보통) / tree_1k: 4,034면 · 1024px (낮음·성능 우선)
 - 텍스처를 유지한 채로는 gltfpack이 약 4,020면 아래로 줄이지 못함(이음매 보존). 그래서 낮은 단계도 4,034면
 - 계절 잎 색은 셰이더가 초록빛이 강한 곳만 바꿈(src/render/seasons.js patchTree)
+
+## 우체국(post_4k / 2k / 1k, 2026-11-25)
+원본 fantasy_house_3d_model.glb(14,388면, 4096px 텍스처 3장, EXT_meshopt_compression 압축). 은행·저장고와 같은 방식:
+meshopt 압축을 풀어 모양(정점·면·UV·노멀 값)은 그대로 두고, 노멀·금속도 텍스처는 빼고 기본색만 4096 / 2048 / 1024px(JPEG 92)로 넣음.
+압축을 푼 까닭: 게임 로더에 MeshoptDecoder가 없어도 읽히게(다른 소품 파일과 같은 형식). 정문은 원본 +x 쪽 → modelYaw −π/2.

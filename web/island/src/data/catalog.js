@@ -33,7 +33,7 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
-    id: "post", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2, iron: 1 }, tier: 1, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 3.3, asset: "assets/suburban/building-type-f.glb", roof: SKY, modelYaw: KENNEY_YAW,
+    id: "post", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2, iron: 1 }, tier: 1, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 5.1, asset: "assets/props/post_{T}.glb", modelYaw: -Math.PI / 2,   // 시계탑·날개 편지 우체국(사용자 제공, 문 +x → +z). 5칸에 꽉 차게 맞추면 높이 약 5.1 m
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
   // 자이언트 전용 집: 몸이 커서(키 약 1.4 m) 일반 집에는 못 들어가고 이 집에만 들어감. 다른 갈매미는 못 들어감.
