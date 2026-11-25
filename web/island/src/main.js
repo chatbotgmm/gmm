@@ -31,6 +31,7 @@ import { TwoFinger } from "./systems/twoFinger.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { PROP_LOD } from "./render/assets.js";
+import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
 import { Minimap } from "./ui/minimap.js";
 import { installKeys } from "./ui/keys.js";
@@ -150,7 +151,7 @@ const quality = new Quality(renderer, sun, c => {
 });
 weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); festaView.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
 function mount(w) {
-  if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
+  if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); poolFor(worldRoot).dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   water.userData.setGrid(world.grid); world.on("ground", () => { waterDirty = true; });   // 물 깊이(얕은 물빛·물거품)
@@ -361,6 +362,7 @@ function frameBody() {
   buildingViews.updateBadges(camera, innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   quality.frame(dt, now);
+  poolFor(worldRoot).sync(camera, sun);             // 묶어 그리는 나무·바위·밭 틀: 화면·그림자 범위에 든 것만 인스턴스로
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });

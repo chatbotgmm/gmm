@@ -7,6 +7,7 @@ import { modelFor, rawModel } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
 import { tintRoofs } from "./roofTint.js";
 import { terrainHeight } from "../world/terrain.js";
+import { poolFor } from "./instances.js";
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -26,6 +27,7 @@ export class BuildingViews {
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
     holder.add(model); v.model = model; v.baseY = model.scale.y;
+    if (def.field && def.prop) poolFor(this.scene).add(model);                      // 밭 틀(칸마다 같은 모델)은 묶어 그림
     if (def.id === "bench") {                                                       // 좌판 높이를 모델에서 직접 잼(앉을 때 엉덩이를 맞춤): 칸 가운데(앞쪽으로 0.12)에서 위→아래 광선
       holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.2).applyMatrix4(holder.matrixWorld);
       const hit = new THREE.Raycaster(o, new THREE.Vector3(0, -1, 0)).intersectObject(model, true)[0]; if (hit) b.seatY = hit.point.y;
@@ -213,7 +215,7 @@ export async function addModuleViews(scene, world) {
     const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
     obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
     if (def.vary) { const h = Math.abs(((x * 73856093) ^ (z * 19349663)) >>> 0) / 4294967295; obj.scale.multiplyScalar(0.85 + h * 0.4); obj.rotation.y = h * 6.283 * 7; }   // 나무: 칸마다 크기 0.85~1.25배·방향 제각각
-    obj.name = m.id; scene.add(obj); map.set(m.id, obj);
+    obj.name = m.id; scene.add(obj); map.set(m.id, obj); poolFor(scene).add(obj);   // 나무·야자수·바위: 같은 모델끼리 구역마다 묶어 그림(instances.js)
   }));
   return map;
 }

@@ -5,6 +5,7 @@ import { toWorldX, toWorldZ } from "../config.js";
 import { PROPS } from "../data/catalog.js";
 import { modelFor, rawModel } from "./assets.js";
 import { terrainHeight } from "../world/terrain.js";
+import { poolFor } from "./instances.js";
 
 export class LifeViews {
   constructor(scene, world, overlay) {
@@ -33,7 +34,7 @@ export class LifeViews {
       scene.add(g); const c = { p, g }; this.crops.push(c); this.swapCrop?.(c);
     };
     // 작물 모델(사용자 제공 당근·양배추): 받으면 싹 4개 대신 칸마다 하나(칸 위치로 번갈아)
-    const swap = c => { if (!this.cropModels || c.g.userData.model) return; c.g.clear(); const k = (c.p.x + c.p.z) % 2, src = this.cropModels[k], m = src.clone(true); m.scale.setScalar(k ? 0.6 : 0.62); c.g.add(m); c.g.userData.model = true; };
+    const swap = c => { if (!this.cropModels || c.g.userData.model) return; c.g.clear(); const k = (c.p.x + c.p.z) % 2, src = this.cropModels[k], m = src.clone(true); m.scale.setScalar(k ? 0.6 : 0.62); c.g.add(m); c.g.userData.model = true; poolFor(scene).add(m); };
     Promise.all(["assets/props/carrot_{T}.glb", "assets/props/cabbage_{T}.glb"].map(u => rawModel(u))).then(ms => { this.cropModels = ms; this.crops.forEach(swap); }).catch(() => {});
     this.swapCrop = swap;
     world.plots.forEach(addCrop);
@@ -65,7 +66,7 @@ export class LifeViews {
     if (!s && on) {
       s = await modelFor({ footprint: { w: 0.55, d: 0.55 } }, () => new THREE.Group(), PROPS.stump);
       s.position.set(toWorldX(tree.x + 0.5), terrainHeight(this.world.grid, tree.x + 0.5, tree.z + 0.5), toWorldZ(tree.z + 0.5));
-      this.scene.add(s); this.stumps.set(tree.id, s);
+      this.scene.add(s); this.stumps.set(tree.id, s); poolFor(this.scene).add(s);
     }
     if (s) s.visible = on && !tree.alive;
   }
