@@ -43,7 +43,7 @@ export const BUILDINGS = {
   },
   // 공식은행: 섬 가운데에 처음부터 있음(짓거나 철거 못 함). 갈매미가 물건을 팔면 새 돈을 찍어 주고, 산 물건은 은행 창고(마을 자재)로.
   bank: {
-    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 4.1, asset: "assets/props/bank_{T}.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·기둥 현관·동전 장식 은행(사용자 제공, 문 +x → +z)
+    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 4.3, asset: "assets/props/bank_{T}.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·기둥 현관·동전 장식 은행(사용자 제공, 문 +x → +z)
     placeholder: { wall: 0xf6efdc, roof: 0xe0b84a, roof_shape: "pyramid" }, interior: { w: 8, d: 6 },
   },
   // 목수가 짓는 시설

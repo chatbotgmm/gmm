@@ -48,7 +48,8 @@ export async function modelFor(def, makePlaceholder, asset = def.asset) {
   if (!asset) return makePlaceholder();
   try {
     const src = await load(asset), fp = def.fit || def.footprint || { w: 1, d: 1 };   // fit: 칸보다 작게 보일 것(가로등 등)
-    return normalize(src.clone(true), fp.w * CELL * 0.95, fp.d * CELL * 0.95);
+    const quarter = Math.abs(Math.sin(def.modelYaw ?? 0)) > 0.5;                  // 모델을 ±90° 돌려 놓으면(views.js) 원본 x가 칸의 d, 원본 z가 칸의 w 쪽이 됨
+    return normalize(src.clone(true), (quarter ? fp.d : fp.w) * CELL * 0.95, (quarter ? fp.w : fp.d) * CELL * 0.95);
   } catch (e) {
     console.warn(`에셋을 못 불러와 임시 도형을 씁니다: ${asset}`, e);
     return makePlaceholder();

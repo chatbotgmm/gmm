@@ -36,7 +36,7 @@ meshopt 압축을 풀어 모양(정점·면·UV·노멀 값)은 그대로 두고
 ## 은행 교체(bank_4k / 2k / 1k, 2026-11-25)
 원본 dome_house_3d_model.glb(14,834면, 4096px 텍스처 3장, EXT_meshopt_compression). 기둥 현관·동전 장식 둥근 집. 우체국과 같은 방법(압축 풀기, 면 그대로, 기본색만 4096 / 2048 / 1024px JPEG 92,
 metallic 0.1·roughness 0.8, KHR_mesh_quantization). 같은 파일 이름에 덮어씀(catalog 경로 그대로). 정문 +x → modelYaw −π/2.
-5×4칸에 맞추면 폭 3.8 m · 깊이 3.6 m · 높이 약 4.1 m(def.height 3.6 → 4.1).
+5×4칸에 맞추면 폭 4.0 m · 깊이 3.8 m · 높이 약 4.3 m(def.height 3.6 → 4.3). ±90° 돌린 모델은 칸의 w·d를 바꿔 맞춤(render/assets.js modelFor; 전에는 폭 3.8 · 깊이 3.6 · 높이 4.1 m로 작게 맞춰졌음).
 - 이전 은행(덮어쓰기 전): domed_building_3d_model.glb, 9,735면, bank_4k 2,160,744 / 2k 862,052 / 1k 478,484 bytes(커밋 47f40a9까지의 파일).
 
 ## 작은 집(house_4k / 2k / 1k, 2026-11-25)
