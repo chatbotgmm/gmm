@@ -280,7 +280,7 @@ installKeys({ hud, tools, roomView });
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
-unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray); };
+unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray, c); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
 hud.setSummon(world);

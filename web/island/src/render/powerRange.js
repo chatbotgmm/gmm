@@ -38,21 +38,32 @@ export class PowerRange {
     if (card) new MutationObserver(() => { if (card.hidden && this.sel) this.sel = null; }).observe(card, { attributes: true, attributeFilter: ["hidden"] });   // 카드가 닫히면(✕·도구 바꾸기) 범위도 지움
   }
   /** 섬에서 건물(또는 빈 땅 = null)을 눌렀을 때. main.js가 hud.houseCard 다음에 부름: 풍차면 범위를 켜고 카드에 전기 정보를 적음 */
-  tap(b, ray = null) {
-    if (!b && ray) b = this.millOnRay(ray);                                        // 땅만 집는 누르기(tools.pickPoint)는 키 큰 풍차의 몸통을 누르면 뒤쪽 땅이 잡힘 → 풍차 몸통 상자를 따로 맞춰 봄
+  tap(b, ray = null, ground = null) {
+    if (ray) b = this.pickOnRay(ray, ground, b);                                   // 풍차 몸통(실제 모양)을 눌렀는지 광선으로 다시 봄
     const c = this.card, go = c?.querySelector(".go"), mill = !!b && !!BUILDINGS[b.defId].power;
     if (go) go.hidden = mill;                                                      // 풍차 카드에는 「들어가 꾸미기」가 없음(집 카드에서는 다시 보임)
     this.sel = mill ? b : null; this.mine = mill; this.key = null; if (!mill || !c) return;
     c.querySelector(".hx").onclick = () => { c.hidden = true; }; this.fillCard(); c.hidden = false;
   }
-  /** 누른 광선이 지나는 풍차(차지한 칸 × 높이 상자) 중 가장 가까운 것 */
-  millOnRay(ray) {
-    const w = this.getWorld(), box = new THREE.Box3(), hit = new THREE.Vector3(); let best = null, bd = Infinity;
+  /** 눌린 건물 고르기(풍차용): 땅만 집는 누르기(tools.pickPoint → cell)는 키 큰 풍차의 몸통을 누르면 뒤쪽 땅(빈 땅이나 다른 건물의 칸)이 잡힘.
+   *  ① 누른 광선이 가장 먼저 맞는 건물 모델(실제 모양)이 풍차면 풍차, 다른 건물이면(풍차 앞을 가린 벽을 누른 것) 풍차가 아님
+   *  ② 맞은 모델이 없으면: 풍차 상자(차지한 칸 × 높이 — 날개 옆 빈 곳을 눌러도 되게 넉넉히)가 누른 땅보다 앞에 있으면 풍차, 아니면 땅의 칸(cell) 그대로
+   *  ground = pickPoint가 준 칸 좌표(언덕 너머의 풍차는 안 잡히게 땅까지의 거리와 견줌) */
+  pickOnRay(ray, ground, cell) {
+    const w = this.getWorld(), o = ray.origin, d = ray.direction, flat = d.x * d.x + d.z * d.z;
+    const far = (ground && flat > 1e-6 ? ((toWorldX(ground.gx) - o.x) * d.x + (toWorldZ(ground.gz) - o.z) * d.z) / flat : Infinity) + 0.05;   // 누른 땅까지의 거리(광선을 따라)
+    const rc = this.rc || (this.rc = new THREE.Raycaster()); rc.set(o, d); rc.far = far;
+    const meshes = [], walk = (n, id) => { if (!n.visible) return; id = n.userData.buildingId ?? id;
+      if (id != null && n.isMesh && !n.userData.noToon && n.material?.blending !== THREE.AdditiveBlending) { n.userData.pickId = id; meshes.push(n); } for (const k of n.children) if (k !== this.root) walk(k, id); };
+    walk(this.scene, null);
+    const first = rc.intersectObjects(meshes, false)[0];
+    if (first) { const b = w.buildings.get(first.object.userData.pickId); return b && BUILDINGS[b.defId].power ? b : cell && BUILDINGS[cell.defId].power ? null : cell; }
+    const box = new THREE.Box3(), hit = new THREE.Vector3(); let best = null, bd = far;
     for (const b of w.buildings.values()) { const def = BUILDINGS[b.defId]; if (!def.power) continue;
       const xs = b.cells.map(q => q[0]), zs = b.cells.map(q => q[1]), y = b.elevation ?? 0;
       box.min.set(toWorldX(Math.min(...xs)), y, toWorldZ(Math.min(...zs))); box.max.set(toWorldX(Math.max(...xs) + 1), y + def.height, toWorldZ(Math.max(...zs) + 1));
-      if (ray.intersectBox(box, hit)) { const d = hit.distanceToSquared(ray.origin); if (d < bd) { bd = d; best = b; } } }
-    return best;
+      if (ray.intersectBox(box, hit)) { const t = hit.distanceTo(o); if (t < bd) { bd = t; best = b; } } }
+    return best || cell;
   }
   fillCard() {
     const c = this.card, b = this.sel, w = this.getWorld(); if (!c || !b) return;
