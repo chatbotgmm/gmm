@@ -359,14 +359,14 @@ addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, inner
 // 시간 배수(테스트용): 시각·날짜·계절이 빨리 감 + 마을 진행(눈 쌓임·갈매미 하루)도 simSpeed배. 실제 시간 모드에서만 날짜가 바뀜
 const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];
 let simSpeed = 1;
-hud.onTimeMult = () => { const i = (TIME_MULTS.findIndex(m => m[0] === daylight.mult) + 1) % TIME_MULTS.length, [m, sp, l] = TIME_MULTS[i];
+hud.onTimeMult = to => { const j = TIME_MULTS.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MULTS.findIndex(m => m[0] === daylight.mult) + 1) % TIME_MULTS.length, [m, sp, l] = TIME_MULTS[i];   // to = 고른 배수(없으면 다음 값)
   if (m > 1 && daylight.mode !== "real") { daylight.mode = "real"; document.getElementById("timeMode").textContent = "시간: 실제 시간"; }
   daylight.setMult(m); simSpeed = sp; return l; };
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
-hud.onTimeMode = () => { const i = (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
+hud.onTimeMode = to => { const j = TIME_MODES.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 const STYLES = [["toon", "툰"], ["clay", "클레이"], ["basic", "기본"]];
 function applyStyle(s) { toon.setStyle(s); roomView.toon.setStyle(s); tintGround(); try { localStorage.setItem("galmaemiman-style", s); } catch { /* 무시 */ } return STYLES.find(x => x[0] === s)[1]; }
-hud.onToon = () => applyStyle(STYLES[(STYLES.findIndex(x => x[0] === toon.style) + 1) % STYLES.length][0]);   // 그림체: 툰 → 클레이 → 기본
+hud.onToon = to => applyStyle(STYLES.some(x => x[0] === to) ? to : STYLES[(STYLES.findIndex(x => x[0] === toon.style) + 1) % STYLES.length][0]);   // 그림체: 툰 → 클레이 → 기본
 { let s0 = null; try { s0 = localStorage.getItem("galmaemiman-style"); } catch { /* 무시 */ } if (s0 && s0 !== "toon" && STYLES.some(x => x[0] === s0)) document.getElementById("toonBtn").textContent = `그림체: ${applyStyle(s0)}`; }
 hud.savedLabel = () => lastSaved ? `마지막 저장 ${new Date(lastSaved).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : "아직 저장 안 함";
 hud.timeLabel = () => daylight.label(); hud.today = () => daylight.now();
@@ -374,8 +374,9 @@ hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.s
 hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")}`);
 const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];
 const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(${SEASONS[seasonOf(daylight.now())].name})`;
-hud.onSeasonMode = () => { seasonPick = SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };
+hud.onSeasonMode = to => { seasonPick = to !== undefined && SEASON_PICKS.includes(to) ? to : SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };
 hud.setSeasonLabel(seasonText());
+hud.settingNow = () => ({ season: seasonPick || "real", time: daylight.mode, mult: daylight.mult, toon: toon.style });   // 설정 고르기 칸의 ✓
 hud.onQuality = mode => { quality.set(mode); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
 hud.setQuality(quality.mode);
 requestAnimationFrame(frame);

@@ -70,15 +70,7 @@
   .dexcell .season { font-size: var(--fs-cap); color: var(--c-warm-ink); } .dexcell .season.now { font-weight: 700; color: var(--c-danger); }
   #phoneBtn { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); z-index: var(--z-context);
     width: 54px; height: 54px; border-radius: var(--r-lg); font-size: var(--fs-icon-lg); padding: 0; background: var(--c-accent); box-shadow: var(--e-2); }
-  #phoneBtn .dot { position: absolute; top: 4px; right: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--c-danger); border: 2px solid #fff; }
-  #phone { position: fixed; inset: 0; z-index: calc(var(--z-sheet) + 1); background: var(--c-scrim); display: grid; place-items: center; padding: var(--safe-sheet); }   /* 폰은 도감보다 한 칸 위(지금과 같은 순서) */
-  #phone .card { background: var(--c-surface); border-radius: var(--r-lg); width: min(420px, 100%); max-height: 84vh; max-height: 84dvh; overflow: auto; overscroll-behavior: contain; padding: 12px 14px 16px; box-sizing: border-box;
-    box-shadow: var(--e-3); }
-  #phone .head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-2); margin-bottom: 8px; } #phone .head b { font-size: var(--fs-title); } #phone .head button { min-height: var(--hit); min-width: var(--hit); }
   #pageSettings button, #pageFiles button, #summon { min-height: var(--hit); } #sfxVol { min-height: var(--hit-sm); } .row { min-height: var(--hit-sm); box-sizing: border-box; }
-  .apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-3); margin: 6px 0 10px; }
-  .apps button { display: flex; flex-direction: column; align-items: center; gap: var(--s-1); background: none; box-shadow: none; font-size: var(--fs-sm); padding: 4px; }
-  .apps button span { width: 52px; height: 52px; border-radius: var(--r-md); display: grid; place-items: center; font-size: var(--fs-icon-lg); background: var(--c-peach); box-shadow: var(--e-1); }
   .col { display: flex; flex-direction: column; gap: var(--s-2); } .col button { text-align: left; }
   .qrow { display: flex; flex-wrap: wrap; gap: var(--gap); } .qrow button { text-align: center; }
   #stats { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: var(--fs-cap); } #stats span { white-space: nowrap; }
@@ -152,7 +144,7 @@
   .emote.pop { animation: bubblePop .28s cubic-bezier(.3, 1.6, .5, 1); }
   @keyframes bubblePop { from { transform: translate(-50%, calc(-100% - 4px)) scale(calc(var(--s) * .4)); } to { transform: translate(-50%, calc(-100% - 10px)) scale(var(--s)); } }
   .zone { position: absolute; transform: translate(-50%, -50%); font-size: var(--fs-sm); padding: 2px 8px; border-radius: var(--r-sm); background: rgba(255,255,255,.75); white-space: nowrap; }
-  #zones.off { opacity: .55; } .dim { color: var(--c-ink-2); }
+  .dim { color: var(--c-ink-2); }
   .row .job { margin-right: 3px; } .row .full { margin-left: auto; font-size: var(--fs-cap); color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
   .row .full.hungry { color: var(--c-danger); font-weight: 600; } .row .full.lazy { color: #8040c0; }
   /* 소식지(갈매폰 앱) · 다녀온 사이 편지 */
@@ -165,14 +157,12 @@
   #letter .card { background: var(--c-surface); border: 2px solid #f0d9b5; border-radius: var(--r-lg); width: min(400px, 100%); max-height: 80vh; max-height: 80dvh; overflow: auto; overscroll-behavior: contain; padding: 14px 16px; box-sizing: border-box; box-shadow: var(--e-3); }
   #letter .head b { font-size: var(--fs-title); } #letterBody p { margin: 8px 0; font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; } #letterBody .sign { text-align: right; color: #7a5c38; }
   #letter .lbtns { display: flex; gap: var(--s-2); justify-content: flex-end; flex-wrap: wrap; margin-top: 10px; } #letter .lbtns button { min-height: max(40px, var(--hit)); padding: 8px 14px; }
-  #dex { position: fixed; inset: 0; z-index: var(--z-sheet); background: var(--c-scrim); display: grid; place-items: center; padding: var(--safe-sheet); }
-  #dex .card { background: var(--c-surface); border-radius: var(--r-lg); width: min(560px, 100%); max-height: 86vh; max-height: 86dvh; overflow: auto; overscroll-behavior: contain; padding: 12px 14px; box-sizing: border-box; box-shadow: var(--e-3); }
-  #dex .head { display: flex; justify-content: space-between; align-items: center; } #dexClose { min-height: var(--hit); min-width: var(--hit); } #dex h3 { font-size: var(--fs-body); margin: 12px 0 6px; }
+  #pageDex h3 { font-size: var(--fs-body); margin: 12px 0 6px; }
   .dexgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: var(--gap); }
   .dexcell { border: 2px solid; border-radius: var(--r-sm); padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-cap); background: #fff; }
   .skydex .dexcell { border-color: #9db7e8; background: linear-gradient(180deg, #f2f7ff, #fff); }
   .dexcell.unknown { opacity: .45; } .dexcell .rec { font-size: var(--fs-cap); color: #2c6e8f; }
-  .dexcell .donated { align-self: flex-start; font-size: var(--fs-cap); font-weight: 700; color: var(--c-on-accent); background: var(--c-info); border-radius: var(--r-pill); padding: 1px 7px; } #dex p { font-size: var(--fs-cap); }
+  .dexcell .donated { align-self: flex-start; font-size: var(--fs-cap); font-weight: 700; color: var(--c-on-accent); background: var(--c-info); border-radius: var(--r-pill); padding: 1px 7px; } #pageDex p { font-size: var(--fs-cap); }
   #loading { position: fixed; inset: 0; z-index: var(--z-loading); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
     background: linear-gradient(#bfe6f5, #e9f6ee 70%, #f3e7c9); color: #2b4a5a; transition: opacity .4s; }
   #loading.done { opacity: 0; pointer-events: none; }
@@ -193,7 +183,6 @@
   :where(html[data-form="portrait"]) #msg { font-size: var(--fs-cap); padding: 4px 9px; }
   :where(html[data-form="portrait"]) :is(#info, #bondBar) { width: calc(100% - var(--safe-l) - var(--safe-r) - var(--hit) - 12px); } :where(html[data-form="portrait"]) #info { padding: 6px 9px; }
   :where(html[data-form="portrait"]) #phoneBtn { width: var(--hit); height: var(--hit); font-size: var(--fs-icon); border-radius: var(--r-md); }
-  :where(html[data-form="portrait"]) .apps { grid-template-columns: repeat(4, 1fr); gap: 10px 4px; }   /* 앱이 14개라 네 줄로(작은 화면에서도 밀지 않고 한눈에) */
   :where(html[data-form="portrait"]) #minimap canvas { width: 120px; height: 120px; }
   /* 집 카드: 세로 폰은 따라가기 카드와 같은 아래 자리(📱 왼쪽), 높이는 hud.js가 도구 막대 위로 맞춤 */
   :where(html[data-form="portrait"]) #houseCard { left: var(--safe-l); right: calc(var(--safe-r) + var(--hit) + 12px); transform: none; width: auto; max-width: none; }
@@ -218,7 +207,6 @@
   :where(html[data-form="landscape"]) #sub { max-height: 30vh; max-height: 30dvh; }
   :where(html[data-form="landscape"]) #minimap canvas { width: 104px; height: 104px; }
   :where(html[data-form="landscape"]) #crossGo { bottom: var(--safe-b); }
-  :where(html[data-form="landscape"]) .apps { grid-template-columns: repeat(5, 1fr); }
   /* 가로 폰: 따라가기 카드는 조금 넓고 낮게(넘치면 카드 안에서 밀기), 선물·쓰다듬기는 카드 위가 아니라 옆에 — 위쪽 도구 막대와 겹치지 않게 */
   :where(html[data-form="landscape"]) #info { width: min(400px, 48vw); max-height: calc(100dvh - 240px); overflow-y: auto; overscroll-behavior: contain; }
   :where(html[data-form="landscape"]) #bondBar { left: calc(var(--safe-l) + min(400px, 48vw) + 8px); width: min(330px, calc(100% - min(400px, 48vw) - 110px)); }
@@ -237,10 +225,74 @@
   #ask .card { background: var(--c-surface); border-radius: var(--r-lg); width: min(380px, 100%); padding: 16px 18px 14px; box-sizing: border-box; box-shadow: var(--e-3); }
   #askTitle { display: block; font-size: var(--fs-title); } #askBody { margin: 8px 0 0; font-size: var(--fs-body); line-height: var(--lh-body); color: var(--c-ink-2); overflow-wrap: anywhere; }
   #ask .lbtns { display: flex; gap: var(--s-3); justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; } #ask .lbtns button { min-height: var(--hit); padding: 8px 16px; }
-  :is(#phone, #dex, #letter, #ask) .card:focus-visible { outline: none; box-shadow: var(--e-3); }   /* 창이 열릴 때 판 자체에 둔 포커스는 링 없이 */
+  :is(#phone, #letter, #ask) .card:focus-visible { outline: none; box-shadow: var(--e-3); }   /* 창이 열릴 때 판 자체에 둔 포커스는 링 없이 */
   #keyHelp { margin-top: 10px; } .keytbl td { vertical-align: top; } .keytbl td:first-child { white-space: nowrap; padding-right: 10px; } .keytbl td:last-child { text-align: left; }
   .keytbl kbd { display: inline-block; min-width: 1.5em; padding: 0 5px; margin: 1px 0; box-sizing: border-box; border-radius: var(--r-xs); background: #fff; text-align: center;
     box-shadow: inset 0 -2px 0 var(--c-line-strong), 0 0 0 1px var(--c-line-strong); font: 600 var(--fs-cap)/18px system-ui, sans-serif; }
+  /* ===== 4단계: 시트 껍데기(.sheet) — 세로 폰은 아래에서 올라오는 시트, 가로 폰은 오른쪽 옆 시트, 태블릿·PC는 오른쪽 패널. 어느 모양이든 뒤는 어둡게(바깥을 누르면 닫힘) ===== */
+  .sheet { position: fixed; inset: 0; z-index: var(--z-sheet); background: var(--c-scrim); display: flex; justify-content: flex-end; align-items: stretch; }
+  .sheet > .card { position: relative; display: flex; flex-direction: column; box-sizing: border-box; background: var(--c-surface); box-shadow: var(--e-3); overflow: hidden;
+    width: clamp(420px, 34vw, 560px); max-width: 100%; height: 100%; border-radius: var(--r-lg) 0 0 var(--r-lg);
+    padding: max(var(--s-3), env(safe-area-inset-top, 0px)) max(var(--s-4), env(safe-area-inset-right, 0px)) max(var(--s-3), env(safe-area-inset-bottom, 0px)) var(--s-4); }
+  .sheet .head { flex: none; display: flex; align-items: center; gap: var(--s-2); min-height: var(--hit); margin-bottom: var(--s-2); }
+  .sheet .head b { flex: 1; min-width: 0; font-size: var(--fs-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet .head button { min-height: var(--hit); min-width: var(--hit); }
+  .sheet .head .sx { font-size: var(--fs-title); padding: 0; margin-left: auto; }
+  /* 본문만 밀림 + 더 있으면 아래쪽이 살짝 흐려짐(끝까지 밀면 사라짐) */
+  .sheet .sbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; margin: 0 calc(-1 * var(--s-2)); padding: 0 var(--s-2) var(--s-2);
+    background: linear-gradient(rgba(255,250,242,0), var(--c-surface) 70%) 0 100% / 100% 28px local no-repeat, linear-gradient(rgba(40,30,10,0), rgba(40,30,10,.12)) 0 100% / 100% 14px scroll no-repeat; }
+  .sheet .sbody > .page { max-width: 40em; }
+  /* 닫기: 터치는 엄지 쪽 아래 막대, 마우스는 위 오른쪽 ✕ */
+  .sheet .sclose { flex: none; display: none; width: 100%; min-height: var(--hit); margin-top: var(--s-2); font-weight: 700; background: var(--c-surface-2); box-shadow: none; }
+  html[data-input="touch"] .sheet .sclose { display: block; }
+  html[data-input="touch"] .sheet .head .sx { display: none; }
+  :where(html[data-form="portrait"]) .sheet { align-items: flex-end; padding-top: max(var(--s-3), env(safe-area-inset-top, 0px)); box-sizing: border-box; }
+  :where(html[data-form="portrait"]) .sheet > .card { width: 100%; height: min(92dvh, 100%); border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding: var(--s-3) max(var(--s-3), env(safe-area-inset-right, 0px)) max(var(--s-3), env(safe-area-inset-bottom, 0px)) max(var(--s-3), env(safe-area-inset-left, 0px)); }
+  :where(html[data-form="portrait"]) .sheet > .card::before { content: ""; position: absolute; top: 5px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: var(--r-pill); background: var(--c-line-strong); }   /* 시트 손잡이(보기만) */
+  :where(html[data-form="landscape"]) .sheet > .card { width: min(440px, 58vw); padding-top: var(--s-2); padding-bottom: max(var(--s-2), env(safe-area-inset-bottom, 0px)); }
+  :where(html[data-form="landscape"]) .sheet .head { margin-bottom: var(--s-1); }
+  /* 갈매폰 홈: 위에 마을 한눈에(#stats) → 묶음 셋 → 맨 아래 독 4개(밀어도 늘 보임) */
+  .sheet .sbody:has(> #pageHome:not([hidden])) { scroll-padding-bottom: 104px; }   /* 키보드 이동·scrollIntoView가 아래 독 밑으로 숨지 않게 */
+  .sheet .sbody:has(> #pageSettings:not([hidden])) { scroll-padding-top: calc(var(--hit) + 16px); }   /* 위에 붙은 설정 탭 밑으로 숨지 않게 */
+  #pageHome:not([hidden]) { display: flex; flex-direction: column; min-height: 100%; }   /* 독이 시트 아래쪽(엄지 쪽)에 붙게 */
+  .apps { flex: 1 0 auto; display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-2) 0 0; }
+  .apps .dock { order: 9; position: sticky; bottom: 0; z-index: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-1); padding: var(--s-2) var(--s-1); margin: auto 0 0;
+    background: var(--c-surface-2); border-radius: var(--r-lg); box-shadow: 0 -2px 8px rgba(40,30,10,.10); }
+  :where(html[data-form="wide"], html[data-form="medium"]) .apps .dock { order: -1; position: static; margin: 0 0 var(--s-1); box-shadow: none; }   /* 마우스(엄지 제약 없음): 독을 맨 위에 */
+  .agroup h5 { margin: 0 0 var(--s-1); font-size: var(--fs-cap); font-weight: 700; color: var(--c-ink-2); letter-spacing: .02em; }
+  .agrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-1); }
+  .apps button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: var(--s-1); min-width: 0; background: none; box-shadow: none; font-size: var(--fs-sm); padding: 4px 2px; white-space: normal; line-height: var(--lh-tight); text-align: center; }
+  .apps button span { position: relative; width: 48px; height: 48px; border-radius: var(--r-md); display: grid; place-items: center; font-size: var(--fs-icon-lg); background: var(--c-peach); box-shadow: var(--e-1); }
+  .apps .dock button span { background: #fff; }
+  :where(html[data-form="landscape"]) .apps button span { width: 40px; height: 40px; font-size: var(--fs-icon); }
+  :where(html[data-form="landscape"]) .apps button { padding: 2px; }
+  :where(html[data-form="landscape"]) .apps .dock { padding: var(--s-1); }
+  #stats { padding: var(--s-2) 10px; background: var(--c-warm); border-radius: var(--r-md); }
+  /* 배지 두 가지: 빨간 숫자 = 할 수 있는 일(도장으로 가구 받기) · 주황 점 = 새 소식(열면 사라짐) */
+  .apps button[data-count] span::after { content: attr(data-count); position: absolute; top: -6px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--r-pill);
+    background: var(--c-danger); color: #fff; font: 700 var(--fs-cap)/20px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .apps button.new span::after { content: ""; position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--c-accent); box-shadow: 0 0 0 2px #fff; }
+  #phoneBtn .badge-count { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: var(--r-pill); background: var(--c-danger); color: #fff;
+    font: 700 var(--fs-cap)/22px system-ui, sans-serif; box-shadow: 0 0 0 2px #fff; pointer-events: none; }
+  #phoneBtn .dot { position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 4px var(--c-accent-strong); pointer-events: none; }
+  /* ☰ 메뉴(Esc로도 열림) */
+  #menuBtn { background: var(--c-hud); font-size: var(--fs-body); padding: 5px var(--s-2); font-weight: 700; }
+  .mlist { display: flex; flex-direction: column; gap: var(--s-2); max-width: 360px; margin: var(--s-2) auto 0; } .mlist button { min-height: var(--hit); text-align: left; padding: 10px 14px; font-size: var(--fs-body); }
+  /* 설정: 갈래 탭 + 고르기 칸(.seg). 지금 값은 테두리 + ✓로(색만으로 알리지 않음) */
+  .stabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-1); padding: var(--s-1); margin-bottom: var(--s-2); background: var(--c-surface-2); border-radius: var(--r-md); position: sticky; top: 0; z-index: 1; }
+  .stabs button { min-height: var(--hit); padding: 4px 2px; font-size: var(--fs-sm); background: transparent; box-shadow: none; white-space: nowrap; }
+  .stabs button.on { background: #fff; box-shadow: inset 0 0 0 2px var(--c-accent-strong), var(--e-1); font-weight: 700; }
+  .srow { display: flex; flex-direction: column; gap: var(--s-1); margin-top: var(--s-2); } .srow .slab { font-size: var(--fs-sm); font-weight: 600; } .srow p { margin: 0; font-size: var(--fs-cap); }
+  .seg { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+  .seg button { flex: 1 1 auto; min-height: var(--hit); padding: 6px 10px; text-align: center; font-size: var(--fs-sm); }
+  .seg button.on::before { content: "✓ "; }
+  button.sw2 { display: flex; justify-content: space-between; align-items: center; gap: var(--s-2); }
+  button.sw2::after { content: "켬"; flex: none; min-width: 44px; padding: 2px 8px; border-radius: var(--r-pill); background: var(--c-accent-strong); color: #fff; font-size: var(--fs-cap); font-weight: 700; text-align: center; }
+  button.sw2.off::after { content: "끔"; background: var(--c-surface-2); color: var(--c-ink-2); box-shadow: inset 0 0 0 1px var(--c-line-strong); }
+  .dev { margin-top: var(--s-4); border: 1px dashed var(--c-line-strong); border-radius: var(--r-md); padding: var(--s-1) 10px var(--s-2); }
+  .dev summary { cursor: pointer; min-height: var(--hit-sm); display: flex; align-items: center; gap: var(--s-2); font-weight: 700; font-size: var(--fs-sm); } .dev summary .dim { font-weight: 400; font-size: var(--fs-cap); }
+  .dev > button { width: 100%; margin-top: var(--s-2); text-align: left; } #devStats { margin-top: var(--s-2); font-size: var(--fs-cap); }
   /* ===== 디자인 토큰: 색·간격·반경·글자·그림자·층을 한곳에. 위의 규칙들은 값을 직접 쓰지 않고 여기 이름을 씀 ===== */
   :root {
     /* 배율: 나중에 JS가 --ui-auto(창 크기)·--ui-user(설정)를 넣음. 지금은 1 */
@@ -299,31 +351,51 @@
   <div id="msg" hidden></div>
 </div>
 <!-- 갈매폰 UI: 평소엔 오른쪽 위 칩(돈·마릿수)과 배고픈 갈매미 알림만, 📱를 누르면 앱 메뉴 -->
-<div id="chips"><span id="chipTime">☀️</span><button id="chipWeather" data-tip="계절·날씨 효과 보기">🍂</button><button id="chipWish" hidden></button><span id="chipMoney">🪙 0</span><button id="chipRank" data-tip="마을 등급·겨울 대비">🛖</button><button id="mapBtn" data-tip="미니맵 보이기/숨기기">🗺 지도</button><span id="chipPop">🐦 0</span><button id="alert" hidden></button></div>
+<div id="chips"><span id="chipTime">☀️</span><button id="chipWeather" data-tip="계절·날씨 효과 보기">🍂</button><button id="chipWish" hidden></button><span id="chipMoney">🪙 0</span><button id="chipRank" data-tip="마을 등급·겨울 대비">🛖</button><button id="mapBtn" data-tip="미니맵 보이기/숨기기">🗺 지도</button><button id="menuBtn" aria-label="메뉴" data-tip="메뉴: 설정·저장·도움말">☰</button><span id="chipPop">🐦 0</span><button id="alert" hidden></button></div>
 <div id="info" hidden></div>
 <button id="tugBtn" hidden>🎣 당기기!</button>
 <div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" data-tip="가방의 물건이나 보물 물고기를 선물해요">🎁 선물</button><button id="petBtn" data-tip="쓰다듬으면 조금씩 친해져요(마을 하루에 몇 번까지)">♥ 쓰다듬기</button></div></div>
-<button id="phoneBtn" aria-label="갈매폰" data-tip="갈매폰: 갈매미·은행·시장·건설·소환·도감·저장·설정">📱</button>
-<div id="phone" hidden>
+<button id="phoneBtn" aria-label="갈매폰" data-tip="갈매폰: 소원·갈매미·소식지·도감과 마을 앱">📱<span class="badge-count" hidden></span><span class="dot" hidden></span></button>
+<div id="phone" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="phoneTitle">
   <div class="card">
-    <div class="head"><button id="phoneBack" hidden>‹ 뒤로</button><b id="phoneTitle">📱 갈매폰</b><button id="phoneClose">닫기</button></div>
-    <div id="pageHome" class="page"><div class="apps">
-      <button data-app="gulls"><span>🐦</span>갈매미</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button>
-      <button data-app="build"><span>🏠</span>건설</button><button data-app="summon"><span>🥚</span>소환</button><button data-app="dex"><span>📖</span>도감</button>
-      <button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button><button data-app="wish"><span>💭</span>소원</button><button data-app="town"><span>🏅</span>마을</button><button data-app="decor"><span>🛋</span>꾸미기</button><button data-app="rel"><span>💞</span>관계도</button><button data-app="news"><span>📰</span>소식지</button>
-    </div><div id="stats" class="dim"></div></div>
+    <div class="head"><button id="phoneBack" class="ghost" hidden>‹ 뒤로</button><b id="phoneTitle">📱 갈매폰</b><button id="phoneClose" class="ghost sx" aria-label="닫기">✕</button></div>
+    <div class="sbody">
+    <div id="pageHome" class="page"><div id="stats" class="dim"></div><div class="apps">
+      <div class="dock" aria-label="자주 쓰는 앱"><button data-app="wish"><span>💭</span>소원·부탁</button><button data-app="gulls"><span>🐦</span>갈매미</button><button data-app="news"><span>📰</span>소식지</button><button data-app="dex"><span>📖</span>도감</button></div>
+      <section class="agroup"><h5>🐦 주민</h5><div class="agrid"><button data-app="rel"><span>💞</span>관계도</button><button data-app="summon"><span>🥚</span>소환</button><button data-app="decor"><span>🛋</span>꾸미기</button></div></section>
+      <section class="agroup"><h5>🏘 마을 살림</h5><div class="agrid"><button data-app="town"><span>🏅</span>마을</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button><button data-app="build" hidden><span>🏠</span>건설</button></div></section>
+      <section class="agroup"><h5>⚙ 갈매폰</h5><div class="agrid"><button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button></div></section>
+    </div></div>
+    <div id="pageMenu" class="page" hidden><div class="mlist"><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="home">📱 갈매폰 열기</button></div></div>
+    <div id="pageDex" class="page" hidden><div id="dexBody"></div></div>
     <div id="pageGulls" class="page" hidden><div id="units"></div></div>
     <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
     <div id="pageMarket" class="page" hidden><div id="marketBody"></div></div>
     <div id="pageSummon" class="page" hidden><p class="dim">아직 마을에 없는 갈매미 하나가 무작위로 와요.</p><button id="summon" class="go">🥚 소환</button><div id="summonLast" class="dim"></div></div>
     <div id="pageFiles" class="page" hidden><p class="dim">이 브라우저에 1분마다, 그리고 화면을 닫거나 다른 앱으로 갈 때 자동으로 저장돼요. 다시 열면 이어서 해요.</p><p id="saveInfo" class="dim"></p><div class="col"><button id="save">💾 지금 저장</button><button id="load">📂 마지막 저장 불러오기</button><button id="reset" class="danger">🏝 새 섬(지금 섬은 사라져요)</button></div></div>
-    <div id="pageSettings" class="page" hidden><div class="col"><h4>그래픽</h4><div id="quality" class="qrow"></div><div id="qualityNote" class="dim"></div><h4>소리</h4><div class="qrow"><button id="sfxBtn">소리: 켬</button><input id="sfxVol" type="range" min="0" max="100" value="70" aria-label="소리 크기"></div><p class="dim" style="margin:2px 0 0">효과음: Kenney "RPG sounds"(CC0) + 물·종·천둥·빗소리는 직접 합성</p><h4>그 밖에</h4><button id="zones">구역 이름 보이기</button><button id="seasonMode" data-tip="실제 날짜 · 봄 · 여름 · 가을 · 겨울">계절: 실제 날짜</button><button id="timeMode" data-tip="실제 시간(기기 시계) · 낮 고정 · 빠르게">시간: 실제 시간</button><button id="timeMult" data-tip="테스트용: 시각·날짜·계절을 빨리 감(×1 · ×60 · ×1440 · ×86400). 마을 진행도 2~8배">시간 배수: ×1</button><button id="toonBtn" data-tip="툰(단계 명암) · 클레이(점토 느낌) · 기본(부드러운 명암)">그림체: 툰</button><button id="dexBtn" hidden>도감</button><h4>조작</h4><button id="keysBtn">⌨️ 단축키 보기</button></div></div>
+    <div id="pageSettings" class="page" hidden>
+      <div class="stabs" role="tablist" aria-label="설정 갈래"><button data-stab="screen" role="tab">🖼 화면</button><button data-stab="sound" role="tab">🔊 소리</button><button data-stab="game" role="tab">🌤 게임</button><button data-stab="keys" role="tab">⌨️ 조작</button></div>
+      <div class="spanel col" data-stab="screen"><h4>그래픽</h4><div id="quality" class="qrow"></div><div id="qualityNote" class="dim"></div>
+        <div class="srow"><span id="toonBtn" class="slab">그림체: 툰</span><div class="seg" id="segToon" data-set="toon"><button data-v="toon">툰</button><button data-v="clay">클레이</button><button data-v="basic">기본</button></div></div>
+        <h4>보이기</h4><button id="zones" class="sw2" aria-pressed="true">구역 이름 보이기</button></div>
+      <div class="spanel col" data-stab="sound" hidden><div class="qrow"><button id="sfxBtn">소리: 켬</button><input id="sfxVol" type="range" min="0" max="100" value="70" aria-label="소리 크기"></div><p class="dim" style="margin:2px 0 0">효과음: Kenney "RPG sounds"(CC0) + 물·종·천둥·빗소리는 직접 합성</p></div>
+      <div class="spanel col" data-stab="game" hidden>
+        <div class="srow"><span id="seasonMode" class="slab">계절: 실제 날짜</span><div class="seg" id="segSeason" data-set="season"><button data-v="real">실제 날짜</button><button data-v="spring">봄</button><button data-v="summer">여름</button><button data-v="autumn">가을</button><button data-v="winter">겨울</button></div></div>
+        <div class="srow"><span id="timeMode" class="slab">시간: 실제 시간</span><div class="seg" id="segTime" data-set="time"><button data-v="real">실제 시간</button><button data-v="noon">낮 고정</button><button data-v="fast">빠르게</button></div></div>
+        <details class="dev"><summary>🛠 개발자 <span class="dim">시험할 때만</span></summary>
+          <div class="srow"><span id="timeMult" class="slab">시간 배수: ×1</span><div class="seg" id="segMult" data-set="mult"><button data-v="1">×1</button><button data-v="60">×60</button><button data-v="1440">×1440</button><button data-v="86400">×86400</button></div><p class="dim">시각·날짜·계절을 빨리 감아요. 마을 진행도 2~8배가 돼요.</p></div>
+          <button id="instantBtn" data-tip="켜면 놓자마자 완공, 끄면 갈매미가 나무 1·돌 1씩 들고 와서 망치질로 지어요">⚡ 바로 완공: 끔</button>
+          <div id="devStats" class="dim"></div></details></div>
+      <div class="spanel col" data-stab="keys" hidden><p class="dim">키보드가 있으면 단축키로도 할 수 있어요.</p><button id="keysBtn">⌨️ 단축키 보기</button><button id="dexBtn" hidden>도감</button></div>
+    </div>
     <div id="pageDecor" class="page" hidden><div id="decorBody"></div></div>
     <div id="pageTown" class="page" hidden><div id="townBody"></div></div>
     <div id="pageWish" class="page" hidden><div id="dailyBody"></div><div id="wishBody"></div></div>
     <div id="pageRel" class="page" hidden><div id="relBody"></div></div>
     <div id="pageNews" class="page" hidden><div id="newsBody"></div></div>
     <div id="pageHelp" class="page" hidden><div id="help">화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 카메라 높이(낮추기·올리기) · W·A·S·D(방향키) 옮기기, Shift = 빠르게<br>도구 중: 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 돌리기 · ✋ 화면 이동 · R 건물 돌리기 · [ ] 붓 크기 · Esc 끄기<br>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 두 손가락 위아래로 끌기 = 기울이기 · 벌리기 = 확대<br>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)<br>경제: 🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼·광부는 원자재를 🐚 시장의 상인에게 팔고, 상인은 가공(목재·석재·철괴)해서 은행에 팔아 돈을 벌어요. 번 돈으로 농부·어부에게서 음식을 사고, 시장에서 집을 사요. 돈이 없으면 물물교환해요. 값은 쌓인 양에 따라 오르내려요.<br>계절·날씨: 계절은 기기 날짜를 따라요(봄 밭 빨리 · 가을 수확 +1 · 겨울 밭 느리고 배고픔·음식 값↑). 비는 밭·낚시에 좋고, 폭풍엔 낚시를 못 해요.<br>💭 소원: 갈매미가 바라는 걸 들어주면 기뻐하고 축하금을 받아요.<br>📋 오늘의 부탁: 📱 소원 맨 위에 날마다(기기 날짜) 부탁 3개가 와요. 모두 들어주면 도장 하나를 받고, 도장은 같은 화면의 🏪 도장 가게에서 한정 가구로 바꿔요. 날짜가 바뀌면 새 부탁으로 바뀌어요.<br>🏅 마을 등급: 갈매미·집·시설·소원이 늘면 등급이 올라 새 건물(카페·잡화점·우체국·큰 집)이 열려요.<br>🗺 넓은 지도: 본섬 둘레에 숲섬·바위섬·들판섬(가까움, 🪚 목수가 다리를 놓으면 걸어감)과 야자섬·조개섬(멀어서 선착장 두 곳을 지으면 배를 타고 감)이 있어요. 다리는 물 칸을 두 번 눌러 줄로 정해요.<br>✏️ 땅 고치기(휴대폰): 🖌 바닥 칠하기·⛰ 높이에서 모양 붓 / 〰 길(두 칸을 누르면 걸어가는 길을 따라) / ▭ 네모(두 모서리), 🎯 십자선(화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함), ↶ 되돌리기 ↷ 다시하기(Ctrl+Z), 🎚 단 맞추기(문지른 곳을 정한 높이로).<br>❄️ 눈: 겨울에 눈이 오면 점점 쌓이고(지붕·나무·바위 위에도) 봄·비에 녹아요. 눈과 모래 위엔 발자국이 남았다 사라져요.<br>🗺 미니맵: 오른쪽 위 🗺 지도 버튼으로 켜고 끔. 누르거나 끌면 그곳으로 화면이 가요(흰 점 = 갈매미, 노란 점 = 배 타는 중, 주황 네모 = 지금 보는 곳).<br>🌷 장식·⚡ 전기: 벤치·화단·분수·눈사람(겨울)이 집 근처 6칸 안에 있으면 만족도 +2씩(최대 +10). 풍차 발전소 둘레 18칸의 집은 밤에 창이 밝고 만족도 +8. ☕ 카페가 가까우면 +5, 카페에 가면 재미·친구가 차올라요. ✉ 우체국이 있으면 소원이 더 자주 오고 축하금이 두 배.<br>🌙 하루: 해가 지면 갈매미들은 집(없으면 그 자리)에 가서 자고, 야행성(그림자·불씨)은 밤에 일하고 낮에 자요. 일하면 피로도가 쌓이고 벤치·침대에서 쉬거나 자면 풀려요.<br>🔧 스스로 고치기: 만족도가 75 아래인 갈매미는 스스로 집 앞 마당을 문 높이로 고르고(땅 높이·낮추기, 고른 마당 +5), 시장·은행까지 돌길을 깔고(돌 1개로 3칸), 벤치·화단 공사를 주문해요.<br>🛣 포장도로: 🖌 바닥 칠하기로 돌길·나무 데크를 깔아 집과 🐚 시장·🏦 은행을 이으면 그 집 갈매미 만족도가 올라요(각 +15). 포장도로 위에선 20% 빨리 걷고, 만족도가 높으면 일도 조금 빨라요. 흙길은 포장이 아니에요.<br>🛋 집 꾸미기: 집을 누르거나 📱 → 🛋 꾸미기에서 들어가 가구를 놓아요(누르기 = 고르기·놓기, 끌기 = 방 돌리기, R = 돌리기). 집주인은 돈이 모이면 잡화점에서 가구를 사 와요.<br>❄️ 겨울 대비: 🏚 저장고를 지으면 남는 음식이 쌓이고 겨울에 배고픈 갈매미를 먹여요. 📖 도감엔 계절 한정 물고기·물건이 있어요.</div><div id="keyHelp"></div></div>
+    </div>
+    <button id="phoneCloseBar" class="sclose">✕ 닫기</button>
   </div>
 </div>
 <div id="confirm" hidden><button id="cfBuild" class="go">🔨 건설</button><button id="cfRot">↻ 돌리기</button><button id="cfCancel">✕ 취소</button></div>
@@ -340,7 +412,6 @@
 <div id="houseCard" hidden><b></b><span class="dim"></span><button class="go">🛋 들어가 꾸미기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
 <div id="letter" hidden><div class="card"><div class="head"><b id="letterTitle">💌 다녀온 사이에</b></div><div id="letterBody"></div><div class="lbtns"><button id="letterNews">📰 소식지 보기</button><button id="letterClose" class="go">고마워요!</button></div></div></div>
 <div id="ask" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle"><div class="card"><b id="askTitle"></b><p id="askBody"></p><div class="lbtns"><button id="askNo" class="ghost">취소</button><button id="askYes" class="go">확인</button></div></div></div>
-<div id="dex" hidden><div class="card"><div class="head"><b>도감 · 가방</b><button id="dexClose">닫기</button></div><div id="dexBody"></div></div></div>
 <div id="loading"><div class="gull">🐦</div><div class="title">갈매미맨 마을</div><div class="track"><div id="loadBar"></div></div><div id="loadText">불러오는 중…</div></div>
 
 <script type="importmap">

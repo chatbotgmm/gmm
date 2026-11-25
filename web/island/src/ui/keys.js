@@ -20,12 +20,12 @@ export const KEY_LIST = [
 const KEY_KEEP_LIST = [
   ["W A S D · 방향키", "화면 옮기기 (Shift = 빠르게)"], ["Q / E", "카메라 낮추기 · 올리기"], ["Space + 끌기", "화면 돌리기 · 입질(❗) 때는 🎣 당기기"],
   ["R", "건물·가구 돌리기"], ["Enter", "정한 자리에 건설"], ["[ ]", "붓 크기"], ["Ctrl+Z", "되돌리기"], ["Ctrl+Shift+Z · Ctrl+Y", "다시하기"],
-  ["Esc", "한 단계씩 닫기(창 → 페이지 → 카드 → 도구 끄기)"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기 (Enter·Space로 누르기)"],
+  ["Esc", "한 단계씩 닫기(창 → 페이지 → 카드 → 도구 끄기) · 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기 (Enter·Space로 누르기)"],
 ];
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
 const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"],
-  ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#dexClose", "Esc"], ["#letterClose", "Esc"]];
-const KEY_OVERLAYS = ["ask", "letter", "phone", "dex"];                     // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 > 도감)
+  ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"]];
+const KEY_OVERLAYS = ["ask", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
 const KEY_CONTROL_SEL = "button, a[href], summary, select, [role=button]";
 
 /** main.js가 한 번 부름. hud·tools·roomView는 읽기만 하고, 동작은 기존 버튼·메서드를 그대로 부름 */
@@ -42,7 +42,7 @@ export function installKeys({ hud, tools, roomView }) {
   const kbdOf = el => el?.dataset?.kbd || "";
   // 칩·도구 막대는 글자가 바뀌어 힌트를 못 붙이는 곳 → 툴팁에 키를 적음
   const tipDefault = (sel, t) => { const b = document.querySelector(sel); if (b && !b.dataset.tip && !b.title) b.dataset.tip = t; };
-  tipDefault("#chipWish", "갈매미의 소원 · 오늘의 부탁 (J)"); tipDefault("#phoneBtn", "갈매폰: 갈매미·은행·시장·소환·도감·저장·설정");
+  tipDefault("#chipWish", "갈매미의 소원 · 오늘의 부탁 (J)"); tipDefault("#phoneBtn", "갈매폰: 소원·갈매미·소식지·도감과 마을 앱");
   for (const [sel] of KEY_HINTS.slice(0, 5)) { const b = document.querySelector(sel); if (b) b.dataset.tip = b.getAttribute("aria-label") || ""; }   // 도구 버튼: 이름 (숫자)
 
   // ---- 열린 창
@@ -61,14 +61,13 @@ export function installKeys({ hud, tools, roomView }) {
     if (!tip.hidden) { hideTip(); return true; }                                // ② 툴팁
     if (ov?.id === "ask") { hud.askCancel?.(); return true; }                    // ③ 확인창 = 취소
     if (ov?.id === "letter") { const c = $("letterClose"); if (c?.onclick) c.click(); else ov.hidden = true; return true; }   // ③ 편지
-    if (ov?.id === "phone") { if (hud.app != null) hud.openApp(null); else hud.closePhone(); return true; }   // ④ 앱 페이지 → 폰 홈 → ⑤ 닫기
-    if (ov?.id === "dex") { hud.showDex(false); return true; }
+    if (ov?.id === "phone") { hud.phoneBackStep(); return true; }               // ④ 앱 페이지 → 폰 홈(메뉴에서 왔으면 메뉴) → ⑤ 닫기
     if (roomView?.isOpen) return false;                                         // ⑦·① 방: 고른 가구 취소 → 나가기(room.js)
     if (tools.plan || tools.mode !== "view") return false;                      // ① 정한 자리 취소 → 도구 끄기(tools.js)
     if (hud.giftPick && !hud.giftPick.hidden) { hud.giftPick.hidden = true; return true; }   // ⑥ 선물 고르는 판
     const hc = $("houseCard"); if (hc && !hc.hidden) { hc.hidden = true; return true; }       // ⑥ 집 카드
     if (hud.follow) { hud.onUnitClick?.(hud.follow); return true; }                           // ⑥ 따라가기 카드(따라가기 그만)
-    return false;                                                               // ⑧ 메뉴는 아직 없음
+    hud.openMenu(); return true;                                                // ⑧ 닫을 게 없으면 ☰ 메뉴
   };
   /** 단축키 하나. 처리했으면 true */
   const shortcut = (e, ov) => {
@@ -76,7 +75,6 @@ export function installKeys({ hud, tools, roomView }) {
     const k = KEY_LIST.find(x => x.code.includes(e.code)); if (!k) return false;
     if (ov && !(ov.id === "phone" && (k.app || k.key === "P"))) return false;    // 창이 떠 있으면 갈매폰 안에서 앱 바꾸기·닫기만
     if (k.sel) { const b = document.querySelector(k.sel); if (!b || b.disabled || b.hidden) return false; if (k.key === "P" && ov) hud.closePhone(); else b.click(); return true; }
-    if (k.app === "dex") { hud.closePhone(); hud.showDex(true); return true; }
     if (ov && hud.app === k.app) { hud.closePhone(); return true; }             // 같은 키를 한 번 더 = 닫기
     if (!ov) hud.openPhone(); hud.openApp(k.app); return true;
   };
@@ -137,6 +135,6 @@ export function installKeys({ hud, tools, roomView }) {
     `<tr><td>${kb("1~5")}</td><td>도구 바꾸기(둘러보기 · 칠하기 · 높이 · 짓기 · 철거)</td></tr>` +
     KEY_LIST.slice(5).map(k => `<tr><td>${kb(k.key)}${k.code.includes("F1") ? ` · ${kb("F1")}` : ""}</td><td>${k.what}</td></tr>`).join("") +
     KEY_KEEP_LIST.map(([k, v]) => `<tr><td>${kb(k)}</td><td>${v}</td></tr>`).join("") + `</table>` +
-    `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰·도감·편지가 열려 있는 동안은 뒤의 화면이 키에 움직이지 않아요.</p>`;
+    `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰(도감·메뉴 포함)·편지가 열려 있는 동안은 뒤의 화면이 키에 움직이지 않아요.</p>`;
   const kbtn = $("keysBtn"); if (kbtn) kbtn.onclick = () => { hud.openApp("help"); box?.scrollIntoView({ block: "start" }); };
 }
