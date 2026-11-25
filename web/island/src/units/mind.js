@@ -16,6 +16,11 @@ export function initMind(u, rnd) {
   u.friends = {};                                                   // 다른 갈매미 id → 호감(-5~10)
   u.activity = null;
 }
+// 쉬기는 피곤할 때만: 기력이 REST_BELOW 아래로 내려가야 쉬기를 고를 수 있고(낮을수록 자주), TIRED 아래면 바로 쉼. 한 번 쉬면 REST_UNTIL까지 차면 일어남.
+// 쉬기로 고른 쉼은 그냥 서 있을 때(+0.6/초)보다 빨리 참: 서서 +REST_GAIN, 벤치 +BENCH_GAIN(초당, 더해지는 값).
+export const REST_BELOW = 50, TIRED = 30, REST_UNTIL = 80, REST_GAIN = 1.4, BENCH_GAIN = 2.4;
+/** 일 사이 숨 고르기(초): 일을 마치거나 끊긴 뒤 다음 일을 고르기 전의 짧은 멈춤. 예전 1~4초 → 0.3~1초 */
+export const pauseSecs = rnd => 0.3 + rnd() * 0.7;
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 
 /** 매 프레임 욕구 변화: 시간이 지나면 줄고, 하는 일에 따라 찬다. */
@@ -31,8 +36,8 @@ export function tickNeeds(u, dt, state, inside) {
 /** 욕구가 급할수록 그 욕구를 채우는 활동의 비중을 키움(지친 갈매미는 일을 덜 함). */
 export function needMult(u, kind) {
   const n = u.needs; if (!n) return 1;
-  if (kind === "rest") return 1 + (100 - n.energy) / 25;
-  if (kind === "enter") return 1 + (100 - n.energy) / 50 + (100 - n.social) / 50;
+  if (kind === "rest") return n.energy >= REST_BELOW ? 0 : 1 + (REST_BELOW - n.energy) / 5;   // 안 피곤하면 쉬기를 고르지 않음
+  if (kind === "enter") return 0.4 + (100 - n.energy) / 50 + (100 - n.social) / 50;          // 집 구경(화면에서 사라짐)은 지치거나 친구가 그리울 때 주로
   if (kind === "visit") return 1 + (100 - n.social) / 22;
   if (kind === "zoomies" || kind === "wander" || kind === "swim") return 1 + (100 - n.fun) / 30;
   if (WORK.has(kind)) return clamp(n.energy / 60, 0.25, 1.3);
