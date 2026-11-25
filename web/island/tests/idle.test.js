@@ -6,7 +6,7 @@ import { seededRandom } from "../src/util.js";
 import * as M from "../src/units/mind.js";
 import * as J from "../src/world/jobs.js";
 
-const village = (seed, names) => { const w = World.create(seed, seededRandom(seed * 31 + 1), { wild: true }); for (const n of names) w.addUnitByName(n); w.isNight = false; return w; };
+const village = (seed, names) => { const w = World.create(seed, seededRandom(seed * 31 + 1), { wild: true, firstGull: true }); for (const n of names) w.addUnitByName(n); w.isNight = false; return w; };
 const WORK = ["GoChop", "Chop", "GoMine", "Mine", "GoFish", "Fish", "GoBuild", "Build", "GoFarm", "Farm"];
 
 test("쉬기 비중: 기력 50 이상이면 0(안 고름), 그 아래로 내려갈수록 커짐 · 일 사이 숨 고르기는 0.3~1초", () => {
@@ -93,7 +93,7 @@ test("음식 사러 가는 길: 파는 갈매미가 동작 중(밭일·낚시 �
 
 test("피곤하면(기력 30 아래) 동네 고치기를 새로 시작하지 않고 먼저 쉼: 만족도가 낮아도 길 깔기는 쉬고 나서", async () => {
   const { setIdle } = await import("../src/units/unitBrain.js");
-  const w = World.create(7, seededRandom(5), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
+  const w = World.create(7, seededRandom(5), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const hq = spot("house", c.x + 12, c.z + 10), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", c.x + 2, c.z + 14); w.placeBuilding("market", mq[0], mq[1], 0);
   const u = w.units.find(o => o.name === "불씨"); u.home = h.id; h.owner = u.unitId; u.inv.stone = 0; w.res.stone = 10; u.coins = 0;
@@ -110,7 +110,7 @@ test("피곤하면(기력 30 아래) 동네 고치기를 새로 시작하지 않
 
 test("피곤하면(기력 30 아래) 심부름을 새로 시작하지 않고 먼저 쉼: 가공품을 든 상인도 은행은 쉬고 나서", async () => {
   const { setIdle } = await import("../src/units/unitBrain.js");
-  const w = World.create(7, seededRandom(5), { wild: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금"); w.isNight = false;   // 시장을 지으려면 목수가 있어야 함
+  const w = World.create(7, seededRandom(5), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("황금"); w.isNight = false;   // 시장을 지으려면 목수가 있어야 함
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const mq = spot("market", c.x + 2, c.z + 14); w.placeBuilding("market", mq[0], mq[1], 0);
   const u = w.units.find(o => o.name === "황금"); assert.equal(u.job, "merchant"); assert.ok(w.economy && w.bankB());
