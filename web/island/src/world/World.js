@@ -288,12 +288,13 @@ export class World {
   }
   /** 밀린 품삯 갚기: 갈매미 순서대로 금고가 허락하는 만큼(나눠 갚기). 다 갚고 금고가 차면 바닥 사태가 끝남 */
   settleOwed() {
-    const bk = this.bank;
+    const bk = this.bank; let paid = 0;
     for (const u of this.units) {
-      const n = Math.min(u.wageOwed || 0, Math.floor(bk.vault)); if (!(n > 0)) continue;
+      const n = Math.min(u.wageOwed || 0, Math.floor(bk.vault)); if (!(n > 0)) continue; paid += n;
       bk.vault -= n; bk.wages += n; bk.owed -= n; this.led("wages", n); u.coins = (u.coins || 0) + n; u.wageOwed -= n;
       if (!u.insideBuildingId) emote(u, `밀린 품삯 받았다! 🪙${n}`, 2); this.emit("wagePaid", { u, n });
     }
+    if (paid) this.checkLow();                                                     // 밀린 품삯을 갚아 30 아래로 내려가도 알림
     if (bk.need && (bk.vault >= bk.need || !this.units.some(u => u.loanRefused))) { bk.need = 0; for (const u of this.units) u.loanRefused = false; }   // 거절한 대출만큼 차면 다시 빌려줄 수 있음
     if (bk.short && bk.owed <= 0 && bk.vault >= BK.VAULT_LOW) { bk.short = 0; this.emit("vaultOk", { vault: Math.floor(bk.vault) }); }
   }

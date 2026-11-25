@@ -252,3 +252,9 @@ test("대출 거절 ≠ 바닥 사태: 금고가 넉넉하면 비싼 집 하나 
   w2.deposit(5); assert.equal(w2.bank.short, 0, "밀린 품삯 없고 30 → 사태 끝"); assert.equal(m2.loanRefused, true, "38까지는 아직 거절");
   w2.deposit(8); assert.equal(m2.loanRefused, false);
 });
+
+test("밀린 품삯을 갚아 금고가 30 아래로 내려가도 '얼마 안 남음' 알림(검토 회귀)", () => {
+  const { w, boss } = town(0); const seen = []; w.on("vaultLow", e => seen.push(e.vault));
+  w.bank.low = 0; boss.wageOwed = 50; w.bank.owed = 50;
+  w.deposit(45); assert.equal(w.bank.vault, 0); assert.equal(boss.wageOwed, 5); assert.deepEqual(seen, [0]); assert.equal(w.bank.low, 1);
+});
