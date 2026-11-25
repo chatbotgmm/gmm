@@ -87,11 +87,24 @@ export class Daylight {
     for (const l of this.lampLights || []) l.parent?.remove(l);
     this.lampLights = Array.from({ length: k }, () => { const l = new THREE.PointLight(0xffc27a, 0, 15, 1); l.castShadow = false; this.scene.add(l); return l; });
   }
+  /** 건물 등불(집·우체국·카페·잡화점 문 옆 등): 유리(발광 마스크, tools/glow_mask.py)가 가로등과 같은 세기로 밤에 빛나고 등불마다 작은 빛 번짐.
+   *  전기와 상관없이 켜짐(기름 등불). 짓는 중(모델이 아래에서 솟는 동안 — 세로로 눌려 있음)에는 끔. 실제 빛은 안 씀 */
+  lantern(o, m, src, n, glow) {
+    const ws = o.getWorldScale(new THREE.Vector3()), on = ws.y > ws.x * 0.97, v = on ? glow : 0;
+    m.emissiveIntensity = v; src.emissiveIntensity = v;
+    if (!o.userData.halo) o.userData.halo = (src.userData.lanterns || []).map(([x, y, z, size]) => {   // 처음 한 번: glb 재질 extras에 적힌 등불 자리
+      const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
+      h.position.set(x, y, z); h.scale.setScalar(Math.max(0.7, size * ws.x * 5) / ws.x); h.userData.noToon = true; h.raycast = () => {}; o.add(h); return h;
+    });
+    for (const h of o.userData.halo) { h.visible = on && n > 0.05; h.material.opacity = 0.55 * n; }
+  }
   streetLamps() {
     const n = this.night ?? 0, glow = 0.15 + 2.2 * n, lamps = [];
     this.scene.traverse(o => {
       if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.05; o.material.opacity = 0.75 * n; return; }   // 전기 들어온 집 창가 불빛
-      if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m; if (src.name !== "lampBody") return;
+      if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m;
+      if (src.name === "lanternGlow") return this.lantern(o, m, src, n, glow);
+      if (src.name !== "lampBody") return;
       m.emissiveIntensity = glow; src.emissiveIntensity = glow;
       if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
         o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;

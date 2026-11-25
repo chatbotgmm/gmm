@@ -7,16 +7,16 @@
 |---|---|---|
 | bank (공식은행) | 14,834 | dome_house_3d_model.glb (2026-11-25 교체, 아래) |
 | bench | 9,070 | wooden_bench_3d_model.glb |
-| cafe (카페) | 14,246 | coffee_shop_3d_model.glb (2026-11-25, 아래) |
+| cafe (카페) | 14,246 (+등불 발광 마스크 512px, 등불 2) | coffee_shop_3d_model.glb (2026-11-25, 아래) |
 | cabbage | 9,234 | tripo_convert_037c8b53… |
 | carrot | 9,910 | tripo_convert_b251bc0d… |
 | cottage (2층집) | 14,304 | 2층집.glb (2026-11-25, 아래) |
 | field_plot | 9,436 | tripo_convert_1547a90d… |
 | flower_box | 8,998 | flower_box_3d_model.glb |
-| house (작은 집) | 14,646 | round_cottage_3d_model.glb |
+| house (작은 집) | 14,646 (+등불 발광 마스크 512px, 등불 1) | round_cottage_3d_model.glb |
 | palm | 9,528 | palm_tree_3d_model.glb |
-| post (우체국) | 14,388 | fantasy_house_3d_model.glb |
-| shop (잡화점) | 14,420 | fantasy_house_3d_model.glb (da8af4be…, 우체국과 다른 파일 · 2026-11-25, 아래) |
+| post (우체국) | 14,388 (+등불 발광 마스크 512px, 등불 1) | fantasy_house_3d_model.glb |
+| shop (잡화점) | 14,420 (+등불 발광 마스크 512px, 등불 1) | fantasy_house_3d_model.glb (da8af4be…, 우체국과 다른 파일 · 2026-11-25, 아래) |
 | stairs_stone | 9,850 | tripo_convert_ca8a87b0… |
 | storehouse | 9,375 | stone_house_3d_model.glb |
 | street_lamp | 9,561 (+발광 마스크 256px) | tripo_convert_8a67f70c… |
@@ -63,3 +63,17 @@ Kenney building-type-d·b와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/
 - 카페: 원본 0.65 × 0.80 × 1.0(x·높이·z). 5×3칸에 꽉 채우면 높이 약 3.5 m → fit { w: 4, d: 2.55 }로 폭 3.74 m · 깊이 2.42 m · 높이 3.00 m(def.height 2.55 → 3.0). 빈자리: 양옆 0.63 m씩, 앞뒤 0.29 m씩.
 - 잡화점: 원본 0.71 × 0.82 × 1.0. 5×3칸에 꽉 채우면 높이 약 3.3 m → fit { w: 4, d: 2.75 }로 폭 3.68 m · 깊이 2.61 m · 높이 3.02 m(def.height 2.55 → 3.0). 빈자리: 양옆 0.66 m씩, 앞뒤 0.19 m씩.
   (fit의 d가 크기를 정함 — 깊이 = d × 0.95. w 4는 걸리지 않는 넉넉한 값)
+
+## 건물 등불 발광(house · post · cafe · shop, 2026-11-25)
+문 옆에 달린 등불 유리가 밤에 빛나게, 가로등(street_lamp)과 같은 방식으로 glb 안에 발광 마스크(emissiveTexture)를 넣음 — `tools/glow_mask.py`.
+- 마스크: 512px 회색 PNG 한 장을 4k · 2k · 1k 세 파일에 똑같이(파일마다 +1.0~1.7 KB). 재질 이름 `lanternGlow`, emissiveFactor는 가로등과 같은 따뜻한 색,
+  재질 extras.lanterns에 등불 중심·크기(빛 번짐 스프라이트 자리)
+- 고른 것: 등불 중심(모델 좌표)에서 반지름 안에 있는 밝은 노란 유리 텍셀만. 금빛 지붕 장식·창틀·벽에 그려진 불빛 얼룩은 거리로 빠짐. **창문은 넣지 않음**(등불만)
+- 등불 수: 작은 집 1 · 우체국 1 · 잡화점 1 · 카페 2. 2층집(cottage) · 은행(bank) · 저장고(storehouse)는 모델에 등불이 없어 그대로
+- 다시 만들기(값은 등불 중심 x,y,z,반지름):
+  - `python3 tools/glow_mask.py house 0.3789,-0.2874,-0.1731,0.048`
+  - `python3 tools/glow_mask.py post 0.3797,-0.2963,-0.1703,0.055`
+  - `python3 tools/glow_mask.py shop 0.3291,-0.1975,-0.2534,0.055`
+  - `python3 tools/glow_mask.py cafe 0.2498,-0.2361,0.1053,0.03 0.2536,-0.2368,-0.1048,0.03 --pane 0.62,0.76,0.72,0.82` (카페는 옆 유리가 어두운 노랑으로 그려져 문턱을 낮춤)
+- 그리기: src/render/daylight.js `lantern()` — 세기는 가로등과 같이 0.15 + 2.2 × 밤(낮에는 거의 안 보이고 밤에 빛남), 전기와 상관없이 켜짐, 짓는 중에는 꺼짐.
+  실제 빛은 쓰지 않고 등불마다 더하기 색 스프라이트 하나. 건물마다 따로 켜고 끄게 재질만 복사(src/render/assets.js, 텍스처는 같이 씀)
