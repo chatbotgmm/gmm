@@ -1526,3 +1526,40 @@ test("도장 가게·저장: 도장으로 한정 가구를 사고, 날짜·나�
   assert.deepEqual(D.stampBoughtFromSave({ [cheap.id]: 2, pearl: 4, [dear.id]: -1 }), { [cheap.id]: 2 });
   j.stamps = -4; assert.equal(World.fromJSON(j, seededRandom(3)).stamps, 0);
 });
+
+test("여덟 가지 함께: 친구·소식지·찌 당기기·수족관·선물·하늘·축제·오늘의 부탁을 한 마을에서 겪고 저장 → 불러와도 그대로(등급 점수 같고, 도장·답례·기증·축제를 또 받지 않음)", async () => {
+  const { FISH } = await import("../src/data/catalog.js"); const { friendStage, affinity } = await import("../src/units/mind.js");
+  const { w, spots } = festTown(); w.addUnitByName("목수"); w.rank = 3; w.festKey = "2026-autumn"; w.winterYear = 2026; w.setSeason("autumn"); w.setDay("2026-11-25");
+  const c = w.center; let aq = null; for (let x = Math.floor(c.x) - 14; x < c.x + 14 && !aq; x++) for (let z = Math.floor(c.z) - 14; z < c.z + 14 && !aq; z++) if (w.check("aquarium", x, z, 0).ok) aq = w.placeBuilding("aquarium", x, z, 0).building;
+  assert.ok(aq && w.aquariumB(), "수족관");
+  const [a, b] = w.units, fisher = w.units.find(u => u.job === "fisher"), seen = {}; for (const ev of ["friendship", "donate", "gift", "bondStage", "sky", "festival", "festivalEnd", "dailyDone", "tug"]) w.on(ev, () => { seen[ev] = (seen[ev] || 0) + 1; });
+  w.befriend(a, b, 99); assert.equal(friendStage(affinity(a, b)), 2, "단짝");
+  const rare = FISH.find(f => f.rarity === "rare" && !f.season); assert.deepEqual(w.donateFish(rare), []); w.tellDonation(fisher, rare, []);
+  w.treasures[rare.id] = 2; w.daily = { key: "2026-11-25", reqs: [{ id: "gift", icon: "🎁", text: "선물", need: 1, have: 0 }, { id: "pet", icon: "♥", text: "쓰다듬기", need: 3, have: 0 }, { id: "deco", icon: "🏮", text: "장식", need: 1, have: 0 }], stamped: false };
+  for (let i = 0; i < 4; i++) assert.ok(w.giveGift(a, rare.id) || i >= 2, "보물 두 마리를 선물"); a.bond = 4.5; for (let i = 0; i < 3; i++) assert.equal(w.pet(a).ok, true);
+  assert.equal(a.bondGifts, 1, "아는 사이 답례 한 번"); assert.equal(seen.bondStage, 1);
+  fisher.state = UnitState.Fish; fisher.fishT = 1; fisher.bite = true; assert.equal(w.tugFloat(fisher), true); fisher.state = UnitState.Idle; fisher.fishT = undefined; fisher.bite = fisher.tugged = false;
+  assert.equal(w.startSky("rainbow", true), true); assert.ok(w.fx.item > 1);
+  w.stepFestival(1.1); assert.ok(w.wishes.some(x => x.id === "festival"));
+  for (let i = 0; i < 4; i++) w.placeBuilding(i % 2 ? "festLantern" : "bunting", ...spots[i], 0);
+  for (let i = 0; i < 40 && !w.festival; i++) w.update(0.1);
+  assert.ok(w.festival, "새 장식 넷으로 축제가 열림"); assert.equal(seen.festival, 1);
+  assert.equal(w.daily.stamped, true, "선물·쓰다듬기·장식을 모두 들어줌"); assert.equal(w.stamps, 1); assert.equal(seen.dailyDone, 3);
+  const texts = w.newsLog.map(e => e.text); assert.equal(new Set(texts).size, texts.length, "같은 소식이 두 번 실리지 않음");
+  for (const word of ["단짝", "기증", "아는 사이", "무지개", "축제"]) assert.ok(texts.some(t => t.includes(word)), `소식지에 ${word}`);
+  // 저장 → 불러오기: 그대로 이어지고, 이미 받은 것은 또 받지 않음
+  w.updateRoads(); for (const u of w.units) u.full = 80;
+  const j = JSON.parse(JSON.stringify(w.serialize(123))), w2 = World.fromJSON(j, seededRandom(3)); w2.festKey = w.festKey; w2.winterYear = 2026; w2.setSeason("autumn");
+  for (const u of w2.units) { u.full = 80; u.needs = { ...w.units.find(o => o.name === u.name).needs }; } w2.updateRoads();
+  assert.equal(w2.setDay("2026-11-25"), false); assert.deepEqual(w2.daily, w.daily); assert.equal(w2.stamps, 1);
+  assert.deepEqual(w2.score().parts, w.score().parts, "등급 점수의 모든 줄이 같음");
+  assert.deepEqual(w2.donated, w.donated); assert.deepEqual(w2.skySeen, w.skySeen); assert.deepEqual(w2.newsLog, w.newsLog); assert.deepEqual(w2.festival, w.festival); assert.equal(w2.wishDone, w.wishDone);
+  const a2 = w2.units.find(u => u.name === a.name), b2 = w2.units.find(u => u.name === b.name), seen2 = {}; for (const ev of ["friendship", "donate", "bondStage", "festival", "dailyDone", "wish"]) w2.on(ev, () => { seen2[ev] = (seen2[ev] || 0) + 1; });
+  assert.equal(friendStage(affinity(a2, b2)), 2); assert.equal(a2.bond, a.bond); assert.equal(w2.pet(a2).ok, false, "오늘 쓰다듬기는 다 씀");
+  w2.befriend(a2, b2, 1); w2.addBond(a2, 0.1); assert.equal(w2.donateFish(rare), null, "같은 종류는 다시 기증하지 않음");
+  w2.placeBuilding("bunting", ...spots[4], 0); for (let i = 0; i < 30; i++) w2.update(0.1);
+  assert.deepEqual(seen2, {}, "불러온 뒤 같은 일을 또 알리지 않음(단짝·답례·축제 소원·도장)"); assert.equal(w2.stamps, 1);
+  for (let i = 0; i < 1900 && w2.festival; i++) w2.update(0.1);
+  assert.equal(w2.festival, null); assert.equal(w2.festivals["2026-autumn"], true); assert.equal(w2.items.festAutumn, 1, "기념 가구 하나");
+  for (let i = 0; i < 30; i++) w2.update(0.1); assert.ok(!w2.wishes.some(x => x.id === "festival"), "이번 계절 축제 소원은 다시 안 생김");
+});
