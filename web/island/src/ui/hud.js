@@ -47,10 +47,14 @@ export class Hud {
     for (const ev of ["pointerup", "pointercancel"]) crossGo.addEventListener(ev, () => tools.crossPress(false));
     const bar = document.getElementById("tools"), sub = document.getElementById("sub");
     this.setForm();
-    // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]
-    const modes = [["view", "👀", "둘러보기", "둘러보기"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"]];
-    this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn("", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
+    // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]. 건설 모드에서만 보이고, 맨 앞 ✓ 완료(view)를 누르면 평소 화면으로
+    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"]];
+    this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn(m === "view" ? "done" : "", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : null); return b; });
+    this.modeBtns[0].setAttribute("aria-label", "완료 — 건설 모드 끝내기");
+    // 🔨 건설: 평소 화면의 유일한 건설 입구. 마지막에 쓴 건설 도구로 들어감(처음엔 건물 짓기)
+    this.lastEdit = "build";
+    document.getElementById("editBtn").onclick = () => this.modeBtns.find(b => b.dataset.mode === this.lastEdit)?.click();
     this.sub = sub;
     // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 돌리고 옮김(도구는 잠시 멈춤)
     this.handBtn = this.toolBtn("hand", "✋", "화면 이동", "이동"); this.handBtn.dataset.tip = "켜면 드래그로 화면을 돌리고 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 드래그해도 돼요";
@@ -60,9 +64,7 @@ export class Hud {
     // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
     const cf = document.getElementById("confirm"), cfBuild = document.getElementById("cfBuild");
     tools.onPlan = (on, ok) => {
-      cf.hidden = !on; cfBuild.disabled = !ok; if (!on) return;
-      const top = document.getElementById("top").getBoundingClientRect();           // 휴대폰은 도구 막대가 아래 → 그 바로 위에 띄움
-      cf.style.bottom = top.top > innerHeight / 2 ? `${innerHeight - top.top + 8}px` : "";
+      cf.hidden = !on; cfBuild.disabled = !ok;                                       // 자리: CSS(--dock-b, 세로 폰은 아래 도구 막대 바로 위)
     };
     cfBuild.onclick = () => tools.confirmBuild();
     document.getElementById("cfRot").onclick = () => tools.rotate();
@@ -94,6 +96,9 @@ export class Hud {
       if (!await this.confirm({ title: "🏝 새 섬을 만들까요?", body: "지금 섬과 갈매미들은 사라지고, 자동 저장도 새 섬으로 바뀌어요. 되돌릴 수 없어요.", ok: "새 섬 만들기", danger: true })) return;
       onReset(); this.closePhone(); };
     this.list = document.getElementById("units"); this.stats = document.getElementById("stats"); this.msg = document.getElementById("msg");
+    // 알림: 버튼 안내(바로 바꿈) + 차례로 보여 주는 알림(최대 3개 대기) · 지난 알림 30개(이번에 켠 동안만, 저장 안 함)
+    this.toastQ = []; this.toastCur = null; this.noteLog = [];
+    document.getElementById("logOpen").onclick = () => this.openApp("log", "news");
     // ---- 갈매폰: 📱 → 홈(맨 아래 독 4개 + 묶음 셋), 같은 시트에 ☰ 메뉴·도감
     this.phone = document.getElementById("phone"); this.phoneBtn = document.getElementById("phoneBtn");
     this.phoneBtn.onclick = () => this.openPhone();
@@ -114,6 +119,7 @@ export class Hud {
     document.getElementById("menuBtn").onclick = () => this.openMenu();
     document.getElementById("pageMenu").onclick = e => { const g = e.target.closest?.("[data-go]")?.dataset.go; if (!g) return;
       if (g === "close") this.closePhone(); else if (g === "home") this.openApp(null); else this.openApp(g, "menu"); };
+    this.watchSizes();
     // 설정 갈래 탭 + 고르기 칸(누른 값으로 바로: main.js 콜백에 목표 값을 넘김)
     this.setTab = "screen";
     for (const t of document.querySelectorAll(".stabs [data-stab]")) t.onclick = () => this.showSetTab(t.dataset.stab);
@@ -125,10 +131,11 @@ export class Hud {
     this.chipMoney = document.getElementById("chipMoney"); this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
     this.chipWeather = document.getElementById("chipWeather"); this.chipWeather.onclick = () => this.onWeatherInfo?.();
     document.getElementById("chipRank").onclick = () => { this.openPhone(); this.openApp("town"); };
+    this.chipMoney.onclick = () => { this.openPhone(); this.openApp("bank"); };       // 돈 → 🏦 은행
     this.wishBtn = document.getElementById("chipWish"); this.wishBtn.onclick = () => { this.openPhone(); this.openApp("wish"); };
     this.seasonBtn = document.getElementById("seasonMode");                       // 이제 라벨(고르기는 옆 #segSeason)
-    addEventListener("resize", () => { this.setForm(); this.layout(); });
-    this.setWorld(world); this.showMode("view"); this.layout();
+    addEventListener("resize", () => this.setForm());
+    this.setWorld(world); this.showMode("view");
   }
   /** 도구 막대 버튼 하나: 아이콘 + 이름(휴대폰은 짧은 이름). 읽어 주기는 언제나 원래 이름 */
   toolBtn(cls, icon, label, short) {
@@ -145,7 +152,6 @@ export class Hud {
     const w = this.world, owner = w.units.find(u => u.unitId === b.owner);
     c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
     c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
-    this.layout();
   }
   /** 확인창(브라우저 confirm 대신): 취소에 먼저 포커스, Esc·바깥 누르기 = 취소. 결과는 Promise<boolean> */
   confirm({ title, body = "", ok = "확인", cancel = "취소", danger = false } = {}) {
@@ -189,10 +195,10 @@ export class Hud {
   closePhone() { if (!this.phone.hidden) this.sfx?.play("phoneClose", { vol: 0.5 }); this.phone.hidden = true; this.app = null; this.appFrom = null; }
   /** ☰ 메뉴(같은 시트를 씀) */
   openMenu() { if (this.phone.hidden) { this.phone.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 }); } this.openApp("menu"); }
-  /** ‹ 뒤로 · Esc 한 단계: 앱 → (메뉴에서 왔으면 메뉴, 아니면 홈) → 닫기 */
+  /** ‹ 뒤로 · Esc 한 단계: 앱 → (메뉴·소식지에서 왔으면 그곳, 아니면 홈) → 닫기 */
   phoneBackStep() {
     if (this.app == null || this.app === "menu") this.closePhone();
-    else this.openApp(this.appFrom === "menu" ? "menu" : null);
+    else this.openApp(this.appFrom || null);
   }
   initSound() {
     const b = document.getElementById("sfxBtn"), v = document.getElementById("sfxVol"), s = this.sfx, label = () => { b.textContent = `소리: ${s.on ? "켬" : "끔"}`; };
@@ -201,8 +207,8 @@ export class Hud {
   openApp(app, from = null) {
     if (app !== this.app && this.sbody) this.sbody.scrollTop = 0;                    // 다른 페이지로 가면 맨 위부터
     this.app = app; this.appFrom = app == null || app === "menu" ? null : from;
-    const pages = { null: "pageHome", menu: "pageMenu", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews", dex: "pageDex" };
-    const titles = { null: "📱 갈매폰", menu: "☰ 메뉴", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지", dex: "📖 도감 · 가방" };
+    const pages = { null: "pageHome", menu: "pageMenu", log: "pageLog", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews", dex: "pageDex" };
+    const titles = { null: "📱 갈매폰", menu: "☰ 메뉴", log: "🔔 지난 알림", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지", dex: "📖 도감 · 가방" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null || app === "menu";
@@ -211,13 +217,16 @@ export class Hud {
     if (this.seen && (app === "news" || app === "dex")) this.seen[app] = this.badgeNow()[app];   // 열면 점 배지 해제
     this.refreshApp(); this.drawBadges();
   }
-  /** 휴대폰: 도구 막대가 아래에 있으면 📱·따라가기 카드·집 카드·칠하기 버튼을 그 위로 */
-  layout() {
-    const top = document.getElementById("top").getBoundingClientRect(), low = top.top > innerHeight / 2, b = low ? `${innerHeight - top.top + 10}px` : "";
-    this.phoneBtn.style.bottom = b; this.info.style.bottom = b;
-    const hc = document.getElementById("houseCard"); if (hc.style.bottom !== b) hc.style.bottom = b;
-    const cg = document.getElementById("crossGo"), cgB = low ? `${innerHeight - top.top + 10}px` : ""; if (cg.style.bottom !== cgB) cg.style.bottom = cgB;
-    const mm = document.getElementById("minimap"); if (mm) mm.style.bottom = low ? `${innerHeight - top.top + 74}px` : "";   // 미니맵은 📱 위
+  /** 화면 구역의 크기를 CSS 변수로: 도구 막대(--dock-h) · 칩 묶음(--chips-h/-w) · 따라가기 카드(--info-h).
+   *  크기가 바뀔 때만 ResizeObserver가 알려 줌(매 프레임 재지 않음) → 📱·카드·집 카드·확인 막대·당기기·미니맵·알림 자리는 CSS가 맞춤 */
+  watchSizes() {
+    const root = document.documentElement, top = document.getElementById("top"), chips = document.getElementById("chips");
+    const put = (k, v) => { const px = `${Math.round(v)}px`; if (root.style.getPropertyValue(k) !== px) root.style.setProperty(k, px); };
+    const measure = () => { const t = top.getBoundingClientRect(), c = chips.getBoundingClientRect(), i = this.info.getBoundingClientRect();
+      put("--dock-h", t.height); put("--chips-h", c.height); put("--chips-w", c.width); put("--info-h", i.height); };
+    if (typeof ResizeObserver === "function") { const ro = new ResizeObserver(measure); for (const e of [top, chips, this.info]) ro.observe(e); }
+    else addEventListener("resize", measure);
+    measure();
   }
   refreshApp() {
     const w = this.world;
@@ -278,6 +287,8 @@ export class Hud {
       this.drawRelations();
     } else if (this.app === "news") {
       this.drawNews();
+    } else if (this.app === "log") {
+      this.drawLog();
     } else if (this.app === "files") {
       document.getElementById("saveInfo").textContent = this.savedLabel?.() || "";
     } else if (this.app === "summon") {
@@ -403,6 +414,8 @@ export class Hud {
   }
   showMode(mode, arg) {
     document.getElementById("houseCard").hidden = true;                             // 도구를 바꾸면 집 카드는 닫음
+    const dm = mode === "view" ? "browse" : "edit"; if (document.body.dataset.mode !== dm) document.body.dataset.mode = dm;   // 평소(browse) · 건설 모드(edit): 배치는 CSS가
+    if (mode !== "view") this.lastEdit = mode;
     this.modeBtns.forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
     this.handBtn.hidden = mode === "view"; if (mode === "view" && this.tools.hand) this.tools.setHand(false);
     this.sub.innerHTML = ""; this.sub.hidden = !["paint", "build", "height"].includes(mode);
@@ -447,17 +460,14 @@ export class Hud {
   /** 🎣 당기기! 버튼: 따라가기 카드 바로 위에 붙여서 보여 줌(입질 동안만). 매 프레임 불러도 바뀔 때만 손댐 */
   showTug(on, secs = 1.5) {
     const b = this.tugBtn; if (b.hidden === !on) return;
-    if (on) b.style.setProperty("--tug", `${Math.max(0.1, secs).toFixed(2)}s`);   // 줄어드는 줄은 실제로 남은 시간만큼
-    if (on) b.style.bottom = `${Math.round(innerHeight - (this.info.hidden ? innerHeight - 60 : this.info.getBoundingClientRect().top) + 8)}px`;
+    if (on) b.style.setProperty("--tug", `${Math.max(0.1, secs).toFixed(2)}s`);   // 줄어드는 줄은 실제로 남은 시간만큼(자리는 CSS: 카드 바로 위)
     b.hidden = !on;
   }
   /** 🎁 선물·♥ 쓰다듬기 버튼: 따라가는 갈매미가 있을 때 카드 바로 위에(당기기 버튼이 떠 있는 동안은 비켜 줌). 매 프레임 불러도 바뀔 때만 손댐 */
   showBond(u) {
     const on = !!u && this.tugBtn.hidden, bar = this.bondBar;
     if (!on || u !== this.bondU) this.giftPick.hidden = true;                       // 다른 갈매미로 바꾸면 고르는 판은 닫음
-    this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!on) return;
-    const ir = this.info.getBoundingClientRect(), bottom = `${Math.round(this.form === "landscape" ? innerHeight - ir.bottom : innerHeight - ir.top + 6)}px`;   // 가로 폰은 카드 옆(아래 끝 맞춤)
-    if (bar.style.bottom !== bottom) bar.style.bottom = bottom;
+    this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!on) return;      // 자리는 CSS(카드 바로 위, 가로 폰은 카드 옆)
     const left = petsLeft(u, newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
     if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
     if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
@@ -516,7 +526,45 @@ export class Hud {
     body.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
-  status(text) { this.msg.textContent = text; this.msg.hidden = !text; clearTimeout(this.msgT); if (text) this.msgT = setTimeout(() => { this.msg.hidden = true; }, 6000); }   // 알림은 6초 뒤 사라짐
+  /** 알림 한 줄. status(글) = 버튼·도구 안내: 바로 바꿔 보여 줌(빈 글이면 안내만 지움 — 도구를 바꿀 때 낡은 안내가 남지 않게).
+   *  status(글, { kind, queue: true }) = 마을 소식: 보이는 것을 덮지 않고 차례로(대기 최대 3개, 같은 글이 이어지면 ×2로 묶음), 지난 알림에 남김.
+   *  kind: info(파랑) · good(초록) · warn(주황) · error(빨강) — 왼쪽 색 띠(색만으로 알리지 않게 글 앞에 이모지가 붙어 옴) */
+  status(text, opt) {
+    const kind = opt?.kind || "info";
+    if (opt?.queue) return this.notify(text, kind);
+    if (!text) { if (this.toastCur && !this.toastCur.q) this.toastEnd(); return; }
+    if (opt?.kind === "warn" || opt?.kind === "error") this.logNote(text, kind);
+    if (this.toastCur?.q) this.toastQ.unshift(this.toastCur);                     // 보이던 소식은 맨 앞으로 되돌려 안내 다음에 다시
+    while (this.toastQ.length > 3) this.toastQ.pop();
+    this.toastShow({ text, kind, q: false, n: 1 }, 6000);
+  }
+  notify(text, kind = "info") {
+    if (!text) return; this.logNote(text, kind);
+    const same = [this.toastCur, this.toastQ[this.toastQ.length - 1]].find(x => x?.q && x.text === text);
+    if (same) { same.n++; if (same === this.toastCur) this.toastShow(same, this.toastMs(same)); return; }   // 같은 소식이 이어지면 ×2, ×3
+    this.toastQ.push({ text, kind, q: true, n: 1 }); while (this.toastQ.length > 3) this.toastQ.shift();   // 너무 밀리면 오래된 것부터 버림(지난 알림엔 남음)
+    if (!this.toastCur) this.toastNext();
+  }
+  toastMs(it) { return it.text.length > 40 ? 6500 : 4500; }
+  toastShow(it, ms) {
+    this.toastCur = it; const t = it.text + (it.n > 1 ? ` ×${it.n}` : "");
+    if (this.msg.textContent !== t) this.msg.textContent = t; this.msg.dataset.kind = it.kind; this.msg.hidden = false;
+    clearTimeout(this.msgT); this.msgT = setTimeout(() => this.toastEnd(), ms);
+  }
+  toastEnd() { clearTimeout(this.msgT); this.toastCur = null; this.msg.hidden = true; if (this.toastQ.length) this.msgT = setTimeout(() => this.toastNext(), 220); }   // 잠깐 비웠다가 다음 것
+  toastNext() { const it = this.toastQ.shift(); if (it) this.toastShow(it, this.toastMs(it)); }
+  logNote(text, kind) {
+    this.noteLog.unshift({ text, kind, at: Date.now() }); if (this.noteLog.length > 30) this.noteLog.length = 30;
+    if (!this.phone.hidden && this.app === "log") this.drawLog();
+  }
+  /** 🔔 지난 알림(새 것부터) */
+  drawLog() {
+    const body = document.getElementById("logBody"), key = `${this.noteLog.length}|${this.noteLog[0]?.at}|${this.noteLog[0]?.text}`;
+    if (key === this.logKey && body.firstChild) return; this.logKey = key;
+    const tm = at => new Date(at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    body.innerHTML = this.noteLog.length ? this.noteLog.map(n => `<li data-kind="${n.kind}"><time>${tm(n.at)}</time><span>${escHtml(n.text)}</span></li>`).join("")
+      : `<li class="dim">아직 지난 알림이 없어요. 마을에서 일이 생기면 여기에 쌓여요.</li>`;
+  }
   update(chunkInfo) {
     const w = this.world, inside = w.units.filter(u => u.insideBuildingId).length;
     const building = [...w.buildings.values()].filter(b => b.hits < b.need).length;
@@ -525,10 +573,10 @@ export class Hud {
       (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🐚 ${w.res.coins}</span>`);
     this.chunkInfo = chunkInfo;                                                       // 삼각형·fps는 설정 → 🛠 개발자(#devStats)에서
     this.drawBadges();
-    this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`; this.chipMoney.dataset.tip = "갈매미들이 가진 돈 합계";
+    this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`;
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
-    const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주
-    this.chipPop.textContent = small ? `🐦${w.units.length} ${face}${sat.toFixed(0)} ${mood}${avg.toFixed(0)}` : `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";
+    const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주(세로 폰은 포만감도 뺌 — 배고프면 알림 칩이 따로 뜸)
+    this.chipPop.textContent = small ? `🐦${w.units.length} ${face}${sat.toFixed(0)}${this.form === "portrait" ? "" : ` ${mood}${avg.toFixed(0)}`}` : `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";
     document.getElementById("chipRank").textContent = small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
     const mb = document.getElementById("mapBtn"), mt = small ? "🗺" : "🗺 지도";       // 글자만 바꿈(키 힌트 칸은 그대로)
     if (mb.firstChild?.nodeType === 3) { if (mb.firstChild.nodeValue !== mt) mb.firstChild.nodeValue = mt; } else mb.prepend(mt);
@@ -539,7 +587,6 @@ export class Hud {
     const hungry = w.units.filter(u => (u.full ?? 80) < J.HUNGRY).sort((a, b) => a.full - b.full)[0];
     this.hungry = hungry; this.alertBtn.hidden = !hungry; if (hungry) this.alertBtn.textContent = `😣 ${hungry.name} 배고파요`;
     if (!this.phone.hidden && this.app && this.app !== "gulls" && this.app !== "dex" && this.app !== "menu") this.refreshApp();
-    this.layout();                                                                   // 도구 막대 높이가 바뀌어도 📱·카드가 그 위에
     w.units.forEach((u, i) => { if (!this.rows[i]) return; const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
       this.rows[i].querySelector(".act").textContent = b ? (u.useFurni ? `🏠 ${FURNITURE[u.useFurni.id].useLabel}` : `${BUILDINGS[b.defId].name} 안`) : STATE_LABEL[u.state] || u.state;
       this.rows[i].querySelector(".coins").textContent = w.economy ? `🪙${u.coins || 0}${u.home ? " 🏠" : ""}` : "";

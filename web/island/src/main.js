@@ -160,22 +160,22 @@ function mount(w) {
   const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => { lifeViews.attachModules(map); moduleObjs = map; tintGround(); })];
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
-    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`); });
+    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true }); });
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
   world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
-  // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말
-  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`); };
+  // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
+  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };
   world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => say("weather", e, WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""));
   // 드문 하늘: 무지개·유성우가 시작될 때, 겨울 첫눈, 유성우 밤에 주운 별조각
   world.on("sky", e => { say("sky", e, ` · ${e.def.note} (📖 도감)`); sfx.chime(e.kind === "meteor" ? [988, 1319, 1568] : [659, 784, 988, 1175], 0.1, 0.14); });
   world.on("firstSnow", e => { say("firstSnow", e, " (📖 도감 · 하늘 기록)"); sfx.chime([1175, 988, 784], 0.14, 0.12); });
   world.on("starPiece", e => { say("starPiece", e, " (📖 가방)"); sfx.chime([1319, 1568], 0.08, 0.14); });
-  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`); });
+  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`, { kind: "info", queue: true }); });
   world.on("friendship", e => { say("friendship", e, " (📱 관계도)"); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
-  world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`));
+  world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`, { kind: "warn", queue: true }));
   world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", e => say("beachcomb", e, " (📖 도감)"));
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
@@ -192,7 +192,7 @@ function mount(w) {
   world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
   // 오늘의 부탁: 하나 끝날 때마다 알림(같은 일의 다른 알림에 묻히지 않게 한 박자 늦게), 모두 끝나면 도장
   world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
-    hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`);
+    hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
@@ -278,19 +278,19 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 // 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
 Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
-  if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요");
-  else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`);
-  else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요");
-  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 🏠 건물 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)");
-  if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`);
-  else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)");
+  if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true });
+  else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true });
+  else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요", { queue: true });
+  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 아래 🔨 건설 → 🏠 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)", { queue: true });
+  if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true });
+  else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true });
   hud.showLetter(backLetter);
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
 });
 
 // ---------- 매 프레임
 const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0, lastSeason = 0;
-// 키보드로 화면: Q/E 카메라 높이, W·A·S·D·방향키 옮기기(입력창이 아닐 때)
+// 키보드로 화면: Q 올리기 · E 내리기(카메라 높이), W·A·S·D·방향키 옮기기(입력창이 아닐 때)
 const keys = new Set();
 const WASD = { KeyW: "ArrowUp", KeyS: "ArrowDown", KeyA: "ArrowLeft", KeyD: "ArrowRight" };   // W·A·S·D = 방향키
 addEventListener("keydown", e => { if (e.target?.tagName === "INPUT" || roomView?.isOpen || e.ctrlKey || e.metaKey) return; const code = WASD[e.code] || e.code; if (/^(KeyQ|KeyE|Arrow(Up|Down|Left|Right))$/.test(code)) { keys.add(code); if (code.startsWith("Arrow")) e.preventDefault(); } if (e.shiftKey) keys.add("Fast"); });
@@ -299,7 +299,7 @@ addEventListener("blur", () => keys.clear());
 function keyCamera(dt) {
   if (!keys.size || (keys.size === 1 && keys.has("Fast"))) return;
   const t = controls.target, off = camera.position.clone().sub(t);
-  const lift = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0);              // PC: E = 카메라를 위로, Q = 아래로(보는 각도는 그대로, 카메라와 보는 점을 함께 올리고 내림)
+  const lift = (keys.has("KeyQ") ? 1 : 0) - (keys.has("KeyE") ? 1 : 0);              // PC: Q = 카메라를 위로, E = 아래로(보는 각도는 그대로, 카메라와 보는 점을 함께 올리고 내림)
   if (lift) t.y = THREE.MathUtils.clamp(t.y + lift * Math.max(3, off.length() * 0.3) * dt * (keys.has("Fast") ? 2.2 : 1), 0, 40);
   const fwd = new THREE.Vector3(-off.x, 0, -off.z).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const mv = new THREE.Vector3().addScaledVector(fwd, (keys.has("ArrowUp") ? 1 : 0) - (keys.has("ArrowDown") ? 1 : 0))
@@ -312,7 +312,7 @@ function frame() {
   try { frameBody(); }
   catch (e) {
     const now = performance.now(), msg = String(e?.message || e);
-    if (msg !== frameErrMsg || now - frameErrAt > 5000) { frameErrMsg = msg; frameErrAt = now; console.error("프레임 오류(계속 진행):", e); try { hud?.status("⚠️ 잠깐 문제가 있었지만 계속할게요"); } catch { /* 알림도 못 띄우면 넘어감 */ } }
+    if (msg !== frameErrMsg || now - frameErrAt > 5000) { frameErrMsg = msg; frameErrAt = now; console.error("프레임 오류(계속 진행):", e); try { hud?.status("⚠️ 잠깐 문제가 있었지만 계속할게요", { kind: "warn" }); } catch { /* 알림도 못 띄우면 넘어감 */ } }
     requestAnimationFrame(frame);
   }
 }
@@ -384,5 +384,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, camera, controls, renderer, scene,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get hud() { return hud; }, camera, controls, renderer, scene,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

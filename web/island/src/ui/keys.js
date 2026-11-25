@@ -3,7 +3,7 @@
 
 /** 단축키 표(한곳에서 정의 → 버튼 키 힌트 · 툴팁 · 도움말 표가 모두 이 표를 읽음). sel = 누르면 대신 눌러 줄 버튼, app = 갈매폰 앱 */
 export const KEY_LIST = [
-  { code: ["Digit1", "Numpad1"], key: "1", what: "👀 둘러보기", sel: '#tools [data-mode="view"]' },
+  { code: ["Digit1", "Numpad1"], key: "1", what: "✓ 건설 모드 끝내기", sel: '#tools [data-mode="view"]' },
   { code: ["Digit2", "Numpad2"], key: "2", what: "🖌 바닥 칠하기", sel: '#tools [data-mode="paint"]' },
   { code: ["Digit3", "Numpad3"], key: "3", what: "⛰ 높이", sel: '#tools [data-mode="height"]' },
   { code: ["Digit4", "Numpad4"], key: "4", what: "🏠 건물 짓기", sel: '#tools [data-mode="build"]' },
@@ -18,7 +18,7 @@ export const KEY_LIST = [
 ];
 /** 원래 있던 키(뜻은 그대로) — 도움말 표에만 */
 const KEY_KEEP_LIST = [
-  ["W A S D · 방향키", "화면 옮기기 (Shift = 빠르게)"], ["Q / E", "카메라 낮추기 · 올리기"], ["Space + 끌기", "화면 돌리기 · 입질(❗) 때는 🎣 당기기"],
+  ["W A S D · 방향키", "화면 옮기기 (Shift = 빠르게)"], ["Q / E", "카메라 올리기 · 내리기"], ["Space + 끌기", "화면 돌리기 · 입질(❗) 때는 🎣 당기기"],
   ["R", "건물·가구 돌리기"], ["Enter", "정한 자리에 건설"], ["[ ]", "붓 크기"], ["Ctrl+Z", "되돌리기"], ["Ctrl+Shift+Z · Ctrl+Y", "다시하기"],
   ["Esc", "한 단계씩 닫기(창 → 페이지 → 카드 → 도구 끄기) · 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기 (Enter·Space로 누르기)"],
 ];
@@ -132,7 +132,7 @@ export function installKeys({ hud, tools, roomView }) {
   const kb = s => s.split(/( · | \/ | \+ |~)/).map(p => /^( · | \/ | \+ |~)$/.test(p) ? p : p.split(" ").map(x => /[가-힣]/.test(x) ? x : `<kbd>${x}</kbd>`).join(" ")).join("");
   const box = $("keyHelp");
   if (box) box.innerHTML = `<h4>⌨️ 단축키 <span class="dim">키보드가 있을 때</span></h4><table class="tbl keytbl">` +
-    `<tr><td>${kb("1~5")}</td><td>도구 바꾸기(둘러보기 · 칠하기 · 높이 · 짓기 · 철거)</td></tr>` +
+    `<tr><td>${kb("2~5")}</td><td>🔨 건설 도구(칠하기 · 높이 · 짓기 · 철거) — 누르면 건설 모드로</td></tr><tr><td>${kb("1")}</td><td>${KEY_LIST[0].what}</td></tr>` +
     KEY_LIST.slice(5).map(k => `<tr><td>${kb(k.key)}${k.code.includes("F1") ? ` · ${kb("F1")}` : ""}</td><td>${k.what}</td></tr>`).join("") +
     KEY_KEEP_LIST.map(([k, v]) => `<tr><td>${kb(k)}</td><td>${v}</td></tr>`).join("") + `</table>` +
     `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰(도감·메뉴 포함)·편지가 열려 있는 동안은 뒤의 화면이 키에 움직이지 않아요.</p>`;
