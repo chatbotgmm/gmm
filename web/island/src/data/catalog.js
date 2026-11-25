@@ -17,7 +17,7 @@ export const BUILDINGS = {
     placeholder: { wall: 0xc9c2b4, roof: 0xc9c2b4, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
   house: {
-    id: "house", builtBy: "builder", house: true, price: 30, cost: { wood: 1 }, tier: 1, name: "작은 집", footprint: { w: 3, d: 3 }, work: 4, height: 1.95, asset: "assets/suburban/building-type-a.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
+    id: "house", builtBy: "builder", house: true, price: 30, cost: { wood: 1 }, tier: 1, name: "작은 집", footprint: { w: 3, d: 3 }, work: 4, height: 2.1, asset: "assets/props/house_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 2.3, d: 2.3 },   // 둥근 오두막(사용자 제공, 문 +x → +z). 3칸에 꽉 채우면 2층집(2.55 m)보다 높아져서(약 2.75 m) 폭 2.2 m·높이 약 2.1 m로 줄임
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },
   },
   cottage: {
@@ -43,7 +43,7 @@ export const BUILDINGS = {
   },
   // 공식은행: 섬 가운데에 처음부터 있음(짓거나 철거 못 함). 갈매미가 물건을 팔면 새 돈을 찍어 주고, 산 물건은 은행 창고(마을 자재)로.
   bank: {
-    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 3.6, asset: "assets/props/bank_{T}.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·동전 은행(사용자 제공)
+    id: "bank", menu: false, fixed: true, bank: true, tier: 1, name: "공식은행", footprint: { w: 5, d: 4 }, work: 6, height: 4.1, asset: "assets/props/bank_{T}.glb", modelYaw: -Math.PI / 2,   // 둥근 지붕·기둥 현관·동전 장식 은행(사용자 제공, 문 +x → +z)
     placeholder: { wall: 0xf6efdc, roof: 0xe0b84a, roof_shape: "pyramid" }, interior: { w: 8, d: 6 },
   },
   // 목수가 짓는 시설

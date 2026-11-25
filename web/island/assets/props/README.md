@@ -5,12 +5,13 @@
 
 | 모델 | 삼각형(모든 단계 같음) | 원본 파일 |
 |---|---|---|
-| bank | 9,735 | domed_building_3d_model.glb |
+| bank (공식은행) | 14,834 | dome_house_3d_model.glb (2026-11-25 교체, 아래) |
 | bench | 9,070 | wooden_bench_3d_model.glb |
 | cabbage | 9,234 | tripo_convert_037c8b53… |
 | carrot | 9,910 | tripo_convert_b251bc0d… |
 | field_plot | 9,436 | tripo_convert_1547a90d… |
 | flower_box | 8,998 | flower_box_3d_model.glb |
+| house (작은 집) | 14,646 | round_cottage_3d_model.glb |
 | palm | 9,528 | palm_tree_3d_model.glb |
 | post (우체국) | 14,388 | fantasy_house_3d_model.glb |
 | stairs_stone | 9,850 | tripo_convert_ca8a87b0… |
@@ -31,3 +32,14 @@
 원본 fantasy_house_3d_model.glb(14,388면, 4096px 텍스처 3장, EXT_meshopt_compression 압축). 은행·저장고와 같은 방식:
 meshopt 압축을 풀어 모양(정점·면·UV·노멀 값)은 그대로 두고, 노멀·금속도 텍스처는 빼고 기본색만 4096 / 2048 / 1024px(JPEG 92)로 넣음.
 압축을 푼 까닭: 게임 로더에 MeshoptDecoder가 없어도 읽히게(다른 소품 파일과 같은 형식). 정문은 원본 +x 쪽 → modelYaw −π/2.
+
+## 은행 교체(bank_4k / 2k / 1k, 2026-11-25)
+원본 dome_house_3d_model.glb(14,834면, 4096px 텍스처 3장, EXT_meshopt_compression). 기둥 현관·동전 장식 둥근 집. 우체국과 같은 방법(압축 풀기, 면 그대로, 기본색만 4096 / 2048 / 1024px JPEG 92,
+metallic 0.1·roughness 0.8, KHR_mesh_quantization). 같은 파일 이름에 덮어씀(catalog 경로 그대로). 정문 +x → modelYaw −π/2.
+5×4칸에 맞추면 폭 3.8 m · 깊이 3.6 m · 높이 약 4.1 m(def.height 3.6 → 4.1).
+- 이전 은행(덮어쓰기 전): domed_building_3d_model.glb, 9,735면, bank_4k 2,160,744 / 2k 862,052 / 1k 478,484 bytes(커밋 47f40a9까지의 파일).
+
+## 작은 집(house_4k / 2k / 1k, 2026-11-25)
+원본 round_cottage_3d_model.glb(14,646면, 4096px 텍스처 3장, EXT_meshopt_compression). 같은 방법, 정문 +x → modelYaw −π/2. Kenney building-type-a와 지붕 색 바꾸기(roof)는 뺌
+(자이언트의 집은 그대로 Kenney building-type-a + 하늘색 지붕).
+크기: 3×3칸에 꽉 채우면 높이 약 2.75 m(계산)로 2층집(2.55 m)보다 커짐 → fit 2.3칸으로 폭 2.2 m · 높이 약 2.1 m(def.height 1.95 → 2.1). 문 앞 칸은 그대로(앞벽에서 문 칸까지 약 0.45 m).
