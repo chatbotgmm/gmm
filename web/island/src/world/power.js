@@ -30,3 +30,12 @@ export function litInRange(world, x, z) {
   const out = []; for (const b of world.buildings.values()) { if (!usesPower(BUILDINGS[b.defId]) || !world.isDone(b)) continue; const c = centerOf(b); if (Math.hypot(c.x - x, c.z - z) <= POWER_RANGE) out.push(b); }
   return out;
 }
+/** 「전기 없음」 배지를 띄울 건물인가: 불이 달렸고(usesPower) 다 지었는데 어느 풍차 범위에도 안 든 건물. 짓는 중(진행률 표시가 있음)·풍차·불 없는 건물은 아님 */
+export function lacksPower(world, b) { return !!b && usesPower(BUILDINGS[b.defId]) && world.isDone(b) && !powered(world, b); }
+/** 전기가 안 닿는 불 달린 건물 목록(render/noPower.js의 배지). powerSources처럼 건물이 놓이거나 다 지어지거나 철거될 때(world.powerRev)만 다시 셈 */
+export function unpowered(world) {
+  const c = world._unpowered;
+  if (c && c.rev === world.powerRev && c.n === world.buildings.size) return c.list;
+  const list = []; for (const b of world.buildings.values()) if (lacksPower(world, b)) list.push(b);
+  world._unpowered = { rev: world.powerRev, n: world.buildings.size, list }; return list;
+}

@@ -1670,3 +1670,28 @@ test("전기(풍차 선행): 가로등·건물 등불·집은 다 지은 풍차 
   const a = put("windmill", c.x, c.z), b2 = put("windmill", c.x + 12, c.z + 2); assert.equal(w.powered(house), true); w.removeBuilding(a.id); assert.equal(w.powered(house), Math.hypot(PW.centerOf(house).x - PW.centerOf(b2).x, PW.centerOf(house).z - PW.centerOf(b2).z) <= R);
   assert.equal(w.powered(house), true);
 });
+
+test("전기 없음 배지 규칙: 다 지은 가로등·등불 건물·집 가운데 풍차 범위 밖인 것만(짓는 중·풍차·불 없는 건물 제외), 풍차 완공·철거에 따라 바뀜", async () => {
+  const PW = await import("../src/world/power.js"), R = PW.POWER_RANGE;
+  const w = World.create(7, seededRandom(1), { wild: true }); w.addUnitByName("목수"); w.rank = 3; w.instantBuild = true;
+  const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
+  const put = (d, x, z) => { const q = spot(d, x, z), r = w.placeBuilding(d, q[0], q[1], 0); assert.ok(r.ok, d); return r.building; };
+  const ids = () => PW.unpowered(w).map(b => b.id).sort((a, b) => a - b), of = (...bs) => bs.map(b => b.id).sort((a, b) => a - b);
+  assert.deepEqual(ids(), [], "빈 섬");
+  const lamp = put("streetlamp", c.x + 4, c.z + 4), house = put("house", c.x + 8, c.z), cottage = put("cottage", c.x - 2, c.z - 8), cafe = put("cafe", c.x - 8, c.z + 6), store = put("storehouse", c.x - 6, c.z - 2);
+  const far = put("streetlamp", c.x + 34, c.z + 2);
+  // 풍차가 없으면: 불 달린 다 지은 건물 모두(저장고처럼 불 없는 건물은 아님)
+  assert.deepEqual(ids(), of(lamp, house, cottage, cafe, far)); assert.equal(PW.lacksPower(w, store), false, "불 없는 건물"); assert.equal(PW.lacksPower(w, null), false);
+  for (const id of ["house", "cottage", "manor", "giantHouse", "cafe", "shop", "post", "streetlamp"]) assert.equal(PW.usesPower(BUILDINGS[id]), true, id);
+  // 짓는 중인 건물에는 안 띄움(진행률 표시가 있음) → 다 지으면 뜸
+  w.instantBuild = false; const site = put("streetlamp", c.x + 5, c.z - 4); assert.equal(PW.lacksPower(w, site), false, "짓는 중"); assert.ok(!ids().includes(site.id));
+  w.finishAll(); assert.ok(ids().includes(site.id), "다 지은 뒤");
+  assert.equal(PW.unpowered(w), PW.unpowered(w), "건물이 안 바뀌면 다시 세지 않음(같은 목록)");
+  // 짓는 중인 풍차: 그대로 → 완공: 범위 안은 사라지고 밖(far)만 남음. 풍차 자신은 배지 없음
+  const wm = put("windmill", c.x, c.z), m = PW.centerOf(wm); assert.deepEqual(ids(), of(lamp, house, cottage, cafe, far, site), "짓는 중인 풍차");
+  const before = PW.unpowered(w); w.finishAll(); w.instantBuild = true; assert.notEqual(PW.unpowered(w), before, "완공하면 다시 셈");
+  const fc = PW.centerOf(far); assert.ok(Math.hypot(fc.x - m.x, fc.z - m.z) > R);
+  assert.deepEqual(ids(), of(far)); assert.equal(PW.lacksPower(w, wm), false);
+  // 철거하면 다시 뜸
+  w.removeBuilding(wm.id); assert.deepEqual(ids(), of(lamp, house, cottage, cafe, far, site));
+});

@@ -8,6 +8,7 @@ import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
 import { Daylight } from "./render/daylight.js";
 import { PowerRange } from "./render/powerRange.js";
+import { NoPowerBadges } from "./render/noPower.js";
 import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
@@ -280,7 +281,8 @@ installKeys({ hud, tools, roomView });
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
-unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray, c); };
+unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray, c); noPower.tap(powerRange.sel ? null : b || null); };
+const noPower = new NoPowerBadges({ camera, overlay, getWorld: () => world, getViews: () => buildingViews, card: document.getElementById("houseCard") });   // 전기 범위 밖 가로등·등불 건물 위 「전기 없음」 말풍선
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
 hud.setSummon(world);
@@ -368,7 +370,7 @@ function frameBody() {
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
-  buildingViews.updateBadges(camera, innerWidth, innerHeight);
+  buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   quality.frame(dt, now);
   buildingThumbs.pump();                             // 기다리는 건물 사진이 있으면 한 장(이어서 그리는 섬이 덮음)
