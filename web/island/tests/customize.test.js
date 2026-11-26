@@ -383,3 +383,13 @@ test("검토 수정: 파서 갈매미를 물로 둘러싸 가두지 못함(마�
   u.x = w.bankB().door.x + 0.5; u.z = w.bankB().door.z + 0.5; const [sx, sz] = [r.skipped[0].x, r.skipped[0].z];
   assert.ok(w.digCell(sx, sz).ok, "갈매미가 떠나면 빈 땅은 섬으로 떼어 낼 수 있음");
 });
+
+test("검토 수정: 메울 수 있던 얕은 물을 높이 도구로 깊게(−0.7 아래) 낮춰도 다시 높일 수 있음(먼 바다로 잠기던 것)", () => {
+  const w = wild(); w.bank.vault = 100; let at = null;
+  for (let z = 0; z < w.grid.h && !at; z++) for (let x = 0; x < w.grid.w && !at; x++) { const c = w.grid.get(x, z); if (c.elevation < 0 && c.elevation >= -0.5 && w.grid.isWater(x, z) && !c.occupiedId) at = [x, z]; }
+  const [x, z] = at, e0 = w.grid.get(x, z).elevation; assert.ok(w.reshape(x, z, "lower")); assert.ok(w.grid.get(x, z).elevation < CU.FILL_MIN);
+  assert.ok(w.reshape(x, z, "raise"), "다시 높이기"); assert.ok(Math.abs(w.grid.get(x, z).elevation - e0) < 0.02);
+  // 섬이 만든 먼 바다(−1)는 그대로 못 높임
+  let deep = null; for (let z2 = 0; z2 < w.grid.h && !deep; z2++) for (let x2 = 0; x2 < w.grid.w && !deep; x2++) if (w.grid.get(x2, z2).elevation <= -0.99 && !w.dug.has(`${x2},${z2}`)) deep = [x2, z2];
+  assert.equal(w.reshape(...deep, "raise"), false);
+});

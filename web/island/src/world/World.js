@@ -1307,6 +1307,7 @@ export class World {
     const wasW = cur < SEA_LEVEL, willW = e < SEA_LEVEL;
     if (wasW && willW) {
       if (e > cur && cur < CU.FILL_MIN - 1e-9 && !this.dug.has(CU.decorKey(x, z))) { this.emit("customRefused", { op: "fill", reason: "먼 바다는 메울 수 없어요", cost: 0, x, z }); return false; }
+      if (e < cur && cur >= CU.FILL_MIN - 1e-9 && e < CU.FILL_MIN - 1e-9) this.dug.add(CU.decorKey(x, z));   // 메울 수 있던 얕은 물을 플레이어가 깊게 팜 → 다시 높이거나 메울 수 있게(먼 바다로 잠기지 않게)
       return true;
     }
     if (wasW === willW) return true;
