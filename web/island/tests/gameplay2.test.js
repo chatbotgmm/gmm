@@ -115,3 +115,13 @@ test("밭 물주기: 농부가 물가에서 물을 떠(쪼기 동작) 마른 밭
   assert.ok(anims.has("Attack") && anims.has("Pave"), [...anims].join(","));
   assert.ok(pours >= 3, `밭 ${pours}칸에 물을 줌`); assert.equal(plots.filter(p => p.moisture > 0.9).length >= 3, true);
 });
+
+test("작물 느리게: 일반 농부가 물 준 밭에 심으면 가을 맑은 날 마을 하루(600초)의 0.2일쯤(예전 0.05일), 봄은 빠르고 겨울은 두 배 느림", async () => {
+  const J = await import("../src/world/jobs.js"), S = await import("../src/world/season.js"), FM = await import("../src/world/farming.js");
+  const farmer = { job: "farmer", rarity: "common" }, days = (season, weather = "clear") => J.growSeconds(farmer) / S.effects(season, weather).grow / FM.DAY_SECS;
+  assert.equal(J.GROW_SECS, 180);
+  assert.ok(days("autumn") > 0.2 && days("autumn") < 0.25, `가을 ${days("autumn")}`);
+  assert.ok(days("spring") < days("summer") && days("summer") < days("autumn") && days("winter") === 2 * days("autumn"), "계절은 그대로 영향");
+  assert.ok(days("autumn", "rain") < days("autumn"), "비 오면 빨리");
+  assert.ok(days("autumn") / FM.MOIST_SLOW < 1, "마른 밭(1/4 빠르기)도 하루 안에 익음");
+});

@@ -427,7 +427,7 @@ test("상인·농부: 가판대에서 남는 것을 팔고 모자란 자재를 �
   assert.ok(w.res.stone >= 4, `돌을 사 왔어야 함: ${w.res.stone}`);
   const p = w.plots[0]; assert.equal(w.farmPlot(p, farmer), "plant"); assert.equal(p.stage, "growing");
   const crew = w.units.splice(0);                                              // 자라는 동안 갈매미가 먼저 거두지 않게 잠시 빼 둠
-  for (let t = 0; t < 60; t += 1) w.update(1);
+  for (let t = 0; t < p.grow + 5; t += 1) w.update(1);                        // 자라는 시간(작물 느리게: 예전 40초 → GROW_SECS 180초 ÷ 농부 배율)
   w.units.push(...crew);
   assert.equal(p.stage, "ripe"); const f0 = w.res.food; assert.equal(w.farmPlot(p, farmer), "harvest"); assert.ok(w.res.food > f0);
   assert.equal(w.canPaint(p.x, p.z), false); assert.equal(w.check("house", p.x, p.z, 0).ok, false);

@@ -89,5 +89,6 @@ export function rollItem(u, rnd, season = null, bonus = 1) {
 }
 
 // ---- 농사
-export const growSeconds = u => 40 / skillMult(u, "farm");
+export const GROW_SECS = 180;                // 심고 익기까지(초, 특기 배율 1 · 가을 · 물 준 밭 기준). 마을 하루 600초. 예전 40초 → 4.5배 느리게
+export const growSeconds = u => GROW_SECS / skillMult(u, "farm");
 export const harvestYield = u => 1 + Math.round(2 * skillMult(u, "farm"));
