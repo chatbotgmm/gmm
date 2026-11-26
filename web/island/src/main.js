@@ -141,7 +141,7 @@ function cullFar(now) {
   const t = controls.target, cam = camera.position, R = drawDist * 0.7;
   const check = (obj, k) => { obj.getWorldPosition(_cp); const dt2 = (_cp.x - t.x) ** 2 + (_cp.z - t.z) ** 2, dc2 = _cp.distanceToSquared(cam), L = drawDist * k; setFar(obj, dt2 > R * R || dc2 > L * L); };
   if (moduleObjs) for (const o of moduleObjs.values()) check(o, 1.3);
-  for (const v of buildingViews.views.values()) if (v.model) check(v.holder, 1.6);
+  for (const v of buildingViews.views.values()) if (v.model) { check(v.holder, 1.6); if (v.ground) setFar(v.ground, farState.get(v.holder)); }   // 밑동 그늘 판은 장면에 따로 붙어 있어 건물과 같이 숨김(건물만 숨고 빈 땅에 그늘이 남지 않게)
   for (const v of unitViews.views || []) if (v?.g) check(v.g, 1.0);
 }
 // 그래픽 설정 5단계: 바뀌면 땅 상세도·소품·갈매미 그림자 거리를 다시 맞춤

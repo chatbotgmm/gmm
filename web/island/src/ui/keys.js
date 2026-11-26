@@ -65,12 +65,13 @@ export function installKeys({ hud, tools, roomView }) {
   let histOn = false, histSkip = false;
   try { histOn = window.top === window && matchMedia("(pointer: coarse)").matches && typeof history.pushState === "function"; } catch { histOn = false; }
   function histSync() {
-    if (!histOn) return;
+    if (!histOn || histSkip) return;                                            // 뒤로 가는 중(popstate 전)에는 history.state가 아직 그대로 → 또 back()하면 한 칸 더 가서 게임 밖으로 나감. popstate 뒤에 다시 맞춤
     try { const open = !!topOverlay(), mine = !!history.state?.gmmBack;
       if (open && !mine) history.pushState({ gmmBack: 1 }, "");
       else if (!open && mine) { histSkip = true; history.back(); } } catch { histOn = false; }
   }
-  addEventListener("popstate", () => { if (histSkip) { histSkip = false; return; } const ov = topOverlay(); if (!ov) return; try { escStep(ov); } catch { /* 무시 */ } setTimeout(histSync, 0); });
+  // 우리가 부른 back()의 popstate: 기다리는 사이 창이 다시 열렸으면 기록 한 칸을 다시 넣음(histSync)
+  addEventListener("popstate", () => { if (histSkip) { histSkip = false; histSync(); return; } const ov = topOverlay(); if (!ov) return; try { escStep(ov); } catch { /* 무시 */ } setTimeout(histSync, 0); });
 
   /** Esc 한 단계. 처리했으면 true(뒤로 안 넘김). 방·도구의 Esc는 원래 코드가 처리(false) */
   const escStep = ov => {
