@@ -576,7 +576,7 @@ function startSleep(u, world, rnd, night) {
     if (startPath(u, world, home.door.x, home.door.z)) return go(home, night ? (isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지") : "졸려… 집에 가서 자야지");
     setIdle(u, rnd, world, BLOCKED_NAP); u.state = US.Sleep; u.nap = true; emote(u, "🏠 집에 가는 길이 막혔어… 잠깐만 졸자", 2.6); return true;
   }
-  const spare = [...world.buildings.values()].filter(b => b.id !== u.home && !b.owner && world.isHouse(b) && world.isDone(b) && world.canFit(u, b)).sort((a, b) => d(a) - d(b)).slice(0, 3);
+  const spare = [...world.buildings.values()].filter(b => b.id !== u.home && !b.owner && BUILDINGS[b.defId].house && world.isDone(b) && world.canFit(u, b)).sort((a, b) => d(a) - d(b)).slice(0, 3);   // "집"은 BUILDINGS.house(경제 없는 섬의 isHouse는 의원·시장·카페까지 들어가 손님 잠자리로 고르면 안 됨)
   for (const b of spare) if (startPath(u, world, b.door.x, b.door.z)) return go(b, "🏠 빈 집에서 하룻밤 신세 질게요");
   setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false;
   if (world.economy) u.sleptOutAt = world.time || 0;

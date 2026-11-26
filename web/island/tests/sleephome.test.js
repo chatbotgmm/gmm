@@ -78,3 +78,12 @@ test("손님으로 자던 빈 집을 다른 갈매미가 사면: 손님은 깨�
   for (let t = 0; t < 40 && left < 0; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId !== spare.id) left = t; }
   assert.ok(left >= 0 && left <= 30, `깨서 나옴(${left.toFixed(1)}초)`);
 });
+
+test("경제 없는 예전 섬: 집 없는 갈매미의 손님 잠자리는 '집'만 — 의원(아픈 갈매미 전용)·시장·카페에서 자지 않음", () => {
+  const w = World.create(3, seededRandom(3), {}); w.instantBuild = true; assert.equal(w.economy, false);
+  const c = w.center; for (const id of ["clinic", "market", "cafe", "house"]) assert.ok(placeAt(w, id, c.x, c.z, 4), id);
+  w.finishAll(); w.isNight = true; const slept = {};
+  for (let t = 0; t < 200; t += 0.1) { w.update(0.1); for (const u of w.units) { const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId); if (b && u.insideAct === "sleep" && !u.sick) slept[b.defId] = (slept[b.defId] || 0) + 0.1; } }
+  assert.ok((slept.house || 0) > 0, "빈 집에서 손님으로 잠: " + JSON.stringify(slept));
+  assert.deepEqual(Object.keys(slept), ["house"], "집 말고는 안 잠: " + JSON.stringify(slept));
+});
