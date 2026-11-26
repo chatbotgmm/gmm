@@ -8,13 +8,13 @@ import { donatedCount, DONATE_SCORE } from "./aquarium.js";
 export const RANKS = [
   { name: "갯마을", icon: "🛖", need: 0, unlock: [] },
   { name: "어촌", icon: "🏘", need: 60, unlock: ["cafe", "clinic"] },
-  { name: "항구 마을", icon: "⚓", need: 140, unlock: ["shop", "post", "aquarium"] },
+  { name: "항구 마을", icon: "⚓", need: 140, unlock: ["shop", "post", "aquarium", "hospital"] },   // 종합병원은 다 지은 일반병원을 업그레이드해서만(unlockName)
   { name: "섬 도시", icon: "🏙", need: 240, unlock: ["manor"] },
 ];
 export const RANK_REWARD = 5;                                                     // 등급이 오르면 갈매미마다 축하금(새 돈)
-const FACILITY = d => d.market || d.field || d.dock || d.storehouse || d.power || ["cafe", "shop", "post", "aquarium", "clinic"].includes(d.id);
+const FACILITY = d => d.market || d.field || d.dock || d.storehouse || d.power || ["cafe", "shop", "post", "aquarium", "clinic", "hospital"].includes(d.id);
 
-/** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8(갈매미 의원 포함), 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 단짝 쌍 ×3(최대 15점), 수족관 기증 종류 ×2, 평균 포만감 50 이상 +10 */
+/** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8(일반병원·종합병원 포함), 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 단짝 쌍 ×3(최대 15점), 수족관 기증 종류 ×2, 평균 포만감 50 이상 +10 */
 export function rankScore(w) {
   const done = [...w.buildings.values()].filter(b => w.isDone(b)).map(b => [BUILDINGS[b.defId], b]);
   const owned = done.filter(([d, b]) => d.house && b.owner).length, empty = done.filter(([d, b]) => d.house && !b.owner).length;
@@ -40,5 +40,7 @@ export function rankScore(w) {
   ];
   return { score: parts.reduce((s, p) => s + p[3], 0), parts };
 }
+/** 등급 해금 목록에 보일 이름: 업그레이드로만 생기는 건물은 '종합병원(일반병원 업그레이드)' */
+export const unlockName = id => { const d = BUILDINGS[id]; return !d ? id : d.upgradeFrom ? `${d.name}(${BUILDINGS[d.upgradeFrom]?.name || d.upgradeFrom} 업그레이드)` : d.name; };
 /** 이 건물을 지으려면 필요한 등급(없으면 0) */
 export const rankNeed = def => def.rank || 0;

@@ -589,8 +589,8 @@ function partyAt(u, world, rnd) {
   doOnce(u, "Jump", null, () => { setIdle(u, rnd, world, 0.6 + rnd() * 1.8); if (rnd() < 0.3) startActivity(u, "zoomies", world, rnd); });
 }
 // ---------------------------------------------------------------- 추위(climate.js)
-/** 들어가 몸을 녹일 수 있는 공공건물(다 지은 것): 은행·시장·저장고·카페·잡화점·우체국·수족관·의원 */
-const SHELTER = new Set(["bank", "market", "storehouse", "cafe", "shop", "post", "aquarium", "clinic"]);
+/** 들어가 몸을 녹일 수 있는 공공건물(다 지은 것): 은행·시장·저장고·카페·잡화점·우체국·수족관·병원 */
+const SHELTER = new Set(["bank", "market", "storehouse", "cafe", "shop", "post", "aquarium", "clinic", "hospital"]);
 /** 추우면 몸 녹이러: 집이 있으면 집, 카페가 더 가깝고 돈이 있으면 카페에서 코코아(2🪙 → 금고, 체온 +0.6), 집이 없으면 가까운 공공건물(무료).
  *  맡은 공사는 그대로 둠(녹고 나면 바로 돌아감). 난수를 쓰지 않음. 갈 수 있으면 true */
 function startWarm(u, world) {
@@ -619,7 +619,7 @@ function startSickRest(u, world) {
   const d = b => Math.hypot(b.door.x + 0.5 - u.x, b.door.z + 0.5 - u.z);
   const shelters = [...world.buildings.values()].filter(b => world.isDone(b) && SHELTER.has(b.defId) && !BUILDINGS[b.defId].clinic).sort((a, b) => d(a) - d(b)).slice(0, 3);   // 의원·집에 못 가면(집 문까지 길이 끊김 등) 가까운 공공건물에서
   for (const b of [world.clinicFor?.(u), homeOk, ...shelters]) if (b && startPath(u, world, b.door.x, b.door.z)) {
-    u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.goFor = "sick"; emote(u, BUILDINGS[b.defId].clinic ? "🤧 의원에 가 볼래…" : b === homeOk ? "🤧 집에서 쉬어야지" : "🤧 따뜻한 데서 쉬어야지", 2.2); return true;
+    u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.goFor = "sick"; emote(u, BUILDINGS[b.defId].clinic ? "🤧 병원에 가 볼래…" : b === homeOk ? "🤧 집에서 쉬어야지" : "🤧 따뜻한 데서 쉬어야지", 2.2); return true;
   }
   return false;
 }

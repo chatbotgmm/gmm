@@ -8,7 +8,7 @@ import * as E from "../world/economy.js";
 import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
 import { WISH_BY_ID, WISH_REWARD, wishText } from "../world/wishes.js";
 import { FESTIVAL_RANK, FESTIVAL_NEED, FESTIVAL_RADIUS, festivalOf, festivalGift, festivalPlaza, festivalStamps } from "../world/festival.js";
-import { RANKS, RANK_REWARD, rankScore } from "../world/rank.js";
+import { RANKS, RANK_REWARD, rankScore, unlockName } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
@@ -21,6 +21,7 @@ import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 import { bankHtml } from "./bankView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
+import { mountUpgrade } from "./upgradeView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -263,8 +264,10 @@ export class Hud {
   /** 섬에서 집을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기) */
   houseCard(b) {
     const c = document.getElementById("houseCard"); if (!b) { c.hidden = true; return; }
-    const w = this.world, owner = w.units.find(u => u.unitId === b.owner);
-    c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
+    const w = this.world, owner = w.units.find(u => u.unitId === b.owner), def = BUILDINGS[b.defId];
+    c.querySelector(".go").hidden = !def.house; mountUpgrade(c, this, w, b, c.querySelector("span"));   // 병원(clinic): 꾸미기 대신 업그레이드 단추(ui/upgradeView.js — 건물 카드를 새로 짤 때 이 줄만 옮김)
+    if (def.clinic) { const doc = w.doctorOf(b); c.querySelector("b").textContent = `🏥 ${def.name}`; c.querySelector("span").textContent = `🛏 환자 ${w.patientsIn(b)}/${def.beds || 0} · 🩺 ${doc ? `당번 ${doc.name}` : "당번 없음"}`; c.hidden = false; c.querySelector(".hx").onclick = () => { c.hidden = true; }; return; }
+    c.querySelector("b").textContent = `🏠 ${def.name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
     c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
   }
   /** 확인창(브라우저 confirm 대신): 취소에 먼저 포커스, Esc·바깥 누르기 = 취소. 결과는 Promise<boolean> */
@@ -372,7 +375,7 @@ export class Hud {
       const pct = nxt ? Math.min(100, Math.round((score - cur.need) / (nxt.need - cur.need) * 100)) : 100;
       const d = this.today?.() || new Date(), m = d.getMonth() + 1;
       const toWinter = w.season === "winter" || m === 12 || m <= 2 ? 0 : Math.ceil((new Date(d.getFullYear(), 11, 1) - d) / 86400000);   // 다음 12월 1일까지(기상청 겨울 시작)
-      const gr = w.granaryB(), BN = id => BUILDINGS[id].name;
+      const gr = w.granaryB(), BN = unlockName;   // 업그레이드로만 생기는 건물은 "종합병원(일반병원 업그레이드)"
       // 계절 축제의 날: 이번 계절 축제가 어디까지 왔는지 + 지난 축제 도장
       const fNow = festivalOf(w.festKey), stamps = festivalStamps(w.festivals), plaza = festivalPlaza(w), fGift = fNow && festivalGift(fNow.key), fOn = w.festival && festivalOf(w.festival.id);
       const fLine = fOn ? `<b>${fOn.def.icon} ${fOn.def.name}</b>가 열리고 있어요! 남은 시간 <b>${Math.max(0, Math.ceil(w.festival.t))}초</b> · 함께한 갈매미 ${w.festival.who.length}마리`
@@ -548,10 +551,10 @@ export class Hud {
   }
   /** 건물 카드 하나: 사진(실제 모델) + 크기 딱지 + 이름 + 재료(잠겼으면 그 이유를 글자로) */
   buildCard(def) {
-    const w = this.world, rankLock = (def.rank || 0) > w.rank, locked = rankLock || !w.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
+    const w = this.world, upFrom = def.upgradeFrom && BUILDINGS[def.upgradeFrom], rankLock = (def.rank || 0) > w.rank, locked = rankLock || !!upFrom || !w.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
     const who = def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가", size = `${def.footprint.w}×${def.footprint.d}`;
     const cost = Object.entries(def.cost || {}).filter(([, n]) => n > 0).map(([k, n]) => `${E.ITEM_ICON[k] ?? k}${n}`).join(" ") || "재료 없음";
-    const why = rankLock ? `${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터` : locked ? `${who} 필요` : def.winterOnly && w.season !== "winter" ? "❄️ 겨울에만" : "";   // 잠긴 이유는 글자로(🔒 딱지는 사진 위에)
+    const why = upFrom ? `${upFrom.name}에서 업그레이드${rankLock ? ` · ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터` : ""}` : rankLock ? `${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터` : locked ? `${who} 필요` : def.winterOnly && w.season !== "winter" ? "❄️ 겨울에만" : "";   // 잠긴 이유는 글자로(🔒 딱지는 사진 위에)
     const b = el("button", "bcard" + (locked ? " locked" : "")); b.dataset.build = def.id; b.dataset.cat = buildCatOf(def);
     // 사진: 미리 찍어 둔 그림을 먼저, 못 읽으면 그 자리에서 찍어 줌(그동안은 빈 칸이 반짝임). 한 번 만든 <img>는 다시 그려도 그대로 씀
     this.thumbImgs ||= new Map(); let pic = this.thumbImgs.get(def.id);
@@ -567,7 +570,7 @@ export class Hud {
     b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), meta); if (locked) b.append(el("span", "block", "🔒"));
     b.setAttribute("aria-label", why ? `${def.name}, ${size}칸, 재료 ${cost}, ${locked ? "잠김: " : ""}${why}` : `${def.name}, ${size}칸, ${m.text}`);
     b.dataset.tip = `${def.name} ${size}칸 · ${w.economy ? `설계비 🪙${m.fee}(금고에서) · ` : ""}재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${w.economy ? w.housePrice(def.id) : def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
-    b.onclick = () => this.tools.setMode("build", def.id); return b;
+    b.onclick = upFrom ? () => this.status(`${def.name}은 바로 못 지어요 · 다 지은 ${upFrom.name}을 눌러 업그레이드해요${rankLock ? ` (${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : ""}`, { kind: "info" }) : () => this.tools.setMode("build", def.id); return b;
   }
   /** 건물 갤러리: 잠금·계절이 바뀔 때만 카드를 다시 만들고, 고르기만 했으면 표시만 바꿈(사진이 깜빡이지 않고 밀어 둔 자리도 그대로) */
   drawBuildTray(arg) {

@@ -183,7 +183,7 @@ test("갈매미 의원: 아프면 빈 침대가 있는 의원에 가서 진료�
   const cl = placeNear(w, "clinic", u.x, u.z); assert.ok(cl && w.clinics().length === 1);
   assert.equal(w.canEnter(u, cl), false, "건강하면 못 들어감(구경 안 감)");
   { const c = (() => { for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (w.buildingAt(cl.x + dx, cl.z + dz) === cl) return [cl.x + dx, cl.z + dz]; })();   // 검토 수정: 건강한 갈매미를 의원에 내려놓으면 "너무 작아요"가 아니라 의원 규칙을 알려 줌
-    assert.ok(w.pickUpUnit(u)); const r = w.dropUnit(u, c[0], c[1]); assert.equal(r.ok, false); assert.equal(r.reason, "의원에는 아픈 갈매미와 당번 의사만 들어가요"); assert.equal(u.insideBuildingId, null); }
+    assert.ok(w.pickUpUnit(u)); const r = w.dropUnit(u, c[0], c[1]); assert.equal(r.ok, false); assert.equal(r.reason, "병원에는 아픈 갈매미와 당번 의사만 들어가요"); assert.equal(u.insideBuildingId, null); }
   u.sick = { kind: "cold", left: 300, med: false }; u.coins = 10; u.state = "Idle"; u.timer = 0; u.needs.energy = 90; const v0 = w.bank.vault;
   assert.equal(w.canEnter(u, cl), true);
   const visits = [], healed = []; w.on("clinicVisit", e => visits.push(e)); w.on("healed", e => healed.push(e));
@@ -206,7 +206,7 @@ test("당번 의사(world.setDoctor): 플레이어가 마을 갈매미를 정하
   const cl = placeNear(w, "clinic", u.x, u.z);
   assert.equal(w.setDoctor("nope", doc.unitId).ok, false); assert.equal(w.setDoctor(cl.id, "nobody").ok, false);
   const r = w.setDoctor(cl.id, doc.unitId); assert.equal(r.ok, true); assert.equal(cl.doctor, "목수"); assert.equal(w.dutyClinic(doc), cl); assert.equal(w.canEnter(doc, cl), true, "당번은 의원에 들어감");
-  assert.equal(w.newsLog.at(-1).text, "목수가 갈매미 의원 당번 의사가 됐어요");
+  assert.equal(w.newsLog.at(-1).text, "목수가 일반병원 당번 의사가 됐어요");
   u.sick = { kind: "cold", left: 300, med: false }; u.coins = 20; u.state = "Idle"; u.timer = 0; doc.state = "Idle"; doc.timer = 5; doc.coins = 0;
   const v0 = w.bank.vault, healed = []; w.on("healed", e => healed.push(e)); let docIn = false, docOut = false, med = null;
   for (let t = 0; t < 300 && !docOut; t += 0.1) {
@@ -228,7 +228,7 @@ test("아픈데 의원이 없으면 집에서 쉼 · 만족도 −10 · 가까�
   let inHome = false; for (let t = 0; t < 120 && !inHome; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId === h.id && u.insideAct === "sick") inHome = true; }
   assert.ok(inHome, "집에서 쉼");
   w.updateRoads(); assert.ok(u.satParts.some(p => p[0] === "🤧 감기" && p[1] === -10));
-  placeNear(w, "clinic", h.door.x, h.door.z); w.updateRoads(); assert.ok(u.satParts.some(p => p[0] === "🏥 가까운 의원" && p[1] === 3));
+  placeNear(w, "clinic", h.door.x, h.door.z); w.updateRoads(); assert.ok(u.satParts.some(p => p[0] === "🏥 가까운 병원" && p[1] === 3));
   // 능률·기력(같은 상태 둘을 비교)
   const z = winterVillage(15, "clear", 0), v = z.u; z.w.season = null; z.w.rankClock = -1e9; v.state = "Held"; v.full = 80; z.w.update(0.01); v.needs.energy = 80; z.w.update(1); const effOk = v.eff;
   v.sick = { kind: "cold", left: 300, med: false }; v.needs.energy = 80; z.w.update(1);
