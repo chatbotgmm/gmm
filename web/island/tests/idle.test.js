@@ -68,12 +68,12 @@ test("피곤하면 쉬고, 기력이 차면 일어남: 기력 25 → 쉬기 → 
   assert.equal(again, false, "기력이 찬 뒤 30초 동안은 다시 쉬지 않음");
 });
 
-test("밤잠은 그대로: 잘 시간이면 안 피곤해도 자러 감(야행성은 낮에)", () => {
+test("잠은 기력으로: 안 피곤하면 아침형도 밤에 자러 가지 않고 깨어 있음(야행성도)", () => {
   const w = village(7, ["그림자"]), u = w.units.find(o => o.name === "기본"), n = w.units.find(o => o.name === "그림자");
-  w.isNight = true; let uSleep = 0, nSleep = 0;
-  const asleep = o => o.state === "Sleep" || o.insideAct === "sleep";            // 집이 없는 기본은 주인 없는 첫 집에서 손님으로 잠
-  for (let k = 0; k < 120 * 30; k++) { for (const o of w.units) o.full = 90; w.update(1 / 30); if (asleep(u)) uSleep++; if (asleep(n)) nSleep++; }
-  assert.ok(uSleep > 120 * 30 * 0.8, `밤: 보통 갈매미는 잠(${uSleep}/3600)`); assert.ok(nSleep < 120 * 30 * 0.2, `밤: 야행성은 깨어 있음(${nSleep}/3600)`);
+  w.isNight = true; u.needs.energy = 100; n.needs.energy = 100; let uSleep = 0, nSleep = 0;
+  const asleep = o => o.state === "Sleep" || o.insideAct === "sleep";
+  for (let k = 0; k < 60 * 30; k++) { for (const o of w.units) o.full = 90; w.update(1 / 30); if (asleep(u)) uSleep++; if (asleep(n)) nSleep++; }
+  assert.equal(uSleep, 0, `밤: 기력이 가득한 아침형은 1분 동안 안 잠(${uSleep}/1800)`); assert.equal(nSleep, 0, `밤: 야행성도 안 잠(${nSleep}/1800)`);
 });
 
 test("음식 사러 가는 길: 파는 갈매미가 동작 중(밭일·낚시 한 동작)이어도 그만두지 않고 가서 삼(제자리에서 '음식 사러!'만 되풀이하지 않음)", () => {

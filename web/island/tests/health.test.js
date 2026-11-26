@@ -5,6 +5,7 @@ import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import { BUILDINGS } from "../src/data/catalog.js";
 import * as CLIM from "../src/world/climate.js";
+import * as CH from "../src/units/chrono.js";
 
 /** 넓은 섬 + 기본 갈매미(첫 집 주인) · 낮 · 겨울 날씨 고정 */
 function winterVillage(seed = 3, weather = "snow", snow = 1) {
@@ -63,16 +64,16 @@ test("집이 없으면: 카페가 있고 돈이 있으면 코코아(2🪙 → �
   assert.ok(inBank, "은행에서 몸을 녹임(무료)"); assert.equal(cocoa.length, 1);
 });
 
-test("잘 시간이고 밖이 추우면 몸 녹이던 건물에서 그대로 잠 · 밖에서 자다가 추워지면 일어나 녹이러 감", () => {
+test("밖에서 자다가 기력이 차서 깨면 추우니 녹이러 감 · 아침형의 밤에 밖이 추우면 몸이 다 녹아도 기력이 가득 찰 때까지 안에서 쉬고, 가득 차면 밤이어도 나옴", () => {
   const { w, u } = winterVillage(6); for (const o of w.units) o.full = 90;
   const hb = w.buildings.get(u.home); hb.owner = null; u.home = null;          // 집 없는 갈매미
-  w.isNight = true; u.state = "Sleep"; u.timer = 30; u.bodyT = 38.95;
+  w.isNight = true; u.state = "Sleep"; u.timer = 30; u.bodyT = 38.95; u.needs.energy = 50;
   let sheltered = null; for (let t = 0; t < 200 && !sheltered; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId) sheltered = w.buildings.get(u.insideBuildingId); }
   assert.ok(sheltered && sheltered.defId === "bank", "밖에서 자다가 깨어 은행으로");
-  for (let t = 0; t < 200; t += 0.1) { u.full = 90; w.update(0.1); }
-  assert.equal(u.insideBuildingId, sheltered.id, "밤새 안에서(체온이 다 올라도)"); assert.ok(u.bodyT > 39.9);
-  w.isNight = false; let out = false; for (let t = 0; t < 30 && !out; t += 0.1) { u.full = 90; w.update(0.1); if (!u.insideBuildingId) out = true; }
-  assert.ok(out, "아침이면 나옴");
+  u.needs.energy = 10; let warmAt = -1, leftAt = -1, eLeft = 0;                // 녹이는 동안 지친 채
+  for (let t = 0; t < 200 && leftAt < 0; t += 0.1) { u.full = 90; w.update(0.1); if (warmAt < 0 && u.bodyT >= CLIM.WARM_DONE) warmAt = t; if (!u.insideBuildingId) { leftAt = t; eLeft = u.needs.energy; } }
+  assert.ok(warmAt >= 0 && leftAt > warmAt, `몸이 녹은 뒤(${warmAt.toFixed(1)}초)에도 더 쉬다 나옴(${leftAt.toFixed(1)}초)`);
+  assert.ok(eLeft >= CH.WAKE_AT, `기력이 가득 차서 나옴(${eLeft.toFixed(1)})`); assert.equal(w.isNight, true, "밤인데도");
 });
 
 test("검토 수정: 집 문까지 길이 끊긴 갈매미도 추우면 가까운 공공건물(은행)에서 녹임(예전엔 집 하나만 보고 포기해 겨울 내내 밖에서 떪)", () => {
@@ -87,10 +88,10 @@ test("검토 수정: 녹일 곳이 하나도 없으면 밖에서 자던 갈매�
   const { w, u } = winterVillage(9, "clear", 0); w.instantBuild = false;
   for (const b of w.buildings.values()) { b.owner = null; b.hits = 0; } u.home = null;   // 다 지은 집·공공건물이 없는 겨울 마을
   w.isNight = true; u.state = "Sleep"; u.timer = 15; u.bodyT = 38.95; u.needs.energy = 15;
-  let flips = 0, last = u.state, slept = 0;
-  for (let t = 0; t < 60; t += 0.1) { u.full = 90; w.update(0.1); if (u.state !== last) { flips++; last = u.state; } if (u.state === "Sleep") slept += 0.1; }
+  let slept = 0, eWake = -1;                                                   // 기력이 가득 찰 때까지(밖 잠 초당 +6 → 15→99.5에 약 14초) 한 번도 깨지 않음
+  for (let t = 0; t < 60 && eWake < 0; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sleep") slept += 0.1; else eWake = u.needs.energy; }
   assert.ok(u.bodyT <= CLIM.COLD_AT, `추운 채로(${u.bodyT.toFixed(2)})`);
-  assert.ok(flips <= 4, `상태가 바뀐 횟수 ${flips}`); assert.ok(slept > 55, `잔 시간 ${slept.toFixed(1)}초`);
+  assert.ok(eWake >= CH.WAKE_AT, `기력이 가득 차서야 깸(${eWake.toFixed(1)})`); assert.ok(slept > (CH.WAKE_AT - 15) / 6 - 1, `잔 시간 ${slept.toFixed(1)}초`);
 });
 
 test("저장·불러오기: 체온·추웠던 횟수 · 예전 저장(칸 없음)은 40.0 · 0", () => {

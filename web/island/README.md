@@ -12,7 +12,7 @@ three.js 0.170.0은 cdn.jsdelivr.net에서 받는다(인터넷 필요). 빌드 �
 - 갈매미 8마리는 `web/village/models`의 진짜 모델(gmm_char1~8.glb, Idle·Walk·Run 애니메이션)을 쓴다. 크기·걷기/달리기 속도는 `chars.json` 값 그대로(발이 미끄러지지 않게 잰 값). 먼 길(8칸 넘게)은 달린다.
 - 해변 바위와 나무는 `web/village/assets/nk`의 Kenney Nature Kit 모델(CC0).
 - 그래서 **`web/` 폴더에서 서버를 열어야** 모델이 나온다: `cd web && python3 -m http.server 8000` → http://localhost:8000/island/
-- 모델을 못 찾으면(파일을 더블클릭해서 연 경우 등) 갈매미는 캡슐, 나무·바위는 임시 도형으로 나온다.
+- 갈매미 모델(chars.json + 9종)은 처음에 한 번 받아 메모리에 두고 섬·방이 같이 쓴다(다시 받지 않음). 다 받을 때까지 불러오는 중 화면이 남고, 받기가 실패하면 1.5·4·10초 뒤 자동으로 다시 받은 뒤 그래도 안 되면 까닭 + [다시 시도]가 나온다(캡슐 대체 없음). 나무·바위·건물은 예전처럼 90초가 지나면 못 받은 것을 임시 도형으로 두고 연다.
 - 한 파일 만들기: `python3 tools/bundle.py 갈매미맨마을.html` (claude.ai 아티팩트용은 `--artifact`). 모델은 `models/`, `assets/nk/` 폴더(.glb 또는 .glb.json)에서도 찾는다.
 
 ## 마을 생활 (web/village에서 옮김)

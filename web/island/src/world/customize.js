@@ -9,7 +9,7 @@ export const CUSTOM_COST = {
   place: { tree: 2, palm: 2, beachRock: 1, ore: 4, bush: 1, flower: 1 },
   remove: { tree: 1, palm: 1, beachRock: 1, ore: 1, bush: 1, flower: 1 },
   move: { cave: 15, lighthouse: 15, pier: 10, breakwater: 10 },
-  dig: 1, fill: 1,
+  dig: 0, fill: 0,                    // 파기·메우기 = 높이 바꾸기라 무료(사용자 요청 "높이바꾸기에 금고돈 쓰면 안될듯"). 높이 도구 되돌리기(restoreCell)도 이 값을 써서 무료
 };
 /** true면 물가 배수(priceMult)를 곱함(bank.js scaled). 지금은 끔: 값이 1~4라 반올림이 들쭉날쭉하고, 꾸미기는 마을 성장과 상관없는 취향 놀이 */
 export const CUSTOM_SCALE = false;

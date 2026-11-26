@@ -44,13 +44,15 @@ import { RoomView } from "./render/room.js";
 import { ROOM_EXPOSURE } from "./render/roomLight.js";
 import { Minimap } from "./ui/minimap.js";
 import { installKeys } from "./ui/keys.js";
+import { createEdition, simSteps } from "./systems/edition.js";
 import { Sfx } from "./audio/sfx.js";
 import { SparkleView } from "./render/sparkles.js";
 import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlerts.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { stepGridLines } from "./render/gridLines.js";
 import { gridShown } from "./ui/gridView.js";
-import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
+import { loadCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
+import { GullPool, loadingView, failReason } from "./render/gullLoad.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -189,7 +191,8 @@ function mount(w) {
   mv.onAdd = (m, o) => { lv.attachModule(m.id, o); if (mw.season) seasonLook.applyTree(m, o, mw.season); };   // 흔들기·쓰러지기 기준 + 지금 계절 잎 색
   mv.onRemove = id => lv.detachModule(id);                                        // 그루터기·움직임도 같이
   const waits = [buildingViews.ready, mv.ready.then(() => tintGround())];
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
+  { const w = world, apply = s => { if (world === w) w.applyCharacterProfiles(s.chars, WALK_SCALE, RUN_SCALE); };   // 갈매미 몸 크기·걸음(목록을 받은 뒤 · 마을 시간은 갈매미를 다 받은 뒤에야 흐름)
+    if (charPool.set) apply(charPool.set); else charPool.setReady.then(apply); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true }); });
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
@@ -245,19 +248,31 @@ function mount(w) {
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
-  return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
+  return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
 }
 let tools = null, hud = null;
 // 첫 화면: 모델을 다 받을 때까지 「불러오는 중」 화면(진행 막대)을 보여 주고, 그동안 마을 시간은 멈춤
+//  · 갈매미(목록 chars.json + 9종)는 다 받을 때까지 기다림(90초에 포기하지 않음). 실패하면 1.5·4·10초 뒤 자동으로 다시 받고(gullLoad.js),
+//    그래도 안 되면 까닭 한 줄 + [다시 시도](못 받은 것만 다시 받음, 새로고침 없이 이어서 시작)
+//  · 건물·나무 등 다른 모델은 예전처럼 늦어도 90초면 넘어감(못 받은 것은 임시 모양)
 const loadingEl = document.getElementById("loading"), loadBar = document.getElementById("loadBar"), loadText = document.getElementById("loadText");
-let ready = false;
-loadProgress.onChange = () => {
-  const { total, done } = loadProgress; if (!total) return;
-  loadBar.style.width = `${Math.round(done / total * 100)}%`; loadText.textContent = `모델 불러오는 중 ${done} / ${total}`;
-};
-const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
-// 갈매미 8종 모델은 처음에 모두 받아 둠(소환하면 바로 나타나게)
-const charPool = charSet ? preloadCharacters(charSet, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model) : null;
+const loadErr = document.getElementById("loadErr"), loadWhy = document.getElementById("loadWhy"), loadRetry = document.getElementById("loadRetry");
+let ready = false, assetsOver = false;
+// 갈매미 모델은 여기서 한 번만 받아 메모리(charPool.map)에 둠 — 섬(views.js)·방(room.js)은 이것만 씀(다시 받지 않음)
+const propTools = loadTools(PROPS);
+const charPool = new GullPool({ loadSet: loadCharacterSet,
+  loadChar: (set, c) => loadCharacter(set.dir, c, propTools, set.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model) });
+function drawLoading() {
+  if (ready) return;
+  const g = charPool.progress(), v = loadingView(g, loadProgress, assetsOver);
+  loadBar.style.width = `${Math.round(v.frac * 100)}%`; loadText.textContent = v.text;
+  if (v.failed) loadWhy.textContent = failReason(g, navigator.onLine);
+  if (loadErr.hidden === v.failed) { loadErr.hidden = !v.failed; if (v.failed) loadRetry.focus({ preventScroll: true }); }   // 단추가 나오면 바로 Enter로 누를 수 있게
+}
+loadProgress.onChange = drawLoading; charPool.onChange(drawLoading);
+loadRetry.onclick = () => charPool.retry();
+addEventListener("keydown", e => { if ((e.key === "Enter" || e.code === "NumpadEnter") && !ready && !loadErr.hidden) { e.preventDefault(); e.stopPropagation(); charPool.retry(); } }, true);   // Enter = 다시 시도(초점이 어디든 · keys.js보다 먼저 받음 — keys.js는 키보드로 옮기지 않은 초점의 Enter를 막음)
+charPool.start(); drawLoading();
 // 저장: 이 브라우저에 1분마다·화면을 떠날 때 자동 저장, 다시 열면 이어서(저장이 없거나 망가졌으면 새 섬)
 let lastSaved = 0, resumed = false;
 function saveNow(quiet = true) {
@@ -325,7 +340,11 @@ const minimap = new Minimap({ getWorld: () => world, camera, controls });   // �
 // 키보드·포인터 층(Esc 단계 닫기 · 열린 창 뒤로 키 안 새게 · 단축키 · 툴팁) + 새 섬·불러오기 확인창은 hud.confirm
 hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
 installKeys({ hud, tools, roomView });
-roomView.chars = charPool;                                                      // 방 안 갈매미 모델
+// 🎟 판(무료·유료)과 ⏩ 배속(유료판 전용, 마을 진행 ×1·×2·×3). 판은 systems/edition.js 한 곳에서만 읽고 씀(지금은 설정에서 고름, 나중엔 계정 값이 우선)
+const edition = createEdition();
+hud.edition = edition; hud.syncEdition();
+edition.onChange(() => hud.syncEdition());
+roomView.chars = charPool;                                                      // 방 안 갈매미 모델(같은 메모리 캐시를 복제해 씀)
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
 // 땅을 한 번 누름: ✨ 반짝이가 있으면 먼저 줍고(손가락 판정 지름 48px 이상 또는 1.2칸 안) 카드는 안 엶. 갈매미를 누른 것은 unitControl이 먼저 받음
@@ -344,8 +363,9 @@ hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo();
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };
-// 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
-Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
+// 건물·나무는 다 받으면(늦어도 90초), 갈매미는 9종을 다 받으면 보여 줌. 못 받은 건물·나무 모델은 임시 모양으로 남음
+const assetsLoad = Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => { assetsOver = true; drawLoading(); });
+Promise.all([assetsLoad, charPool.ready]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
   if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true, full: true });
   else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true, full: true });
@@ -394,13 +414,14 @@ function frame() {
   }
 }
 function tickClock() {
-  world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
+  world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 잠은 기력으로(chrono.js) — 밤엔 아침형이, 낮엔 야행성이 피로가 1.5배로 쌓임
   if (daylight.time) world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60;   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
 }
 function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
-  if (ready) for (let k = 0; k < simSpeed; k++) world.update(dt);                 // 불러오는 동안은 멈춤. 시간 배수(테스트)면 마을도 여러 번 돌림
+  const steps = simSteps(simSpeed, edition.speed);                                // ⏩ 배속(유료판 ×1·×2·×3) × 시간 배수(시험) — 프레임당 최대 12번, 한 번의 dt는 그대로(0.05초 이하)
+  if (ready) for (let k = 0; k < steps; k++) world.update(dt);                    // 불러오는 동안은 멈춤(탭이 숨으면 프레임 자체가 멈춤 + dt 상한 0.05초)
   stepGridLines(dt, gridShown({ mode: tools?.mode, on: hud?.gridOn, room: roomView.isOpen }));   // 건설 모드 격자선(▦, 땅 셰이더 세기만)
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
     daylight.world = world; daylight.update(dt, performance.now()); tickClock();  // 방 안에서도 바깥 시간이 흐름(방 조명·갈매미 잠자기가 따라감)
@@ -425,7 +446,7 @@ function frameBody() {
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);
-  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
+  unitViews.sync(ready ? dt * steps : dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt, controls.target);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
@@ -449,11 +470,16 @@ function frameBody() {
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
 // 시간 배수(테스트용): 시각·날짜·계절이 빨리 감 + 마을 진행(눈 쌓임·갈매미 하루)도 simSpeed배. 실제 시간 모드에서만 날짜가 바뀜
-const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];
+const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];   // [시계 배수, 마을 진행 배수, 라벨] — 게임 ⏩ 배속(edition.js)과 따로, 둘이 겹치면 곱(프레임당 최대 12번)
 let simSpeed = 1;
 hud.onTimeMult = to => { const j = TIME_MULTS.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MULTS.findIndex(m => m[0] === daylight.mult) + 1) % TIME_MULTS.length, [m, sp, l] = TIME_MULTS[i];   // to = 고른 배수(없으면 다음 값)
   if (m > 1 && daylight.mode !== "real") { daylight.mode = "real"; document.getElementById("timeMode").textContent = "시간: 실제 시간"; }
   daylight.setMult(m); simSpeed = sp; return l; };
+// 판·배속 고르기(설정 칸 · 시간 칩 · F 키가 모두 이리로)
+hud.onEdition = v => { const r = edition.setLocal(v); if (!r.ok && r.reason === "account") hud.status("🎟 판은 계정에서 정해져요 · 설정에서는 볼 수만 있어요", { kind: "warn" });
+  else if (r.ok) hud.status(edition.isPaid ? "🎟 유료판 · ⏩ 배속(×2·×3)을 쓸 수 있어요" : "🎟 무료판 · 배속은 ×1로 돌아갔어요", { kind: edition.isPaid ? "good" : "info" }); };
+hud.onSpeed = v => { const r = v === "next" ? edition.cycleSpeed() : edition.setSpeed(+v); if (!r.ok && r.reason === "locked") { hud.speedLocked(); return; }
+  if (r.ok) hud.status(r.speed > 1 ? `⏩ 배속 ×${r.speed} · 마을 진행(걸음·일·공사·밭)이 ${r.speed}배 · 하루 빛은 실제 시각 그대로` : "▶ 배속 ×1(보통 빠르기)"); };
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
 hud.onTimeMode = to => { const j = TIME_MODES.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 const STYLES = [["toon", "툰"], ["clay", "클레이"], ["basic", "기본"]];
@@ -468,13 +494,13 @@ const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];
 const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(${SEASONS[seasonOf(daylight.now())].name})`;
 hud.onSeasonMode = to => { seasonPick = to !== undefined && SEASON_PICKS.includes(to) ? to : SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };
 hud.setSeasonLabel(seasonText());
-hud.settingNow = () => ({ season: seasonPick || "real", time: daylight.mode, mult: daylight.mult, toon: toon.style });   // 설정 고르기 칸의 ✓
+hud.settingNow = () => ({ season: seasonPick || "real", time: daylight.mode, mult: daylight.mult, toon: toon.style, edition: edition.edition, speed: edition.speed });   // 설정 고르기 칸의 ✓
 hud.onQuality = mode => { quality.set(mode); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
 hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { sfx, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
+window.__island = { sfx, edition, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
   setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

@@ -816,17 +816,17 @@ test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리
   assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null); assert.ok(u.needs.energy > e0 + 20, "앉아 있는 동안 기력이 참");
 });
 
-test("밤·낮과 피로: 밤엔 집에 들어가 계속 자고(야행성은 밤에 일함), 일하면 피로가 쌓이고 쉬면 풀림", async () => {
+test("밤·낮과 피로: 밤에 지친 아침형은 집에서 자다 기력이 차면 밤이어도 일어나고(야행성은 밤에 일함), 낮엔 지친 야행성이 잠, 일하면 피로가 쌓이고 쉬면 풀림", async () => {
   const w = World.create(7, seededRandom(9), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("그림자");
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q = spot("house", c.x + 6, c.z + 6), h = w.placeBuilding("house", q[0], q[1], 0).building, u = w.units.find(o => o.name === "기본"), n = w.units.find(o => o.name === "그림자");
-  u.home = h.id; h.owner = u.unitId; w.isNight = true;
-  let inside = 0, nightWork = 0;
-  for (let t = 0; t < 240; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (t > 60 && u.insideBuildingId === h.id) inside++; if (["GoMine", "Mine", "GoChop", "Chop", "Wander", "Visit"].includes(n.state)) nightWork++; }
-  assert.ok(inside > 1500, `밤엔 집 안에서 잠(${inside}/1800 틱)`); assert.ok(nightWork > 100, `야행성은 밤에 돌아다니며 일함(${nightWork})`);
-  // 낮: 야행성이 잠
-  w.isNight = false; let nSleep = 0; for (let t = 0; t < 120; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (n.state === "Sleep" || n.insideBuildingId) nSleep++; }
-  assert.ok(nSleep > 600, `야행성은 낮에 잠(${nSleep})`);
+  u.home = h.id; h.owner = u.unitId; w.isNight = true; u.needs.energy = 10; n.needs.energy = 100;
+  let slept = false, woke = false, nightWork = 0;
+  for (let t = 0; t < 240; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (u.insideBuildingId === h.id && u.insideAct === "sleep") slept = true; else if (slept && !u.insideBuildingId) woke = true; if (["GoMine", "Mine", "GoChop", "Chop", "Wander", "Visit"].includes(n.state)) nightWork++; }
+  assert.ok(slept, "밤에 지친 아침형은 집에 들어가 잠"); assert.ok(woke, "기력이 차면 밤이어도 일어나 나옴"); assert.ok(nightWork > 100, `야행성은 밤에 돌아다니며 일함(${nightWork})`);
+  // 낮: 지친(기력 25 — 어긋난 시간 문턱 30 아래) 야행성은 바로 잠
+  w.isNight = false; n.needs.energy = 25; n.state = "Idle"; n.timer = 0; n.activity = null; let nSleep = 0; for (let t = 0; t < 30; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (n.state === "Sleep" || n.insideAct === "sleep" || n.state === "GoToBuilding" && n.sleepy) nSleep++; }
+  assert.ok(nSleep > 100, `야행성은 낮에 지치면 잠(${nSleep})`);
   // 피로: 일하면 기력이 줄고(피로↑) 벤치·잠은 채움
   const { tickNeeds } = await import("../src/units/mind.js"); const z = { needs: { energy: 80, social: 50, fun: 50 } };
   tickNeeds(z, 10, "Chop", false); assert.ok(Math.abs(z.needs.energy - 74.5) < 1e-6, "일 10초 = 기력 −5.5(피로 +5.5)");

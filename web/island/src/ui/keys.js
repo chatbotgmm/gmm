@@ -19,6 +19,7 @@ export const KEY_LIST = [
   { code: ["KeyZ"], key: "Z", what: "⟲ 건설 모드: 화면을 왼쪽으로 90° 돌리기", sel: "#viewL" },
   { code: ["KeyX"], key: "X", what: "⟳ 건설 모드: 화면을 오른쪽으로 90° 돌리기", sel: "#viewR" },
   { code: ["KeyG"], key: "G", what: "▦ 건설 모드: 칸 격자선 켜기·끄기", sel: "#gridBtn" },
+  { code: ["KeyF"], key: "F", what: "⏩ 배속 ×1 → ×2 → ×3 (유료판 · 무료판은 🔒 안내)", fn: "speed" },
 ];
 /** 원래 있던 키(뜻은 그대로) — 도움말 표에만 */
 const KEY_KEEP_LIST = [
@@ -93,6 +94,7 @@ export function installKeys({ hud, tools, roomView }) {
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || roomView?.isOpen) return false;
     const k = KEY_LIST.find(x => x.code.includes(e.code)); if (!k) return false;
     if (ov && !(ov.id === "phone" && (k.app || k.key === "P"))) return false;    // 창이 떠 있으면 갈매폰 안에서 앱 바꾸기·닫기만
+    if (k.fn === "speed") { hud.onSpeed?.("next"); return true; }                // ⏩ 배속(유료판) · 무료판이면 잠금 안내 창
     if (k.sel) { const b = document.querySelector(k.sel); if (!b || b.disabled || b.hidden) return false; if (k.key === "P" && ov) hud.closePhone(); else b.click(); return true; }
     if (ov && hud.app === k.app) { hud.closePhone(); return true; }             // 같은 키를 한 번 더 = 닫기
     if (!ov) hud.openPhone(); hud.openApp(k.app); return true;

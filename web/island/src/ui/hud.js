@@ -1,8 +1,9 @@
 // 화면 UI: 도구 막대, 갈매미 목록·통계 판, 알림 줄. DOM만 다루고 월드는 콜백으로 바꾼다.
 import { GROUND_TYPES, UnitState } from "../data/types.js";
-import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS, UNITS, FURNITURE, PERSONA } from "../data/catalog.js";
+import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS, UNITS, FURNITURE } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import * as M from "../units/mind.js";
+import { chronoLabel, chronoNote } from "../units/chrono.js";
 import { TRIBES } from "../data/catalog.js";
 import * as E from "../world/economy.js";
 import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
@@ -182,6 +183,7 @@ export class Hud {
     // 배고픈 갈매미 알림: 누르면 그 갈매미를 따라감
     this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitClick?.(this.hungry); };
     this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
+    this.chipTime.onclick = () => this.onSpeed?.("next");                          // 시간 칩 = ⏩ 배속 바꾸기(유료판 ×1→×2→×3, 무료판이면 잠금 안내)
     this.chipWeather = document.getElementById("chipWeather"); this.chipWeather.onclick = () => this.onWeatherInfo?.();
     this.chipVault = document.getElementById("chipVault"); this.chipTown = document.getElementById("chipTown");   // 🏦 내 금고(내 돈) · 🪙 마을 돈(갈매미들 돈 합계)
     this.chipParts = { vv: this.chipVault.querySelector(".vv"), vt: this.chipVault.querySelector(".vt"), wl: this.chipWeather.querySelector(".wl"), wt: this.chipWeather.querySelector(".wt") };
@@ -351,9 +353,42 @@ export class Hud {
     const lab = id => document.getElementById(id);
     if (kind === "season") this.setSeasonLabel(this.onSeasonMode?.(v === "real" ? null : v));
     else if (kind === "time") { const l = this.onTimeMode?.(v); if (l) lab("timeMode").textContent = `시간: ${l}`; }
-    else if (kind === "mult") { const l = this.onTimeMult?.(+v); if (l) lab("timeMult").textContent = `시간 배수: ${l}`; }
+    else if (kind === "mult") { const l = this.onTimeMult?.(+v); if (l) lab("timeMult").textContent = `시계 빨리 감기(시험): ${l}`; }
+    else if (kind === "edition") this.onEdition?.(v);
+    else if (kind === "speed") this.onSpeed?.(v);
     else if (kind === "toon") { const l = this.onToon?.(v); if (l) lab("toonBtn").textContent = `그림체: ${l}`; }
     this.syncSettings();
+  }
+  /** 🎟 판 · ⏩ 배속 표시를 지금 값에 맞춤(설정의 판 상자 · 시간 칩 툴팁). edition.onChange와 설정 열 때 부름 */
+  syncEdition() {
+    const e = this.edition; if (!e) return; const $ = id => document.getElementById(id), paid = e.isPaid, sp = e.speed;
+    const box = $("edBox"); if (!box) return;
+    box.dataset.edition = e.edition; box.dataset.source = e.source;
+    $("edNow").textContent = paid ? "💎 유료판" : "🆓 무료판";
+    $("edSrc").textContent = e.source === "account" ? "계정에서 정해졌어요" : "설정에서 고름";
+    $("edNote").textContent = e.canPick ? "지금은 시험용이라 누구나 바꿀 수 있어요." : "계정 값이 우선이라 여기서는 볼 수만 있어요.";
+    for (const b of $("segEdition").children) b.disabled = !e.canPick;
+    $("speedLab").textContent = paid ? `⏩ 배속: ×${sp}` : "⏩ 배속: ×1 🔒";
+    for (const b of $("segSpeed").children) { const lock = !paid && b.dataset.v !== "1"; b.classList.toggle("locked", lock); b.textContent = `×${b.dataset.v}${lock ? " 🔒" : ""}`; b.setAttribute("aria-label", lock ? `×${b.dataset.v}(유료판 기능)` : `×${b.dataset.v}`); }
+    $("speedNote").textContent = paid ? "마을 진행(걸음·일·공사·밭)이 빨라져요 · 하루 빛·날짜는 실제 시각 그대로 · 시간 칩이나 F 키로도" : "🔒 유료판 기능이에요 · 위에서 유료를 고르면 쓸 수 있어요";
+    this.drawTimeChip();
+    this.chipTime.dataset.tip = paid ? `⏩ 배속 ×${sp} · 누르면 ×1 → ×2 → ×3 (F)` : "⏩ 배속은 유료판 기능 🔒 · 누르면 안내 (F)";
+    this.chipTime.setAttribute("aria-label", `${this.chipTime.textContent} · ${paid ? `배속 ×${sp}, 누르면 바꾸기` : "배속은 유료판 기능"}`);
+    this.syncSettings(); }
+  /** 시간 칩: 시각 + ⏩ 배속. 넓은 화면은 글자로(🌙 22:02 ⏩×3), 휴대폰은 칩 폭이 늘지 않게 오른쪽 위 작은 딱지(data-speed, CSS ::before) */
+  drawTimeChip() {
+    const sp = this.edition?.speed ?? 1, small = this.phoneForm, c = this.chipTime; if (!c || !this.timeLabel) return;
+    cardPut(c, (small ? this.timeLabel().replace(" ", "") : this.timeLabel()) + (sp > 1 && !small ? ` ⏩×${sp}` : ""));
+    c.classList.toggle("fast", sp > 1); const d = sp > 1 && small ? `×${sp}` : ""; if ((c.dataset.speed || "") !== d) { if (d) c.dataset.speed = d; else delete c.dataset.speed; }
+  }
+  /** 무료판에서 배속을 누름: 🔒 유료판 기능 안내 + 설정의 판 줄로 가는 바로가기 */
+  async speedLocked() {
+    const flash = () => { const box = document.getElementById("edBox"); box?.scrollIntoView?.({ block: "nearest" }); box?.classList.remove("flash"); void box?.offsetWidth; box?.classList.add("flash"); return box; };
+    if (!this.phone.hidden && this.app === "settings") { flash(); this.status("🔒 배속은 유료판 기능이에요 · 🎟 판에서 유료를 고르면 쓸 수 있어요", { kind: "warn" }); return; }   // 설정 안에서 누르면 창 없이 판 줄만 반짝
+    const go = await this.confirm({ title: "🔒 유료판 기능이에요", body: "⏩ 배속(×2·×3)은 유료판에서 쓸 수 있어요. 지금은 시험용이라 설정의 🎟 판에서 바로 바꿀 수 있어요.", ok: "🎟 판 바꾸러 가기", cancel: "닫기" });
+    if (!go) return;
+    if (this.phone.hidden) this.openPhone(); this.openApp("settings");
+    flash()?.querySelector('#segEdition [data-v="paid"]')?.focus({ preventScroll: true });
   }
   /** 고르기 칸의 ✓를 지금 값에 맞춤(시간 배수가 시간을 실제 시간으로 돌려놓는 것처럼 다른 곳에서 바뀌어도) */
   syncSettings() {
@@ -389,7 +424,7 @@ export class Hud {
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null || app === "menu";
     if (app === "dex") this.drawDex();                                              // 도감은 열 때 한 번만 그림(읽는 중에 튀지 않게)
-    if (app === "settings") { this.showSetTab(this.setTab); this.drawInstant?.(); }
+    if (app === "settings") { this.showSetTab(this.setTab); this.drawInstant?.(); this.syncEdition(); }
     if (app === "help") { const touch = document.documentElement.dataset.input === "touch";   // 지금 쓰는 쪽 조작만 펼쳐 둠(터치 ↔ 마우스·키보드)
       for (const d of document.querySelectorAll("#help details[data-input]")) d.open = d.dataset.input === (touch ? "touch" : "mouse"); }
     this.coach?.appHint(app, document.getElementById(pages[app]));                 // 처음 여는 앱이면 맨 위에 짧은 안내 한 번
@@ -833,7 +868,7 @@ export class Hud {
     cardPut(document.getElementById("chipRank"), small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`);   // 같은 글이면 안 씀
     const mb = document.getElementById("mapBtn"), mt = small ? "🗺" : "🗺 지도";       // 글자만 바꿈(키 힌트 칸은 그대로)
     if (mb.firstChild?.nodeType === 3) { if (mb.firstChild.nodeValue !== mt) mb.firstChild.nodeValue = mt; } else mb.prepend(mt);
-    if (this.timeLabel) cardPut(this.chipTime, small ? this.timeLabel().replace(" ", "") : this.timeLabel());   // 휴대폰: 아이콘과 시각 사이 띄어쓰기 없이(칸 하나 아낌)
+    if (this.timeLabel) this.drawTimeChip();   // 휴대폰: 아이콘과 시각 사이 띄어쓰기 없이(칸 하나 아낌)
     if (this.weatherLabel) { const p = this.chipParts, t = tempChipOf(w.air, this.form);   // 휴대폰: 아이콘 + 기온만(🍂☀️ 3°) · 그 밖: 이름까지 + 3°C(4°C 이하 파랑 · 24°C 이상 주황)
       cardPut(p.wl, small ? this.weatherLabel().replace(/ [가-힣]+(?= · |$)/g, "").replace(/ · /g, "") : `${this.weatherLabel()} ·`); cardPut(p.wt, t.text);
       if ((p.wt.dataset.tone || null) !== t.tone) { if (t.tone) p.wt.dataset.tone = t.tone; else delete p.wt.dataset.tone; } }
@@ -910,8 +945,8 @@ export class Hud {
     const flags = gullFlags(u);                                                     // 🤧 아픔 · 🥶 추움 · 💸 밀린 품삯 — 접혀 있어도 맨 앞에 보이게
     if (!open) { cardPut(k.sub, `${flags ? flags + " " : ""}${doing} · 😊${Math.round(sat)} 🍗${Math.round(full)}`); this.showBond(u); return; }
     const r = RARITY[u.rarity], n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
-    cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}`);
-    const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
+    cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} · ${chronoLabel(u)}`);   // 체질: 🌅 아침형(밤에 더 빨리 지침) · 🌙 야행성(낮에)
+    const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : chronoNote(u, w);   // 급한 것(게으름·배고픔)이 없으면 체질 영향("밤이라 더 빨리 지쳐요")
     cardPut(k.doing, doing);   /* 펼친 카드는 🤧·💸 칩과 체온 줄이 따로 알림 */ cardPut(k.note, note ? ` · ${note}` : "");
     const bt = bodyTempOf(u), tp = k.temp; if (tp.row.hidden !== !bt) tp.row.hidden = !bt;
     if (bt) { const wd = `${bt.pct}%`; if (tp.fill.style.width !== wd) tp.fill.style.width = wd; cardPut(tp.num, bt.text); cardPut(tp.label, `${bt.tone === "cold" ? "🥶" : bt.tone === "hot" ? "🥵" : ""}체온`); tp.row.title = bt.word ? `체온 ${bt.text} · ${bt.word}` : `체온 ${bt.text}`;
