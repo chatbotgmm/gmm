@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
-import { NATURE_TOOLS, natureAction, natureToolsFor, natureCard, natureHover, strokeText, undoText, redoText, moveInfo, moveHtml } from "../src/ui/natureView.js";
+import { NATURE_TOOLS, natureTool, natureAction, natureToolsFor, natureCard, natureHover, strokeText, undoText, redoText, moveInfo, moveHtml } from "../src/ui/natureView.js";
 
 const fresh = () => World.create(7, seededRandom(3), { wild: true });
 /** 나무를 심을 수 있는 잔디 칸 */
@@ -28,9 +28,11 @@ test("카드 아래 글: 값은 customCost와 같고, 심기는 한도(나무 n/
   const w = fresh(), info = w.customInfo();
   for (const t of natureToolsFor(info)) {
     const m = natureCard(t, info), want = t.op === "dig" || t.op === "fill" ? w.customCost(t.op) : w.customCost(t.op, t.kind);
-    assert.equal(m.cost, want, t.arg); if (!m.off) assert.ok(m.meta.startsWith(`🪙${want}`), `${t.arg}: ${m.meta}`);
+    assert.equal(m.cost, want, t.arg); if (!m.off) assert.ok(want ? m.meta.startsWith(`🪙${want}`) : m.meta === "무료", `${t.arg}: ${m.meta}`);
   }
   assert.equal(natureCard(NATURE_TOOLS[0], info).meta, `🪙2 · ${w.trees.length}/260`);
+  for (const a of ["dig", "fill"]) { const c = natureCard(natureTool(a), info); assert.equal(c.meta, "무료", a); assert.equal(c.cost, 0); assert.equal(c.short, false); assert.match(natureTool(a).tip, /\(무료\)/); }
+  w.bank.vault = 0; assert.equal(natureCard(natureTool("dig"), w.customInfo()).short, false, "금고 0이어도 파기 카드는 안 모자람");
   w.bank.vault = 3; const poor = w.customInfo();
   assert.equal(natureCard(NATURE_TOOLS.find(t => t.arg === "ore"), poor).short, true, "광석 4 > 금고 3");
   assert.equal(natureCard(NATURE_TOOLS.find(t => t.arg === "bush"), poor).short, false);
@@ -43,7 +45,8 @@ test("미리보기(dry)는 섬을 바꾸지 않음: grid.version·금고·나무
   assert.ok(r.ok); assert.equal(w.grid.version, v0); assert.equal(w.trees.length, n0); assert.equal(w.bank.vault, vault);
   assert.equal(natureHover("auto", r, vault), `🌳 나무 심기 · 🪙2 · 금고 🪙${vault} → 🪙${vault - 2}`);
   const d = w.digCells([[x, z], [x + 1, z]], { dry: true }); assert.equal(w.grid.version, v0, "파기 미리보기도");
-  assert.match(natureHover("dig", d, vault), /🕳 \d칸 파기 · 🪙\d/);
+  assert.equal(d.cost, 0); assert.equal(natureHover("dig", d, vault), "🕳 2칸 파기", "무료라 🪙·금고 글 없음");
+  assert.equal(natureHover("fill", { ok: true, done: 3, cost: 0, skipped: [] }, vault), "🏖 3칸 메우기");
   const cave = w.landmark("cave"), m = w.moveLandmark("cave", cave.cells[0][0] + 1, cave.cells[0][1], cave.rot, { dry: true }); assert.equal(w.grid.version, v0, "옮기기 미리보기도");
   assert.equal(natureHover("auto", { ok: false, reason: "물 위에는 심을 수 없어요" }, vault), "🚫 물 위에는 심을 수 없어요");
   void m;
@@ -56,7 +59,8 @@ test("한 획 요약·되돌리기 글: 받침에 맞는 조사, 값과 남은 �
   assert.equal(strokeText("flower", { done: 1, cost: 1 }, 59), "🌸 꽃 1개를 놓았어요 · 🪙1 → 금고 🪙59 · ↶ 되돌리기");
   assert.equal(strokeText("move:cave", { done: 1, cost: 15 }, 45), "🦇 동굴을 옮겼어요 · 🪙15 → 금고 🪙45 · ↶ 되돌리기");
   assert.equal(strokeText("move:lighthouse", { done: 1, cost: 15 }, 45), "🗼 등대를 옮겼어요 · 🪙15 → 금고 🪙45 · ↶ 되돌리기");
-  assert.equal(strokeText("dig", { done: 9, cost: 9, fail: "건물 문 앞은 팔 수 없어요" }, 51), "🕳 9칸을 팠어요 · 🪙9 → 금고 🪙51 · 못 한 곳: 건물 문 앞은 팔 수 없어요 · ↶ 되돌리기");
+  assert.equal(strokeText("dig", { done: 9, cost: 0, fail: "건물 문 앞은 팔 수 없어요" }, 60), "🕳 9칸을 팠어요 · 못 한 곳: 건물 문 앞은 팔 수 없어요 · ↶ 되돌리기", "파기는 무료라 🪙 없이");
+  assert.equal(undoText({ n: 1, refund: 0 }), "↶ 되돌렸어요", "무료 파기 되돌리기는 돌려받는 글 없음");
   assert.equal(strokeText("auto", { done: 0, fail: "갈매미가 서 있어요" }, 60), "🚫 갈매미가 서 있어요");
   assert.equal(strokeText("auto", { done: 1, cost: 0, kinds: ["tree"] }, 0, false), "🌳 나무 1그루를 심었어요 · ↶ 되돌리기", "경제가 없는 섬은 값 없이");
   assert.equal(undoText({ n: 1, refund: 2 }), "↶ 되돌렸어요 · 🪙2 돌려받음");
