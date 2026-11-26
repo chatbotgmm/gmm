@@ -368,7 +368,7 @@ function keepCameraAboveGround() {
 function keyCamera(dt) {
   if (!keys.size || (keys.size === 1 && keys.has("Fast"))) return;
   const t = controls.target, off = camera.position.clone().sub(t);
-  const lift = (keys.has("KeyQ") ? 1 : 0) - (keys.has("KeyE") ? 1 : 0);              // PC: Q = 카메라를 위로, E = 아래로(보는 각도는 그대로, 카메라와 보는 점을 함께 올리고 내림)
+  const lift = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0);              // PC: Q = 카메라를 아래로, E = 위로(보는 각도는 그대로, 카메라와 보는 점을 함께 올리고 내림)
   if (lift) t.y = THREE.MathUtils.clamp(t.y + lift * Math.max(3, off.length() * 0.3) * dt * (keys.has("Fast") ? 2.2 : 1), 0, 40);
   const fwd = new THREE.Vector3(-off.x, 0, -off.z).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const mv = new THREE.Vector3().addScaledVector(fwd, (keys.has("ArrowUp") ? 1 : 0) - (keys.has("ArrowDown") ? 1 : 0))
