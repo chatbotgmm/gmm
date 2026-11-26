@@ -371,3 +371,15 @@ test("검토 수정: 붓·고스트 길 검사는 가까이에서 이어지면 �
   assert.ok(w.placeNature("tree", x + 6, z, { dry: true }).ok); assert.equal(floods, 0, "나무 고스트");
   const r = w.digCells(cells); assert.equal(r.done, 49); assert.equal(floods, 0, "실제 파기");
 });
+
+test("검토 수정: 파서 갈매미를 물로 둘러싸 가두지 못함(마지막 칸 거절), 갈매미 없는 땅은 됨", () => {
+  const w = wild(); for (const n of ["목수", "미니"]) w.addUnitByName(n); w.bank.vault = 1000;
+  const [cx, cz] = find(w, openGrass(w, 4), { x: w.center.x + 14, z: w.center.z + 6 }); const u = w.units[0];
+  for (const o of w.units) if (o !== u && Math.abs(o.x - cx) < 4 && Math.abs(o.z - cz) < 4) { o.x = w.bankB().door.x + 0.5; o.z = w.bankB().door.z + 0.5; }
+  u.x = cx + 0.5; u.z = cz + 0.5; u.path = null;
+  const ring = []; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === 2) ring.push([cx + dx, cz + dz]);
+  const r = w.digCells(ring); assert.equal(r.done, 15); assert.equal(r.skipped.length, 1); assert.equal(r.skipped[0].reason, "갈매미가 갇혀요(물로 둘러싸지 말아 주세요)");
+  assert.equal(w.compAt(cx, cz), w.compAt(w.bankB().door.x, w.bankB().door.z), "갈매미 자리는 은행과 이어짐");
+  u.x = w.bankB().door.x + 0.5; u.z = w.bankB().door.z + 0.5; const [sx, sz] = [r.skipped[0].x, r.skipped[0].z];
+  assert.ok(w.digCell(sx, sz).ok, "갈매미가 떠나면 빈 땅은 섬으로 떼어 낼 수 있음");
+});

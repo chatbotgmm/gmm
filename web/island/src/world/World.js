@@ -1077,16 +1077,24 @@ export class World {
     return true;
   }
   /** 파기: 다 지은 건물 문 → 공식은행 문 이어짐이 끊기지 않나(은행이 없으면 검사 안 함) */
-  keepsBankLink(x, z, e) {
-    const bank = this.bankB(); if (!bank) return true;
-    { const g = this.grid, W = g.w, nb = [];                                       // 빠른 길: 이 칸으로 드나들던 이웃끼리 가까이에서 이어지면 아무 길도 안 끊김
+  keepsBankLink(x, z, e) { return !this.digLinkProblem(x, z, e); }
+  /** 파기(땅 → 물) 길 검사: 다 지은 건물 문 → 공식은행 문 이어짐, 그리고 밖에 있는 갈매미(헤엄 중이면 올라올 칸)가 물에 둘러싸여 갇히지 않는가.
+   *  기준 칸은 공식은행 문(은행이 없는 예전 섬은 섬 가운데). 문제가 있으면 까닭(한국어), 없으면 "" */
+  digLinkProblem(x, z, e) {
+    const g = this.grid, W = g.w;
+    { const nb = [];                                                               // 빠른 길: 이 칸으로 드나들던 이웃끼리 가까이에서 이어지면 아무 길도 안 끊김
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && g.canStep(x, z, nx, nz)) nb.push(nz * W + nx); }
-      if (this.localLinked(new Set([z * W + x]), nb)) return true; }
-    const g = this.grid, before = this.comps(), at = (p) => g.inBounds(p.x, p.z) ? before[p.z * g.w + p.x] : -1, home = at(bank.door); if (home < 0) return true;
-    const doors = [...this.buildings.values()].filter(b => b !== bank && this.isDone(b) && !BUILDINGS[b.defId].bridge && at(b.door) === home).map(b => b.door);
-    if (!doors.length) return true;
-    const after = this.probeComps([[x, z]], [], e), aid = p => after[p.z * g.w + p.x], h = aid(bank.door);
-    return doors.every(d => aid(d) === h);
+      if (this.localLinked(new Set([z * W + x]), nb)) return ""; }
+    const bank = this.bankB(), ref = bank ? bank.door : { x: Math.floor(this.center?.x ?? g.w / 2), z: Math.floor(this.center?.z ?? g.h / 2) };
+    const before = this.comps(), at = p => g.inBounds(p.x, p.z) ? before[p.z * W + p.x] : -1, home = at(ref); if (home < 0) return "";
+    const doors = bank ? [...this.buildings.values()].filter(b => b !== bank && this.isDone(b) && !BUILDINGS[b.defId].bridge && at(b.door) === home).map(b => b.door) : [];
+    const gulls = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && !u.sailing)
+      .map(u => u.swimming && u.swim ? { x: u.swim.sx, z: u.swim.sz } : { x: Math.floor(u.x), z: Math.floor(u.z) }).filter(p => !(p.x === x && p.z === z) && at(p) === home);
+    if (!doors.length && !gulls.length) return "";
+    const after = this.probeComps([[x, z]], [], e), aid = p => after[p.z * W + p.x], h = aid(ref);
+    if (!doors.every(d => aid(d) === h)) return "길이 끊겨요(다리를 먼저 놓아요)";
+    if (!gulls.every(p => aid(p) === h)) return "갈매미가 갇혀요(물로 둘러싸지 말아 주세요)";
+    return "";
   }
   /** 놓은 덤불·꽃을 지움(건물·나무·지형지물·높이 바꾸기). 돈은 안 돌려줌 */
   dropDecor(cells) {
@@ -1278,7 +1286,7 @@ export class World {
     if (c.occupiedId) return fail("건물·나무가 있는 칸은 팔 수 없어요");
     if (this.isPlot(x, z)) return fail("밭은 팔 수 없어요");
     if (g.doorOwner(x, z)) return fail("건물 문 앞은 팔 수 없어요");
-    if (!this.keepsBankLink(x, z, e)) return fail("길이 끊겨요(다리를 먼저 놓아요)");
+    const cut = this.digLinkProblem(x, z, e); if (cut) return fail(cut);
     if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), true);
     return { ok: true, cost, x, z };
   }
