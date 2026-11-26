@@ -41,7 +41,7 @@ export class PowerRange {
   tap(b, ray = null, ground = null) {
     if (ray) b = this.pickOnRay(ray, ground, b);                                   // 풍차 몸통(실제 모양)을 눌렀는지 광선으로 다시 봄
     const c = this.card, go = c?.querySelector(".go"), mill = !!b && !!BUILDINGS[b.defId].power;
-    if (go) go.hidden = mill;                                                      // 풍차 카드에는 「들어가 꾸미기」가 없음(집 카드에서는 다시 보임)
+    if (go && mill) go.hidden = true;                                              // 풍차 카드에는 「들어가 꾸미기」가 없음(보일지는 hud.houseCard가 열 때마다 정함 — 집만 보임, 병원은 숨김. 여기서 다시 켜면 병원 카드에 남의 집 꾸미기 단추가 뜸)
     this.sel = mill ? b : null; this.mine = mill; this.key = null; if (!mill || !c) return;
     c.querySelector(".hx").onclick = () => { c.hidden = true; }; this.fillCard(); c.hidden = false;
   }

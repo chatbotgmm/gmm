@@ -155,7 +155,7 @@
   /* 집 카드: 화면 폭을 넘지 않게(좁으면 줄바꿈), 저절로 닫히지 않음(✕ · 빈 땅 누르기 · 도구 바꾸기로 닫힘) */
   #houseCard { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--row-b) + calc(66*var(--u))); z-index: var(--z-context); background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u));
     box-shadow: var(--e-2); display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; width: max-content; max-width: calc(100vw - var(--safe-l) - var(--safe-r)); box-sizing: border-box; } #houseCard[hidden] { display: none; }
-  #houseCard button { min-height: var(--hit); } #houseCard .hx { margin-left: auto; }
+  #houseCard button { min-height: var(--hit); } #houseCard .hx { margin-left: auto; } #houseCard .upg { background: var(--c-accent-strong); color: var(--c-on-accent); font-weight: 700; }   /* 업그레이드 단추(ui/upgradeView.js): .go와 같은 색, .go 클래스는 꾸미기 단추 전용 */
   .badge { position: absolute; transform: translate(-50%, -100%); background: #fff; border-radius: var(--r-md); padding: calc(2*var(--u)) calc(7*var(--u)); font-size: var(--fs-sm);
     box-shadow: var(--e-1); white-space: nowrap; }
   /* 말풍선: 갈매미 머리 위. 보통 말(둥근 네모 + 꼬리) · 생각(💭, 점점이 꼬리) · 감정 아이콘(동그라미) */

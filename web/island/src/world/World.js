@@ -588,7 +588,7 @@ export class World {
   /** 당번 의사 정하기(플레이어가 의원 카드에서): unitId가 null이면 당번을 비움. 한 갈매미는 한 의원만(다른 의원 당번은 풀림).
    *  돌려주는 값: { ok, reason } */
   setDoctor(clinicId, unitId) {
-    const b = this.buildings.get(clinicId); if (!b || !BUILDINGS[b.defId].clinic) return { ok: false, reason: "의원이 아니에요" };
+    const b = this.buildings.get(clinicId); if (!b || !BUILDINGS[b.defId].clinic) return { ok: false, reason: "병원이 아니에요" };
     if (unitId == null) { const was = b.doctor; b.doctor = null; if (was) this.emit("doctor", { b, u: null, was }); return { ok: true, reason: "" }; }
     const u = this.units.find(o => o.unitId === unitId || o.name === unitId); if (!u) return { ok: false, reason: "그런 갈매미가 없어요" };
     for (const o of this.buildings.values()) if (o !== b && o.doctor === u.name) o.doctor = null;
@@ -1588,6 +1588,7 @@ export class World {
   /** 놓을 수 있나. 경제가 있으면 마지막에 설계비(금고)를 봄 → 통과하면 { ...r, fee }. opt.free: 갈매미가 스스로 주문한 공사(설계비 없음) */
   check(defId, ax, az, rot, opt = {}) {
     const def = BUILDINGS[defId], r = checkPlacement(this.grid, def, ax, az, rot, this.units);
+    if (def.upgradeFrom) return { ...r, ok: false, reason: `${def.name}은 다 지은 ${BUILDINGS[def.upgradeFrom].name}을 업그레이드해서 지어요` };   // 업그레이드로만 생기는 건물(startUpgrade)
     if (!r.ok) return r;
     if (r.cells.some(([x, z]) => this.isPlot(x, z))) return { ...r, ok: false, reason: "밭에는 지을 수 없어요" };
     if (def.fixed) return { ...r, ok: false, reason: `${def.name}은 하나뿐이에요` };
@@ -1630,7 +1631,68 @@ export class World {
   }
   finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); } }
   /** 공사가 끝나 다 지어졌을 때(망치질·finishAll·⚡ 바로 완공. 불러오기는 아님): 수족관이면 갈매미들이 아껴 둔 물고기를 기증 */
-  builtNow(b) { if (b.defId === "aquarium") this.donateStashes(); }
+  builtNow(b) { if (b.defId === "aquarium") this.donateStashes(); if (b.upFrom) { const from = b.upFrom; b.upFrom = null; this.emit("upgraded", { b, from }); } }
+
+  // ---- 건물 업그레이드(일반병원 → 종합병원 등. def.upgradeTo / upgradeFrom으로 일반화)
+  //  다 지은 건물을 그 자리에서 더 큰 건물의 공사장으로 바꿈: 문 칸·방향은 그대로, 칸은 옆·뒤로 넓힘(넓힐 칸이 막혀 있으면 안 됨).
+  //  설계비(새 건물 설계비, 물가 배수)는 금고에서 · 재료·품삯은 보통 공사처럼(재료를 다 모은 뒤 지음). 공사 중에는 그 건물 기능이 멈추고 안에 있던 갈매미는 나옴.
+  //  당번 의사(doctor)는 이어받음. 공사 중 철거하면 보통 공사처럼 설계비를 돌려줌(예전 건물은 돌아오지 않음).
+  /** 업그레이드해서 놓일 자리: 같은 방향, 문 칸이 같고 예전 칸을 모두 덮는 앵커. 없으면 null */
+  upgradeSpot(b, to = BUILDINGS[BUILDINGS[b.defId]?.upgradeTo]) {
+    if (!to) return null; const own = new Set(b.cells.map(([x, z]) => `${x},${z}`)), R = Math.max(to.footprint.w, to.footprint.d);
+    for (let az = b.z - R; az <= b.z + R; az++) for (let ax = b.x - R; ax <= b.x + R; ax++) {
+      const fp = footprint(to, ax, az, b.rot);
+      if (fp.door.x === b.door.x && fp.door.z === b.door.z && b.cells.every(([x, z]) => fp.cells.some(([cx, cz]) => cx === x && cz === z))) return { ax, az, cells: fp.cells, door: fp.door, extra: fp.cells.filter(([x, z]) => !own.has(`${x},${z}`)) };
+    }
+    return null;
+  }
+  /** 넓힐 칸 하나를 무엇이 막나(없으면 ""). 무엇이 막는지 이름으로 */
+  upgradeBlock(b, x, z, e) {
+    const g = this.grid, c = g.get(x, z); if (!c) return "섬 밖이에요";
+    if (g.isWater(x, z)) return "옆 칸이 바다예요";
+    if (c.occupiedId) { const o = this.buildings.get(c.occupiedId), m = o ? null : this.modules.find(q => q.id === c.occupiedId);
+      return `옆 칸에 ${o ? josa(BUILDINGS[o.defId].name, "이", "가") : m ? josa(MODULES[m.defId]?.name || "지형지물", "이", "가") : "무언가가"} 있어요`; }
+    const door = g.doorOwner(x, z); if (door && door !== b.id) { const o = this.buildings.get(door); return `옆 칸이 ${o ? BUILDINGS[o.defId].name : "다른 건물"}의 문 앞이에요`; }
+    if (this.isPlot(x, z)) return "옆 칸이 밭이에요";
+    if (Math.abs(c.elevation - e) > 1e-6) return "옆 칸 바닥 높이가 달라요";
+    if (this.units.some(u => !u.insideBuildingId && Math.floor(u.x) === x && Math.floor(u.z) === z)) return "옆 칸에 갈매미가 서 있어요";
+    return "";
+  }
+  /** 업그레이드할 수 있나: { ok, reason, to, fee, spot }. 화면 단추(ui/upgradeView.js)와 startUpgrade가 같은 판정을 씀 */
+  upgradeCheck(b) {
+    const def = b && BUILDINGS[b.defId], to = def && BUILDINGS[def.upgradeTo];
+    const fail = (reason, extra = {}) => ({ ok: false, reason, to: to || null, fee: extra.fee ?? (to ? this.upgradeFee(to.id) : 0), spot: extra.spot || null });
+    if (!to) return fail("업그레이드할 수 없는 건물이에요");
+    if (!this.isDone(b)) return fail(`${def.name}을 다 지은 뒤에 업그레이드할 수 있어요`);
+    if (rankNeed(to) > this.rank) return fail(`🏅 마을 등급이 ${RANKS[rankNeed(to)].icon} ${RANKS[rankNeed(to)].name}이 되면 업그레이드할 수 있어요`);
+    const job = to.builtBy || "builder", word = { builder: "건축", carpenter: "목수" }[job] || job;
+    if (!this.units.some(u => u.job === job) || !this.builderFor(to)) return fail(`${word} 갈매미가 있어야 지을 수 있어요 (🥚 소환)`);
+    const spot = this.upgradeSpot(b, to); if (!spot) return fail(`${to.name}이 들어갈 자리를 못 찾았어요`);
+    for (const [x, z] of spot.extra) { const why = this.upgradeBlock(b, x, z, b.elevation ?? 0); if (why) return fail(`${why} (${to.name}은 ${to.footprint.w}×${to.footprint.d}칸이라 옆·뒤로 넓혀요)`, { spot }); }
+    const fee = this.upgradeFee(to.id);
+    if (fee > this.bank.vault) return fail(BK.feeReason(fee, this.bank.vault), { fee, spot });
+    return { ok: true, reason: "", to, fee, spot };
+  }
+  /** 업그레이드 설계비: 새 건물의 설계비 × 물가(경제가 없으면 0) */
+  upgradeFee(toId) { return this.economy ? BK.scaled(BK.feeOf(toId), this.priceMult()) : 0; }
+  /** 업그레이드 시작: 설계비를 내고, 예전 건물 자리(같은 id)에 새 건물 공사장을 놓음. { ok, reason, building } */
+  startUpgrade(id) {
+    const old = this.buildings.get(id), r = this.upgradeCheck(old); if (!r.ok) return { ok: false, reason: r.reason };
+    const from = old.defId, keep = { doctor: old.doctor || null };
+    for (const u of this.units) if (u.state === UnitState.GoToBuilding && u.targetBuildingId === id) setIdle(u, this.rnd, this);   // 가던 환자·의사는 그만(공사장에 들어가지 않게)
+    this.removeBuilding(id);                                                        // 안에 있던 갈매미는 문 앞으로 · 다 지은 건물이라 설계비 환불 없음
+    const put = this.placeBuilding(r.to.id, r.spot.ax, r.spot.az, old.rot, id, this.instantBuild ? 1e9 : 0);
+    if (!put.ok) {                                                                  // 거의 없음(같은 판정을 앞에서 함): 예전 건물을 그대로 되돌림
+      const back = this.placeBuilding(from, old.x, old.z, old.rot, id, 1e9); if (back.ok) Object.assign(back.building, { interior: old.interior, doctor: keep.doctor });
+      return { ok: false, reason: put.reason };
+    }
+    const b = put.building; b.hits = Math.min(b.hits, b.need); b.doctor = keep.doctor; b.upFrom = from; b.fee = r.fee;
+    if (b.fee) { this.bank.vault -= b.fee; this.bank.fees += b.fee; this.led("fees", b.fee); this.emit("fee", { b, fee: b.fee }); this.checkLow(); }
+    this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
+    this.emit("upgradeStart", { b, from, fee: b.fee });
+    if (this.isDone(b)) this.builtNow(b);                                           // ⚡ 바로 완공
+    return { ok: true, reason: "", building: b };
+  }
   /** 다 지었을 때: 계단·낚시터는 걸을 수 있게, 밭은 칸마다 밭(심고 거둠), 낚시터는 낚시 자리 */
   completed(b) {
     const def = BUILDINGS[b.defId]; this.powerRev++;                                // 풍차가 다 지어지면 전기 범위를 다시 셈(power.js)
@@ -1687,7 +1749,7 @@ export class World {
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
     if (b && b.ramp && this.isDone(b) && this.grid.inBounds(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); return { ok: true }; }   // 다 지은 계단 위
     if (b && this.isDone(b) && !this.canEnter(u, b)) { u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
-      const only = BUILDINGS[b.defId].forUnit; return { ok: false, reason: only ? `${only} 전용 집이에요` : BUILDINGS[b.defId].clinic ? "의원에는 아픈 갈매미와 당번 의사만 들어가요" : `${u.name}에게는 너무 작아요(전용 집에 들어가요)` }; }
+      const only = BUILDINGS[b.defId].forUnit; return { ok: false, reason: only ? `${only} 전용 집이에요` : BUILDINGS[b.defId].clinic ? "병원에는 아픈 갈매미와 당번 의사만 들어가요" : `${u.name}에게는 너무 작아요(전용 집에 들어가요)` }; }
     if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
     let spot = null;
     if (b) spot = this.grid.isWalkable(b.door.x, b.door.z) ? [b.door.x, b.door.z] : null;                 // 공사장: 문 앞에
@@ -1810,7 +1872,7 @@ export class World {
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
       sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
-      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}) })) };
+      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
   static fromJSON(j, rnd = Math.random) {
     if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
@@ -1819,7 +1881,8 @@ export class World {
     if (j.firstSnowYear === undefined && w.snow > 0.02) w.firstSnowYear = "?";    // 예전 저장(첫눈 기록 없음)인데 눈이 쌓여 있으면 이번 겨울 첫눈은 지난 일
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
-    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; r.building.doctor = BUILDINGS[s.defId]?.clinic && typeof s.doctor === "string" ? s.doctor : null; } }
+    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; r.building.doctor = BUILDINGS[s.defId]?.clinic && typeof s.doctor === "string" ? s.doctor : null;
+      r.building.upFrom = !w.isDone(r.building) && BUILDINGS[s.defId]?.upgradeFrom === s.up ? s.up : null; } }   // 업그레이드 공사 중(예전 저장엔 없음 → 보통 공사)
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     w.decor = CU.decorFromSave(j.decor, (x, z, k) => !w.landProblem(x, z, k));      // 덤불·꽃 겹(예전 저장엔 없음 → 빈 겹). 건물을 다시 놓은 뒤에(그사이 못 쓰게 된 칸은 버림)
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);

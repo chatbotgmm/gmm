@@ -68,8 +68,11 @@ const NEWS_MAKERS = {
   // 병·의원(health.js): 걸림(마을 첫 병은 더 크게) · 나음 · 접수(알림 줄에만) · 당번 의사
   sick: ({ u, from, first, why }) => ({ icon: "🤧", text: first ? `${josa(u.name, "이", "가")} 감기에 걸렸어요. 따뜻한 데서 푹 쉬면 나아요` : `${josa(u.name, "이", "가")} ${from ? `${from.name}에게서 ` : why === "wet" ? "젖은 채 떨다가 " : why === "overwork" ? "추운 날 너무 오래 일하다 " : ""}감기${from ? "가 옮았어요" : "에 걸렸어요"}`, weight: first ? 3 : 2 }),
   healed: ({ u, doctor }) => ({ icon: "😊", text: `${josa(u.name, "이", "가")} 감기가 다 나았어요${doctor ? ` (당번 ${doctor} 선생님 덕분)` : ""}`, weight: 1 }),
-  clinicVisit: ({ u, fee, medicine }) => ({ icon: "🏥", text: `${josa(u.name, "이", "가")} 의원에 누웠어요 · 진료비 🪙${fee}${medicine >= 0 ? ` · 약 🪙${medicine}` : ""}`, weight: 0 }),
-  doctor: ({ u, was }) => ({ icon: "🩺", text: u ? `${josa(u.name, "이", "가")} 갈매미 의원 당번 의사가 됐어요` : `${was} 선생님의 의원 당번이 끝났어요`, weight: u ? 2 : 0 }),
+  clinicVisit: ({ u, fee, medicine }) => ({ icon: "🏥", text: `${josa(u.name, "이", "가")} 병원에 누웠어요 · 진료비 🪙${fee}${medicine >= 0 ? ` · 약 🪙${medicine}` : ""}`, weight: 0 }),
+  doctor: ({ b, u, was }) => { const n = BUILDINGS[b?.defId]?.name || "병원"; return { icon: "🩺", text: u ? `${josa(u.name, "이", "가")} ${n} 당번 의사가 됐어요` : `${was} 선생님의 ${n} 당번이 끝났어요`, weight: u ? 2 : 0 }; },
+  // 건물 업그레이드(World.startUpgrade): 시작 · 완료
+  upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? ` · 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },
+  upgraded: ({ b, from }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏥", text: `${josa(f.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!${d.beds ? ` 침대 ${d.beds}개` : ""}`, weight: 6 } : null; },
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */

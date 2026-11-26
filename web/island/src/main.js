@@ -22,7 +22,7 @@ import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD, wishText } from "./world/wishes.js";
-import { RANK_REWARD } from "./world/rank.js";
+import { RANK_REWARD, unlockName } from "./world/rank.js";
 import { newsFor, awayLetter, newsPages } from "./world/news.js";
 import { dailyKey, STAMP_SHOP } from "./world/daily.js";
 import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
@@ -207,7 +207,7 @@ function mount(w) {
   world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`, { kind: "info", queue: true }); });
   world.on("friendship", e => { say("friendship", e, " (📱 관계도)"); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
   world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`, { kind: "warn", queue: true }));
-  world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
+  world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(unlockName).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", e => say("beachcomb", e, ` (${e.u.name}의 소지품)`));
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
   // 수족관: 크기 기록(흔한 물고기의 첫 기록은 조용히) · 기증 · 기념 선물
@@ -311,13 +311,13 @@ const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => wor
 unitControl.onTapGround = (c, e) => {
   const s = (e && sparkleView?.hit(e.clientX, e.clientY, camera, renderer.domElement)) || world.sparkleNear(c.gx, c.gz);
   if (s && world.pickSparkle(s.id)) { hud.houseCard(null); powerRange.tap(null); noPower.tap(null); return; }   // 빈 땅을 누른 것처럼 열린 카드는 닫음
-  const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray, c); noPower.tap(powerRange.sel ? null : b || null); };
+  const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && (BUILDINGS[b.defId].house || BUILDINGS[b.defId].clinic) && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray, c); noPower.tap(powerRange.sel ? null : b || null); };
 const noPower = new NoPowerBadges({ camera, overlay, getWorld: () => world, getViews: () => buildingViews, card: document.getElementById("houseCard") });   // 전기 범위 밖 가로등·등불 건물 위 「전기 없음」 말풍선
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
   unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
-  hud.houseCard(tools.mode === "view" && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
+  hud.houseCard(tools.mode === "view" && (BUILDINGS[b.defId].house || BUILDINGS[b.defId].clinic) && world.isDone(b) ? b : null); };
 hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); if (!i.left) hud.status("모두 모였어요", { kind: "info" }); hud.setSummon(world); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭은 summonBlocked 알림(ALERTS)이 바로 띄움
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };

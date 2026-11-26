@@ -27,7 +27,7 @@ export const FEE_UNKNOWN = 5;        // 표에 없는 건물의 설계비
 export const FEE = {
   stairs: 2, bench: 2, flowerbed: 2, bunting: 2, festLantern: 2, seasonDeco: 2, streetlamp: 3, snowman: 0,
   bridge: 1, dock: 3, pier: 4, field: 5, fountain: 8, storehouse: 12, market: 15, windmill: 15,
-  cafe: 20, clinic: 20, shop: 25, post: 30, aquarium: 30,
+  cafe: 20, clinic: 20, hospital: 40, shop: 25, post: 30, aquarium: 30,
   house: 10, cottage: 15, giantHouse: 15, manor: 30, bank: 0,
 };
 export const feeOf = defId => FEE[defId] ?? FEE_UNKNOWN;

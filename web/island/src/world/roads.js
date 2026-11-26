@@ -56,7 +56,7 @@ export function satisfaction(world, u, net = world.roads?.net) {
     const deco = [...world.buildings.values()].filter(b => BUILDINGS[b.defId].deco && world.isDone(b) && near(b, 6)).length;
     if (deco) parts.push(["🌷 집 근처 장식", Math.min(10, deco * 2)]);
     if ([...world.buildings.values()].some(b => b.defId === "cafe" && world.isDone(b) && near(b, 30))) parts.push(["☕ 가까운 카페", 5]);
-    if ([...world.buildings.values()].some(b => BUILDINGS[b.defId].clinic && world.isDone(b) && near(b, 30))) parts.push(["🏥 가까운 의원", 3]);
+    if ([...world.buildings.values()].some(b => BUILDINGS[b.defId].clinic && world.isDone(b) && near(b, 30))) parts.push(["🏥 가까운 병원", 3]);
     if (world.powered?.(home)) parts.push(["⚡ 전기", 8]);
     if (yardFlat(world, home)) parts.push(["🏡 고른 마당", 5]);
   }

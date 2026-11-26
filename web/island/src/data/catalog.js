@@ -97,11 +97,19 @@ export const BUILDINGS = {
     id: "aquarium", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "수족관", footprint: { w: 4, d: 3 }, work: 7, height: 2.4, asset: null,
     placeholder: { wall: 0xe6f4f7, roof: 0x4fa3c7, roof_shape: "flat", awning: 0x7fd0e0, tank: 0x3f9fd0 }, interior: { w: 7, d: 5 },
   },
-  // 갈매미 의원(health.js): 아픈 갈매미가 침대에서 쉼(침대 beds개 = 동시에 환자 수). 의사는 처음엔 없고, 플레이어가 마을 갈매미 하나를 당번으로 정하면(world.setDoctor) 더 빨리 나음.
-  // 병원 모델이 아직 없어 카페 건물 모델(Kenney)을 빨간 지붕으로 물들여 씀(사용자에게 병원 GLB를 받으면 asset만 바꿈)
+  // 일반병원(id "clinic" 그대로 — 예전 저장 호환, health.js): 아픈 갈매미가 침대에서 쉼(침대 beds개 = 동시에 환자 수). 의사는 처음엔 없고, 플레이어가 마을 갈매미 하나를 당번으로 정하면(world.setDoctor) 더 빨리 나음.
+  // 날개 지붕 둥근 단층 병원(사용자 제공, 문 +x → +z). 4×3칸에 비율 그대로 꽉 채우면 폭 2.89 m · 깊이 2.85 m · 높이 2.76 m(꼭대기 십자 포함, 카페·잡화점 3.0 m보다 조금 낮음).
+  // upgradeTo: 다 지은 뒤 이 건물로 업그레이드할 수 있음(world.upgradeCheck·startUpgrade — 칸을 넓혀 그 자리에 새 공사장, 당번 의사는 이어받음)
   clinic: {
-    id: "clinic", builtBy: "carpenter", clinic: true, beds: 3, rank: 1, cost: { wood: 2, stone: 2 }, tier: 1, name: "갈매미 의원", footprint: { w: 4, d: 3 }, work: 7, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: { hue: 0.0, sat: 1.25 }, modelYaw: KENNEY_YAW,
+    id: "clinic", builtBy: "carpenter", clinic: true, beds: 3, rank: 1, upgradeTo: "hospital", cost: { wood: 2, stone: 2 }, tier: 1, name: "일반병원", footprint: { w: 4, d: 3 }, work: 7, height: 2.8, asset: "assets/props/clinic_{T}.glb", modelYaw: -Math.PI / 2,
     placeholder: { wall: 0xffffff, roof: 0xe05a5a, roof_shape: "flat", awning: 0xe05a5a }, interior: { w: 7, d: 5 },
+  },
+  // 종합병원: 건설 메뉴에서 바로 놓지 못하고 다 지은 일반병원을 업그레이드해서만 생김(upgradeFrom). 항구 마을(rank 2)부터, 설계비 FEE.hospital(금고), 재료는 보통 공사처럼 갈매미가 모아 와서 지음.
+  // 진료 규칙은 일반병원과 같음(clinic: true) · 침대 6. 3층 날개 셋 + 가운데 돔(사용자 제공, 앞뒤 두 면에 문 — +x 면을 정문으로 → +z), 문 옆 등불 4개(밤에 빛남, 풍차 전기가 닿을 때).
+  // 5×4칸(일반병원 4×3에서 옆 1줄·뒤 1줄 넓힘, 문 칸은 그대로)에 비율 그대로 꽉 채우면 폭 4.75 m · 깊이 3.43 m · 높이 3.96 m(은행 4.3 m보다 조금 낮고 일반병원의 1.43배)
+  hospital: {
+    id: "hospital", builtBy: "carpenter", clinic: true, beds: 6, rank: 2, upgradeFrom: "clinic", lit: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "종합병원", footprint: { w: 5, d: 4 }, work: 4, height: 4.0, asset: "assets/props/hospital_{T}.glb", modelYaw: -Math.PI / 2,
+    placeholder: { wall: 0xffffff, roof: 0xe05a5a, roof_shape: "pyramid", awning: 0xe05a5a }, interior: { w: 8, d: 6 },
   },
   manor: {
     id: "manor", builtBy: "builder", house: true, price: 80, rank: 3, cost: { wood: 3, stone: 2 }, tier: 1, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,

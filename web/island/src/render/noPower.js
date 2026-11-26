@@ -33,10 +33,10 @@ export class NoPowerBadges {
   tap(b) {
     const c = this.card, w = this.getWorld(); this.sel = null; if (!c || !b || !lacksPower(w, b)) return;
     const def = BUILDINGS[b.defId], span = c.querySelector("span");
-    if (def.house && !c.hidden) span.textContent += ` · ${NO_POWER_WHY}`;            // 집 카드(주인·아늑함) 뒤에
+    if ((def.house || def.clinic) && !c.hidden) span.textContent += ` · ${NO_POWER_WHY}`;   // 집 카드(주인·아늑함)·병원 카드(환자·당번) 뒤에
     else { c.querySelector("b").textContent = `${NP_EMOJI[def.id] || "🏠"} ${def.name}`; span.textContent = NO_POWER_WHY;
       const go = c.querySelector(".go"); if (go) go.hidden = true; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false; }
-    this.sel = b; this.own = !def.house;
+    this.sel = b; this.own = !(def.house || def.clinic);
   }
   /** 카드를 연 건물에 전기가 들어오면(풍차 완공) 까닭 글을 지움 */
   cardSync(w) {
