@@ -290,7 +290,7 @@ hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
   unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
   hud.houseCard(tools.mode === "view" && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
-hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
+hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); hud.status(i.reason || "8마리 모두 모였어요", { kind: i.left ? "warn" : "info" }); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭을
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };

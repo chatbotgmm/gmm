@@ -97,6 +97,12 @@ export const BUILDINGS = {
     id: "aquarium", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "수족관", footprint: { w: 4, d: 3 }, work: 7, height: 2.4, asset: null,
     placeholder: { wall: 0xe6f4f7, roof: 0x4fa3c7, roof_shape: "flat", awning: 0x7fd0e0, tank: 0x3f9fd0 }, interior: { w: 7, d: 5 },
   },
+  // 갈매미 의원(health.js): 아픈 갈매미가 침대에서 쉼(침대 beds개 = 동시에 환자 수). 의사는 처음엔 없고, 플레이어가 마을 갈매미 하나를 당번으로 정하면(world.setDoctor) 더 빨리 나음.
+  // 병원 모델이 아직 없어 카페 건물 모델(Kenney)을 빨간 지붕으로 물들여 씀(사용자에게 병원 GLB를 받으면 asset만 바꿈)
+  clinic: {
+    id: "clinic", builtBy: "carpenter", clinic: true, beds: 3, rank: 1, cost: { wood: 2, stone: 2 }, tier: 1, name: "갈매미 의원", footprint: { w: 4, d: 3 }, work: 7, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: { hue: 0.0, sat: 1.25 }, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xffffff, roof: 0xe05a5a, roof_shape: "flat", awning: 0xe05a5a }, interior: { w: 7, d: 5 },
+  },
   manor: {
     id: "manor", builtBy: "builder", house: true, price: 80, rank: 3, cost: { wood: 3, stone: 2 }, tier: 1, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
@@ -133,6 +139,13 @@ export const FURNITURE = {
   starBed:    { id: "starBed", name: "별밤 침대", footprint: { w: 1, d: 2 }, height: 0.5, comfort: 6, use: "sleep", useLabel: "별밤 침대에서 낮잠", shape: "bed", colors: [0x3b3f73, 0xf4f1ea, 0x6f78c9] },
   snowSofa:   { id: "snowSofa", name: "눈꽃 소파", footprint: { w: 2, d: 1 }, height: 0.8, comfort: 4, use: "sit", useLabel: "눈꽃 소파에서 뒹굴", shape: "sofa", colors: [0xbfdcf2, 0xffffff] },
 };
+// 옷(clothes.js): 갈매미가 잡화점에서 자기 돈으로 사거나(낸 돈은 금고로) 도장 가게 선물 "손뜨개 목도리"로 받음. slot: 입는 자리 · warmth: 체감 보온(°C) ·
+// price: 잡화점 값(🪙) · below: 공기가 이 온도(°C) 이하일 때 입음. 우비·밀짚모자는 2단계(젖음·더위)
+export const CLOTHES = {
+  scarf: { id: "scarf", name: "털목도리", icon: "🧣", slot: "neck", warmth: 4, price: 6, below: 14, say: "목도리 둘러야지 🧣" },
+  coat:  { id: "coat", name: "누빔 외투", icon: "🧥", slot: "body", warmth: 8, price: 14, below: 4, say: "외투 입어야지 🧥" },
+};
+export const CLOTHES_ORDER = ["scarf", "coat"];                                 // 잡화점에서 사는 순서
 export const SHOP_FURNITURE = Object.values(FURNITURE).filter(f => f.price).map(f => f.id);
 // 실내 바닥·벽지 색
 export const FLOORS = { wood: { name: "나무", color: 0xc49a6c }, tile: { name: "타일", color: 0xe8e2d6 }, carpet: { name: "카펫", color: 0x9fb7c9 }, dark: { name: "짙은 나무", color: 0x7a5236 } };
@@ -287,6 +300,26 @@ export const ITEMS = [
   { id: "stampLamp",  name: "노을 스탠드",   rarity: "rare", furniture: "duskLamp",  stamp: 2 },
   { id: "stampShelf", name: "민트 책장",     rarity: "epic", furniture: "mintShelf", stamp: 3 },
   { id: "stampBed",   name: "별밤 침대",     rarity: "epic", furniture: "starBed",   stamp: 5 },
+  // ---- 여기부터는 플레이어 몫 선물거리(gift: 낚시·바닷가 줍기로는 안 나오고 상인도 안 팖. 값 없음). 맨 뒤에 붙여 기존 낚시 결과가 그대로
+  // ✨ 반짝이(sparkle: 하루 몇 번 바닷가·마을에 생기고 플레이어가 탭해서 주움 → 내 주머니). 계절은 season 대신 sparkleSeason(낚시 계절 물건과 섞이지 않게)
+  { id: "shell",    name: "조개껍데기",       rarity: "common", gift: true, sparkle: "beach" },
+  { id: "seaglass", name: "바다 유리",         rarity: "common", gift: true, sparkle: "beach" },
+  { id: "goby",     name: "웅덩이 망둥어",     rarity: "common", gift: true, sparkle: "beach" },
+  { id: "postcard", name: "바람에 날아온 엽서", rarity: "common", gift: true, sparkle: "village" },
+  { id: "blossom",  name: "벚꽃 가지",         rarity: "common", gift: true, sparkle: "village", sparkleSeason: "spring" },
+  { id: "clover",   name: "네잎클로버",         rarity: "common", gift: true, sparkle: "village", sparkleSeason: "summer" },
+  { id: "acorn",    name: "도토리",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "autumn" },
+  { id: "pinecone", name: "솔방울",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "winter" },
+  { id: "icicle",   name: "고드름",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "winter" },
+  // 도장 선물(stampGift = 도장 값: 도장 가게에서 사는 귀한 선물. 받으면 정이 두 배). stamp 키는 쓰지 않음(STAMP_SHOP은 가구만)
+  { id: "goldLetter",   name: "금박 편지지",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "starBrooch",   name: "별 브로치",         rarity: "epic", gift: true, stampGift: 1 },
+  { id: "bouquet",      name: "들꽃 꽃다발",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "rainbowShell", name: "무지개 소라",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "snowGlobe",    name: "눈꽃 스노볼",       rarity: "epic", gift: true, stampGift: 1 },
+  { id: "fishTin",      name: "황금 생선 통조림",  rarity: "epic", gift: true, stampGift: 1 },
+  { id: "crownCookie",  name: "갈매미 왕관 쿠키",  rarity: "epic", gift: true, stampGift: 2 },
+  { id: "knitScarf",    name: "손뜨개 목도리",     rarity: "epic", gift: true, stampGift: 1, clothes: "scarf" },   // 주면 그 갈매미 옷(털목도리)이 되어 바로 둘러 줌
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

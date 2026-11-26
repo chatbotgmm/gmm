@@ -35,6 +35,15 @@ export function activityWeights(u) {
   return Object.entries(p).filter(([, w]) => typeof w === "number" && w > 0);
 }
 
+/** 제 일거리가 없을 때(공사장 없음·낚시 자리 없음·밭이 자라는 중…) 대신 돕는 일. 순서대로 해 봄.
+ *  건축가·목수·상인은 창고에 모자란 자재부터(나무·돌), 농부·낚시꾼은 서로의 일(낚시)·벌목, 나무꾼·광부는 서로의 일. */
+export const HELP_STOCK = 30;                 // 돕는 일로 모으는 자재는 (은행 창고 + 내 가방)에 이만큼 찰 때까지만(넘치면 돕지 않고 놀거나 산책: 돈을 끝없이 찍지 않게)
+export function helpJobs(u, res = {}) {
+  const has = k => (res[k] || 0) + (u.inv?.[k] || 0), gather = has("wood") <= has("stone") ? ["chop", "mine"] : ["mine", "chop"];
+  const list = { builder: gather, carpenter: gather, merchant: gather, fisher: ["chop"], farmer: ["fish"], lumberjack: ["mine"], miner: ["chop"] }[u.job] || gather;
+  return list.filter(k => !(k === "chop" && has("wood") >= HELP_STOCK) && !(k === "mine" && has("stone") >= HELP_STOCK));
+}
+
 // ---- 건축
 /** 이 갈매미가 이 건물을 지을 수 있나: 1등급은 누구나, 그 위는 그 등급 이상 건축가만. */
 export function canBuild(u, def) {
@@ -73,12 +82,13 @@ export function rollFish(u, rnd, season = null, bonus = 1) {
 export const itemChance = u => 0.02 * skillMult(u, "fish") ** 2;
 export function rollItem(u, rnd, season = null, bonus = 1) {
   const w = { common: 50, rare: 30, epic: 15, legend: 5 }, m = skillMult(u, "fish") * bonus;
-  const ws = ITEMS.map(i => inSeason(i, season) && !i.sky && !i.fest && !i.stamp ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0);
+  const ws = ITEMS.map(i => inSeason(i, season) && !i.sky && !i.fest && !i.stamp && !i.gift ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0);
   let r = rnd() * ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < ITEMS.length; i++) if ((r -= ws[i]) <= 0) return ITEMS[i];
   return ITEMS[0];
 }
 
 // ---- 농사
-export const growSeconds = u => 40 / skillMult(u, "farm");
+export const GROW_SECS = 180;                // 심고 익기까지(초, 특기 배율 1 · 가을 · 물 준 밭 기준). 마을 하루 600초. 예전 40초 → 4.5배 느리게
+export const growSeconds = u => GROW_SECS / skillMult(u, "farm");
 export const harvestYield = u => 1 + Math.round(2 * skillMult(u, "farm"));
