@@ -142,3 +142,15 @@ test("단차 채광 검토: 대각선 칸은 절벽 모서리 너머(사이 두 
     assert.equal(hits, 0, `${kind}: 모서리 너머로 캐지 않음`);
   }
 });
+
+test("밭 물주기 검토: 가장 가까운 마른 밭이 물가에서 멀어(24칸 밖) 물을 못 떠도, 물가 가까운 다른 마른 밭에는 물을 줌", () => {
+  // 왼쪽 두 줄(x<2)이 바다, 나머지 0 m 땅. 밭 A(x=29)는 물가에서 27칸, 밭 B(x=4)는 2칸. 농부는 A 옆에 있음
+  const g = new Grid(32, 12, 32);
+  for (let z = 0; z < 12; z++) for (let x = 0; x < 32; x++) { g.get(x, z).groundType = x < 2 ? "Sand" : "Grass"; g.get(x, z).elevation = x < 2 ? -1 : 0; }
+  const a = { x: 29, z: 6, stage: "growing", t: 1e6, grow: 1e6, moisture: 0.1 }, b = { x: 4, z: 6, stage: "growing", t: 1e6, grow: 1e6, moisture: 0.1 };
+  const w = new World(g, [], seededRandom(3), { plots: [a, b] }); w.isNight = false; w.setSeason("autumn"); w.setWeather("clear"); w.weather.t = 1e9;
+  const f = w.addUnitByName("미니"); f.job = "farmer"; f.x = 28.5; f.z = 6.5; f.y = 0;
+  let watered = 0; w.on("plotWater", ({ p }) => { if (p.x === 4) watered++; });
+  for (let t = 0; t < 40 && !watered; t += 0.05) { f.full = 90; f.needs.energy = 100; w.update(0.05); }   // 고치기 전엔 A만 보다 실패 → 이리저리 거닐다 B 쪽에 가까워져야(50초 뒤) 줌
+  assert.ok(watered > 0, `40초 안에 물가 가까운 밭 B에 물을 줌(농부 상태 ${f.state})`);
+});

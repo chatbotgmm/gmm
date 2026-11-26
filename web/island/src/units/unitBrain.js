@@ -492,13 +492,15 @@ export function interactNear(u, world, rnd = Math.random, R = 2.6, prefer = null
 
 /** 밭 물주기 시작: 가까운 마른 밭을 찜하고, 물을 들고 있으면(u.can) 바로 밭으로, 없으면 그 밭에서 가까운 물가(FM.waterEdges)로 먼저 감. 물가가 없거나 못 가면 false */
 function startWatering(u, world, list) {
-  const pl = nearest(u, list, p => [p.x, p.z]); if (!pl) return false;
-  if ((u.can || 0) > 0) { if (!startPath(u, world, pl.x, pl.z)) return false; }
-  else {
-    const g = world.grid; if (!pl._ws || pl._ws.v !== g.version) pl._ws = { v: g.version, list: FM.waterEdges(g, pl.x, pl.z).slice(0, 3) };   // 물가 찾기는 땅이 바뀔 때만 다시
+  // 가까운 밭부터 3칸까지: 가장 가까운 밭이 물가에서 멀거나(24칸 밖) 물가로 가는 길이 없으면 다음 밭(그 한 칸 때문에 다른 밭 물주기가 다 멈추지 않게)
+  const d = p => Math.hypot(p.x + 0.5 - u.x, p.z + 0.5 - u.z), g = world.grid;
+  const pl = list.slice().sort((a, b) => d(a) - d(b)).slice(0, 3).find(pl => {
+    if ((u.can || 0) > 0) return startPath(u, world, pl.x, pl.z);
+    if (!pl._ws || pl._ws.v !== g.version) pl._ws = { v: g.version, list: FM.waterEdges(g, pl.x, pl.z).slice(0, 3) };   // 물가 찾기는 땅이 바뀔 때만 다시
     const edge = pl._ws.list.find(e => startPath(u, world, e.x, e.z)); if (!edge) return false;
-    u.water = { fill: edge };
-  }
+    u.water = { fill: edge }; return true;
+  });
+  if (!pl) return false;
   u.water ||= {}; pl.claimed = u.unitId; u.focus = pl; u.state = US.GoWater; emote(u, (u.can || 0) > 0 ? "💧 물 주러" : "🪣 물 뜨러", 1.8); return true;
 }
 /** 물주기 길에 닿음: 물가면 물을 뜨고(쪼기 동작) 밭으로, 밭이면 붓고(쪼그려 톡톡) 남은 물로 가까운(6칸 안) 마른 밭을 이어서 */
