@@ -48,6 +48,7 @@ const uiAutoScale = () => uiCoarse() ? 1 : Math.max(1, Math.min(2, Math.floor(Ma
 // 건설 갤러리의 분류(화면에서만 쓰는 표 — 건물 정의에는 분류가 없음)
 const BUILD_CATS = [["all", "전체"], ["home", "집"], ["work", "시설"], ["deco", "장식"], ["road", "교통"]];
 const buildCatOf = d => d.house ? "home" : d.deco ? "deco" : d.stairs || d.bridge || d.pier ? "road" : "work";
+const cardPut = (node, t) => { if (node.textContent !== t) node.textContent = t; };   // 바뀐 글자만 고침(따라가기 카드)
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 export class Hud {
@@ -69,6 +70,9 @@ export class Hud {
     this.lastEdit = "build";
     document.getElementById("editBtn").onclick = () => this.modeBtns.find(b => b.dataset.mode === this.lastEdit)?.click();
     this.sub = sub;
+    // 한 줄 건물 갤러리: 마우스 휠(세로)을 옆으로 밀기로 — 옆으로 넘칠 때만, 아래위로 넘치는 트레이(가로 폰 세로 열)는 그대로
+    sub.addEventListener("wheel", e => { if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || sub.scrollWidth <= sub.clientWidth + 1 || sub.scrollHeight > sub.clientHeight + 1) return;
+      sub.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 32 : 1); e.preventDefault(); }, { passive: false });
     // ---- 보조 줄(#ebar): 분류 칩(건물 짓기) · 철거 안내 · 보조 버튼(✋ 화면 이동 · ↶ ↷ · 🎯 십자선 · ⟲ ⟳ 화면 돌리기). 한 번만 만들고 도구에 따라 보이기만 바꿈
     const ebar = document.getElementById("ebar"), aux = el("div", "eaux");
     const auxBtn = (id, icon, label, tip) => { const b = el("button", "abtn", icon); if (id) b.id = id; b.setAttribute("aria-label", label); b.dataset.tip = tip; aux.appendChild(b); return b; };
@@ -109,10 +113,11 @@ export class Hud {
     for (const k of ORDER) { const b = el("button", "", QUALITY[k].name); b.dataset.q = k; b.dataset.tip = QUALITY_NOTE[k]; b.onclick = () => this.setQuality(this.onQuality?.(k)); this.qBox.appendChild(b); }
     this.info = document.getElementById("info");
     this.tugBtn = document.getElementById("tugBtn"); this.tugBtn.onclick = () => this.onTug?.();   // 찌 당기기(따라가는 갈매미에게 입질이 왔을 때만 보임)
-    // 선물·쓰다듬기(따라가기 카드 위): 카드는 매 프레임 다시 그리므로 버튼은 따로 둠
+    // 선물·쓰다듬기: 버튼은 카드의 행동 줄에(뼈대를 한 번만 만드니 누르는 중에 사라지지 않음), 선물 고르는 판만 카드 위에 뜸
     this.bondBar = document.getElementById("bondBar"); this.giftPick = document.getElementById("giftPick"); this.giftBtn = document.getElementById("giftBtn"); this.petBtn = document.getElementById("petBtn");
     this.giftBtn.onclick = () => { this.giftPick.hidden = !this.giftPick.hidden; if (!this.giftPick.hidden) this.drawGifts(); };
     this.petBtn.onclick = () => { if (!this.follow) return; this.onPet?.(this.follow); this.showBond(this.follow); };   // 남은 횟수는 바로 고침(글자판은 1초에 5번만 그림)
+    this.buildInfoCard();
     this.giftPick.onclick = e => { const b = e.target.closest?.("[data-gift]"), u = this.follow; if (!b || !u) return; this.onGift?.(u, b.dataset.gift); this.drawGifts(); };
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); const on = !zb.classList.contains("off"); zb.setAttribute("aria-pressed", String(on)); this.onZones?.(on); };
     document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
@@ -176,7 +181,7 @@ export class Hud {
     const f = hudFormNow(k); this.form = f; this.phoneForm = f === "portrait" || f === "landscape";
     if (root.dataset.form !== f) root.dataset.form = f;
     root.toggleAttribute("data-narrow", f === "medium" && innerWidth / k < 900);   // 중간 화면 가운데 좁은 창(건설 판을 한 칸으로)
-    root.toggleAttribute("data-short", !this.phoneForm && innerHeight / k < 600);   // 낮은 창(건물 갤러리를 한 줄로)
+    root.toggleAttribute("data-short", !this.phoneForm && innerHeight / k < 1000);  // 키가 아주 크지 않은 태블릿·PC 창은 건물 갤러리를 한 줄로(건설 판이 화면 높이의 4분의 1을 넘지 않게)
   }
   // ---- 화면 맞춤 설정(글자·버튼 크기 · 키 힌트 · 왼손 배치 · 움직임 줄이기 · 진동)
   /** 저장해 둔 값을 읽어 바로 적용(첫 화면이 그려지기 전) */
@@ -535,6 +540,7 @@ export class Hud {
   showMode(mode, arg) {
     document.getElementById("houseCard").hidden = true;                             // 도구를 바꾸면 집 카드는 닫음
     const dm = mode === "view" ? "browse" : "edit"; if (document.body.dataset.mode !== dm) document.body.dataset.mode = dm;   // 평소(browse) · 건설 모드(edit): 배치는 CSS가
+    if (this.ic) this.syncInfo();                                                   // 휴대폰: 건설 중엔 따라가기 카드를 한 줄로 접음(바로)
     if (mode !== "view") this.lastEdit = mode;
     this.modeBtns.forEach(b => { const on = b.dataset.mode === mode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
     if (mode === "view" && this.tools.hand) this.tools.setHand(false);
@@ -577,18 +583,18 @@ export class Hud {
   /** 🥚 소환 버튼: 마을에 있는 수 / 전체, 다 모이면 끔 */
   setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all;
     const left = UNITS.filter(d => !world.units.some(u => u.name === d.name)).map(d => d.name); document.getElementById("summonLast").textContent = left.length ? `아직 안 온 갈매미: ${left.join(", ")}` : ""; }
-  showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); }
+  showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); if (this.ic) this.syncInfo(); }   // 카드는 바로(다음 갱신까지 기다리지 않게)
   /** 🎣 당기기! 버튼: 따라가기 카드 바로 위에 붙여서 보여 줌(입질 동안만). 매 프레임 불러도 바뀔 때만 손댐 */
   showTug(on, secs = 1.5) {
     const b = this.tugBtn; if (b.hidden === !on) return;
     if (on) b.style.setProperty("--tug", `${Math.max(0.1, secs).toFixed(2)}s`);   // 줄어드는 줄은 실제로 남은 시간만큼(자리는 CSS: 카드 바로 위)
-    b.hidden = !on;
+    b.hidden = !on; this.giftBtn.disabled = on; if (on) this.giftPick.hidden = true;   // 당기는 동안 선물 판은 비켜 줌(같은 자리)
   }
-  /** 🎁 선물·♥ 쓰다듬기 버튼: 따라가는 갈매미가 있을 때 카드 바로 위에(당기기 버튼이 떠 있는 동안은 비켜 줌). 매 프레임 불러도 바뀔 때만 손댐 */
+  /** 🎁 선물 고르는 판(카드 바로 위, 당기기 버튼과 같은 자리라 그동안은 비켜 줌)과 ♥ 쓰다듬기 남은 횟수. 자주 불러도 바뀔 때만 손댐 */
   showBond(u) {
     const on = !!u && this.tugBtn.hidden, bar = this.bondBar;
     if (!on || u !== this.bondU) this.giftPick.hidden = true;                       // 다른 갈매미로 바꾸면 고르는 판은 닫음
-    this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!on) return;      // 자리는 CSS(카드 바로 위, 가로 폰은 카드 옆)
+    this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!u) return;       // 자리는 CSS(카드 바로 위, 가로 폰은 카드 옆)
     const left = petsLeft(u, newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
     if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
     if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
@@ -713,24 +719,58 @@ export class Hud {
       this.rows[i].querySelector(".coins").textContent = w.economy ? `🪙${u.coins || 0}${u.home ? " 🏠" : ""}` : "";
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
-    // 따라가는 갈매미 정보
-    const u = this.follow; this.info.hidden = !u; if (!u) this.showBond(null);
-    if (u) { const job = JOBS[u.job], r = RARITY[u.rarity];
-      const n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
-      // 따라가기 카드: 이름·직업 배지 / 지금 하는 일 / 욕구 막대 4개 / 돈·가방·집 칩 (긴 설명은 뺌)
-      const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : STATE_LABEL[u.state] || u.state;
-      const bar = (label, v, cls = "") => `<div class="need"><span>${label}</span><i class="${cls}"><b style="width:${Math.max(0, Math.min(100, v))}%"></b></i><em>${Math.round(v)}</em></div>`;
-      const full = u.full ?? 80, note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
-      const bag = E.ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${E.ITEM_ICON[k]}${u.inv[k]}`).join(" ");
-      if (this.infoOpen === undefined) { this.infoOpen = !this.phoneForm; this.info.onclick = () => { this.infoOpen = !this.infoOpen; }; }   // 휴대폰은 접힌 채(누르면 펼침)
-      if (!this.infoOpen) { this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="dim">${doing}</span><span class="hearts">${bondHearts(u.bond)}</span><span class="dim">😊${Math.round(u.sat ?? 50)} 🍗${Math.round(full)} ▾</span></div>`; this.info.classList.add("mini"); this.showBond(u); return; }
-      this.info.classList.remove("mini");
-      this.info.innerHTML = `<div class="ihead"><b>${u.name}</b><span class="jobtag">${job.icon} ${job.name}</span><span class="hearts" title="${BOND_STAGES[bondStage(u.bond)].name}">${bondHearts(u.bond)}</span><span class="dim">${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}</span></div>` +
-        `<div class="doing">${doing}${note ? ` · <span class="warn">${note}</span>` : ""}</div>` +
-        `<div class="needs">${bar("만족도", u.sat ?? 50, (u.sat ?? 50) < 35 ? "low" : "")}${bar("포만감", Math.min(100, full), full < J.HUNGRY ? "low" : "")}${bar("피로도", 100 - (n.energy ?? 100), (n.energy ?? 100) < 25 ? "low" : "")}${bar("친구", n.social ?? 0)}${bar("재미", n.fun ?? 0)}</div>` +
-        (u.satParts ? `<div class="small dim">만족도: ${u.satParts.map(([n, v]) => `${n} ${v > 0 ? "+" : ""}${v}`).join(" · ")}</div>` : "") +
-        (w.economy ? `<div class="ichips"><span>🪙 ${u.coins || 0}</span><span>${bag ? "🎒 " + bag : "🎒 비었음"}</span><span>${u.home ? "🏠 " + (BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? "") : "🏠 집 없음"}</span></div>` : "") +
-        `<div class="dim small">좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · ${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)} · 누르면 접기 ▴</div>`;
-      this.showBond(u); }                                                         // 카드를 그린 뒤에(카드 높이에 맞춰 바로 위에 놓음)
+    this.syncInfo();                                                               // 따라가는 갈매미 카드(값만 고침)
+  }
+  // ---- 따라가기 카드(#info): 뼈대는 한 번만 만들고, 그 뒤로는 글자와 막대 길이만 고침(누르는 중에 다시 그려져 누름이 사라지지 않게)
+  buildInfoCard() {
+    const c = this.info, k = this.ic = {}; c.textContent = "";
+    const head = el("div", "ihead"), meta = el("div", "imeta"), body = el("div", "ibody"), acts = el("div", "iacts");
+    k.name = el("b"); k.job = el("span", "jobtag"); k.hearts = el("span", "hearts"); k.sub = el("span", "dim isub"); meta.append(k.name, k.job, k.hearts, k.sub);
+    k.tog = el("button", "itog ghost"); k.tog.type = "button";
+    k.tog.innerHTML = `<svg viewBox="0 0 24 24" width="1.1em" height="1.1em" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;   // 펼친 카드는 아래 꺾쇠(접기), 접힌 카드는 위 꺾쇠(펼치기) — 돌리기는 CSS
+    k.x = el("button", "ix ghost", "✕"); k.x.type = "button"; k.x.setAttribute("aria-label", "따라가기 그만"); k.x.dataset.tip = "따라가기 그만";
+    head.append(meta, k.tog, k.x);
+    const doing = el("div", "doing"); k.doing = el("span"); k.note = el("span", "warn"); doing.append(k.doing, k.note);
+    const needs = el("div", "needs"); k.bars = ["만족도", "포만감", "피로도", "친구", "재미"].map(label => {
+      const row = el("div", "need"), track = el("i"), fill = el("b"), num = el("em"); track.appendChild(fill); row.append(el("span", "", label), track, num); needs.appendChild(row); return { track, fill, num }; });
+    k.parts = el("div", "small dim"); const chips = k.chips = el("div", "ichips"); k.coin = el("span"); k.bag = el("span"); k.home = el("span"); chips.append(k.coin, k.bag, k.home);
+    k.foot = el("div", "dim small"); body.append(doing, needs, k.parts, chips, k.foot);
+    // 행동 줄: 관계 먼저, 그다음 선물 · 쓰다듬기 · 집 보기
+    k.rel = el("button", "", "💞 관계"); k.rel.type = "button"; k.rel.dataset.tip = "이 갈매미의 친구 사이를 관계도에서 봐요";
+    k.goHome = el("button", "", "🏠 집 보기"); k.goHome.type = "button"; k.goHome.dataset.tip = "이 갈매미의 집으로 화면을 옮겨요";
+    acts.append(k.rel, this.giftBtn, this.petBtn, k.goHome); c.append(head, body, acts);
+    k.tog.onclick = () => { this.infoOpen = !this.infoOpen; if (this.infoEdit) this.infoWas = this.infoOpen; this.syncInfo(); };
+    k.x.onclick = () => { if (this.follow) this.onUnitClick?.(this.follow); };       // 따라가기 그만(카드도 닫힘)
+    k.rel.onclick = () => { const u = this.follow; if (!u) return; this.relSel = u.name; if (this.phone.hidden) this.openPhone(); this.openApp("rel"); };
+    k.goHome.onclick = () => { const u = this.follow, b = u && u.home && this.world.buildings.get(u.home); if (b) this.onGoto?.(b); };
+  }
+  /** 카드의 값만 고침. 1초에 5번(update) + 접기·모드가 바뀔 때 바로. 접혀 있어도 머리줄은 계속 고침 */
+  syncInfo() {
+    const u = this.follow, c = this.info, k = this.ic, w = this.world;
+    if (c.hidden !== !u) c.hidden = !u; if (!u) { this.showBond(null); return; }
+    if (this.infoOpen === undefined) this.infoOpen = !this.phoneForm;                // 휴대폰은 접힌 채(⌃로 펼침)
+    const editing = document.body.dataset.mode === "edit";                          // 건설 모드(모든 화면): 저절로 한 줄로 접어 건설 판·섬을 가리지 않게, 끝내면 보던 대로
+    if (editing !== !!this.infoEdit) { this.infoEdit = editing; if (editing) { this.infoWas = this.infoOpen; this.infoOpen = false; } else if (this.infoWas !== undefined) this.infoOpen = this.infoWas; }
+    const open = this.infoOpen, job = JOBS[u.job], full = u.full ?? 80, sat = u.sat ?? 50;
+    const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : STATE_LABEL[u.state] || u.state;
+    if (c.classList.contains("mini") === open) c.classList.toggle("mini", !open);
+    cardPut(k.name, u.name); cardPut(k.job, `${job.icon} ${job.name}`); cardPut(k.hearts, bondHearts(u.bond));
+    const stage = BOND_STAGES[bondStage(u.bond)].name; if (k.hearts.title !== stage) k.hearts.title = stage;
+    const exp = String(open); if (k.tog.getAttribute("aria-expanded") !== exp) { k.tog.setAttribute("aria-expanded", exp); k.tog.setAttribute("aria-label", open ? "카드 접기" : "카드 펼치기"); k.tog.dataset.tip = open ? "접기" : "펼치기"; }   // 카드는 아래에 붙어 있어 위로 펼쳐지고 아래로 접힘
+    const homeB = u.home && w.buildings.get(u.home); if (k.goHome.hidden !== !homeB) k.goHome.hidden = !homeB;
+    if (!open) { cardPut(k.sub, `${doing} · 😊${Math.round(sat)} 🍗${Math.round(full)}`); this.showBond(u); return; }
+    const r = RARITY[u.rarity], n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
+    cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}`);
+    const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
+    cardPut(k.doing, doing); cardPut(k.note, note ? ` · ${note}` : "");
+    const energy = n.energy ?? 100, vals = [[sat, sat < 35], [Math.min(100, full), full < J.HUNGRY], [100 - energy, energy < 25], [n.social ?? 0, false], [n.fun ?? 0, false]];
+    vals.forEach(([v, low], i) => { const b = k.bars[i], wd = `${Math.max(0, Math.min(100, v)).toFixed(0)}%`;
+      if (b.fill.style.width !== wd) b.fill.style.width = wd; if (b.track.classList.contains("low") !== low) b.track.classList.toggle("low", low); cardPut(b.num, String(Math.round(v))); });
+    cardPut(k.parts, u.satParts ? `만족도: ${u.satParts.map(([name, v]) => `${name} ${v > 0 ? "+" : ""}${v}`).join(" · ")}` : ""); if (k.parts.hidden !== !u.satParts) k.parts.hidden = !u.satParts;
+    if (k.chips.hidden !== !w.economy) k.chips.hidden = !w.economy;
+    if (w.economy) { const bag = E.ITEMS_ORDER.filter(id => u.inv?.[id]).map(id => `${E.ITEM_ICON[id]}${u.inv[id]}`).join(" ");
+      cardPut(k.coin, `🪙 ${u.coins || 0}`); cardPut(k.bag, bag ? "🎒 " + bag : "🎒 비었음"); cardPut(k.home, homeB ? "🏠 " + (BUILDINGS[homeB.defId]?.name ?? "") : "🏠 집 없음"); }
+    cardPut(k.foot, `좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · ${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)}`);
+    this.showBond(u);
   }
 }

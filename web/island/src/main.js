@@ -280,6 +280,10 @@ roomView.chars = charPool;                                                      
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
+// 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
+hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
+  unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
+  hud.houseCard(tools.mode === "view" && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
 hud.onSummon = () => { if (!world.summon()) hud.status("8마리 모두 모였어요"); };
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };

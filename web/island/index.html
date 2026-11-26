@@ -75,7 +75,16 @@
   #stats { display: flex; flex-wrap: wrap; gap: calc(3*var(--u)) calc(10*var(--u)); font-size: var(--fs-cap); } #stats span { white-space: nowrap; }
   .tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; } .tbl td { padding: calc(4*var(--u)) calc(2*var(--u)); border-bottom: 1px dashed var(--c-line); }
   .tbl td:last-child { text-align: right; } h4 { margin: calc(10*var(--u)) 0 calc(4*var(--u)); font-size: var(--fs-body); }
-  #info .ihead { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; } #info .ihead b { font-size: var(--fs-body); }
+  /* 따라가기 카드: 머리줄(이름 · 직업 · ⌃ 접기 · ✕ 그만) / 몸(욕구 막대 · 칩) / 행동 줄(관계 · 선물 · 쓰다듬기 · 집 보기). 뼈대는 한 번만 만들고 값만 고침 */
+  #info .ihead { display: flex; align-items: center; gap: var(--gap); } #info .ihead b { font-size: var(--fs-body); }
+  #info .imeta { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: calc(3*var(--u)) var(--s-2); flex-wrap: wrap; }
+  #info.mini .imeta { row-gap: 0; overflow: hidden; } #info.mini .isub { flex-basis: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* 접힌 카드: 둘째 줄에 지금 하는 일 · 만족 · 포만 */
+  #info .ihead button { flex: none; min-width: var(--hit-sm); min-height: var(--hit-sm); padding: 0; font-size: var(--fs-body); font-weight: 700; border-radius: var(--r-md); touch-action: manipulation; }
+  #info.mini .ibody { display: none; }
+  #info .itog svg { display: block; margin: auto; pointer-events: none; transition: transform var(--t-med) var(--ease); } #info.mini .itog svg { transform: rotate(180deg); }
+  #info .iacts { display: flex; flex-wrap: wrap; gap: var(--gap); margin-top: calc(6*var(--u)); } #info .iacts [hidden] { display: none; }
+  #info .iacts button { flex: 1 1 auto; min-height: max(calc(38*var(--u)), var(--hit-sm)); padding: calc(5*var(--u)) calc(6*var(--u)); font-size: var(--fs-sm); border-radius: var(--r-md); white-space: nowrap; touch-action: manipulation; }   /* 네 개가 한 줄에(좁으면 다음 줄로) */
+  #info .iacts button:disabled { opacity: .55; }
   #info .jobtag { background: var(--c-peach); border-radius: var(--r-sm); padding: 1px calc(7*var(--u)); font-size: var(--fs-cap); }
   #info .doing { margin: calc(3*var(--u)) 0 calc(6*var(--u)); font-size: var(--fs-sm); } #info .warn { color: var(--c-danger); font-weight: 600; }
   #info .needs { display: grid; grid-template-columns: 1fr 1fr; gap: calc(4*var(--u)) calc(12*var(--u)); margin-bottom: calc(6*var(--u)); }
@@ -84,8 +93,8 @@
   #info .need i.low b { background: var(--c-danger); } #info .need em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; color: var(--c-ink-2); }
   #info .ichips { display: flex; flex-wrap: wrap; gap: calc(5*var(--u)); margin-bottom: calc(4*var(--u)); } #info .ichips span { background: rgba(0,0,0,.05); border-radius: var(--r-sm); padding: calc(2*var(--u)) calc(7*var(--u)); font-size: var(--fs-cap); }
   #info .small { font-size: var(--fs-cap); } #info.mini { min-height: var(--hit-sm); display: flex; flex-direction: column; justify-content: center; }   /* 접힌 카드도 누르는 칸 44px */
-  #info { position: fixed; left: var(--safe-l); bottom: var(--info-b); z-index: var(--z-hud); width: min(calc(330*var(--u)), calc(100% - calc(100*var(--u))));
-    background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u)); font-size: var(--fs-cap); line-height: var(--lh-body); box-shadow: var(--e-1); box-sizing: border-box; }
+  #info { position: fixed; left: var(--safe-l); bottom: var(--info-b); z-index: var(--z-hud); width: min(calc(360*var(--u)), calc(100% - calc(100*var(--u))));
+    background: var(--c-surface); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u)); font-size: var(--fs-cap); line-height: var(--lh-body); box-shadow: var(--e-1); box-sizing: border-box; }   /* 불투명: 뒤의 이름표·말풍선이 비치지 않게 */
   /* 찌 당기기: 따라가기 카드 바로 위의 큰 버튼(입질 동안만), 아래 줄이 줄어들며 남은 시간을 알려 줌. 흰 글자가 읽히게 진한 주황 */
   #tugBtn { position: fixed; left: var(--safe-l); bottom: calc(var(--info-b) + var(--info-h) + calc(8*var(--u))); z-index: var(--z-context); min-width: calc(150*var(--u)); min-height: calc(56*var(--u)); padding: calc(10*var(--u)) calc(22*var(--u)) calc(14*var(--u)); font-size: var(--fs-h); font-weight: 700;
     color: var(--c-on-accent); background: var(--c-accent-strong); border: calc(3*var(--u)) solid #fff; border-radius: var(--r-lg); box-shadow: var(--e-2); overflow: hidden; touch-action: manipulation; animation: tugPulse .45s ease-in-out infinite alternate; }
@@ -94,10 +103,10 @@
   @keyframes tugPulse { from { transform: scale(1); } to { transform: scale(1.07); } } @keyframes tugLeft { to { transform: scaleX(0); } }
   .emote.icon.bite { font-size: var(--fs-display); padding: calc(4*var(--u)) calc(12*var(--u)); background: #ffe27a; } .emote.bite::after { border-top-color: #ffe27a; }
   body.inroom #tugBtn, body.inroom #bondBar { display: none !important; }
-  /* 선물·쓰다듬기: 따라가기 카드 바로 위의 버튼 두 개(선물을 누르면 그 위로 고르는 판이 열림) */
-  #bondBar { position: fixed; left: var(--safe-l); bottom: calc(var(--info-b) + var(--info-h) + calc(6*var(--u))); z-index: var(--z-hud); width: min(calc(330*var(--u)), calc(100% - calc(100*var(--u)))); display: flex; flex-direction: column; gap: var(--gap); pointer-events: none; }
+  /* 선물 고르는 판: 따라가기 카드 바로 위(당기기 버튼과 같은 자리 — 당기는 동안은 닫힘). 🎁 선물 · ♥ 쓰다듬기 버튼은 카드의 행동 줄에 있음 */
+  #bondBar { position: fixed; left: var(--safe-l); bottom: calc(var(--info-b) + var(--info-h) + calc(6*var(--u))); z-index: var(--z-hud); width: min(calc(360*var(--u)), calc(100% - calc(100*var(--u)))); display: flex; flex-direction: column; gap: var(--gap); pointer-events: none; }
   #bondBar[hidden], #giftPick[hidden] { display: none; }
-  #bondBar .brow { display: flex; gap: var(--gap); } #bondBar .brow button { flex: none; }   /* 좁아도 두 버튼이 서로 덮지 않게 */ #bondBar button { pointer-events: auto; min-height: max(calc(40*var(--u)), var(--hit-sm)); padding: calc(6*var(--u)) calc(12*var(--u)); font-size: var(--fs-body); border-radius: var(--r-md); touch-action: manipulation; }
+  #bondBar .brow { display: none; } #bondBar button { pointer-events: auto; min-height: max(calc(40*var(--u)), var(--hit-sm)); padding: calc(6*var(--u)) calc(12*var(--u)); font-size: var(--fs-body); border-radius: var(--r-md); touch-action: manipulation; }
   #petBtn { color: #b8355c; } #bondBar button:disabled { opacity: .55; }
   #giftPick { pointer-events: auto; background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u)); box-shadow: var(--e-1); font-size: var(--fs-cap); max-height: 34vh; max-height: 34dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; }
   #giftPick p { margin: 0 0 calc(6*var(--u)); } #giftPick .gifts { display: flex; flex-wrap: wrap; gap: calc(5*var(--u)); } #giftPick .gifts button { min-height: max(calc(38*var(--u)), var(--hit-sm)); font-size: var(--fs-sm); }
@@ -197,7 +206,12 @@
   :where(html[data-form="landscape"]) #minimap canvas { width: calc(104*var(--u)); height: calc(104*var(--u)); }
   :where(html[data-form="landscape"]) #crossGo { bottom: var(--row-b); }
   /* 가로 폰: 따라가기 카드는 조금 넓고 낮게(넘치면 카드 안에서 밀기), 선물·쓰다듬기는 카드 위가 아니라 옆에 — 위쪽 도구 막대와 겹치지 않게 */
-  :where(html[data-form="landscape"]) #info { width: min(calc(400*var(--u)), 48vw); max-height: calc(100dvh - calc(240*var(--u))); overflow-y: auto; overscroll-behavior: contain; }
+  :where(html[data-form="landscape"]) #info { width: min(calc(400*var(--u)), 48vw); max-height: calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - calc(8*var(--u))); display: flex; flex-direction: column; }
+  :where(html[data-form="landscape"]) #info .needs { grid-template-columns: 1fr 1fr 1fr; gap: calc(4*var(--u)) calc(10*var(--u)); } :where(html[data-form="landscape"]) #info .need { grid-template-columns: auto 1fr calc(22*var(--u)); }
+  :where(html[data-form="landscape"]) #info .ibody { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }   /* 낮은 화면: 몸만 스크롤(머리줄·행동 줄은 늘 보임) */
+  :where(html[data-form="landscape"]) #tugBtn { bottom: var(--info-b); left: calc(var(--safe-l) + min(calc(400*var(--u)), 48vw) + calc(8*var(--u))); }   /* 가로 폰: 당기기는 카드 옆(선물 판과 같은 자리) */
+  html[data-form="portrait"] #tugBtn { min-width: min(calc(150*var(--u)), calc(100vw - var(--safe-l) - var(--safe-r) - var(--mm-space))); max-width: calc(100vw - var(--safe-l) - var(--safe-r) - var(--mm-space)); }   /* 크게(130%) + 펼친 카드: 당기기가 미니맵 높이까지 올라가도 그 왼쪽에 */
+  :where(html[data-form="portrait"]) #info { max-height: 46dvh; display: flex; flex-direction: column; } :where(html[data-form="portrait"]) #info .ibody { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   :where(html[data-form="landscape"]) #bondBar { bottom: var(--info-b); left: calc(var(--safe-l) + min(calc(400*var(--u)), 48vw) + calc(8*var(--u))); width: min(calc(330*var(--u)), calc(100% - min(calc(400*var(--u)), 48vw) - calc(110*var(--u)))); }
   :where(html[data-form="landscape"]) body:has(#minimap:not([hidden])) #bondBar { width: min(calc(330*var(--u)), calc(100% - var(--safe-l) - min(calc(400*var(--u)), 48vw) - var(--safe-r) - var(--mm-space) - calc(8*var(--u)))); }   /* 미니맵을 켰으면 선물 판이 그 왼쪽까지만 */
   /* ===== 3단계: 키보드·포인터 — 키 힌트(.kbd, 마우스·키보드일 때만), 툴팁(#tip), 확인창(#ask), 단축키 표 ===== */
@@ -393,9 +407,9 @@
   html[data-form="landscape"] #sub[data-kind="build"] { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: 1fr 1fr; grid-auto-rows: calc(92*var(--u)); }
   html[data-form="landscape"] #sub .tgrp + .tgrp { padding-left: 0; border-left: 0; } html[data-form="landscape"] #sub .tgrp { max-width: 100%; } html[data-form="landscape"] #sub .tgb { flex-wrap: wrap; }
   html[data-form="landscape"] #ebar .ecats { max-width: calc(236*var(--u)); } html[data-form="landscape"] #ebar .ehint { max-width: calc(220*var(--u)); }
-  html[data-form="landscape"] body[data-mode="edit"] :is(#info, #tugBtn) { left: calc(var(--safe-l) + var(--edit-w)); }
+  html[data-form="landscape"] body[data-mode="edit"] :is(#info, #tugBtn) { left: calc(var(--safe-l) + var(--edit-w)); } html[data-form="landscape"] body[data-mode="edit"] #tugBtn { bottom: calc(var(--info-b) + var(--info-h) + calc(8*var(--u))); }
   html[data-form="landscape"] body[data-mode="edit"] #info { width: min(calc(360*var(--u)), calc(100vw - var(--safe-l) - var(--safe-r) - var(--edit-w))); }
-  :where(html[data-form="portrait"], html[data-form="landscape"]) body[data-mode="edit"] #bondBar { display: none; }   /* 휴대폰: 건설 중엔 선물·쓰다듬기 줄을 접어 둠 */
+  body[data-mode="edit"] :is(#bondBar, #info .iacts) { display: none; }   /* 건설 중엔(모든 화면) 카드를 한 줄로 — 행동 줄·선물 판은 접어 둠 */
   /* 확인 막대: [취소] [돌리기] [건설] — 주요 행동이 오른쪽(엄지 쪽) */
   #confirm button { min-width: var(--hit); padding: calc(8*var(--u)) calc(14*var(--u)); }
   /* 방 화면: 가구 카드(이름 · 개수 · 크기 · 아늑함) · 행동 줄 [치우기 ··· 취소 · 돌리기 · 놓기] */
@@ -495,7 +509,7 @@
   html[data-form="landscape"] body[data-mode="edit"] { --mm-w: calc(80*var(--u)); }
   html[data-form="landscape"] body[data-mode="edit"] #minimap canvas { width: calc(72*var(--u)); height: calc(72*var(--u)); }
   html[data-form="landscape"] #confirm { bottom: calc(var(--row-b) + var(--info-h) + var(--s-2)); }
-  /* 낮은 창(배율로 나눈 높이 600 미만인 태블릿·PC 배치, hud.js가 data-short를 붙임): 건물 갤러리를 한 줄로 → 📱가 미니맵 밑으로 내려오고 섬이 더 보임 */
+  /* 키가 아주 크지 않은 창(배율로 나눈 높이 1000 미만인 태블릿·PC 배치, hud.js가 data-short를 붙임): 건물 갤러리를 한 줄로(옆으로 밀기 · 마우스 휠도 옆으로) → 건설 판이 화면 높이의 4분의 1 안, 섬이 더 보임 */
   html[data-short] #sub[data-kind="build"] { grid-template-rows: calc(98*var(--u)); }
   /* 글자·버튼 크기 줄: [－] 막대 [＋] [기본] */
   .urow { display: flex; align-items: center; gap: var(--s-2); }
@@ -516,7 +530,7 @@
 <div id="chips"><div id="stat" role="group" aria-label="마을 상태"><span id="chipTime">☀️</span><button id="chipWeather" data-tip="계절·날씨 효과 보기">🍂</button><button id="chipMoney" data-tip="갈매미들이 가진 돈 합계 · 누르면 🏦 은행">🪙 0</button><button id="chipRank" data-tip="마을 등급·겨울 대비">🛖</button><span id="chipPop">🐦 0</span></div><button id="mapBtn" data-tip="미니맵 보이기/숨기기">🗺 지도</button><button id="menuBtn" aria-label="메뉴" data-tip="메뉴: 설정·저장·도움말·지난 알림">☰</button><i class="brk" aria-hidden="true"></i><button id="chipWish" hidden></button><button id="alert" hidden></button></div>
 <div id="info" hidden></div>
 <button id="tugBtn" hidden>🎣 당기기!</button>
-<div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" data-tip="가방의 물건이나 보물 물고기를 선물해요">🎁 선물</button><button id="petBtn" data-tip="쓰다듬으면 조금씩 친해져요(마을 하루에 몇 번까지)">♥ 쓰다듬기</button></div></div>
+<div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" data-tip="가방의 물건이나 보물 물고기를 선물해요">🎁 선물</button><button id="petBtn" data-tip="쓰다듬으면 조금씩 친해져요(마을 하루에 몇 번까지)">♥ 쓰다듬기</button></div></div><!-- 두 버튼은 켜질 때 따라가기 카드의 행동 줄로 옮겨짐(hud.js buildInfoCard) -->
 <button id="phoneBtn" aria-label="갈매폰" data-tip="갈매폰: 소원·갈매미·소식지·도감과 마을 앱">📱<span class="badge-count" hidden></span><span class="dot" hidden></span></button>
 <div id="phone" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="phoneTitle">
   <div class="card">
