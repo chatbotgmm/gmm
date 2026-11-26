@@ -19,6 +19,8 @@ import { STAMP_SHOP, DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
 import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 import { bankHtml } from "./bankView.js";
+import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
+import { summonHtml, summonButton } from "./summonView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -99,15 +101,21 @@ export class Hud {
     tools.onMode = (m, arg) => this.showMode(m, arg);
     // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
     const cf = document.getElementById("confirm"), cfBuild = document.getElementById("cfBuild");
-    tools.onPlan = (on, ok) => {
+    tools.onPlan = (on, ok, plan) => {
       cf.hidden = !on; cfBuild.disabled = !ok;                                       // 자리: CSS(--dock-b, 세로 폰은 아래 도구 막대 바로 위)
+      this.planNow = on ? plan || null : null; this.drawPlan();                      // 설계비·금고·재료 요약(금고가 바뀌면 update가 다시 셈)
     };
     cfBuild.onclick = () => tools.confirmBuild();
+    const cfInfo = document.getElementById("cfInfo");                                // 휴대폰: 둘째 줄(재료·짓는 이)은 한 줄로 줄여 두고 누르면 펼침
+    cfInfo.onclick = () => { const open = cfInfo.dataset.open !== "1"; cfInfo.dataset.open = open ? "1" : "0"; cfInfo.setAttribute("aria-expanded", String(open)); };
+    cfInfo.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cfInfo.onclick(); } };
     document.getElementById("cfRot").onclick = () => tools.rotate();
     document.getElementById("cfCancel").onclick = () => tools.clearPlan();
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     this.instantBuild = false;
     this.summonBtn = document.getElementById("summon"); this.summonBtn.onclick = () => this.onSummon?.();
+    document.getElementById("summonMid").onclick = e => { const go = e.target.closest("[data-act]"); if (!go) return;   // 🏗 자이언트의 집 지으러 가기 → 폰을 닫고 건설 모드(그 건물을 고른 채)
+      this.closePhone(); this.tools.setMode("build", go.dataset.act); };
     document.getElementById("dexBtn").onclick = () => this.showDex(true);
     // ⚡ 바로 완공(시험용): 설정 → 게임 → 🛠 개발자 안에
     const ib = document.getElementById("instantBtn"), ibDraw = () => { ib.textContent = `⚡ 바로 완공: ${this.instantBuild ? "켬" : "끔"}`; ib.classList.toggle("on", this.instantBuild); ib.setAttribute("aria-pressed", String(this.instantBuild)); };
@@ -407,7 +415,8 @@ export class Hud {
   /** 배지에 쓰는 값: 할 일(도장으로 지금 받을 수 있는 가구 수) · 새 소식(소식지 마지막 기사 · 도감에 모은 가짓수) */
   badgeNow() {
     const w = this.world, log = w.newsLog || [], last = log[log.length - 1];
-    return { act: STAMP_SHOP.filter(s => (w.stamps || 0) >= s.stamp).length,
+    const si = w.summonInfo();
+    return { act: STAMP_SHOP.filter(s => (w.stamps || 0) >= s.stamp).length, summon: si.can ? si.count : 0,
       news: `${log.length}|${last?.t}|${last?.text}`,
       dex: Object.keys(w.collection || {}).length + Object.keys(w.items || {}).filter(k => w.items[k]).length + Object.keys(w.skySeen || {}).length };
   }
@@ -416,11 +425,13 @@ export class Hud {
     const now = this.badgeNow(); if (!this.seen) this.seen = { news: now.news, dex: now.dex };
     if (!this.phone.hidden && (this.app === "news" || this.app === "dex")) this.seen[this.app] = now[this.app];   // 보는 중에 온 소식도 본 것으로
     const newNews = now.news !== this.seen.news && this.app !== "news", newDex = now.dex > this.seen.dex && this.app !== "dex";
-    const key = `${now.act}|${newNews}|${newDex}`; if (key === this.badgeKey) return; this.badgeKey = key;
+    const key = `${now.act}|${newNews}|${newDex}|${now.summon}`; if (key === this.badgeKey) return; this.badgeKey = key;
     const cnt = this.phoneBtn.querySelector(".badge-count"), dot = this.phoneBtn.querySelector(".dot");
     cnt.hidden = !now.act; cnt.textContent = now.act || ""; dot.hidden = !!now.act || !(newNews || newDex);
     this.phoneBtn.setAttribute("aria-label", `갈매폰${now.act ? ` · 받을 수 있는 것 ${now.act}개` : ""}${newNews || newDex ? " · 새 소식" : ""}`);
     const wb = this.appBtns?.wish; if (wb) for (const e of [wb, wb.firstElementChild]) { if (!e) continue; if (now.act) e.dataset.count = now.act; else delete e.dataset.count; }   // 숫자는 아이콘(span)의 ::after가 attr로 읽음
+    const sb = this.appBtns?.summon; if (sb) { for (const e of [sb, sb.firstElementChild]) { if (!e) continue; if (now.summon) e.dataset.count = now.summon; else delete e.dataset.count; }   // 🥚 지금 부를 수 있는 마릿수
+      sb.setAttribute("aria-label", now.summon ? `소환 · 지금 ${now.summon}마리 부를 수 있어요` : "소환"); }
     this.appBtns?.news?.classList.toggle("new", newNews); this.appBtns?.dex?.classList.toggle("new", newDex);
   }
   /** 📱 소원 앱 맨 위 「오늘」: 오늘의 부탁(나아간 만큼 막대) · 모은 도장 · 도장 가게. 바뀐 게 없으면 다시 안 그림(가게 단추가 눌리게) */
@@ -518,6 +529,23 @@ export class Hud {
     const sb = this.trayGroup("모양");
     for (const [s, label] of [["brush", "🖌 붓"], ["line", "〰 길"], ["rect", "▭ 네모"]]) { const b = el("button", t.shape === s ? "on" : "", label); b.dataset.shape = s; b.onclick = () => { t.setShape(s); this.showMode(t.mode, t.mode === "paint" ? t.paintType : t.heightOp); }; sb.appendChild(b); }
   }
+  /** 건설 확인창 요약(#cfInfo): 설계비 · 금고 잔액 → 낸 뒤 · 재료 · 짓는 이 · 못 지으면 '착공 불가'와 까닭. 글이 같으면 안 씀 */
+  drawPlan() {
+    const p = this.planNow, box = document.getElementById("cfInfo"), w = this.world;
+    if (!p || !box) { if (box && box.innerHTML) { box.innerHTML = ""; this.planHtmlNow = ""; } return; }
+    let info;
+    if (p.bridge) info = bridgeInfo(w, p.ok, p.water);
+    else info = planInfo(w, p.defId, w.check(p.defId, p.ax, p.az, p.rot));
+    const html = planHtml(info); if (html !== this.planHtmlNow) { this.planHtmlNow = html; box.innerHTML = html; }
+    const cfBuild = document.getElementById("cfBuild"); if (cfBuild.disabled !== !info.ok) cfBuild.disabled = !info.ok;
+    box.parentElement.classList.toggle("bad", !info.ok);
+  }
+  /** 갤러리 카드 아래 글(설계비 · 재료)을 금고·물가에 맞춰 고침(바뀐 카드만) */
+  drawCardMeta() {
+    const w = this.world; if (!this.buildCards) return;
+    for (const c of this.buildCards) { const def = BUILDINGS[c.dataset.build]; if (!def || c.dataset.why) continue;
+      const m = cardMeta(w, def), meta = c.querySelector(".bmeta"); if (meta && meta.dataset.html !== m.html) { meta.dataset.html = m.html; meta.innerHTML = m.html; c.classList.toggle("short", m.short); c.setAttribute("aria-label", `${def.name}, ${def.footprint.w}×${def.footprint.d}칸, ${m.text}`); } }
+  }
   /** 건물 카드 하나: 사진(실제 모델) + 크기 딱지 + 이름 + 재료(잠겼으면 그 이유를 글자로) */
   buildCard(def) {
     const w = this.world, rankLock = (def.rank || 0) > w.rank, locked = rankLock || !w.builderFor(def), tierName = RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name;
@@ -534,9 +562,11 @@ export class Hud {
       pic.appendChild(img); this.thumbImgs.set(def.id, pic);
       if (this.thumbs) img.src = this.thumbs.url(def.id);
     }
-    b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), el("span", "bmeta", why || cost)); if (locked) b.append(el("span", "block", "🔒"));
-    b.setAttribute("aria-label", `${def.name}, ${size}칸, 재료 ${cost}${why ? `, ${locked ? "잠김: " : ""}${why}` : ""}`);
-    b.dataset.tip = `${def.name} ${size}칸 · 재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
+    const meta = el("span", "bmeta"), m = cardMeta(w, def);                         // 아래 글: 잠긴 까닭 또는 설계비 · 재료(금고보다 비싸면 빨간 숫자 — drawCardMeta가 금고에 맞춰 고침)
+    if (why) { meta.textContent = why; b.dataset.why = why; } else { meta.innerHTML = m.html; meta.dataset.html = m.html; b.classList.toggle("short", m.short); }
+    b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), meta); if (locked) b.append(el("span", "block", "🔒"));
+    b.setAttribute("aria-label", why ? `${def.name}, ${size}칸, 재료 ${cost}, ${locked ? "잠김: " : ""}${why}` : `${def.name}, ${size}칸, ${m.text}`);
+    b.dataset.tip = `${def.name} ${size}칸 · ${w.economy ? `설계비 🪙${m.fee}(금고에서) · ` : ""}재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${w.economy ? w.housePrice(def.id) : def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
     b.onclick = () => this.tools.setMode("build", def.id); return b;
   }
   /** 건물 갤러리: 잠금·계절이 바뀔 때만 카드를 다시 만들고, 고르기만 했으면 표시만 바꿈(사진이 깜빡이지 않고 밀어 둔 자리도 그대로) */
@@ -545,7 +575,7 @@ export class Hud {
     const key = `${w.rank}|${w.season}|${defs.map(d => w.builderFor(d) ? 1 : 0).join("")}`;
     if (key !== this.trayKey || w !== this.trayWorld) { this.trayKey = key; this.trayWorld = w; this.buildCards = defs.map(d => this.buildCard(d)); }
     for (const c of this.buildCards) { const on = c.dataset.build === arg; c.classList.toggle("on", on); c.setAttribute("aria-pressed", String(on)); }
-    this.sub.append(...this.buildCards); this.filterBuild();
+    this.sub.append(...this.buildCards); this.filterBuild(); this.drawCardMeta();
   }
   filterBuild() {
     for (const b of this.catBtns) { const on = b.dataset.cat === this.buildCat; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
@@ -594,9 +624,14 @@ export class Hud {
     if (mode === "height" && arg === "level" && this.shownOp !== "level") { const g = sub.querySelector("[data-level]")?.closest(".tgrp"); if (g) { sub.scrollLeft = Math.max(0, g.offsetLeft - 64); sub.scrollTop = Math.max(0, g.offsetTop - 64); } }   // 🎚 단 맞추기를 고르면 「맞출 높이」가 바로 보이게(세로 폰은 옆으로 미는 한 줄)
     this.shownOp = mode === "height" ? arg : null;
   }
-  /** 🥚 소환 버튼: 마을에 있는 수 / 전체, 다 모이면 끔 */
-  setSummon(world) { const n = world.units.length, all = UNITS.length; this.summonBtn.textContent = n >= all ? `🥚 모두 모임 ${n}/${all}` : `🥚 소환 ${n}/${all}`; this.summonBtn.disabled = n >= all;
-    const left = UNITS.filter(d => !world.units.some(u => u.name === d.name)).map(d => d.name); document.getElementById("summonLast").textContent = left.length ? `아직 안 온 갈매미: ${left.join(", ")}` : ""; }
+  /** 🥚 소환 페이지: 지금 부를 수 있는 수(인구 = 집 수) · 단추(못 부르면 꺼짐 + 까닭) · 다음 갈매미 · 자이언트 안내 · 자세히. 글이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게) */
+  setSummon(world) {
+    const info = world.summonInfo(), btn = summonButton(info), v = summonHtml(info, world.units, (k, t, h, o) => this.more(k, t, h, o));
+    if (this.summonBtn.textContent !== btn.text) this.summonBtn.textContent = btn.text;
+    if (this.summonBtn.disabled !== btn.disabled) this.summonBtn.disabled = btn.disabled;
+    const why = document.getElementById("summonWhy"), whyText = v.giantOnly ? "" : btn.why; if (why.textContent !== whyText) why.textContent = whyText; why.hidden = !whyText;
+    for (const [id, html] of [["summonHead", v.head], ["summonMid", v.mid], ["summonMore", v.bottom]]) { const e = document.getElementById(id); if (e.dataset.html !== html) { e.dataset.html = html; e.innerHTML = html; } }
+  }
   showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); if (this.ic) this.syncInfo(); }   // 카드는 바로(다음 갱신까지 기다리지 않게)
   /** 🎣 당기기! 버튼: 따라가기 카드 바로 위에 붙여서 보여 줌(입질 동안만). 매 프레임 불러도 바뀔 때만 손댐 */
   showTug(on, secs = 1.5) {
@@ -715,6 +750,8 @@ export class Hud {
     this.chunkInfo = chunkInfo;                                                       // 삼각형·fps는 설정 → 🛠 개발자(#devStats)에서
     this.drawBadges();
     this.drawMoneyChips();
+    if (this.planNow) this.drawPlan();                                               // 건설 확인창: 품삯·세금으로 금고가 바뀌면 설계비 줄·단추를 다시
+    if (document.body.dataset.mode === "edit" && this.tools?.mode === "build") this.drawCardMeta();
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
     const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주(세로 폰은 포만감도 뺌 — 배고프면 알림 칩이 따로 뜸)
     cardPut(this.chipPop, small ? `🐦${w.units.length} ${face}${sat.toFixed(0)}${this.form === "portrait" ? "" : ` ${mood}${avg.toFixed(0)}`}` : `🐦 ${w.units.length} · ${face} ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`); if (!this.chipPop.dataset.tip) this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";   // "만족" 낱말은 툴팁으로(금고·마을 돈 칸이 늘어 한 줄에 들어가게)

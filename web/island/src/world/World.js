@@ -247,7 +247,7 @@ export class World {
   }
   // ---- 인구 = 집 수(population.js): 공식은행이 있는 섬에서는 다 지은 집 한 채당 갈매미 한 마리까지만 부를 수 있음
   /** 화면용: 지금 🥚 소환할 수 있는가와 까닭(난수 안 씀).
-   *  { can, reason(못 부를 때 한국어 글, 부를 수 있으면 ""), houses(다 지은 보통 집), gulls(보통 갈매미), free(남은 집 자리), left(아직 안 온 갈매미 수),
+   *  { can, count(지금 부를 수 있는 마릿수), reason(못 부를 때 한국어 글, 부를 수 있으면 ""), houses(다 지은 보통 집), gulls(보통 갈매미), free(남은 집 자리), left(아직 안 온 갈매미 수),
    *    next(다음에 올 갈매미 이름, 무작위면 null), candidates(올 수 있는 이름들), needHouse, needGiantHouse, gated(집 수 규칙이 켜진 섬인가) } */
   summonInfo() { return P.summonInfoFor(this.units, [...this.buildings.values()].filter(b => this.isDone(b)), this.economy); }
   /** 🥚 소환: 아직 마을에 없고 지금 올 수 있는(집 자리가 있는) 갈매미 하나를 광장 근처에 부름. 꼭 필요한 직업(건축가 → 목수 → 상인)이 없으면 그 갈매미부터, 아니면 무작위.

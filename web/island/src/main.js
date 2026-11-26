@@ -237,7 +237,7 @@ function welcomeBack(w) {
   const wishes = w.wishes.map(x => { const u = w.units.find(o => o.unitId === x.unitId), d = WISH_BY_ID[x.id]; return u && d ? { who: u.name, text: wishText(d, w, u, x) } : null; }).filter(Boolean);
   return awayLetter(r, { post: !!w.postB(), news, wishes });
 }
-const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 기본 갈매미 한 마리 → 🥚 소환으로 더
+const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 다 지은 작은 집 한 채(갈매미 0) → 🥚 소환으로 첫 갈매미(집 한 채에 한 마리)
 const backLetter = savedWorld ? welcomeBack(world) : null;                        // 다 불러온 뒤에 보여 줌
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
 addEventListener("visibilitychange", () => { if (document.hidden && ready) saveNow(); });
@@ -293,7 +293,7 @@ hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
   unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
   hud.houseCard(tools.mode === "view" && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
-hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); hud.status(i.reason || "8마리 모두 모였어요", { kind: i.left ? "warn" : "info" }); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭을
+hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); hud.status(i.reason || "모두 모였어요", { kind: i.left ? "warn" : "info" }); hud.setSummon(world); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭을
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };

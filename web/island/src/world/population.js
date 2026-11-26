@@ -34,8 +34,10 @@ export function summonInfoFor(units, done, gated = true) {
   if (gated) for (const job of SUMMON_FIRST) { if (hasJob(job)) continue; const n = candidates.find(c => jobOfName(c) === job); if (n) { next = n; break; } }
   if (gated && !next && candidates.length === 1) next = candidates[0];   // 예전 섬(gated 아님)은 한 마리 남아도 난수를 한 번 씀(예전 그대로)
   const can = candidates.length > 0;
+  const ordAbsent = absent.filter(n => !SPECIAL_HOME[n]).length, specialNow = absent.filter(n => SPECIAL_HOME[n] && specialFree(n)).length;
+  const count = !gated ? absent.length : Math.max(Math.min(free, ordAbsent), rescue ? 1 : 0) + specialNow;   // 지금 부를 수 있는 수(한 마리씩 부를 때마다 하나씩 줄어듦)
   const needHouse = gated && !can && absent.some(n => !SPECIAL_HOME[n]);                 // 보통 갈매미가 남았는데 집 자리가 없음
   const needGiantHouse = gated && absent.some(n => SPECIAL_HOME[n] && !specialFree(n));  // 자이언트가 아직 안 왔고 빈 자이언트의 집이 없음
   const reason = can ? "" : !absent.length ? REASON_ALL : needHouse ? `${REASON_HOUSE} (집 ${houses}채 · 갈매미 ${gulls}마리)` : REASON_GIANT;
-  return { can, reason, houses, gulls, free, left: absent.length, next, candidates, needHouse, needGiantHouse, gated };
+  return { can, count, reason, houses, gulls, free, left: absent.length, next, candidates, needHouse, needGiantHouse, gated };
 }

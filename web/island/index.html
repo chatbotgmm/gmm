@@ -29,6 +29,25 @@
   #confirm { position: fixed; left: calc(50% + var(--edit-w) / 2); transform: translateX(-50%); bottom: calc(var(--row-b) + calc(58*var(--u))); z-index: var(--z-editbar); display: flex; gap: var(--s-3);
     background: var(--c-hud); padding: var(--s-2); border-radius: var(--r-md); box-shadow: var(--e-2); }
   #confirm[hidden] { display: none; }
+  #confirm { flex-direction: column; align-items: stretch; gap: var(--s-2); } #confirm .cfBtns { display: flex; gap: var(--s-3); justify-content: flex-end; }
+  /* 확인창 요약(화면 연결 3단계): 핵심 한 줄(이름 · 설계비 · 금고 → 낸 뒤) 크게 + 재료·짓는 이 작게. 못 지으면 '🚫 착공 불가' 띠 */
+  #cfInfo { min-width: 0; font-size: var(--fs-body); line-height: var(--lh-tight); font-variant-numeric: tabular-nums; } #cfInfo:empty { display: none; }
+  #cfInfo .cf-main { font-size: var(--fs-title); font-weight: 600; }
+  #cfInfo .cf-sub { margin-top: calc(2*var(--u)); font-size: var(--fs-cap); color: var(--c-ink-2); } #cfInfo .cf-have { color: var(--c-ink-2); font-size: var(--fs-cap); }
+  #cfInfo .cf-bad { margin-top: var(--s-1); padding: var(--s-1) var(--s-2); border-radius: var(--r-sm); background: var(--c-danger-soft); color: var(--c-danger-ink); font-size: var(--fs-sm); font-weight: 600; }
+  #cfInfo .cf-hint { font-weight: 400; font-size: var(--fs-cap); }
+  #cfInfo { cursor: pointer; border-radius: var(--r-sm); }
+  /* 휴대폰: 핵심 줄은 굵게 남기고, 재료·짓는 이·돈 안내는 한 줄로 줄여 둠(누르면 펼침) → 확인 막대가 섬을 덜 가림 */
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo .cf-main { font-size: calc(15*var(--u)); }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo:not([data-open="1"]) :is(.cf-sub, .cf-bad) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo:not([data-open="1"]) .cf-hint { display: none; }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo .cf-sub::before { content: "⌄ "; color: var(--c-ink-2); }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo[data-open="1"] .cf-sub::before { content: "⌃ "; }
+  /* 세로 폰 말고는: 요약을 단추 왼쪽에(위아래로 쌓지 않음 — 확인 막대가 낮아 고스트·섬을 덜 가림) */
+  html:not([data-form="portrait"]) #confirm { flex-direction: row; align-items: center; width: max-content; max-width: calc(100vw - var(--safe-l) - var(--safe-r) - var(--edit-w) - var(--s-3)); }
+  html:not([data-form="portrait"]) #cfInfo { flex: 1 1 calc(240*var(--u)); max-width: calc(300*var(--u)); }
+  html:is([data-form="wide"], [data-form="medium"]) #cfInfo { max-width: calc(340*var(--u)); }
+  html:not([data-form="portrait"]) #confirm .cfBtns { flex: none; }
   #confirm .go { padding: calc(9*var(--u)) calc(16*var(--u)); } #confirm button { min-height: var(--hit); }
   #top { position: fixed; }   /* 건설 모드 HUD: 자리·모양은 아래 「6단계」 블록에서 화면 모양별로 */
   #top > .bar { max-width: 100%; box-sizing: border-box; }   /* 도구 막대·트레이가 화면 밖으로 나가지 않게 */
@@ -380,6 +399,7 @@
   .bcard .bnm { flex: none; font-size: var(--fs-sm); font-weight: 700; line-height: calc(16*var(--u)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bcard .bmeta { flex: none; font-size: var(--fs-cap); line-height: calc(15*var(--u)); color: var(--c-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .bcard.locked { opacity: 1; background: var(--c-surface-2); } .bcard.locked .bimg img { filter: grayscale(.85); opacity: .6; } .bcard.locked .bmeta { color: var(--c-danger-ink); font-weight: 600; }
+  .bcard .bmeta .fee { color: var(--c-ink); } .bcard.short .bmeta .fee-short { color: var(--c-danger-ink); }   /* 설계비가 금고보다 비싸면 빨간 숫자 */
   .bcard.on { box-shadow: inset 0 0 0 calc(3*var(--u)) var(--c-accent-strong), var(--e-1); }
   #sub[data-kind="build"] { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, calc(98*var(--u))); grid-auto-columns: calc(104*var(--u)); gap: var(--s-1); overflow-x: auto; align-items: stretch; }   /* 태블릿·PC: 두 줄 격자 */
   /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 900px보다 좁으면 보조 줄을 탭 위 한 줄로 */
@@ -585,6 +605,13 @@
   .sum[data-tone="ok"] { background: var(--c-ok-bg); } .sum[data-tone="ok"] .sum-tone { color: var(--c-ok-ink); }
   .sum:is([data-tone="low"], [data-tone="warn"]) { background: var(--c-low-bg); } .sum:is([data-tone="low"], [data-tone="warn"]) .sum-tone { color: var(--c-low-ink); }
   .sum[data-tone="empty"] { background: var(--c-empty-bg); } .sum[data-tone="empty"] .sum-tone { color: var(--c-empty-ink); } .sum[data-tone="empty"] .sum-bar i { background: var(--c-danger); }
+  /* 🥚 소환 페이지(화면 연결 3단계): 머리(지금 부를 수 있는 수) → 소환 단추 → 못 부르는 까닭 → 다음 갈매미·자이언트 안내 → 자세히 */
+  #pageSummon #summon { width: 100%; margin: 0 0 var(--s-2); font-size: var(--fs-title); }
+  #pageSummon .sm-why { margin: 0 0 var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--c-low-bg); color: var(--c-low-ink); font-size: var(--fs-body); font-weight: 600; }
+  #pageSummon .sm-next { margin: 0 0 var(--s-2); font-size: var(--fs-body); }
+  #pageSummon .sm-giant { margin: 0 0 var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--c-warm); font-size: var(--fs-body); }
+  #pageSummon .sm-giant p { margin: 0 0 var(--s-2); font-weight: 600; } #pageSummon .sm-go { min-height: var(--hit); width: 100%; }
+  #pageSummon :is(.sm-list, .sm-rules) { margin: 0; padding-left: 1.2em; } #pageSummon :is(.sm-list, .sm-rules) li { margin: calc(3*var(--u)) 0; }
   details.more { border-top: 1px solid var(--c-line); }
   details.more > summary { display: flex; align-items: center; gap: var(--s-2); min-height: var(--hit-sm); box-sizing: border-box; padding: var(--s-1) 0; cursor: pointer; list-style: none; font-size: var(--fs-body); font-weight: 700; touch-action: manipulation; }   /* 요약 줄 = 누르는 칸 44px(터치) */
   details.more > summary::-webkit-details-marker { display: none; }
@@ -651,7 +678,7 @@
     <div id="pageGulls" class="page" hidden><div id="units"></div></div>
     <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
     <div id="pageMarket" class="page" hidden><div id="marketBody"></div></div>
-    <div id="pageSummon" class="page" hidden><p class="dim">아직 마을에 없는 갈매미 하나가 무작위로 와요.</p><button id="summon" class="go">🥚 소환</button><div id="summonLast" class="dim"></div></div>
+    <div id="pageSummon" class="page" hidden><div id="summonHead"></div><button id="summon" class="go">🥚 소환</button><p id="summonWhy" class="sm-why" hidden></p><div id="summonMid"></div><div id="summonMore"></div></div>
     <div id="pageFiles" class="page" hidden><p class="dim">이 브라우저에 1분마다, 그리고 화면을 닫거나 다른 앱으로 갈 때 자동으로 저장돼요. 다시 열면 이어서 해요.</p><p id="saveInfo" class="dim"></p><div class="col"><button id="save">💾 지금 저장</button><button id="load">📂 마지막 저장 불러오기</button><button id="reset" class="danger">🏝 새 섬(지금 섬은 사라져요)</button></div></div>
     <div id="pageSettings" class="page" hidden>
       <div class="stabs" role="tablist" aria-label="설정 갈래"><button data-stab="screen" role="tab">🖼 화면</button><button data-stab="sound" role="tab">🔊 소리</button><button data-stab="game" role="tab">🌤 게임</button><button data-stab="keys" role="tab">⌨️ 조작</button></div>
@@ -691,7 +718,7 @@
     <button id="phoneCloseBar" class="sclose">✕ 닫기</button>
   </div>
 </div>
-<div id="confirm" hidden role="group" aria-label="건설 확인"><button id="cfCancel">✕ 취소</button><button id="cfRot">↻ 돌리기</button><button id="cfBuild" class="go">🔨 건설</button></div>
+<div id="confirm" hidden role="group" aria-label="건설 확인"><div id="cfInfo" aria-live="polite" tabindex="0" role="button" aria-expanded="false" aria-label="설계비·재료 자세히"></div><div class="cfBtns"><button id="cfCancel">✕ 취소</button><button id="cfRot">↻ 돌리기</button><button id="cfBuild" class="go">🔨 건설</button></div></div>
 <div id="overlay"></div>
 <div id="minimap" hidden role="region" aria-label="미니맵: 누르거나 끌면 그곳으로"><canvas></canvas></div>
 <div id="cross" hidden></div><button id="crossGo" hidden>🖌 누르는 동안 칠하기</button>

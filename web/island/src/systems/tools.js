@@ -232,12 +232,14 @@ export class Tools {
   confirmBuild() {
     const h = this.plan; if (this.mode !== "build" || !h) return;
     if (h.bridge) {
-      const { ok } = this.bridgeLine(h); let n = 0; for (const [x, z] of ok) if (this.world.placeBuilding("bridge", x, z, 0).ok) n++;
-      this.plan = null; this.refresh(); this.onStatus(n ? `다리 ${n}칸 공사를 시작했어요 · 🪚 목수가 땅 쪽부터 한 칸씩 놓아요` : "놓을 수 있는 물 칸이 없어요"); return;
+      const { ok } = this.bridgeLine(h); let n = 0, fee = 0; for (const [x, z] of ok) { const r = this.world.placeBuilding("bridge", x, z, 0); if (r.ok) { n++; fee += r.building.fee || 0; } }
+      const paid = fee ? ` · 설계비 🪙${fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "", cut = n && n < ok.length ? ` · 금고가 모자라 ${ok.length - n}칸은 못 놓았어요` : "";
+      this.plan = null; this.refresh(); this.onStatus(n ? `다리 ${n}칸 공사를 시작했어요${paid}${cut} · 🪚 목수가 땅 쪽부터 한 칸씩 놓아요` : "놓을 수 있는 물 칸이 없어요"); return;
     }
     const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
     if (r.ok) this.plan = null;
-    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요` : `${def.name} 공사를 시작했어요 · 갈매미가 나무·돌로 지어요`);
+    const paid = r.ok && r.building.fee ? ` · 설계비 🪙${r.building.fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "";
+    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요${paid}` : `${def.name} 공사를 시작했어요${paid} · 갈매미가 나무·돌로 지어요`);
   }
   clearPlan() { this.plan = null; this.refresh(); }
 
@@ -245,8 +247,9 @@ export class Tools {
   refresh() {
     const plan = this.mode === "build" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false;
-    if (this.mode === "build" && plan?.bridge) { const L = this.bridgeLine(plan); this.onPlan?.(plan.done, L.ok.length > 0); }
-    else if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok); }
+    // onPlan(보이나, 지을 수 있나, 자리) — 자리: 건물 { defId, ax, az, rot } · 다리 { bridge, ok: 놓을 수 있는 칸 수, water: 물 칸 수 }(확인창이 설계비·금고를 다시 셈)
+    if (this.mode === "build" && plan?.bridge) { const L = this.bridgeLine(plan); this.onPlan?.(plan.done, L.ok.length > 0, { bridge: true, ok: L.ok.length, water: L.water.length }); }
+    else if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok, { defId: this.buildId, ax: a.x, az: a.z, rot: this.rot }); }
     else this.onPlan?.(false);
     if (!h) { this.buildingViews.setHighlight(null); return; }
     const cell = grid.get(h.x, h.z);
