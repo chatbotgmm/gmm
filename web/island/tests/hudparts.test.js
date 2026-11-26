@@ -58,7 +58,7 @@ test("기온 칩: 휴대폰 3° · 태블릿·PC 3°C · 4°C 이하 cold · 24�
 test("새 섬: 금고 60 → 칩 ok · 25 → low · 1 또는 바닥 사태 → empty · 60으로 되돌리면 ok", () => {
   const w = World.create(7, seededRandom(3), { wild: true });
   const chip = () => P.vaultChipOf({ vault: w.bank.vault, owed: w.bank.owed, state: w.vaultState() }, "wide");
-  assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(chip().tone, "ok"); assert.equal(chip().text, "🏦 내 금고 60");
+  assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(chip().tone, "ok"); assert.equal(chip().text, `🏦 내 금고 ${BK.VAULT_START}`);
   assert.equal(P.townChipOf(w.moneySupply(), "wide"), "🪙 마을 돈 0", "새 섬은 갈매미가 없어 마을 돈 0");
   w.bank.vault = 25; assert.equal(chip().tone, "low");
   w.bank.vault = 1; assert.equal(chip().tone, "empty");

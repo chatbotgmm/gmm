@@ -14,7 +14,7 @@ const spotFor = (w, d) => { const c = w.center;
   return null; };
 
 test("확인창: 금고 60에서 작은 집 → 설계비 10 · 금고 60 → 50, 지을 수 있음", () => {
-  const w = fresh(), [x, z] = spotFor(w, "house"), r = w.check("house", x, z, 0);
+  const w = fresh(); w.bank.vault = 60; const [x, z] = spotFor(w, "house"), r = w.check("house", x, z, 0);   // 금고 60일 때의 확인창 글(새 섬 시작 금고와 상관없이)
   assert.ok(r.ok, r.reason); const info = planInfo(w, "house", r);
   assert.deepEqual([info.fee, info.vault, info.after, info.ok], [10, 60, 50, true]);
   const html = planHtml(info);

@@ -22,7 +22,7 @@ const houses = w => [...w.buildings.values()].filter(b => BUILDINGS[b.defId].hou
 
 test("새 섬: 공식은행 + 다 지은 작은 집 한 채(은행 옆, 문까지 걸어감, 씨앗마다 같은 자리) + 금고 60, 갈매미는 없음", () => {
   const w = fresh(), bk = w.bankB(), hs = houses(w);
-  assert.equal(BK.VAULT_START, 60); assert.equal(w.bank.vault, 60); assert.equal(w.units.length, 0, "첫 갈매미는 소환으로");
+  assert.equal(BK.VAULT_START, 300); assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(w.units.length, 0, "첫 갈매미는 소환으로");
   assert.equal(hs.length, 1); const h = hs[0];
   assert.equal(h.defId, "house"); assert.ok(w.isDone(h)); assert.equal(h.hits, h.need); assert.equal(h.fee, 0); assert.ok(!h.owner, "주인 없는 집");
   assert.ok(h.interior.furnished, "새 집 기본 가구");
@@ -33,7 +33,7 @@ test("새 섬: 공식은행 + 다 지은 작은 집 한 채(은행 옆, 문까�
   assert.deepEqual([h2.x, h2.z, h2.rot], [h.x, h.z, h.rot], "난수와 상관없이 같은 자리");
   // 저장·불러오기: 집과 금고가 그대로, 갈매미 없는 섬도 열림
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1));
-  assert.equal(back.units.length, 0); assert.equal(houses(back).length, 1); assert.ok(back.isDone(houses(back)[0])); assert.equal(back.bank.vault, 60);
+  assert.equal(back.units.length, 0); assert.equal(houses(back).length, 1); assert.ok(back.isDone(houses(back)[0])); assert.equal(back.bank.vault, BK.VAULT_START);
   assert.equal(back.summonInfo().next, "기본");
   // 시험 받침 firstGull: 기본 갈매미를 미리 부름
   const t = World.create(7, seededRandom(3), { wild: true, firstGull: true }); assert.deepEqual(t.units.map(u => u.name), ["기본"]); assert.equal(houses(t).length, 1);
@@ -54,7 +54,7 @@ test("소환: 갈매미 수 < 다 지은 집 수일 때만 · 첫 갈매미는 �
   assert.deepEqual(newsFor("summonBlocked", blocked[0], w), { icon: "🥚", text: info.reason, weight: 0 }, "알림 줄용 문장(소식지에는 안 실음)");
   assert.equal(w.newsLog.some(e => /집이 모자라요/.test(e.text)), false);
   // 짓는 중인 집은 세지 않음 → 다 지으면 한 마리
-  const s = spotFor(w, "house"), site = w.placeBuilding("house", s[0], s[1], 0); assert.ok(site.ok); assert.equal(w.bank.vault, 50, "설계비 10");
+  const s = spotFor(w, "house"), site = w.placeBuilding("house", s[0], s[1], 0); assert.ok(site.ok); assert.equal(w.bank.vault, BK.VAULT_START - 10, "설계비 10");
   assert.equal(w.summonInfo().can, false, "짓는 중"); assert.equal(w.summon(), null);
   w.finishAll(); assert.equal(w.summonInfo().houses, 2); assert.equal(w.summonInfo().can, true);
   const second = w.summon(); assert.equal(second.name, "목수", "둘째는 목수(시장을 지음)"); assert.equal(w.summon(), null);
@@ -150,7 +150,7 @@ test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(1·21382
     const mid = { x: w.grid.w / 2, z: w.grid.h / 2 }, bx = Math.floor(mid.x) - Math.floor(BUILDINGS.bank.footprint.w / 2), bz = Math.floor(mid.z) - Math.floor(BUILDINGS.bank.footprint.d / 2);   // center는 이제 은행을 따라가므로 지도 한가운데 기준으로 잼
     assert.ok(Math.hypot(bk.x - bx, bk.z - bz) <= 3, "가운데에서 세 칸 안"); assert.ok(Math.hypot(bk.x - bx, bk.z - bz) > 0, "가운데에는 못 놓는 씨앗");
     const hs = houses(w); assert.equal(hs.length, 1); assert.ok(w.isDone(hs[0])); assert.ok(findPath(w.grid, bk.door.x, bk.door.z, hs[0].door.x, hs[0].door.z));
-    assert.equal(w.bank.vault, 60); assert.equal(w.units.length, 0); assert.equal(w.summonInfo().gated, true);
+    assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(w.units.length, 0); assert.equal(w.summonInfo().gated, true);
     assert.equal(w.summon().name, "기본"); assert.equal(w.summon(), null, "집 1 = 갈매미 1");
     const again = World.create(seed, seededRandom(8), { wild: true }); assert.deepEqual([again.bankB().x, again.bankB().z], [bk.x, bk.z], "난수와 상관없이 같은 자리");
   }
@@ -160,7 +160,7 @@ test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(1·21382
 
 test("검토 회귀: 은행 기록이 아예 없는 예전 저장도 금고 100(금고 칸만 없는 저장과 같게), 새 섬은 60", () => {
   assert.equal(BK.bankFromSave(undefined).vault, BK.VAULT_LEGACY); assert.equal(BK.bankFromSave(null, 50).vault, 100);
-  assert.equal(BK.bankFromSave({ returned: 7 }).vault, 107); assert.equal(BK.bankFromSave({ vault: 3 }).vault, 3); assert.equal(BK.newBank().vault, 60);
+  assert.equal(BK.bankFromSave({ returned: 7 }).vault, 107); assert.equal(BK.bankFromSave({ vault: 3 }).vault, 3); assert.equal(BK.newBank().vault, BK.VAULT_START);
   const w = fresh(), j = JSON.parse(JSON.stringify(w.serialize())); delete j.bank;
   assert.equal(World.fromJSON(j, seededRandom(1)).bank.vault, 100);
 });
