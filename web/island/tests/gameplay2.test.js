@@ -125,3 +125,20 @@ test("작물 느리게: 일반 농부가 물 준 밭에 심으면 가을 맑은 
   assert.ok(days("autumn", "rain") < days("autumn"), "비 오면 빨리");
   assert.ok(days("autumn") / FM.MOIST_SLOW < 1, "마른 밭(1/4 빠르기)도 하루 안에 익음");
 });
+
+test("단차 채광 검토: 대각선 칸은 절벽 모서리 너머(사이 두 칸이 다 다른 높이)면 일하는 칸이 아님 · 길찾기처럼 모서리를 가로지르지 않음", () => {
+  // 대상(10,10)과 갈매미 쪽(11,11)은 둘 다 0 m지만, 사이 두 칸(11,10)·(10,11)이 0.75 m 절벽이라 모서리로만 닿음
+  const g = new Grid(24, 24, 24);
+  for (let z = 0; z < 24; z++) for (let x = 0; x < 24; x++) { g.get(x, z).groundType = "Grass"; g.get(x, z).elevation = (x >= 11) !== (z >= 11) ? 0.75 : 0; }
+  assert.equal(findPath(g, 15, 15, 9, 9), null, "길찾기로는 건너편에 못 감");
+  for (const kind of ["ore", "tree"]) {
+    const w = new World(g, [{ id: "m1", defId: kind, cells: [[10, 10]] }], seededRandom(3)); w.isNight = false;
+    assert.equal(workCells(g, 10, 10).some(([x, z]) => x === 11 && z === 11), false, `${kind}: 모서리 너머 칸은 빠짐`);
+    assert.ok(workCells(g, 10, 10).some(([x, z]) => x === 9 && z === 9), "같은 쪽 대각선 칸은 그대로");
+    w.addUnitByName("기본"); const u = w.units[0]; u.x = 12.5; u.z = 12.5; u.y = 0; u.full = 90;
+    let hits = 0; w.on(kind === "ore" ? "oreHit" : "treeHit", () => hits++);
+    interactNear(u, w, seededRandom(1), 3);
+    for (let i = 0; i < 400; i++) { u.full = 90; w.update(0.05); }
+    assert.equal(hits, 0, `${kind}: 모서리 너머로 캐지 않음`);
+  }
+});

@@ -183,7 +183,10 @@ const AROUND8 = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1
  *  절벽 위(2층)에서 아래(1층) 광석을 캐거나 그 반대가 되지 않게(길찾기 canStep과 같은 기준). 없으면 빈 목록 → 그 대상은 못 캠 */
 export function workCells(grid, tx, tz) {
   const c = grid.get(tx, tz); if (!c) return [];
-  return AROUND8.map(([dx, dz]) => [tx + dx, tz + dz]).filter(([x, z]) => { const h = grid.walkHeight(x, z); return h !== null && !grid.doorOwner(x, z) && Math.abs(h - c.elevation) <= MAX_STEP + 1e-6; });
+  const near = (a, b) => Math.abs(a - b) <= MAX_STEP + 1e-6;
+  // 대각선 칸은 사이 두 칸 중 하나라도 대상·서는 칸과 같은 높이여야 함(절벽 모서리 너머로만 닿으면 안 됨: 길찾기의 모서리 가로지르기 금지와 같은 뜻)
+  const side = (x, z, h) => { const s = grid.get(x, z); return !!s && near(s.elevation, c.elevation) && near(s.elevation, h); };
+  return AROUND8.map(([dx, dz]) => [tx + dx, tz + dz]).filter(([x, z]) => { const h = grid.walkHeight(x, z); return h !== null && !grid.doorOwner(x, z) && near(h, c.elevation) && (x === tx || z === tz || side(x, tz, h) || side(tx, z, h)); });
 }
 /** 걸어서(또는 배로) 닿을 수 있는 칸인가: 이어진 땅 덩어리(compAt)로 싸게 봄. 못 재면 닿는다고 봄 */
 function canReach(u, world, x, z) {
