@@ -12,6 +12,7 @@ import * as F from "../world/furniture.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { unitPlaceholder } from "./placeholders.js";
 
 // 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
 const roomFurniSource = itemId => { const it = ITEMS.find(i => i.id === itemId); if (!it) return "마을 가방의 가구";
@@ -49,9 +50,9 @@ function measureLying(v) {
 function measureAt(v, ws) {
   const r = v.root, keep = { p: r.position.clone(), q: r.quaternion.clone(), parent: r.parent };
   keep.parent?.remove(r); r.position.set(0, 0.52, 0); r.rotation.set(-Math.PI / 2, 0, 0, "YXZ");
-  for (const w of v.wings) w.scale.setScalar(ws); v.mixer.update(0); r.updateMatrixWorld(true);
+  for (const w of v.wings) w.scale.setScalar(ws); v.mixer?.update(0); r.updateMatrixWorld(true);
   const t = new THREE.Vector3(), pts = []; let zMin = 9, zMax = -9, headY = -9;
-  r.traverse(o => { if (!o.isSkinnedMesh) return; const n = o.geometry.attributes.position.count;
+  r.traverse(o => { if (!(o.isSkinnedMesh || (v.cap && o.isMesh))) return; const n = o.geometry.attributes.position.count;   // 캡슐(모델을 못 받은 갈매미)은 뼈대가 없어 보통 메쉬로 잼
     for (let k = 0; k < n; k += 2) { o.getVertexPosition(k, t); t.applyMatrix4(o.matrixWorld); pts.push(t.x, t.y, t.z); zMin = Math.min(zMin, t.z); zMax = Math.max(zMax, t.z); } });
   const wingZ = Math.min(9, ...v.wings.map(w => w.getWorldPosition(t).z));          // 날개 뿌리(어깨) 위치(누운 자세 그대로일 때 잼)
   r.position.copy(keep.p); r.quaternion.copy(keep.q); keep.parent?.add(r);
@@ -283,22 +284,31 @@ export class RoomView {
     else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("↔ 옮기기", () => this.startMove(), "go"); }
   }
   // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)
-  async gullModel(u) {
+  /** 방 안 갈매미 모습. 모델(charPool)을 아직 못 받았거나 못 받은 갈매미(폰에서 받기 실패·90초 넘게 걸림)도 섬 화면처럼 캡슐로 보여 줌
+   *  (예전: 모델이 없으면 root 없이 굳어 방에 아무것도 안 그림 — 섬엔 캡슐이 보이는데 방엔 갈매미가 없었음). 모델이 나중에 오면 바꿔 끼움 */
+  gullModel(u) {
     let v = this.gulls.get(u.unitId); if (v) return v;
     v = { root: null }; this.gulls.set(u.unitId, v);
-    const pool = await this.chars; const ch = pool?.get?.(u.name); if (!ch) return v;
+    const cap = unitPlaceholder(u.scale || 1); cap.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    Object.assign(v, { root: cap, cap: true, mixer: null, acts: null, cur: null });
+    Promise.resolve(this.chars).then(pool => { const ch = pool?.get?.(u.name); if (ch) this.useModel(v, ch); }).catch(() => { /* 캡슐 그대로 */ });
+    return v;
+  }
+  useModel(v, ch) {
     const root = SkeletonUtils.clone(ch.root), mixer = new THREE.AnimationMixer(root), acts = {};
     for (const [k, a] of Object.entries(ch.acts)) acts[k] = mixer.clipAction(a.getClip());
     root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    Object.assign(v, { root, mixer, acts, cur: null }); return v;
+    v.root?.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket);              // 캡슐을 빼고 다음 syncGulls가 모델을 그 자리에 놓음(누운 몸 크기·날개·옷·이불도 다시 잼)
+    Object.assign(v, { root, mixer, acts, cur: null, cap: false, wear: null, wings: null, lying: null, blanket: null, blanketFor: null });
+    this.gullT = 0;
   }
   play(v, key, speed = 1) { if (!v.acts?.[key] || v.cur === key) return; v.acts[v.cur]?.fadeOut(0.25); v.acts[key].reset().fadeIn(0.25).play(); v.acts[key].timeScale = speed; v.cur = key; }
-  async syncGulls() {
+  syncGulls() {
     const w = this.world, b = this.b, levels = F.levels(b), inside = w.units.filter(u => u.insideBuildingId === b.id);
     for (const [id, v] of this.gulls) if (!inside.some(u => u.unitId === id)) { v.root?.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket); }
     let free = 0;
     for (const u of inside) {
-      const v = await this.gullModel(u); if (!v.root || !this.isOpen) continue;
+      const v = this.gullModel(u); if (!v.root || !this.isOpen) continue;
       const o = u.useFurni, li = o ? levels.findIndex(L => L.furniture.includes(o)) : 0;
       if (li !== this.li) { if (v.root.parent) v.root.parent.remove(v.root); v.blanket?.parent?.remove(v.blanket); continue; }
       if (!v.root.parent) { this.root.add(v.root); this.toon.sweep(v.root); }
@@ -351,7 +361,7 @@ export class RoomView {
   update(dt) {
     if (!this.isOpen) return; this.controls.update(); this.cutWalls();
     this.breath = (this.breath || 0) + dt;
-    for (const v of this.gulls.values()) { if (v.root?.parent) v.mixer.update(dt); if (v.blanket?.parent) v.blanket.scale.y = 1 + 0.04 * Math.sin(this.breath * 1.6);   // 이불이 숨 쉬듯 오르내림
+    for (const v of this.gulls.values()) { if (v.root?.parent) v.mixer?.update(dt); if (v.blanket?.parent) v.blanket.scale.y = 1 + 0.04 * Math.sin(this.breath * 1.6);   // 이불이 숨 쉬듯 오르내림
       for (const w of v.wings || []) w.scale.setScalar(v.asleep ? v.lying?.wingScale ?? 0.55 : 1); }          // 자는 동안 날개를 몸 쪽으로 접어 이불 밖으로 안 나오게(기본 갈매미: 날개 끝 x 0.43 → 0.34 m)
     this.drawBubbles();
     if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = 1; this.syncGulls(); }
