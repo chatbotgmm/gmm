@@ -105,6 +105,6 @@ export function moveHtml(info) {
   const main = `<b>${info.icon} ${nvEsc(info.name)} 옮기기</b>` + (info.eco ? ` · ${nw(`<b>${nvCoin(info.cost)}</b>`)} · ${nw(`금고 ${nvCoin(info.vault)}${info.ok ? ` → <b>${nvCoin(info.after)}</b>` : ""}`)}` : "");
   const why = info.moneyShort ? `금고가 ${nvCoin(info.cost - info.vault)} 모자라요` : nvEsc(info.reason);
   const bad = info.ok ? "" : `<div class="cf-bad"><b>🚫 못 옮겨요</b> · ${why}</div>`;
-  const sub = `${info.cave ? "↻ 돌리기로 입구 방향을 바꿔요 · " : ""}${info.eco && info.cost ? "↶ 되돌리면 낸 값을 돌려받아요" : "↶ 되돌릴 수 있어요"}`;
+  const sub = `${info.cave ? `${nw("↻ 돌리기로 입구 방향을 바꿔요")} · ` : ""}${nw(info.eco && info.cost ? "↶ 되돌리면 낸 값을 돌려받아요" : "↶ 되돌릴 수 있어요")}`;   // 구절째 다음 줄로(넓은 화면에서 「요」 한 글자만 둘째 줄에 남던 것)
   return `<div class="cf-main">${main}</div>${bad}<div class="cf-sub">${sub}</div>`;
 }
