@@ -5,6 +5,10 @@ import { toWorldX, toWorldZ } from "../config.js";
 import { PROPS } from "../data/catalog.js";
 import { modelFor, rawModel } from "./assets.js";
 import { terrainHeight } from "../world/terrain.js";
+import { poolFor } from "./instances.js";
+import { placeEl, showEl } from "../util.js";
+
+const _lifeP = new THREE.Vector3();
 
 export class LifeViews {
   constructor(scene, world, overlay) {
@@ -33,7 +37,7 @@ export class LifeViews {
       scene.add(g); const c = { p, g }; this.crops.push(c); this.swapCrop?.(c);
     };
     // 작물 모델(사용자 제공 당근·양배추): 받으면 싹 4개 대신 칸마다 하나(칸 위치로 번갈아)
-    const swap = c => { if (!this.cropModels || c.g.userData.model) return; c.g.clear(); const k = (c.p.x + c.p.z) % 2, src = this.cropModels[k], m = src.clone(true); m.scale.setScalar(k ? 0.6 : 0.62); c.g.add(m); c.g.userData.model = true; };
+    const swap = c => { if (!this.cropModels || c.g.userData.model) return; c.g.clear(); const k = (c.p.x + c.p.z) % 2, src = this.cropModels[k], m = src.clone(true); m.scale.setScalar(k ? 0.6 : 0.62); c.g.add(m); c.g.userData.model = true; poolFor(scene).add(m); };
     Promise.all(["assets/props/carrot_{T}.glb", "assets/props/cabbage_{T}.glb"].map(u => rawModel(u))).then(ms => { this.cropModels = ms; this.crops.forEach(swap); }).catch(() => {});
     this.swapCrop = swap;
     world.plots.forEach(addCrop);
@@ -65,7 +69,7 @@ export class LifeViews {
     if (!s && on) {
       s = await modelFor({ footprint: { w: 0.55, d: 0.55 } }, () => new THREE.Group(), PROPS.stump);
       s.position.set(toWorldX(tree.x + 0.5), terrainHeight(this.world.grid, tree.x + 0.5, tree.z + 0.5), toWorldZ(tree.z + 0.5));
-      this.scene.add(s); this.stumps.set(tree.id, s);
+      this.scene.add(s); this.stumps.set(tree.id, s); poolFor(this.scene).add(s);
     }
     if (s) s.visible = on && !tree.alive;
   }
@@ -93,7 +97,8 @@ export class LifeViews {
     }
   }
 
-  update(dt, camera, w, h, tmp = new THREE.Vector3()) {
+  update(dt, camera, w, h) {
+    const tmp = _lifeP;
     for (let i = this.anims.length - 1; i >= 0; i--) {
       const a = this.anims[i], o = a.o, base = o.userData.base || { scale: 1 };
       if (a.kind === "sway") {
@@ -128,25 +133,26 @@ export class LifeViews {
       if (!g.userData.model) for (const m of g.children) m.material = p.stage === "ripe" ? this.cropRipe : this.cropGreen;
       else g.position.y = this.world.standHeight(p.x + 0.5, p.z + 0.5) + 0.06 - (p.stage === "ripe" ? 0 : 0.05 * (1 - grow));   // 모델: 자라며 커지고 땅 위로
     }
-    // 말풍선
+    // 말풍선(자리·크기·투명도는 바뀔 때만 씀 → 가만히 있을 땐 DOM을 건드리지 않음)
     this.world.units.forEach((u, i) => {
-      const e = this.emoteFor(i), show = u.emoteT > 0 && !!u.emoteText && !u.insideBuildingId; e.hidden = !show; if (!show) { e.dataset.t = ""; return; }
+      const e = this.emoteFor(i), show = u.emoteT > 0 && !!u.emoteText && !u.insideBuildingId; if (!show) { showEl(e, false); if (e.dataset.t) e.dataset.t = ""; return; }
       tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z));
       const dist = camera.position.distanceTo(tmp); tmp.project(camera);
-      if (tmp.z > 1 || dist > 75) { e.hidden = true; return; }                    // 너무 멀면 숨김(화면이 어지럽지 않게)
+      if (tmp.z > 1 || dist > 75 || Math.abs(tmp.x) > 1.3 || Math.abs(tmp.y) > 1.3) { showEl(e, false); return; }   // 너무 멀거나 화면 밖이면 숨김(화면이 어지럽지 않게)
+      showEl(e, true);
       if (e.dataset.t !== u.emoteText) {                                          // 새 말: 모양 고르고 톡 튀어나오게
         e.dataset.t = u.emoteText; e.textContent = u.emoteText;
         const t = u.emoteText, think = t.startsWith("💭"), icon = [...t].length <= 2 || /^(…|zZ…|!\?)$/.test(t);
         e.className = "emote" + (think ? " think" : icon ? " icon" : "") + (t === "❗" ? " bite" : ""); void e.offsetWidth; e.classList.add("pop");   // 입질(❗)은 크게
       }
-      const sc = THREE.MathUtils.clamp(1.15 - dist / 90, 0.6, 1.1);                // 멀수록 작게
-      e.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; e.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
-      e.style.setProperty("--s", sc.toFixed(2)); e.style.opacity = Math.min(1, u.emoteT / 0.3).toFixed(2);   // 끝날 때 살짝 사라짐
+      const sc = THREE.MathUtils.clamp(1.15 - dist / 90, 0.6, 1.1).toFixed(2), op = Math.min(1, u.emoteT / 0.3).toFixed(2);   // 멀수록 작게 · 끝날 때 살짝 사라짐
+      placeEl(e, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h);
+      if (e._sc !== sc) { e._sc = sc; e.style.setProperty("--s", sc); } if (e._op !== op) { e._op = op; e.style.opacity = op; }
     });
     for (const { z, e } of this.zoneEls) {
       tmp.set(toWorldX(z.x + 0.5), 2.6, toWorldZ(z.z + 0.5)).project(camera);
-      e.hidden = !this.showZones || tmp.z > 1;
-      e.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; e.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
+      const on = this.showZones && tmp.z <= 1 && Math.abs(tmp.x) < 1.3 && Math.abs(tmp.y) < 1.3; showEl(e, on);
+      if (on) placeEl(e, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h);
     }
   }
 }

@@ -8,12 +8,13 @@ function gradient(steps = [0.42, 0.62, 0.82, 1.0]) {
   const t = new THREE.DataTexture(data, steps.length, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
 }
 const GRAD = gradient();
+// (묶어 그리는 InstancedMesh는 물체 자리가 instanceMatrix에 있어 modelMatrix × instanceMatrix로 월드 좌표를 잼)
 // 물체 위 눈: 위를 향한 면에 눈 깊이만큼 흰색(지붕·나무·바위·소품). 땅(자체 계절 셰이더)과 갈매미(noSnow)는 빼고. 값은 seasons.js가 world.snow로 정함
 export const OBJ_SNOW = { value: 0 };
 function addSnow(sh) {
   sh.uniforms.uObjSnow = OBJ_SNOW;
   sh.vertexShader = "varying vec3 vObjSnowN; varying vec3 vObjSnowW;\n" + sh.vertexShader.replace("#include <begin_vertex>",
-    "#include <begin_vertex>\n vObjSnowN = normalize(mat3(modelMatrix) * objectNormal); vObjSnowW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    "#include <begin_vertex>\n#ifdef USE_INSTANCING\n mat4 objSnowM = modelMatrix * instanceMatrix;\n#else\n mat4 objSnowM = modelMatrix;\n#endif\n vObjSnowN = normalize(mat3(objSnowM) * objectNormal); vObjSnowW = (objSnowM * vec4(transformed, 1.0)).xyz;");
   sh.fragmentShader = "uniform float uObjSnow; varying vec3 vObjSnowN; varying vec3 vObjSnowW;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
     float snowUp = smoothstep(0.45, 0.8, vObjSnowN.y), snowN = fract(sin(dot(floor(vObjSnowW.xz * 3.0), vec2(12.9898, 78.233))) * 43758.5453);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.97, 1.0), clamp(uObjSnow * snowUp * (0.75 + 0.3 * snowN), 0.0, 1.0));`);
@@ -44,7 +45,7 @@ float clayN(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * 
   return mix(mix(mix(clayH(i), clayH(i + vec3(1,0,0)), f.x), mix(clayH(i + vec3(0,1,0)), clayH(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(clayH(i + vec3(0,0,1)), clayH(i + vec3(1,0,1)), f.x), mix(clayH(i + vec3(0,1,1)), clayH(i + vec3(1,1,1)), f.x), f.y), f.z); }`;
 function addClay(sh) {
-  sh.vertexShader = "varying vec3 vClayW;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vClayW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+  sh.vertexShader = "varying vec3 vClayW;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n#ifdef USE_INSTANCING\n mat4 clayM = modelMatrix * instanceMatrix;\n#else\n mat4 clayM = modelMatrix;\n#endif\n vClayW = (clayM * vec4(transformed, 1.0)).xyz;");
   sh.fragmentShader = "varying vec3 vClayW;\n" + CLAY_NOISE + "\n" + sh.fragmentShader
     .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
       { vec3 cp = vClayW * 7.0; vec3 nn = vec3(clayN(cp), clayN(cp + 17.3), clayN(cp + 31.7)) + 0.5 * vec3(clayN(cp * 2.3 + 5.1), clayN(cp * 2.3 + 9.7), clayN(cp * 2.3 + 2.2));

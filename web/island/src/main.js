@@ -10,7 +10,7 @@ import { Daylight } from "./render/daylight.js";
 import { PowerRange } from "./render/powerRange.js";
 import { NoPowerBadges } from "./render/noPower.js";
 import { Toon } from "./render/toon.js";
-import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
+import { BuildingViews, UnitViews, addModuleViews, setGroundShade } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
 import { WeatherViews } from "./render/weather.js";
@@ -35,6 +35,7 @@ import { BuildingThumbs } from "./render/thumbs.js";
 import { Hud } from "./ui/hud.js";
 import { Quality } from "./render/quality.js";
 import { PROP_LOD } from "./render/assets.js";
+import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
 import { Minimap } from "./ui/minimap.js";
 import { installKeys } from "./ui/keys.js";
@@ -117,6 +118,7 @@ function hookSounds(w) {
 // 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)
 function applyAssetTier(c) {
   PROP_LOD.level = c.lod ?? 0;                                                    // 소품 텍스처 단계(4k·2k·1k)
+  PROP_LOD.aniso = Math.min(renderer.capabilities.getMaxAnisotropy(), [4, 4, 2, 1][c.lod ?? 0] ?? 1);   // 텍스처 이방성 필터(새로 받는 모델부터)
   drawDist = c.drawDist ?? 200; lastCull = 0;   // 그리기 거리(보는 곳 둘레 반지름 = drawDist × 0.7), 끝은 안개로 가림(fitFog)
 }
 // 그리기 거리: 0.3초마다 나무·바위·건물·소품을 카메라와의 거리로 보이기/숨기기(멀리 있는 것은 그리지도, 그림자도 만들지 않음).
@@ -154,7 +156,7 @@ const quality = new Quality(renderer, sun, c => {
 });
 weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); festaView.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
 function mount(w) {
-  if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); overlay.innerHTML = ""; }
+  if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); poolFor(worldRoot).dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
   chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
   water.userData.setGrid(world.grid); world.on("ground", () => { waterDirty = true; });   // 물 깊이(얕은 물빛·물거품)
@@ -307,6 +309,7 @@ Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
 });
 
 // ---------- 매 프레임
+const sunAt = new THREE.Vector3();
 const clock = new THREE.Clock(); let simT = 0, lastSync = 0, lastHud = 0, lastSeason = 0;
 // 키보드로 화면: Q 올리기 · E 내리기(카메라 높이), W·A·S·D·방향키 옮기기(입력창이 아닐 때)
 const keys = new Set();
@@ -349,7 +352,7 @@ function frameBody() {
     renderer.render(roomView.scene, roomView.camera); requestAnimationFrame(frame); return;
   }
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
-  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 2, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도
+  const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 4, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도(프레임당 4 ms만큼만 나눠 만듦)
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   cullFar(now);
@@ -357,6 +360,7 @@ function frameBody() {
   world.winterYear = winterYearOf(daylight.now());                              // 첫눈은 겨울마다 한 번(어느 해 겨울인지는 화면이 알려 줌)
   skyShow.update(dt, world.sky, controls.target, camera);
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);
+  setGroundShade(1 - 0.8 * (daylight.night ?? 0), world.snow ?? 0);          // 건물 밑동 그늘은 밤에 옅게, 눈 위에서는 푸르스름하게
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
@@ -365,7 +369,7 @@ function frameBody() {
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);
   unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
-  buildingViews.updateConstruction(dt);
+  buildingViews.updateConstruction(dt, controls.target);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
@@ -377,7 +381,11 @@ function frameBody() {
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
-  quality.frame(dt, now);
+  // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
+  if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }
+  quality.hold = !ready;                            // 불러오는 동안 느린 것은 자동 낮추기에 세지 않음
+  quality.frame(dt, now, unitViews.casting > 0 || lifeViews.anims.length > 0 || buildingViews.animating);
+  poolFor(worldRoot).sync(camera, sun);             // 묶어 그리는 나무·바위·밭 틀: 화면·그림자 범위에 든 것만 인스턴스로
   buildingThumbs.pump();                             // 기다리는 건물 사진이 있으면 한 장(이어서 그리는 섬이 덮음)
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }

@@ -7,6 +7,10 @@ import { modelFor, rawModel } from "./assets.js";
 import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
 import { tintRoofs } from "./roofTint.js";
 import { terrainHeight } from "../world/terrain.js";
+import { poolFor } from "./instances.js";
+import { placeEl, showEl, textEl } from "../util.js";
+
+const _badgeP = new THREE.Vector3(), _lineP = new THREE.Vector3();
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -25,18 +29,26 @@ export class BuildingViews {
     const model = await buildingModel(def, { ramp: b.ramp, season: this.world.season });
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
     holder.add(model); v.model = model; v.baseY = model.scale.y;
+    if (def.field && def.prop) poolFor(this.scene).add(model);                      // 밭 틀(칸마다 같은 모델)은 묶어 그림
     if (def.id === "bench") {                                                       // 좌판 높이를 모델에서 직접 잼(앉을 때 엉덩이를 맞춤): 칸 가운데(앞쪽으로 0.12)에서 위→아래 광선
       holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.2).applyMatrix4(holder.matrixWorld);
       const hit = new THREE.Raycaster(o, new THREE.Vector3(0, -1, 0)).intersectObject(model, true)[0]; if (hit) b.seatY = hit.point.y;
     }
-    v.height = new THREE.Box3().setFromObject(model).max.y + 0.35;                // 🐦 표시는 실제 지붕 위에
+    holder.updateWorldMatrix(true, false);                                          // 모델이 이미 받아져 있으면(불러오기·같은 건물 또 짓기) 아직 한 번도 안 그려져 holder의 월드 행렬이 비어 있음 → 먼저 맞춤
+    const box = new THREE.Box3().setFromObject(model); v.height = box.max.y - holder.position.y + 0.35;   // 🐦 표시는 실제 지붕 위에(holder 기준 높이)
+    if (def.asset) {                                                                // 밑동 그늘: 건물·소품이 땅에 떠 보이지 않게 둘레에 옅은 그늘 판(모두 묶어 그리기 1번, 그림자를 끈 설정에서도 보임)
+      const g = v.ground = new THREE.Mesh(GROUND_GEO, groundShadeMat()); g.renderOrder = 1; g.userData.noToon = true;
+      g.position.set((box.min.x + box.max.x) / 2, holder.position.y + 0.025, (box.min.z + box.max.z) / 2); g.scale.set((box.max.x - box.min.x) * 1.4, 1, (box.max.z - box.min.z) * 1.4);
+      this.scene.add(g); poolFor(this.scene).add(g);
+    }
   }
   /** 공사 중인 건물은 진행만큼 아래에서부터 솟아오르고, 반투명한 비계 상자가 둘러싼다. */
-  updateConstruction(dt) {
+  updateConstruction(dt, focus = null) {
+    this.animating = false;                                                         // 그림자가 바뀌는 중인지(솟아오르는 공사 · 보는 곳 근처의 풍차 날개) → main이 그림자 다시 그리기 간격을 정함
     for (const v of this.views.values()) {
       const b = v.building, p = Math.min(1, b.hits / b.need);
       if (!v.model) continue;
-      v.shown = v.shown ?? p; v.shown += (p - v.shown) * Math.min(1, dt * 4);
+      v.shown = v.shown ?? p; if (Math.abs(p - v.shown) > 0.002) this.animating = true; v.shown += (p - v.shown) * Math.min(1, dt * 4);
       v.model.scale.y = v.baseY * Math.max(0.04, 0.08 + 0.92 * v.shown);
       if (p < 1 && !v.scaffold) {
         const def = BUILDINGS[b.defId], box = new THREE.Box3().setFromObject(v.model), size = box.getSize(new THREE.Vector3());
@@ -45,7 +57,9 @@ export class BuildingViews {
         v.scaffold.position.y = Math.max(0.6, v.height - 0.3) / 2; v.holder.add(v.scaffold); void size;
       }
       if (v.scaffold) v.scaffold.visible = p < 1;
-      if (p >= 1) v.model.traverse(o => { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else if (o.name === "fountainWater") o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; });   // 풍차 날개 돌기 · 분수 물
+      if (!v.spin) { v.spin = []; v.model.traverse(o => { if (o.name === "windBlades" || o.name === "fountainWater") v.spin.push(o); }); }   // 움직이는 부분은 한 번만 찾아 둠(매 프레임 모델 전체를 훑지 않게)
+      if (p >= 1) for (const o of v.spin) { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; }   // 풍차 날개 돌기 · 분수 물
+      if (p >= 1 && v.spin.length && focus && Math.abs(v.holder.position.x - focus.x) < 34 && Math.abs(v.holder.position.z - focus.z) < 34) this.animating = true;
     }
     // 전기가 들어온 집: 창가 불빛(밤에만 보임 — daylight.js가 houseGlow 세기를 정함). 2초마다 확인
     if ((this.glowT = (this.glowT || 0) - dt) > 0) return; this.glowT = 2;
@@ -57,7 +71,7 @@ export class BuildingViews {
       if (v.glow) v.glow.userData.on = on;
     }
   }
-  remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); v.badge.remove(); this.views.delete(id); }
+  remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); if (v.ground) this.scene.remove(v.ground); v.badge.remove(); this.views.delete(id); }
   setHighlight(id) {                                                              // 철거 도구가 가리키는 건물을 붉게
     for (const [bid, v] of this.views) v.holder.traverse(o => { if (o.isMesh) {
       if (!o.userData.baseMat) o.userData.baseMat = o.material;
@@ -71,14 +85,16 @@ export class BuildingViews {
     } });
   }
   // 건물 위 표시: 안에 있는 갈매미 수(건물 밖에서도 안의 상태가 유지됨을 보여 줌)
-  updateBadges(camera, w, h, tmp = new THREE.Vector3()) {
+  updateBadges(camera, w, h) {
+    const tmp = _badgeP;
     for (const v of this.views.values()) {
       const b = v.building, n = b.occupants.length, building = b.hits < b.need, def = BUILDINGS[b.defId];
       const forSale = !building && def.house && !b.owner && this.economy?.();         // 다 지었는데 주인이 없는 집 = 시장 매물
-      v.badge.hidden = n === 0 && !building && !forSale; if (v.badge.hidden) continue;
+      if (n === 0 && !building && !forSale) { showEl(v.badge, false); continue; }
       tmp.set(v.holder.position.x, v.holder.position.y + v.height, v.holder.position.z).project(camera);
-      v.badge.textContent = building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${def.price}`; v.badge.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`; v.badge.style.top = `${(-tmp.y * 0.5 + 0.5) * h}px`;
-      if (tmp.z > 1) v.badge.hidden = true;
+      if (tmp.z > 1 || Math.abs(tmp.x) > 1.2 || Math.abs(tmp.y) > 1.2) { showEl(v.badge, false); continue; }   // 카메라 뒤·화면 밖은 숨기고 건드리지 않음
+      textEl(v.badge, building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${def.price}`);
+      placeEl(v.badge, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); showEl(v.badge, true);   // 글자·자리는 바뀔 때만 씀(util.js)
     }
   }
 }
@@ -89,6 +105,27 @@ export async function buildingModel(def, { ramp = null, season = null } = {}) {
   const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
   if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
   return model;
+}
+
+// 밑동 그늘 판: 가운데는 진하고(건물에 가려짐) 가장자리로 갈수록 옅어지는 둥근 네모
+const GROUND_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+let GROUND_MAT = null;
+function groundShadeMat() {
+  if (GROUND_MAT) return GROUND_MAT;
+  const N = 64, c = document.createElement("canvas"); c.width = c.height = N; const g = c.getContext("2d"), img = g.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = Math.abs((x + 0.5) / N * 2 - 1), w = Math.abs((y + 0.5) / N * 2 - 1), d = Math.pow(u ** 4 + w ** 4, 0.25), t = Math.min(1, Math.max(0, (d - 0.55) / 0.45)), i = (y * N + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.round(255 * (1 - t * t * (3 - 2 * t)));
+  }
+  g.putImageData(img, 0, 0);
+  return (GROUND_MAT = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0x1d2b14, transparent: true, opacity: 0.34, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+}
+
+/** 밑동 그늘 세기(0~1): 밤에는 옅게(가로등 빛 웅덩이를 어둡게 덮지 않게). snow(0~1): 눈 덮인 땅에서는 풀빛(어두운 초록)이 아니라 그림자처럼 푸르스름한 회색 */
+const SHADE_GRASS = new THREE.Color(0x1d2b14), SHADE_SNOW = new THREE.Color(0x3a4a66);
+export function setGroundShade(k, snow = 0) {
+  if (!GROUND_MAT) return; GROUND_MAT.opacity = 0.34 * k;
+  const s = Math.round(Math.min(1, Math.max(0, snow)) * 50) / 50; if (GROUND_MAT.userData.snow !== s) { GROUND_MAT.userData.snow = s; GROUND_MAT.color.copy(SHADE_GRASS).lerp(SHADE_SNOW, s); }
 }
 
 /** 계단 모델: 문 쪽(+z)이 입구, -z로 올라감. 디딤판 높이는 World.stairStep과 같은 식. 바닥에서부터 꽉 찬 돌계단. */
@@ -238,7 +275,7 @@ export async function addModuleViews(scene, world) {
     const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
     obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
     if (def.vary) { const h = Math.abs(((x * 73856093) ^ (z * 19349663)) >>> 0) / 4294967295; obj.scale.multiplyScalar(0.85 + h * 0.4); obj.rotation.y = h * 6.283 * 7; }   // 나무: 칸마다 크기 0.85~1.25배·방향 제각각
-    obj.name = m.id; scene.add(obj); map.set(m.id, obj);
+    obj.name = m.id; scene.add(obj); map.set(m.id, obj); poolFor(scene).add(obj);   // 나무·야자수·바위: 같은 모델끼리 구역마다 묶어 그림(instances.js)
   }));
   return map;
 }
@@ -312,7 +349,7 @@ export class UnitViews {
   /** 매 프레임: 위치·방향, 동작(AI가 정한 u.anim, 아니면 걷기·달리기·서 있기), 손의 도구, 낚싯줄과 찌. */
   sync(dt, playAnim, walkScale = 2.2, runScale = 1.5, speedBoost = 1, time = 0, camera = null) {
     if (camera) { projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projView); }
-    this.frameNo = (this.frameNo || 0) + 1;
+    this.frameNo = (this.frameNo || 0) + 1; this.casting = 0;                       // casting: 실제 그림자를 드리우는(밖에 나와 있는) 갈매미 수
     this.world.units.forEach((u, i) => {
       const v = this.views[i]; if (!v) return;                                     // 막 소환돼 아직 모습이 안 만들어진 갈매미
       const { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
@@ -322,6 +359,7 @@ export class UnitViews {
         const want = (this.shadowDist ?? 999) > 0 && camera.position.distanceTo(g.position) < (this.shadowDist ?? 999);
         if (v.castOn !== want) { v.castOn = want; v.ch.root.traverse(o => { if (o.isMesh) o.castShadow = want; }); }
       }
+      if (v.castOn && g.visible) this.casting++;
       this.swimLook(v, u, i, dt, time);
       if (u.state === "Sit" && v.ch) {                                               // 앉기: 몸통 바닥(엉덩이)이 좌판 높이(u.y)에 오게 모델을 내림. 자세가 잡힌 뒤 한 번 잼
         v.sitT = (v.sitT || 0) + dt;
@@ -358,9 +396,9 @@ export class UnitViews {
       const fishing = !!u.fishing && g.visible; v.line.visible = v.bob.visible = fishing;
       if (fishing) {
         v.bob.position.set(toWorldX(u.fishing.x), -0.16 + Math.sin(time * 5 + i) * 0.01, toWorldZ(u.fishing.z));
-        const tip = ch?.inHand.rod?.getObjectByName("tip"), from = new THREE.Vector3();
+        const tip = v.tip === undefined || v.tipOf !== ch ? (v.tipOf = ch, v.tip = ch?.inHand.rod?.getObjectByName("tip") ?? null) : v.tip, from = _lineP;   // 낚싯대 끝은 한 번만 찾음
         if (tip) tip.getWorldPosition(from); else from.set(g.position.x, g.position.y + h * 0.7, g.position.z);
-        v.line.geometry.setFromPoints([from, v.bob.position.clone()]);
+        const lp = v.line.geometry.attributes.position; lp.setXYZ(0, from.x, from.y, from.z); lp.setXYZ(1, v.bob.position.x, v.bob.position.y, v.bob.position.z); lp.needsUpdate = true; v.line.geometry.computeBoundingSphere();
       }
     });
   }

@@ -3,7 +3,7 @@ import { toWorldX, toWorldZ, toGridX, toGridZ, SEA_LEVEL } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
 
 const GROUND_RGB = { Grass: [140, 196, 78], Cobble: [140, 152, 166], WoodDeck: [200, 150, 95], Dirt: [200, 160, 118], Sand: [240, 222, 160], Rock: [150, 144, 135] };
-const SIZE = 176;
+const SIZE = 176, BRIDGE_RGB = [176, 128, 80], HOUSE_RGB = [214, 110, 75], BUILDING_RGB = [120, 92, 70];
 
 export class Minimap {
   constructor({ getWorld, camera, controls, onStatus }) {
@@ -22,13 +22,13 @@ export class Minimap {
   }
   setOn(on) { this.box.hidden = !on; try { localStorage.setItem("galmaemiman-minimap", on ? "1" : "0"); } catch { /* 무시 */ } }
   drawTerrain(w) {
-    const g = w.grid, img = this.terrain.getContext("2d").createImageData(SIZE, SIZE), sx = g.w / SIZE, sz = g.h / SIZE;
+    const g = w.grid, img = this.terrain.getContext("2d").createImageData(SIZE, SIZE), d8 = img.data, sx = g.w / SIZE, sz = g.h / SIZE;
     for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
-      const c = g.get(Math.floor(x * sx), Math.floor(y * sz)), i = (y * SIZE + x) * 4; let rgb;
-      if (c.elevation < SEA_LEVEL) { const d = Math.min(1, (SEA_LEVEL - c.elevation) / 0.9); rgb = [Math.round(120 - 80 * d), Math.round(205 - 70 * d), Math.round(220 - 30 * d)]; }
-      else { rgb = (GROUND_RGB[c.groundType] || GROUND_RGB.Grass).slice(); const k = 1 + Math.min(0.3, Math.max(0, c.elevation) * 0.12); rgb = rgb.map(v => Math.min(255, v * k)); }
-      if (c.occupiedId) { const b = w.buildings.get(c.occupiedId); if (b) rgb = BUILDINGS[b.defId].bridge ? [176, 128, 80] : BUILDINGS[b.defId].house ? [214, 110, 75] : [120, 92, 70]; else rgb = rgb.map(v => v * 0.72); }   // 건물 · 나무·바위(어둡게)
-      img.data.set([rgb[0], rgb[1], rgb[2], 255], i);
+      const c = g.get(Math.floor(x * sx), Math.floor(y * sz)), i = (y * SIZE + x) * 4; let r, gr, bl;   // 화소마다 배열을 만들지 않고 숫자로(3초마다 3만 화소)
+      if (c.elevation < SEA_LEVEL) { const d = Math.min(1, (SEA_LEVEL - c.elevation) / 0.9); r = Math.round(120 - 80 * d); gr = Math.round(205 - 70 * d); bl = Math.round(220 - 30 * d); }
+      else { const base = GROUND_RGB[c.groundType] || GROUND_RGB.Grass, k = 1 + Math.min(0.3, Math.max(0, c.elevation) * 0.12); r = Math.min(255, base[0] * k); gr = Math.min(255, base[1] * k); bl = Math.min(255, base[2] * k); }
+      if (c.occupiedId) { const b = w.buildings.get(c.occupiedId); if (b) { const q = BUILDINGS[b.defId].bridge ? BRIDGE_RGB : BUILDINGS[b.defId].house ? HOUSE_RGB : BUILDING_RGB; r = q[0]; gr = q[1]; bl = q[2]; } else { r *= 0.72; gr *= 0.72; bl *= 0.72; } }   // 건물 · 나무·바위(어둡게)
+      d8[i] = r; d8[i + 1] = gr; d8[i + 2] = bl; d8[i + 3] = 255;
     }
     this.terrain.getContext("2d").putImageData(img, 0, 0); this.tv = g.version;
   }

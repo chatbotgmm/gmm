@@ -10,7 +10,7 @@ function patchTree(m) {
   if (!m || m.userData.treeSeason || m.userData.fromPatched) return; m.userData.treeSeason = true;
   const own = m.onBeforeCompile && Object.prototype.hasOwnProperty.call(m, "onBeforeCompile") ? m.onBeforeCompile : null;
   m.onBeforeCompile = (sh, r) => { own?.call(m, sh, r); Object.assign(sh.uniforms, TREE_U);
-    sh.vertexShader = "varying vec3 vTreeW;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n vTreeW = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;");
+    sh.vertexShader = "varying vec3 vTreeW;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n#ifdef USE_INSTANCING\n mat4 treeM = modelMatrix * instanceMatrix;\n#else\n mat4 treeM = modelMatrix;\n#endif\n vTreeW = (treeM * vec4(0.0, 0.0, 0.0, 1.0)).xyz;");
     sh.fragmentShader = "uniform float uTSpr; uniform float uTAut; uniform float uTWin; varying vec3 vTreeW;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
       { float g = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 6.0, 0.0, 1.0), lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         float h = fract(sin(dot(floor(vTreeW.xz * 0.99), vec2(12.9898, 78.233))) * 43758.5453);

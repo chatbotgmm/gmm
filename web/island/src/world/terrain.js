@@ -34,7 +34,8 @@ export function corners(grid, x, z) {
 export function bilinear(c, u, v) { return (c[0] * (1 - u) + c[1] * u) * (1 - v) + (c[2] * (1 - u) + c[3] * u) * v; }
 /** 칸 안 높이: 꼭짓점 쌍선형 + 가운데 볼록(칸 높이 − 꼭짓점 평균, 가장자리에서 0) → 틈 없이 이어지면서 칸 가운데는 그 칸 높이. */
 export function heightIn(c, e, u, v) {
-  return bilinear(c, u, v) + BUMP * (e - (c[0] + c[1] + c[2] + c[3]) / 4) * Math.sin(Math.PI * u) * Math.sin(Math.PI * v);
+  const d = e - (c[0] + c[1] + c[2] + c[3]) / 4;                                // 평평한 곳(d = 0)은 볼록이 없으니 사인을 재지 않음(값은 같음)
+  return d ? bilinear(c, u, v) + BUMP * d * Math.sin(Math.PI * u) * Math.sin(Math.PI * v) : bilinear(c, u, v);
 }
 
 /** 격자 좌표(칸 단위, 연속) 위치의 땅 높이. */
