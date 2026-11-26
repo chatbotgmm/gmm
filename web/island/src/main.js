@@ -40,6 +40,7 @@ import { Quality } from "./render/quality.js";
 import { PROP_LOD } from "./render/assets.js";
 import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
+import { ROOM_EXPOSURE } from "./render/roomLight.js";
 import { Minimap } from "./ui/minimap.js";
 import { installKeys } from "./ui/keys.js";
 import { Sfx } from "./audio/sfx.js";
@@ -306,6 +307,7 @@ hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06
 addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
+roomView.daylight = daylight;                                                   // 방 조명이 바깥 시간대(daylight.glow)를 따름
 sfx.listener = { target: controls.target, camera };
 tools.onEdit = kind => { if (kind !== "nature") sfx.play(kind === "height" ? "dig" : "paint", { vol: 0.5 }); };   // 자연·지형은 월드 custom 이벤트가 소리를 냄
 tools.onUndoSound = () => sfx.play("undo", { vol: 0.6 });
@@ -385,14 +387,20 @@ function frame() {
     requestAnimationFrame(frame);
   }
 }
+function tickClock() {
+  world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
+  if (daylight.time) world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60;   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
+}
 function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   if (ready) for (let k = 0; k < simSpeed; k++) world.update(dt);                 // 불러오는 동안은 멈춤. 시간 배수(테스트)면 마을도 여러 번 돌림
   stepGridLines(dt, gridShown({ mode: tools?.mode, on: hud?.gridOn, room: roomView.isOpen }));   // 건설 모드 격자선(▦, 땅 셰이더 세기만)
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
+    daylight.world = world; daylight.update(dt, performance.now()); tickClock();  // 방 안에서도 바깥 시간이 흐름(방 조명·갈매미 잠자기가 따라감)
     roomView.update(dt); quality.frame(dt, performance.now());
-    renderer.render(roomView.scene, roomView.camera); requestAnimationFrame(frame); return;
+    const ex = renderer.toneMappingExposure; renderer.toneMappingExposure = ROOM_EXPOSURE;   // 방 밝기는 방 조명이 정함(섬 노출과 따로)
+    renderer.render(roomView.scene, roomView.camera); renderer.toneMappingExposure = ex; requestAnimationFrame(frame); return;
   }
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 4, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도(프레임당 4 ms만큼만 나눠 만듦)
@@ -404,8 +412,7 @@ function frameBody() {
   skyShow.update(dt, world.sky, controls.target, camera);
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);
   setGroundShade(1 - 0.8 * (daylight.glow ?? 0), world.snow ?? 0);           // 건물 밑동 그늘은 밤에 옅게(등불과 같은 부드러운 곡선), 눈 위에서는 푸르스름하게
-  world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
-  if (daylight.time) world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60;   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
+  tickClock();
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
   if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); world.setDay(dailyKey(new Date())); }

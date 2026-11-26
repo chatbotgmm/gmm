@@ -12,6 +12,7 @@ import * as F from "../world/furniture.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { roomLight, ROOM_DARK_WHY } from "./roomLight.js";
 
 // 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
 const roomFurniSource = itemId => { const it = ITEMS.find(i => i.id === itemId); if (!it) return "마을 가방의 가구";
@@ -74,7 +75,7 @@ export class RoomView {
     this.renderer = renderer; this.onExit = onExit; this.isOpen = false; this.tab = "furniture";
     const s = this.scene = new THREE.Scene(); s.background = new THREE.Color(0x30343c);
     this.camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 100);
-    s.add(new THREE.HemisphereLight(0xfff4e2, 0x8a7a6a, 1.1));
+    s.add(this.hemi = new THREE.HemisphereLight(0xfff4e2, 0x8a7a6a, 1.1));          // 세기·색은 relight()가 바깥 시간대 × 집 전기로 정함(roomLight.js)
     const sun = this.sun = new THREE.DirectionalLight(0xfff0d8, 1.6); sun.position.set(4, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
     Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 0.5, far: 30 }); sun.shadow.bias = -0.0008; s.add(sun);
     this.root = new THREE.Group(); s.add(this.root); this.gulls = new Map(); this.chars = null;   // chars: 갈매미 모델(main이 넣어 줌)
@@ -98,7 +99,7 @@ export class RoomView {
   setLevel(i) { this.li = i; this.sel = null; this.ghost = null; this.build(); this.fit(); this.refreshUI(); this.status(`${this.L.name}`); }
   open(world, b) {
     this.world = world; this.b = b; this.sel = null; this.ghost = null; this.isOpen = true; this.li = 0;
-    F.room(b); this.build();
+    this.pw = this.gl = null; F.room(b); this.build();                            // pw·gl: 전기·어둠(부드럽게 따라감) — 들어올 땐 바로 지금 값
     const it = this.L, span = Math.max(it.w, it.d);
     this.controls.target.set(0, 0.4, 0); this.camera.position.set(span * 0.55, span * 0.95, span * 1.15); this.fit(); this.controls.update();
     this.onSound?.("doorIn"); this.touch.hidden = false; this.ui.hidden = false; this.bubbleBox.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
@@ -132,7 +133,7 @@ export class RoomView {
     this.grid = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12 })); this.grid.userData.noToon = true; r.add(this.grid);
     const wc = WALLPAPERS[it.wallpaper]?.color ?? 0xf6eedc;
     // 네 벽: 카메라 쪽 벽은 낮게 잘라(무릎 높이) 안이 보이게 함(update에서 매 프레임). 문을 누르면 다른 방으로 가거나 밖으로 나감
-    this.walls = []; this.doorHits = [];
+    this.walls = []; this.doorHits = []; this.wins = []; this.lamps = []; this.shades = [];
     const trim = 0xe9dcc4, wmat = m(wc), T = 0.15, STUB = 0.45;
     const SIDES = { N: [it.w, 0, -it.d / 2 - T / 2, 0], S: [it.w, 0, it.d / 2 + T / 2, Math.PI], W: [it.d, -it.w / 2 - T / 2, 0, Math.PI / 2], E: [it.d, it.w / 2 + T / 2, 0, -Math.PI / 2] };
     const along = (side, at, len) => (side === "N" || side === "E" ? 1 : -1) * (at + 0.5 - len / 2);   // 문 칸 번호 → 벽 그룹 안 x
@@ -156,7 +157,7 @@ export class RoomView {
         g.add(panel, fr, mat, sign); tall.push(panel, fr); this.walls.push({ g, full, stub, tall, sign, side, signY: [2.25, 0.75] });
       }
       if (!doors.length && (side === "N" || side === "E")) {                       // 문이 없는 뒤·오른쪽 벽엔 창문
-        const win = new THREE.Mesh(new THREE.BoxGeometry(Math.min(1.3, len - 1), 0.9, 0.04), new THREE.MeshStandardMaterial({ color: 0xbfe4f5, emissive: 0x9fd4f0, emissiveIntensity: 0.35 })); win.position.set(0, 1.45, T / 2 + 0.01);
+        const win = new THREE.Mesh(new THREE.BoxGeometry(Math.min(1.3, len - 1), 0.9, 0.04), new THREE.MeshStandardMaterial({ color: 0xbfe4f5, emissive: 0x9fd4f0, emissiveIntensity: 0.35 })); win.position.set(0, 1.45, T / 2 + 0.01); this.wins.push(win);
         const wf = new THREE.Mesh(new THREE.BoxGeometry(Math.min(1.42, len - 0.88), 1.02, 0.03), m(0xffffff)); wf.position.set(0, 1.45, T / 2 + 0.002); g.add(win, wf); tall.push(win, wf);
       }
       if (!doors.length) this.walls.push({ g, full, stub, tall, side });
@@ -187,7 +188,9 @@ export class RoomView {
     // 가구
     it.furniture.forEach((o, i) => { const g = furnitureModel(o.id), sz = F.size(o.id, o.rot); g.position.copy(this.cellCenter(o.x, o.z, sz)); g.rotation.y = -o.rot * Math.PI / 2; g.userData.index = i; r.add(g); this.items.push(g); });
     // 스탠드 불빛(방 안에서만, 최대 2개)
-    it.furniture.filter(o => FURNITURE[o.id].light).slice(0, 2).forEach(o => { const p = new THREE.PointLight(0xffd59a, 2.5, 6, 1.5), sz = F.size(o.id, o.rot); p.position.copy(this.cellCenter(o.x, o.z, sz)).y = 1.3; r.add(p); });
+    it.furniture.filter(o => FURNITURE[o.id].light).slice(0, 2).forEach(o => { const p = new THREE.PointLight(0xffd59a, 2.5, 6, 1.5), sz = F.size(o.id, o.rot); p.position.copy(this.cellCenter(o.x, o.z, sz)).y = 1.3; r.add(p); this.lamps.push(p); });   // 전기 없는 저녁·밤엔 세기 0(빛 개수는 그대로 — 셰이더 다시 안 만듦)
+    for (const g of this.items) g.traverse(o => { if (o.userData.lampShade) { o.material = o.material.clone(); this.shades.push(o); } });   // 갓 발광도 불과 같이 켜고 끔(가구 재질은 섬·썸네일과 같이 쓰므로 방에서만 복사)
+    this.relight();
     this.toon.sweep(); this.drawSel(); this.drawGhost();
   }
   /** 문·계단: 다른 방으로 가거나 밖으로 */
@@ -347,13 +350,27 @@ export class RoomView {
     }
     for (const [id, e] of this.bubbles) if (!seen.has(id)) e.hidden = true;
   }
+  /** 방 조명: 바깥 시간대(daylight.glow, main이 this.daylight로 넣어 줌) × 이 집 전기(world.powered). 풍차 완공·철거·해 짐을 몇 초에 걸쳐 따라감(움직임 줄이기면 빨리) */
+  relight(dt) {
+    const want = this.world?.powered?.(this.b) ? 1 : 0, glow = this.daylight?.glow ?? 0;
+    if (this.pw == null || dt == null) { this.pw ??= want; this.gl ??= glow; }
+    else { const k = Math.min(1, dt * (this.calm ? 8 : 1.5)); this.pw += (want - this.pw) * k; this.gl += (glow - this.gl) * k; }
+    const o = this.lit = roomLight(this.gl, this.pw, this.lit);
+    this.hemi.color.setRGB(...o.sky); this.hemi.groundColor.setRGB(...o.ground); this.hemi.intensity = o.hemi;
+    this.sun.color.setRGB(...o.key); this.sun.intensity = o.keyI; this.scene.background.setRGB(...o.bg);
+    for (const l of this.lamps || []) l.intensity = 2.5 * o.lamp;
+    for (const sh of this.shades || []) for (const m of [sh.material, sh.material.userData.src]) if (m) m.emissiveIntensity = 0.6 * o.lamp;
+    for (const w of this.wins || []) for (const m of [w.material, w.material.userData.src]) if (m) { m.color.setRGB(...o.win); m.emissive.setRGB(...o.winE); m.emissiveIntensity = o.winI; }
+    const el = this.ui.querySelector(".rpow"); if (el && el.hidden === o.dark) { el.textContent = ROOM_DARK_WHY; el.hidden = !o.dark; }
+  }
+  get calm() { try { return (this.calmQ ??= matchMedia("(prefers-reduced-motion: reduce)")).matches; } catch { return false; } }
   bubbleFor(id) { let e = this.bubbles.get(id); if (!e) { e = document.createElement("div"); e.className = "emote"; e.hidden = true; this.bubbleBox.appendChild(e); this.bubbles.set(id, e); } return e; }
   update(dt) {
     if (!this.isOpen) return; this.controls.update(); this.cutWalls();
     this.breath = (this.breath || 0) + dt;
     for (const v of this.gulls.values()) { if (v.root?.parent) v.mixer.update(dt); if (v.blanket?.parent) v.blanket.scale.y = 1 + 0.04 * Math.sin(this.breath * 1.6);   // 이불이 숨 쉬듯 오르내림
       for (const w of v.wings || []) w.scale.setScalar(v.asleep ? v.lying?.wingScale ?? 0.55 : 1); }          // 자는 동안 날개를 몸 쪽으로 접어 이불 밖으로 안 나오게(기본 갈매미: 날개 끝 x 0.43 → 0.34 m)
-    this.drawBubbles();
+    this.drawBubbles(); this.relight(dt);
     if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = 1; this.syncGulls(); }
     if (Math.abs(innerWidth / innerHeight - (this.lastAspect || 0)) > 0.01) this.fit();   // 화면을 돌리면 다시 맞춤
     if (this.whoT === undefined || (this.whoT -= dt) <= 0) { this.whoT = 1; const inside = this.world.units.filter(u => u.insideBuildingId === this.b.id); this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : ""; }

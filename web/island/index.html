@@ -156,6 +156,7 @@
   #room .rwho { font-size: var(--fs-cap); margin-top: calc(2*var(--u)); } #room .rlevels { display: flex; gap: var(--gap); margin-top: calc(6*var(--u)); flex-wrap: wrap; } #room .rlevels .dim { font-size: var(--fs-cap); }
   #room .rbottom { position: absolute; left: var(--safe-l); right: var(--safe-r); bottom: var(--safe-b); background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)); box-shadow: var(--e-1);
     display: flex; flex-direction: column; gap: var(--gap); max-width: calc(760*var(--u)); margin: 0 auto; }
+  #room .rpow { margin-top: var(--s-1); width: fit-content; max-width: 100%; padding: calc(2*var(--u)) var(--s-2); border-radius: var(--r-sm); background: var(--c-warm); color: var(--c-warm-ink); font-size: var(--fs-sm); font-weight: 700; line-height: var(--lh-tight); } #room .rpow[hidden] { display: none; }   /* 전기 없는 저녁·밤: 불이 안 켜지는 까닭 한 줄(room.js relight) */
   #room .rmsg { font-size: var(--fs-sm); min-height: 1em; } #room .racts:empty { display: none; }
   #room .racts, #room .rtabs, #room .rlist { display: flex; gap: var(--gap); flex-wrap: wrap; } #room .rlist { max-height: 30vh; max-height: 30dvh; overflow: auto; overscroll-behavior: contain; }
   #room button { min-height: var(--hit); }
@@ -800,7 +801,7 @@
 <div id="cross" hidden></div><button id="crossGo" hidden>🖌 누르는 동안 칠하기</button>
 <div id="roomTouch" hidden></div>
 <div id="room" hidden role="region" aria-label="집 꾸미기">
-  <div class="rhead"><div><b class="rtitle"></b><div class="rlevels"></div><div class="rwho dim"></div></div><button class="rexit">🚪 나가기</button></div>
+  <div class="rhead"><div><b class="rtitle"></b><div class="rlevels"></div><div class="rwho dim"></div><div class="rpow" role="status" hidden></div></div><button class="rexit">🚪 나가기</button></div>
   <div class="rbottom"><div class="rmsg"></div><div class="racts"></div>
     <div class="rtabs"><button data-tab="furniture">🛋 가구</button><button data-tab="floor">🟫 바닥</button><button data-tab="wall">🎨 벽지</button><button class="rexit rx2 ghost" aria-label="집에서 나가기">🚪 나가기</button></div>
     <div class="rlist"></div></div>
