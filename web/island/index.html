@@ -40,7 +40,7 @@
   .row { display: flex; gap: var(--s-2); padding: var(--gap); border-radius: var(--r-sm); cursor: pointer; align-items: center; } .row .coins { font-size: var(--fs-cap); font-variant-numeric: tabular-nums; } .row:hover { background: rgba(0,0,0,.05); }
   .row.on { background: var(--c-accent-soft); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-accent-strong); } .row .nm { font-weight: 600; min-width: calc(54*var(--u)); } .row .act { color: var(--c-ink-2); font-size: var(--fs-cap); }
   #help { font-size: var(--fs-sm); line-height: 1.7; }
-  #chips { position: fixed; top: var(--safe-t); right: var(--safe-r); z-index: var(--z-hud); max-width: min(calc(720*var(--u)), 62vw);
+  #chips { position: fixed; top: var(--safe-t); right: var(--safe-r); z-index: var(--z-hud); max-width: min(calc(1040*var(--u)), 78vw);   /* 태블릿·PC: 금고·마을 돈 칸이 늘어 한 줄에 들어가게(예전 720px · 62vw) */
     display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--gap); }
   #chips .brk { flex: 0 0 100%; height: 0; }   /* 둘째 줄: 소원(트래커)·배고픔 알림 */
   #chips > span, #chips > button { min-height: var(--hit-sm); min-width: var(--hit-sm); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
@@ -307,8 +307,7 @@
   html[data-form="portrait"] { --mm-w: calc(128*var(--u)); } html[data-form="landscape"] { --mm-w: calc(112*var(--u)); }
   html body[data-mode="browse"] #top, body[data-mode="edit"] #editBtn { display: none; }   /* html을 붙여 화면 모양별 #top { display } 규칙(세로 폰의 flex)보다 세게: 평소 화면에 건설 판이 비쳐 보이던 것 */
   :where(html[data-form="portrait"], html[data-form="landscape"]) body[data-mode="edit"] #phoneBtn { display: none; }   /* 휴대폰: 건설 중엔 📱 숨김(✓ 완료로 돌아오면 다시) */
-  body[data-mode="edit"] :is(#stat > :not(#chipMoney), #chipWish) { display: none; }   /* 건설 중엔 상태 묶음을 돈만 */
-  body[data-mode="edit"] #stat > #chipMoney { background: none; }
+  body[data-mode="edit"] :is(#stat > :not(#chipVault), #chipWish) { display: none; }   /* 건설 중엔 상태 묶음을 내 금고만(설계비·품삯이 여기서 나감) */
   /* 🔨 건설(평소의 건설 입구): 아래 왼쪽 엄지 자리 */
   #editBtn { position: fixed; left: var(--safe-l); bottom: var(--row-b); z-index: var(--z-context); height: var(--corner-h); padding: 0 calc(16*var(--u)); font-size: var(--fs-body); font-weight: 700;
     border-radius: var(--r-lg); background: var(--c-surface); box-shadow: var(--e-2), inset 0 0 0 calc(2*var(--u)) var(--c-accent); }
@@ -325,7 +324,7 @@
   #stat > button::after { content: "›"; margin-left: calc(3*var(--u)); color: var(--c-ink-2); font-weight: 700; }
   @media (hover: hover) { #stat > button:hover:not(:disabled) { filter: none; background-color: rgba(40,30,10,.06); } }
   @media (any-pointer: coarse) { #stat { --stat-bw: calc(6*var(--u)); } }
-  :where(html[data-form="portrait"], html[data-form="landscape"]) #stat > * { font-size: var(--fs-cap); padding: 0 calc(6*var(--u)); }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #stat > * { font-size: var(--fs-cap); padding: 0 calc(4*var(--u)); }   /* 칸 사이를 조금 좁힘: 금고 칸이 늘어도 390폭에서 🗺·☰까지 한 줄 */
   :where(html[data-form="portrait"], html[data-form="landscape"]) #stat > button::after { margin-left: 1px; }
   /* 알림(토스트): 위쪽 가운데, 칩 묶음·미니맵·도구 막대를 피한 자리. 누르면 뒤의 화면이 그대로 받음. 갈매폰 시트 바로 아래 층(열린 시트의 머리·뒤로 단추를 가리지 않게) */
   #msg { position: fixed; z-index: calc(var(--z-sheet) - 1); top: calc(var(--safe-t) + var(--toast-t, 0px)); left: var(--safe-l); right: calc(var(--safe-r) + max(var(--chips-w), var(--mm-space)) + var(--s-2));
@@ -456,6 +455,10 @@
     /* 글자 6단계 + 아이콘 크기 */
     --fs-cap: calc(12*var(--u)); --fs-sm: calc(13*var(--u)); --fs-body: calc(14*var(--u)); --fs-title: calc(17*var(--u)); --fs-h: calc(21*var(--u)); --fs-display: calc(28*var(--u));
     --fs-icon: calc(20*var(--u)); --fs-icon-lg: calc(26*var(--u)); --fs-icon-xl: calc(34*var(--u));
+    --fs-big: calc(22*var(--u));   /* 핵심 요약 머리의 큰 숫자(본문의 약 1.6배) */
+    /* 상태 색(data-tone): 넉넉 ok · 얼마 안 남음 low(=warn) · 바닥 empty — 글자는 바탕 위에서 4.5:1 넘게. 기온: 추움 cold · 더움 hot */
+    --c-ok-bg: #e4f3e8; --c-ok-ink: #24653f; --c-low-bg: var(--c-accent-soft); --c-low-ink: #8f450c; --c-empty-bg: var(--c-danger-soft); --c-empty-ink: var(--c-danger-ink);
+    --c-cold: #245c99; --c-hot: #a8520f;
     --lh-body: 1.5; --lh-tight: 1.25;
     /* 누르는 칸 크기(2단계부터 씀) */
     --hit: max(24px, calc(32*var(--u))); --hit-sm: max(24px, calc(28*var(--u))); --hit-gap: calc(6*var(--u));   /* 작게(75%) 해도 누르는 칸은 24px 밑으로 안 줄어듦 */
@@ -463,7 +466,7 @@
     --safe-t: max(var(--s-3), env(safe-area-inset-top, 0px)); --safe-r: calc(max(var(--s-3), env(safe-area-inset-right, 0px)) + var(--hud-inset-x));
     --safe-b: max(var(--s-3), env(safe-area-inset-bottom, 0px)); --safe-l: calc(max(var(--s-3), env(safe-area-inset-left, 0px)) + var(--hud-inset-x));
     --safe-sheet: max(var(--s-4), env(safe-area-inset-top, 0px)) max(var(--s-4), env(safe-area-inset-right, 0px)) max(var(--s-4), env(safe-area-inset-bottom, 0px)) max(var(--s-4), env(safe-area-inset-left, 0px));
-    --chips-l: calc(400*var(--u));   /* 가로 폰의 칩 묶음 최대 폭(평소엔 상태 묶음 + 🗺 + ☰가 한 줄, 건설 중엔 돈만 남아 좁아짐 → 도구 막대 자리) */
+    --chips-l: calc(440*var(--u));   /* 가로 폰의 칩 묶음 최대 폭(평소엔 상태 묶음 + 🗺 + ☰가 한 줄, 건설 중엔 돈만 남아 좁아짐 → 도구 막대 자리) */
     /* 그림자 3단계 */
     --e-1: 0 1px calc(3*var(--u)) rgba(40,30,10,.16); --e-2: 0 calc(3*var(--u)) calc(10*var(--u)) rgba(40,30,10,.20); --e-3: 0 calc(10*var(--u)) calc(30*var(--u)) rgba(40,30,10,.26);
     /* 층(아래 → 위). 월드 라벨 < 방 터치 < 방 말풍선 < HUD(칩·카드·미니맵) < 십자선 < 방 판 < 문맥 버튼(📱·당기기·칠하기·집 카드) < 확인 막대 < 시트(도감, 폰은 +1) < 편지 모달 < 알림 < 툴팁 < 로딩 */
@@ -570,6 +573,44 @@
   html[data-form="landscape"] body.inroom #coach { --room-w: calc(260*var(--u)); }
   .stabs button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #coach { max-height: calc(100dvh - calc(16*var(--u))); overflow-y: auto; overscroll-behavior: contain; }
+  /* ===== 화면 연결 1단계: 공통 부품 — 핵심 요약 머리(.sum) · 자세히 보기 접기(details.more) · 0인 줄 흐리게(.zero). hudParts.js가 HTML을 만듦 ===== */
+  .sum { display: flex; gap: var(--s-3); align-items: center; margin: 0 0 var(--s-2); padding: var(--s-2) var(--s-3); background: var(--c-warm); border-radius: var(--r-md); }
+  .sum-ico { flex: none; font-size: var(--fs-icon-xl); line-height: 1; }
+  .sum-main { flex: 1; min-width: 0; }
+  .sum-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s-2); }
+  .sum-big { font-size: var(--fs-big); font-weight: 800; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+  .sum-lab { font-size: var(--fs-body); font-weight: 700; }
+  .sum-line { margin-top: calc(2*var(--u)); font-size: var(--fs-body); font-weight: 600; line-height: var(--lh-tight); }
+  .sum .sum-bar { margin: var(--s-1) 0 0; }
+  .sum[data-tone="ok"] { background: var(--c-ok-bg); } .sum[data-tone="ok"] .sum-tone { color: var(--c-ok-ink); }
+  .sum:is([data-tone="low"], [data-tone="warn"]) { background: var(--c-low-bg); } .sum:is([data-tone="low"], [data-tone="warn"]) .sum-tone { color: var(--c-low-ink); }
+  .sum[data-tone="empty"] { background: var(--c-empty-bg); } .sum[data-tone="empty"] .sum-tone { color: var(--c-empty-ink); } .sum[data-tone="empty"] .sum-bar i { background: var(--c-danger); }
+  details.more { border-top: 1px solid var(--c-line); }
+  details.more > summary { display: flex; align-items: center; gap: var(--s-2); min-height: var(--hit-sm); box-sizing: border-box; padding: var(--s-1) 0; cursor: pointer; list-style: none; font-size: var(--fs-body); font-weight: 700; touch-action: manipulation; }   /* 요약 줄 = 누르는 칸 44px(터치) */
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::after { content: "›"; margin-left: auto; flex: none; width: 1em; text-align: center; font-size: 1.35em; line-height: 1; color: var(--c-ink-2); transform: rotate(90deg); transition: transform var(--t-fast) var(--ease); }   /* ⌄ 펼치기 · 펼치면 ⌃ */
+  details.more[open] > summary::after { transform: rotate(-90deg); }
+  .more-n { font-size: var(--fs-cap); font-weight: 400; color: var(--c-ink-2); }
+  .more-b { padding: 0 0 var(--s-2); font-size: var(--fs-sm); }
+  .zero, .tbl tr.zero td { color: var(--c-ink-2); font-weight: 400; }   /* 0점·0원 줄: 흐리게(글자 대비는 4.5:1 넘게 남김) */
+  /* 위쪽 상태 줄: 🏦 내 금고(가장 굵게·테두리, 상태 색) · 🪙 마을 돈(작게) · 🌡 기온(날씨 칸 안). 휴대폰은 금고 아래에 마을 돈을 작게 겹쳐 칸 하나로 */
+  #stat > #chipVault { position: relative; z-index: 0; display: inline-flex; align-items: center; line-height: 1.1; font-weight: 800; color: var(--c-ok-ink); }
+  #chipVault::before { content: ""; position: absolute; z-index: -1; inset: var(--stat-bw) calc(2*var(--u)); border-radius: var(--r-sm); background: var(--c-ok-bg); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-ok-ink); }
+  #chipVault[data-tone="low"] { color: var(--c-low-ink); } #chipVault[data-tone="low"]::before { background: var(--c-low-bg); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-low-ink); }
+  #chipVault[data-tone="empty"] { color: var(--c-empty-ink); } #chipVault[data-tone="empty"]::before { background: var(--c-empty-bg); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-danger); }
+  #chipVault:not([data-tone])::before { background: none; box-shadow: none; } #chipVault:not([data-tone]) { color: var(--c-ink); font-weight: 600; }   /* 예전 섬(🐚 조개): 강조 없음 */
+  #chipVault .vs { display: inline-flex; flex-direction: column; align-items: center; min-width: 0; }
+  #chipVault .vv { font-size: calc(16*var(--u)); }
+  #chipVault .vt { display: none; font-size: var(--fs-cap); font-weight: 400; color: var(--c-ink-2); }
+  #stat > #chipTown { font-size: var(--fs-sm); color: var(--c-ink-2); }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #stat > #chipTown { display: none; }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #chipVault .vv { font-size: var(--fs-body); }
+  :where(html[data-form="portrait"], html[data-form="landscape"]) #chipVault .vt { display: block; }
+  body[data-mode="edit"] #chipVault .vt { display: none; }
+  #chipWeather .wt:not(:empty) { margin-left: .25em; } #chipWeather .wt[data-tone="cold"] { color: var(--c-cold); font-weight: 700; } #chipWeather .wt[data-tone="hot"] { color: var(--c-hot); font-weight: 700; }
+  @keyframes vaultBump { 0%, 100% { transform: none; } 25% { transform: translateX(calc(-3*var(--u))); } 75% { transform: translateX(calc(3*var(--u))); } }
+  #chipVault.bump { animation: vaultBump .35s var(--ease) 2; }   /* 금고 얼마 안 남음·바닥·다시 참: 한 번 흔들기 */
+  html[data-motion="reduce"] #chipVault.bump { animation: none; } @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) #chipVault.bump { animation: none; } }
 </style>
 </head>
 <body>
@@ -582,7 +623,7 @@
 <div id="msg" hidden role="status" aria-live="polite"></div>
 <button id="editBtn" data-tip="건설 모드: 바닥 칠하기·높이·건물 짓기·철거 (숫자 2~5)">🔨 건설</button>
 <!-- 위 오른쪽: 상태 묶음(시각·날씨·돈·등급·갈매미) + 지도·메뉴, 둘째 줄엔 소원·배고픔 알림 -->
-<div id="chips"><div id="stat" role="group" aria-label="마을 상태"><span id="chipTime">☀️</span><button id="chipWeather" data-tip="계절·날씨 효과 보기">🍂</button><button id="chipMoney" data-tip="갈매미들이 가진 돈 합계 · 누르면 🏦 은행">🪙 0</button><button id="chipRank" data-tip="마을 등급·겨울 대비">🛖</button><span id="chipPop">🐦 0</span></div><button id="mapBtn" data-tip="미니맵 보이기/숨기기">🗺 지도</button><button id="menuBtn" aria-label="메뉴" data-tip="메뉴: 설정·저장·도움말·지난 알림">☰</button><i class="brk" aria-hidden="true"></i><button id="chipWish" hidden></button><button id="alert" hidden></button></div>
+<div id="chips"><div id="stat" role="group" aria-label="마을 상태"><span id="chipTime">☀️</span><button id="chipWeather" data-tip="계절·날씨·기온 보기"><span class="wl">🍂</span><span class="wt"></span></button><button id="chipVault" data-tip="내 금고: 건설비·품삯을 내는 내 돈 · 누르면 🏦 은행"><span class="vs"><span class="vv">🏦 0</span><span class="vt"></span></span></button><button id="chipTown" data-tip="마을 돈: 갈매미들이 가진 돈 합계(내 돈이 아니에요) · 누르면 🏦 은행">🪙 0</button><button id="chipRank" data-tip="마을 등급·겨울 대비">🛖</button><span id="chipPop">🐦 0</span></div><button id="mapBtn" data-tip="미니맵 보이기/숨기기">🗺 지도</button><button id="menuBtn" aria-label="메뉴" data-tip="메뉴: 설정·저장·도움말·지난 알림">☰</button><i class="brk" aria-hidden="true"></i><button id="chipWish" hidden></button><button id="alert" hidden></button></div>
 <div id="info" hidden role="region" aria-label="따라가는 갈매미"></div>
 <button id="tugBtn" hidden aria-keyshortcuts="Space">🎣 당기기!</button>
 <div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" data-tip="가방의 물건이나 보물 물고기를 선물해요">🎁 선물</button><button id="petBtn" data-tip="쓰다듬으면 조금씩 친해져요(마을 하루에 몇 번까지)">♥ 쓰다듬기</button></div></div><!-- 두 버튼은 켜질 때 따라가기 카드의 행동 줄로 옮겨짐(hud.js buildInfoCard) -->

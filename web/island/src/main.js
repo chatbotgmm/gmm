@@ -33,6 +33,8 @@ import { TwoFinger } from "./systems/twoFinger.js";
 import { QuarterCam } from "./systems/quarterView.js";
 import { BuildingThumbs } from "./render/thumbs.js";
 import { Hud } from "./ui/hud.js";
+import { tempNote } from "./ui/hudParts.js";
+import { indoorTemp } from "./world/climate.js";
 import { Quality } from "./render/quality.js";
 import { PROP_LOD } from "./render/assets.js";
 import { poolFor } from "./render/instances.js";
@@ -174,6 +176,7 @@ function mount(w) {
   world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
   const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };
+  for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦(알림 줄 연결은 4단계)
   world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => say("weather", e, WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""));
   // 드문 하늘: 무지개·유성우가 시작될 때, 겨울 첫눈, 유성우 밤에 주운 별조각
@@ -362,6 +365,7 @@ function frameBody() {
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);
   setGroundShade(1 - 0.8 * (daylight.glow ?? 0), world.snow ?? 0);           // 건물 밑동 그늘은 밤에 옅게(등불과 같은 부드러운 곡선), 눈 위에서는 푸르스름하게
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
+  if (daylight.time) world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60;   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
   if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); world.setDay(dailyKey(new Date())); }
@@ -405,7 +409,7 @@ hud.onToon = to => applyStyle(STYLES.some(x => x[0] === to) ? to : STYLES[(STYLE
 hud.savedLabel = () => lastSaved ? `마지막 저장 ${new Date(lastSaved).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : "아직 저장 안 함";
 hud.timeLabel = () => daylight.label(); hud.today = () => daylight.now();
 hud.weatherLabel = () => `${SEASONS[world.season]?.icon ?? ""} ${SEASONS[world.season]?.name ?? ""} · ${WEATHER[world.weather.kind].icon} ${WEATHER[world.weather.kind].name}${world.sky ? ` · ${SKY_EVENTS[world.sky.kind].icon} ${SKY_EVENTS[world.sky.kind].name}` : ""}`;
-hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")}`);
+hud.onWeatherInfo = () => hud.status(`${hud.weatherLabel()} · ${[SEASON_NOTE[world.season], WEATHER_NOTE[world.weather.kind]].filter(Boolean).join(" · ")} · ${tempNote(world.air, indoorTemp(world.air), world.units)}`);
 const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];
 const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(${SEASONS[seasonOf(daylight.now())].name})`;
 hud.onSeasonMode = to => { seasonPick = to !== undefined && SEASON_PICKS.includes(to) ? to : SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };

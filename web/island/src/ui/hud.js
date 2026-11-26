@@ -17,6 +17,7 @@ import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftables, petsLeft,
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { STAMP_SHOP, DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
+import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -164,15 +165,25 @@ export class Hud {
     this.seen = null;
     // 배고픈 갈매미 알림: 누르면 그 갈매미를 따라감
     this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitClick?.(this.hungry); };
-    this.chipMoney = document.getElementById("chipMoney"); this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
+    this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
     this.chipWeather = document.getElementById("chipWeather"); this.chipWeather.onclick = () => this.onWeatherInfo?.();
+    this.chipVault = document.getElementById("chipVault"); this.chipTown = document.getElementById("chipTown");   // 🏦 내 금고(내 돈) · 🪙 마을 돈(갈매미들 돈 합계)
+    this.chipParts = { vv: this.chipVault.querySelector(".vv"), vt: this.chipVault.querySelector(".vt"), wl: this.chipWeather.querySelector(".wl"), wt: this.chipWeather.querySelector(".wt") };
     document.getElementById("chipRank").onclick = () => { this.openPhone(); this.openApp("town"); };
-    this.chipMoney.onclick = () => { this.openPhone(); this.openApp("bank"); };       // 돈 → 🏦 은행
+    this.chipVault.onclick = () => { this.openPhone(); this.openApp("bank"); };       // 금고 → 🏦 은행
+    this.chipTown.onclick = () => { this.moreOpen.set("bank.town", true); this.openPhone(); this.openApp("bank"); };   // 마을 돈 → 은행 앱의 「마을에 도는 돈」 접기를 펼친 채로(2단계가 열쇠 bank.town을 씀)
+    // 자세히 보기 접기(details.more): 펼침을 이번 실행 동안 기억(저장 안 함) → 앱이 5Hz로 다시 그려도 펼친 채. toggle은 거품이 안 올라와서 잡는 단계(capture)에서 들음
+    this.moreOpen = new Map();
+    document.addEventListener("toggle", e => { const d = e.target; if (d instanceof HTMLDetailsElement && d.classList.contains("more") && d.dataset.more) this.moreOpen.set(d.dataset.more, d.open); }, true);
     this.wishBtn = document.getElementById("chipWish"); this.wishBtn.onclick = () => { this.openPhone(); this.openApp("wish"); };
     this.seasonBtn = document.getElementById("seasonMode");                       // 이제 라벨(고르기는 옆 #segSeason)
     addEventListener("resize", () => this.setForm());
     this.setWorld(world); this.showMode("view");
   }
+  /** 자세히 보기 접기 HTML(hudParts.moreBox + 기억한 펼침). opts.open = 처음 한 번의 기본값 */
+  more(key, title, html, opts = {}) { return moreBox(key, title, html, { ...opts, open: this.moreOpen.get(key) ?? !!opts.open }); }
+  /** 금고 칩을 한 번 흔들기(금고 얼마 안 남음·바닥·다시 참 이벤트) */
+  bumpVault() { const c = this.chipVault; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); clearTimeout(this.bumpT); this.bumpT = setTimeout(() => c.classList.remove("bump"), 900); }
   /** 도구 막대 버튼 하나: 아이콘 + 이름(휴대폰은 짧은 이름). 읽어 주기는 언제나 원래 이름 */
   toolBtn(cls, icon, label, short) {
     const b = el("button", (cls ? cls + " " : "") + "tbtn"); b.append(el("span", "ti", icon), el("span", "tl", label), el("span", "ts", short)); b.setAttribute("aria-label", label); return b;
@@ -706,15 +717,17 @@ export class Hud {
       (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🐚 ${w.res.coins}</span>`);
     this.chunkInfo = chunkInfo;                                                       // 삼각형·fps는 설정 → 🛠 개발자(#devStats)에서
     this.drawBadges();
-    this.chipMoney.textContent = w.economy ? `🪙 ${w.moneySupply()}` : `🐚 ${w.res.coins}`;
+    this.drawMoneyChips();
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
     const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주(세로 폰은 포만감도 뺌 — 배고프면 알림 칩이 따로 뜸)
-    this.chipPop.textContent = small ? `🐦${w.units.length} ${face}${sat.toFixed(0)}${this.form === "portrait" ? "" : ` ${mood}${avg.toFixed(0)}`}` : `🐦 ${w.units.length} · ${face} 만족 ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`; this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";
-    document.getElementById("chipRank").textContent = small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`;
+    cardPut(this.chipPop, small ? `🐦${w.units.length} ${face}${sat.toFixed(0)}${this.form === "portrait" ? "" : ` ${mood}${avg.toFixed(0)}`}` : `🐦 ${w.units.length} · ${face} ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`); if (!this.chipPop.dataset.tip) this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";   // "만족" 낱말은 툴팁으로(금고·마을 돈 칸이 늘어 한 줄에 들어가게)
+    cardPut(document.getElementById("chipRank"), small ? RANKS[w.rank].icon : `${RANKS[w.rank].icon} ${RANKS[w.rank].name}`);   // 같은 글이면 안 씀
     const mb = document.getElementById("mapBtn"), mt = small ? "🗺" : "🗺 지도";       // 글자만 바꿈(키 힌트 칸은 그대로)
     if (mb.firstChild?.nodeType === 3) { if (mb.firstChild.nodeValue !== mt) mb.firstChild.nodeValue = mt; } else mb.prepend(mt);
-    if (this.timeLabel) this.chipTime.textContent = this.timeLabel();
-    if (this.weatherLabel) this.chipWeather.textContent = small ? this.weatherLabel().replace(/ [가-힣]+(?= · |$)/g, "").replace(/ · /g, " ") : this.weatherLabel();   // 휴대폰: 아이콘만
+    if (this.timeLabel) cardPut(this.chipTime, small ? this.timeLabel().replace(" ", "") : this.timeLabel());   // 휴대폰: 아이콘과 시각 사이 띄어쓰기 없이(칸 하나 아낌)
+    if (this.weatherLabel) { const p = this.chipParts, t = tempChipOf(w.air, this.form);   // 휴대폰: 아이콘 + 기온만(🍂☀️ 3°) · 그 밖: 이름까지 + 3°C(4°C 이하 파랑 · 24°C 이상 주황)
+      cardPut(p.wl, small ? this.weatherLabel().replace(/ [가-힣]+(?= · |$)/g, "").replace(/ · /g, "") : `${this.weatherLabel()} ·`); cardPut(p.wt, t.text);
+      if ((p.wt.dataset.tone || null) !== t.tone) { if (t.tone) p.wt.dataset.tone = t.tone; else delete p.wt.dataset.tone; } }
     const nw = this.world.wishes.length; this.wishBtn.hidden = !nw; this.wishBtn.textContent = small ? `💭${nw}` : `💭 소원 ${nw}`;
     if (this.app === "wish" || this.app === "market") { this.appT = (this.appT || 0) + 1; if (this.appT % 5 === 0) this.refreshApp(); }
     const hungry = w.units.filter(u => (u.full ?? 80) < J.HUNGRY).sort((a, b) => a.full - b.full)[0];
@@ -726,6 +739,15 @@ export class Hud {
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
     this.syncInfo();                                                               // 따라가는 갈매미 카드(값만 고침)
+  }
+  /** 위쪽 줄 🏦 내 금고 · 🪙 마을 돈: 글자·색이 바뀔 때만 DOM을 고침(5Hz 갱신) */
+  drawMoneyChips() {
+    const w = this.world, bk = w.bank || {}, eco = !!w.economy, p = this.chipParts, supply = eco ? w.moneySupply() : 0;
+    const v = vaultChipOf({ economy: eco, vault: bk.vault ?? 0, owed: bk.owed ?? 0, state: eco && w.vaultState ? w.vaultState() : "ok", coins: w.res?.coins ?? 0 }, this.form);
+    cardPut(p.vv, v.text); cardPut(p.vt, eco ? townChipOf(supply, "portrait") : "");
+    const c = this.chipVault; if ((c.dataset.tone || null) !== v.tone) { if (v.tone) c.dataset.tone = v.tone; else delete c.dataset.tone; }
+    if (c.dataset.tip !== v.tip) { c.dataset.tip = v.tip; c.setAttribute("aria-label", v.tip); }
+    if (this.chipTown.hidden !== !eco) this.chipTown.hidden = !eco; if (eco) cardPut(this.chipTown, townChipOf(supply, this.form));
   }
   // ---- 따라가기 카드(#info): 뼈대는 한 번만 만들고, 그 뒤로는 글자와 막대 길이만 고침(누르는 중에 다시 그려져 누름이 사라지지 않게)
   buildInfoCard() {
