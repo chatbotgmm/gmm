@@ -322,3 +322,19 @@ test("많이 꾸민 뒤 마을 3일: 오류 없이 돌고, 갈매미가 사라�
   assert.ok(w.trees.every(t => !t.sapling), "3일이면 묘목은 다 자람"); assert.ok(planted >= 30);
   console.log(`# 3일 시뮬: 심음 ${planted} · 치움 ${removed} + 일하는 중 치움 ${removedMid} · 나무 ${w.trees.length} · 광석 ${w.ores.length} · 덤불·꽃 ${w.decor.add.size} · 꾸미기에 쓴 돈 ${w.bank.custom} · 금고 ${Math.floor(w.bank.vault)} · 갈매미 이동(칸) ${[...moved.values()].map(v => v.toFixed(0)).join("/")}`);
 });
+
+test("검토 수정: 스르르 높이 바꾸기(animateShape)로 물↔땅을 넘어도 끝에서 판 칸(dug)·모래·낚시 자리를 정리", () => {
+  const w = wild(), [x, z] = find(w, openGrass(w, 2)); w.bank.vault = 100;
+  assert.ok(w.digCell(x, z).ok); assert.ok(w.dug.has(`${x},${z}`));
+  w.grid.setGround(x, z, "Grass"); w.animateShape = true;
+  assert.ok(w.reshape(x, z, "raise")); assert.ok(w.reshape(x, z, "raise"));           // −0.6 → −0.1 → 0.4(두 번째에 물 → 땅, 값 1)
+  for (let i = 0; i < 20 && w.shaping.size; i++) w.update(0.1);
+  assert.equal(w.shaping.size, 0); assert.ok(!w.grid.isWater(x, z));
+  assert.ok(!w.dug.has(`${x},${z}`), "땅이 된 칸은 판 칸 목록에서 빠짐(중간 높이가 먼저 물 높이를 넘어도)"); assert.equal(w.grid.get(x, z).groundType, "Sand");
+  // 예전 섬: 해안 낚시 자리가 바라보는 물을 스르르 메우면 낚시 자리가 지워짐
+  const o = World.create(7, seededRandom(1)); o.animateShape = true;
+  const s = o.spots.find(p => !p.dock && o.grid.isWalkable(p.x, p.z) && o.reshape && o.checkFill(p.x + p.dir[0], p.z + p.dir[1], { free: true, cur: o.grid.get(p.x + p.dir[0], p.z + p.dir[1]).elevation }).ok);
+  assert.ok(s, "메울 수 있는 물을 바라보는 낚시 자리"); const fx = s.x + s.dir[0], fz = s.z + s.dir[1];
+  assert.ok(o.reshape(fx, fz, "flatten", 0, 1)); for (let i = 0; i < 20 && o.shaping.size; i++) o.update(0.1);
+  assert.ok(!o.grid.isWater(fx, fz)); assert.ok(!o.spots.includes(s), "바라보는 물이 땅이 된 낚시 자리는 지워짐");
+});

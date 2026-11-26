@@ -933,13 +933,13 @@ export class World {
     if (op === "raise" && cur < 0 && cur > -step && e > 0 && amount >= 0.99) e = 0;      // 모래사장 비탈(-0.15 등)은 0으로 맞춤
     if (Math.abs(e - cur) < 0.005) return false;
     if (!this.reshapeAllowed(x, z, cur, e)) return false;                            // 땅↔물 경계를 넘으면 꾸미기 값·검사(customize.js), 먼 바다 높이기 금지
-    if (this.animateShape) { this.shaping.set(idx, { x, z, target: e }); return true; }
+    if (this.animateShape) { const prev = this.shaping.get(idx); this.shaping.set(idx, { x, z, target: e, w0: prev ? prev.w0 : this.grid.isWater(x, z) }); return true; }   // w0: 스르르 바뀌기 전 물이었나(중간 높이가 물 높이를 먼저 넘어도 끝에서 땅↔물 정리를 하게)
     return this.applyHeight(x, z, e);
   }
-  /** 높이를 실제로 바꾸고, 물에 잠긴 씨앗·갈매미를 정리. */
-  applyHeight(x, z, e) {
-    const c = this.grid.get(x, z), wasWater = this.grid.isWater(x, z);
-    if (!this.grid.setElevation(x, z, e)) return false;
+  /** 높이를 실제로 바꾸고, 물에 잠긴 씨앗·갈매미를 정리. was: 바뀌기 전 물이었나(스르르 바뀌기가 넘김, 없으면 지금 칸으로 봄) */
+  applyHeight(x, z, e, was = null) {
+    const c = this.grid.get(x, z), wasWater = was ?? this.grid.isWater(x, z);
+    if (!this.grid.setElevation(x, z, e) && was === null) return false;
     if (wasWater && !this.grid.isWater(x, z) && c.groundType !== "Sand") c.groundType = "Sand";
     const nowWater = this.grid.isWater(x, z), key = CU.decorKey(x, z);
     if (wasWater !== nowWater) { if (nowWater) this.dug.add(key); else this.dug.delete(key); }   // 플레이어가 판 물 칸(깊어도 다시 메울 수 있음)
@@ -955,7 +955,7 @@ export class World {
   stepShaping(dt) {
     for (const [idx, s] of this.shaping) {
       const c = this.grid.get(s.x, s.z), d = s.target - c.elevation, mv = Math.sign(d) * Math.min(Math.abs(d), 1.5 * dt);
-      if (Math.abs(d) <= 1.5 * dt + 1e-6) { this.shaping.delete(idx); this.applyHeight(s.x, s.z, s.target); }
+      if (Math.abs(d) <= 1.5 * dt + 1e-6) { this.shaping.delete(idx); this.applyHeight(s.x, s.z, s.target, s.w0 ?? null); }
       else this.grid.setElevation(s.x, s.z, Math.round((c.elevation + mv) * 1000) / 1000);
     }
   }
