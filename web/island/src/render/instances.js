@@ -7,7 +7,16 @@
 import * as THREE from "three";
 
 const HOT = 30;
+let tick = 0;                                                                   // sync를 부를 때마다 하나씩(풀이 여럿이어도 겹치지 않게 모듈에 하나)
 const pools = new WeakMap(), _inv = new THREE.Matrix4(), _pv = new THREE.Matrix4(), _view = new THREE.Frustum();
+/** updateWorldMatrix(true, false)와 같되 이번 프레임(f)에 이미 맞춘 부모는 다시 계산하지 않음
+ *  f: sync마다 새 번호. (전에는 물체마다 부모 사슬 끝 — worldRoot·scene — 까지 매번 다시 곱했음) */
+function worldOf(o, f) {
+  if (o._wf === f) return; o._wf = f; const p = o.parent;
+  if (p) worldOf(p, f);
+  if (o.matrixAutoUpdate) o.updateMatrix();
+  if (o.matrixWorldAutoUpdate === true) { if (p) o.matrixWorld.multiplyMatrices(p.matrixWorld, o.matrix); else o.matrixWorld.copy(o.matrix); }
+}
 /** 이 뿌리(worldRoot) 아래 물체를 묶어 그리는 풀(뿌리마다 하나) */
 export function poolFor(root) { let p = pools.get(root); if (!p) pools.set(root, p = new InstancePool(root)); return p; }
 
@@ -39,7 +48,7 @@ export class InstancePool {
   leave(e) { const g = e.group; if (!g) return; g.ents.splice(g.ents.indexOf(e), 1); g.dirty = true; e.group = null; e.shown = false; }
   /** 매 프레임(그리기 직전): 바뀐 물체의 자리를 다시 읽고(가만히 있는 물체는 4프레임에 한 번만 확인), 화면·그림자 범위에 든 물체만 채움 */
   sync(camera, light) {
-    const f = ++this.frame, E = this.entries, root = this.root;
+    const f = ++this.frame, E = this.entries, root = this.root, wf = ++tick;
     for (let i = E.length - 1; i >= 0; i--) {
       const e = E[i]; if (e.hot > 0) e.hot--; else if ((f + i) & 3) continue;
       const m = e.mesh; let vis = (m.layers.mask & 1) !== 0, att = false;
@@ -48,7 +57,7 @@ export class InstancePool {
         if (e.group || ++e.wait > 600) { this.leave(e); m.visible = true; m.userData.pooled = false; E.splice(i, 1); }
         continue;
       }
-      m.updateWorldMatrix(true, false);
+      worldOf(m, wf);
       if (!e.group || e.group.main.material !== m.material) {                         // 처음 · 재질이 바뀜(계절 잎·그림체·철거 표시)
         this.leave(e); const g = e.group = this.groupFor(m); g.ents.push(e); if (g.ents.length > g.cap) this.alloc(g, null, g.cap * 2); e.last[0] = NaN;
       }
