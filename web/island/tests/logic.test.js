@@ -1730,3 +1730,24 @@ test("하루 빛: 1분마다 훑어도 색·세기·해/달 바뀜이 툭 튀지
   }
   assert.equal(nightLook(0), 0); assert.equal(nightLook(1), 1); assert.equal(nightLook(0.5), 0.5);   // 밤 판정 경계(0.5)는 같은 자리
 });
+
+test("새 넓은 섬엔 늘 공식은행: 가운데가 울퉁불퉁한 섬(흙길 비탈·고지대가 가운데까지)은 가까운 평평한 자리로 비켜 섬", async () => {
+  const { placeTownBank } = await import("../src/world/World.js");
+  for (const seed of [1, 4, 36, 108, 150]) {                                        // 고치기 전엔 은행이 안 생기던 seed
+    const w = World.create(seed, seededRandom(1), { wild: true }), b = w.bankB();
+    assert.ok(b, `seed ${seed}: 공식은행이 있어야 함`);
+    assert.ok(Math.hypot(b.x - 94, b.z - 94) <= 16, `seed ${seed}: 가운데 근처`);
+    assert.ok(b.cells.every(([x, z]) => w.grid.get(x, z).elevation === 0), "평지에 섬");
+    const u = w.units[0]; assert.ok(findPath(w.grid, Math.floor(u.x), Math.floor(u.z), b.door.x, b.door.z, 60000), "기본 갈매미가 은행 문까지 걸어감");
+    assert.equal(World.create(seed, seededRandom(1), { wild: true }).bankB().x, b.x, "같은 seed → 같은 자리");
+    const zb = w.zones.find(z => z.id === "bank"); assert.equal(zb.x, w.center.x); assert.equal(zb.z, w.center.z - 3);
+  }
+  const w7 = World.create(7, seededRandom(1), { wild: true }), b7 = w7.bankB();   // 원래 가운데에 놓이던 섬은 그대로
+  assert.deepEqual([b7.x, b7.z], [94, 94]); assert.deepEqual(w7.center, { x: 96, z: 96 });
+  // 평평한 자리가 아예 없으면 땅을 골라 놓음(체크무늬 높이: 어디에도 5×4 평지가 없음)
+  const g = new Grid(40, 40, 8); for (let z = 0; z < 40; z++) for (let x = 0; x < 40; x++) g.get(x, z).elevation = (x + z) % 2 ? 0.1 : 0;
+  const w = new World(g, [], seededRandom(1), {}); w.wild = true;
+  const b = placeTownBank(w); assert.ok(b && w.bankB() === b, "땅을 골라 은행을 놓음");
+  assert.ok(b.cells.every(([x, z]) => g.get(x, z).elevation === 0), "은행 칸은 높이 0");
+  assert.ok(Math.hypot(b.x - 18, b.z - 18) <= 16);
+});

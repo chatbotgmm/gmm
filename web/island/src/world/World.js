@@ -6,7 +6,7 @@ import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
 import { Grid } from "./Grid.js";
 import { generateIsland, generateWildIsland } from "./islandGen.js";
-import { checkPlacement } from "./placement.js";
+import { checkPlacement, footprint } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere, isNocturnal } from "../units/unitBrain.js";
@@ -25,6 +25,53 @@ import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, 
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP } from "./daily.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave } from "./bond.js";
+
+/**
+ * 새 넓은 섬에 공식은행을 놓음(예전 저장을 불러올 땐 쓰지 않음). 난수를 쓰지 않아 같은 섬 → 같은 자리.
+ * 1) 지도 한가운데(예전 자리)에 놓이면 그대로(이미 은행이 있던 섬은 하나도 안 바뀜).
+ * 2) 아니면 가운데에서 가까운 순(거리², z, x)으로 반지름 R칸 안에서: 바닥이 높이 0으로 평평하고, 문으로 걸어 들어가며,
+ *    은행이 서도 섬의 다른 땅(고지대 비탈 포함)으로 가는 길이 끊기지 않는 자리.
+ * 3) 그래도 없으면 같은 순서로 자리를 골라 은행 칸·문 앞 칸의 땅을 높이 0으로 고른 뒤 같은 조건을 봄(안 되면 되돌림).
+ * @returns 놓은 은행 건물(끝내 못 놓으면 null)
+ */
+export function placeTownBank(w, R = 16) {
+  const def = BUILDINGS.bank, g = w.grid, mid = { x: g.w / 2, z: g.h / 2 }, ax0 = mid.x - Math.floor(def.footprint.w / 2), az0 = mid.z - Math.floor(def.footprint.d / 2);
+  const first = w.placeBuilding("bank", ax0, az0, 0, null, 1e9); if (first.ok) return first.building;
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const reach = (sx, sz) => {                                                     // 걸어서 닿는 칸(4방향, grid.canStep)
+    const seen = new Uint8Array(g.w * g.h), st = [[sx, sz]]; seen[g.index(sx, sz)] = 1;
+    while (st.length) { const [x, z] = st.pop(); for (const [dx, dz] of N4) { const nx = x + dx, nz = z + dz;
+      if (!g.inBounds(nx, nz) || seen[g.index(nx, nz)] || !g.canStep(x, z, nx, nz)) continue; seen[g.index(nx, nz)] = 1; st.push([nx, nz]); } }
+    return seen;
+  };
+  const anchors = []; for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (dx * dx + dz * dz <= R * R) anchors.push([dx, dz]);
+  anchors.sort((a, b) => (a[0] * a[0] + a[1] * a[1]) - (b[0] * b[0] + b[1] * b[1]) || a[1] - b[1] || a[0] - b[0]);
+  const start = anchors.map(([dx, dz]) => [mid.x + dx, mid.z + dz]).find(([x, z]) => !g.get(x, z)?.occupiedId && g.get(x, z)?.elevation === 0 && g.isWalkable(x, z));
+  if (!start) return null;
+  const base = reach(start[0], start[1]);                                          // 가운데 평지에서 걸어 닿는 섬 땅
+  const fits = (ax, az) => {
+    const fp = footprint(def, ax, az, 0);
+    if (!fp.cells.every(([x, z]) => g.get(x, z)?.elevation === 0)) return false;
+    if (!checkPlacement(g, def, ax, az, 0, w.units).ok) return false;
+    const tmp = "__bankSpot"; g.occupants.set(tmp, { kind: "building", walkable: false, surface: 0 }); for (const [x, z] of fp.cells) g.get(x, z).occupiedId = tmp;
+    const after = reach(fp.door.x, fp.door.z);
+    for (const [x, z] of fp.cells) g.get(x, z).occupiedId = null; g.occupants.delete(tmp);
+    const inFp = new Set(fp.cells.map(([x, z]) => g.index(x, z)));
+    for (let i = 0; i < base.length; i++) if (base[i] && !after[i] && !inFp.has(i)) return false;   // 은행 때문에 못 가게 되는 땅이 없어야 함
+    return true;
+  };
+  const put = (ax, az) => w.placeBuilding("bank", ax, az, 0, null, 1e9).building;
+  for (const [dx, dz] of anchors) if (fits(ax0 + dx, az0 + dz)) return put(ax0 + dx, az0 + dz);
+  for (const [dx, dz] of anchors) {                                                // 땅 고르기
+    const ax = ax0 + dx, az = az0 + dz, fp = footprint(def, ax, az, 0), cells = [...fp.cells, [fp.door.x, fp.door.z]];
+    if (!cells.every(([x, z]) => g.inBounds(x, z) && !g.isWater(x, z) && !g.get(x, z).occupiedId && !g.doorOwner(x, z))) continue;
+    const undo = cells.map(([x, z]) => [x, z, g.get(x, z).elevation]);
+    for (const [x, z] of cells) g.get(x, z).elevation = 0;
+    if (fits(ax, az)) { for (const [x, z] of cells) g.markDirty(x, z); g.version++; return put(ax, az); }
+    for (const [x, z, e] of undo) g.get(x, z).elevation = e;
+  }
+  return null;
+}
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
@@ -88,12 +135,19 @@ export class World {
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
       w.hungerScale = 0.48; w.seedFood = 20;                                       // 넓은 지도: 오가는 길이 멀어 배고픔을 늦춤(본섬 지름 1.3배 → 0.6 × 0.8)
-      const c = g.center, def = BUILDINGS.bank; w.placeBuilding("bank", c.x - Math.floor(def.footprint.w / 2), c.z - Math.floor(def.footprint.d / 2), 0, null, 1e9);
+      placeTownBank(w);                                                           // 가운데가 울퉁불퉁하면 가까운 평평한 자리(없으면 땅을 고름)
+      const zb = w.zones.find(z => z.id === "bank"); if (zb) { const c = w.center; zb.x = c.x; zb.z = c.z - 3; }   // 이름표도 은행을 따라감
       w.addUnitByName("기본");
     } else if (!empty) w.spawnUnits();
     return w;
   }
-  get center() { return { x: this.grid.w / 2, z: this.grid.h / 2 }; }
+  /** 마을 가운데: 지도 한가운데. 넓은 섬에서 은행이 가운데에 못 놓여 옆으로 비켜 섰으면 그만큼 옮긴 곳(은행 앞 광장·소환 자리가 은행을 따라감) */
+  get center() {
+    const c = { x: this.grid.w / 2, z: this.grid.h / 2 }; if (!this.wild) return c;
+    for (const b of this.buildings.values()) { const def = BUILDINGS[b.defId]; if (!def.bank) continue;
+      c.x += b.x - (this.grid.w / 2 - Math.floor(def.footprint.w / 2)); c.z += b.z - (this.grid.h / 2 - Math.floor(def.footprint.d / 2)); break; }
+    return c;
+  }
   /** 이름으로 갈매미 하나를 가운데(은행 앞) 근처에 부름. */
   addUnitByName(name) {
     const i = UNITS.findIndex(u => u.name === name); if (i < 0 || this.units.some(o => o.name === name)) return null;
