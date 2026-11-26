@@ -29,6 +29,7 @@ import * as BK from "./bank.js";
 import * as P from "./population.js";
 import * as FM from "./farming.js";
 import * as CU from "./customize.js";
+import * as CLIM from "./climate.js";
 import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -85,6 +86,8 @@ export class World {
     this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
     // 섬 꾸미기(customize.js): 놓은 덤불·꽃과 치운 소품 자리(불러오기는 fromJSON이 건물을 다시 놓은 뒤 채움) · 플레이어가 판 물 칸 · 되돌리기 표(저장 안 함)
     this.decor = CU.newDecor(); this.dug = CU.dugFromSave(extra.dug); this.undo = new Map(); this.undoSeq = 0;
+    // 기온(climate.js): 지금 바깥 공기 °C(update마다 셈, 저장 안 함) · 기기 시각(화면이 넣어 주면 하루 변화를 시각으로, 없으면 낮밤만)
+    this.air = CLIM.NEUTRAL_AIR; this.hour = null;
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -474,6 +477,21 @@ export class World {
   // ---- 계절·날씨
   /** 계절 × 날씨 효과 + 드문 하늘(item: 물건을 찾을 확률 배수, 무지개가 떠 있으면 1보다 큼) */
   get fx() { const f = S.effects(this.season, this.weather.kind); if (this.sky) f.item *= SKY_EVENTS[this.sky.kind].item; return f; }
+  /** 지금 바깥 공기 기온(°C): 계절·날씨·쌓인 눈·시각(world.hour, 없으면 world.isNight) */
+  airNow() { return CLIM.airTemp(this.season, this.weather.kind, this.snow, this.hour, this.isNight ?? null); }
+  /** 실내 기온(°C, 화면용): 전기 들어온 집은 난방 +3. 규칙(체온)은 난방과 상관없이 늘 쾌적 범위 */
+  indoorTempOf(b) { return CLIM.indoorTemp(this.air, b && this.powered(b) ? CLIM.HEAT_POWER : 0); }
+  /** 갈매미가 처음 추워짐(체온이 39.0 아래로): feltCold +1(옷을 살 까닭), 마을 하루에 한 번 chill 알림 */
+  noteChill(u) {
+    u.feltCold = (u.feltCold || 0) + 1; const day = newsDay(this.time);
+    if (u.chillDay !== day) { u.chillDay = day; this.emit("chill", { u }); }
+  }
+  /** 카페 코코아: 2🪙(금고로) → 체온 즉시 +0.6(40까지). 돈이 모자라면 그냥 몸만 녹임. 샀으면 true */
+  buyCocoa(u) {
+    const price = CLIM.COCOA_PRICE; if ((u.coins || 0) < price) return false;
+    u.coins -= price; this.deposit(price); u.bodyT = Math.min(CLIM.BODY_NORMAL, (u.bodyT ?? CLIM.BODY_NORMAL) + CLIM.COCOA_WARM);
+    this.emit("cocoa", { u, price }); return true;
+  }
   setSeason(s) { if (s === this.season) return; if (s !== "winter") this.firstSnowYear = null; this.season = s; this.emit("season", s); }   // 겨울이 지나가면 다음 겨울의 눈이 다시 첫눈
   setWeather(kind) {
     const prev = this.weather.kind; this.weather = { kind, t: S.weatherDuration(kind, this.wrnd) }; this.emit("weather", this.weather);
@@ -1539,6 +1557,7 @@ export class World {
     this.stepWishes(dt); this.stepFestival(dt); this.stepBank();
     if ((this.rankClock += dt) >= 2) { this.rankClock = 0; this.updateRoads(); this.stepRank(); }
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
+    this.air = this.airNow();
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);
     this.separate();
   }
@@ -1623,7 +1642,7 @@ export class World {
       decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0 })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
@@ -1644,7 +1663,8 @@ export class World {
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
       u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
-      u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused; }   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
+      u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused;   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
+      u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0); }   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
     w.bank = BK.bankFromSave(j.bank, w.time);                                     // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게). 금고가 없는 예전 저장은 100 + 돌아온 돈
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)

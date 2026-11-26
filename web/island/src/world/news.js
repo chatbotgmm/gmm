@@ -59,6 +59,9 @@ const NEWS_MAKERS = {
   fee: ({ b, fee }) => BUILDINGS[b.defId] ? { icon: "🏦", text: `${BUILDINGS[b.defId].name} 설계비 🪙${fee}을 금고에서 냈어요`, weight: 0 } : null,
   wageOwed: ({ u, n }) => ({ icon: "💸", text: `${u.name}의 품삯 🪙${n}이 밀렸어요`, weight: 0 }),
   wagePaid: ({ u, n }) => ({ icon: "💸", text: `${josa(u.name, "이", "가")} 밀린 품삯 🪙${n}을 받았어요`, weight: 0 }),
+  // 기온·체온(climate.js): 그날 처음 추워함 · 카페 코코아(알림 줄에만)
+  chill: ({ u }) => ({ icon: "🥶", text: `${josa(u.name, "이", "가")} 추워해요`, weight: 0 }),
+  cocoa: ({ u, price }) => ({ icon: "☕", text: `${josa(u.name, "이", "가")} 카페에서 코코아로 몸을 녹였어요 🪙${price}`, weight: 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 이 일의 소식 한 줄(없으면 null) */

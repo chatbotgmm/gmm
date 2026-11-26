@@ -22,6 +22,7 @@ export const FEST_HEAT = 6, FEST_HEAT_R = 6;            // 축제 광장 6칸 �
 export const WARM_BONUS = { "불씨": 4, "자이언트": 2, "미니": -2 };
 export const COLD_EFF = 0.85, COLD_HUNGER = 1.1, HOT_EFF = 0.9;
 export const COLD_SAT = -8, HOT_SAT = -5;
+export const COCOA_PRICE = 2, COCOA_WARM = 0.6;          // 카페 코코아: 2🪙(금고로) → 체온 즉시 +0.6
 
 const r1 = v => Math.round(v * 10) / 10;
 
