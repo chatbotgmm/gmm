@@ -597,10 +597,12 @@ function startWarm(u, world) {
   const d = b => Math.hypot(b.door.x + 0.5 - u.x, b.door.z + 0.5 - u.z), all = [...world.buildings.values()].filter(b => world.isDone(b));
   const home = u.home && world.buildings.get(u.home), homeOk = home && world.canEnter(u, home) ? home : null;
   const cafe = all.filter(b => b.defId === "cafe").sort((a, b) => d(a) - d(b))[0], rich = (u.coins || 0) >= CLIM.COCOA_PRICE;
-  const order = [];
-  if (cafe && rich && (!homeOk || d(cafe) < d(homeOk))) order.push([cafe, true]);
+  const order = [], cafeFirst = cafe && rich && (!homeOk || d(cafe) < d(homeOk));
+  if (cafeFirst) order.push([cafe, true]);
   if (homeOk) order.push([homeOk, false]);
-  if (!order.length) for (const b of all.filter(b => SHELTER.has(b.defId)).sort((a, b) => d(a) - d(b)).slice(0, 3)) order.push([b, false]);
+  // 집 문까지 길이 끊겼으면(시뮬 마을에서 씨앗마다 1~2채) 카페 코코아 → 가까운 공공건물로 이어서 찾음(예전엔 집이 있으면 집 하나만 보고 포기해 겨울 내내 밖에서 떨었음)
+  if (cafe && rich && !cafeFirst) order.push([cafe, true]);
+  for (const b of all.filter(b => SHELTER.has(b.defId) && !(rich && b === cafe)).sort((a, b) => d(a) - d(b)).slice(0, 3)) order.push([b, false]);
   for (const [b, cocoa] of order) if (startPath(u, world, b.door.x, b.door.z)) {
     u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.goFor = "warm"; u.cocoa = cocoa;
     emote(u, cocoa ? "🥶 코코아 마시러" : b === homeOk ? "🥶 집에서 몸 녹여야지" : "🥶 몸 녹이러", 2.2); return true;

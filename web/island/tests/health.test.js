@@ -75,6 +75,14 @@ test("잘 시간이고 밖이 추우면 몸 녹이던 건물에서 그대로 잠
   assert.ok(out, "아침이면 나옴");
 });
 
+test("검토 수정: 집 문까지 길이 끊긴 갈매미도 추우면 가까운 공공건물(은행)에서 녹임(예전엔 집 하나만 보고 포기해 겨울 내내 밖에서 떪)", () => {
+  const { w, u, h } = winterVillage(8); for (const o of w.units) o.full = 90;
+  w.grid.setElevation(h.door.x, h.door.z, -1); w.recomputeComps?.();           // 집 문 칸을 물로: 집은 그대로 내 집이지만 걸어갈 수 없음
+  u.coins = 0; u.bodyT = 38.95; u.state = "Idle"; u.timer = 0; u.needs.energy = 90;
+  let warmB = null; for (let t = 0; t < 300 && !warmB; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId && u.insideAct === "warm") warmB = w.buildings.get(u.insideBuildingId); }
+  assert.ok(warmB && warmB.defId === "bank", `은행에서 녹임(${warmB?.defId})`);
+});
+
 test("저장·불러오기: 체온·추웠던 횟수 · 예전 저장(칸 없음)은 40.0 · 0", () => {
   const { w, u } = winterVillage(7); u.bodyT = 38.74; u.feltCold = 3;
   const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.units[0].bodyT, 38.7);
