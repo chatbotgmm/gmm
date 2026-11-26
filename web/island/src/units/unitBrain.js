@@ -14,6 +14,7 @@ import { areNeighbors } from "../world/wishes.js";
 import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
 import * as IM from "../world/improve.js";
+import * as FM from "../world/farming.js";
 import { FURNITURE } from "../data/catalog.js";
 import { FESTIVAL_JOIN_CHANCE, FESTIVAL_FUN, FESTIVAL_PAL } from "../world/festival.js";
 import { STASH_SELL_AT, stashSellable } from "../world/belongings.js";
@@ -109,6 +110,7 @@ function release(u) {
   const f = u.focus;
   if (f && f.claimed === u.unitId) f.claimed = null;
   if (f && f.busy === u.unitId && u.committed !== f.id) f.busy = null;   // 맡은 공사장(committed)은 끝날 때까지 찜 유지
+  u.water = null;                                                       // 물주기 길(물 뜬 것 u.can은 그대로 들고 있음)
   u.fetch = null;                                                       // 은행 자재 예약도 풀림(가는 길에 그만두면 다른 건축가가 가져갈 수 있게)
   u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined; u.bite = u.tugged = false; u.processing = false;
 }
@@ -422,11 +424,12 @@ function startActivityInner(u, kind, world, rnd) {
       if (!startPath(u, world, st.standX, st.standZ)) return false;
       u.state = US.GoTrade; return true;
     }
-    case "farm": {                                                                // 농부: 비었거나 다 자란 밭
+    case "farm": {                                                                // 농부: 다 자란 밭 거두기 → 목마른 밭 물주기 → 빈 밭 심기 → 마른 밭 물주기
       if (u.job !== "farmer") return false;
-      const pl = nearest(u, world.plots.filter(p => !p.claimed && (p.stage === "empty" || p.stage === "ripe")), p => [p.x, p.z]);
-      if (!pl || !startPath(u, world, pl.x, pl.z)) return false;
-      pl.claimed = u.unitId; u.focus = pl; u.state = US.GoFarm; return true;
+      const free = world.plots.filter(p => !p.claimed), at = p => [p.x, p.z];
+      const goFarm = pl => { if (!pl || !startPath(u, world, pl.x, pl.z)) return false; pl.claimed = u.unitId; u.focus = pl; u.state = US.GoFarm; return true; };
+      return goFarm(nearest(u, free.filter(p => p.stage === "ripe"), at)) || startWatering(u, world, free.filter(p => p.stage === "growing" && (p.moisture ?? 1) < FM.DRY_BELOW))
+        || goFarm(nearest(u, free.filter(p => p.stage === "empty"), at)) || startWatering(u, world, free.filter(FM.needsWater));
     }
     case "swim": {                                                                // 물가 땅까지 걸어간 뒤 얕은 물로 들어가 헤엄
       const [sx, sz] = cellOf(u), r = Math.round(reach(u) * 1.5), shores = [];
@@ -484,6 +487,35 @@ export function interactNear(u, world, rnd = Math.random, R = 2.6, prefer = null
   return null;
 }
 
+/** 밭 물주기 시작: 가까운 마른 밭을 찜하고, 물을 들고 있으면(u.can) 바로 밭으로, 없으면 그 밭에서 가까운 물가(FM.waterEdges)로 먼저 감. 물가가 없거나 못 가면 false */
+function startWatering(u, world, list) {
+  const pl = nearest(u, list, p => [p.x, p.z]); if (!pl) return false;
+  if ((u.can || 0) > 0) { if (!startPath(u, world, pl.x, pl.z)) return false; }
+  else {
+    const g = world.grid; if (!pl._ws || pl._ws.v !== g.version) pl._ws = { v: g.version, list: FM.waterEdges(g, pl.x, pl.z).slice(0, 3) };   // 물가 찾기는 땅이 바뀔 때만 다시
+    const edge = pl._ws.list.find(e => startPath(u, world, e.x, e.z)); if (!edge) return false;
+    u.water = { fill: edge };
+  }
+  u.water ||= {}; pl.claimed = u.unitId; u.focus = pl; u.state = US.GoWater; emote(u, (u.can || 0) > 0 ? "💧 물 주러" : "🪣 물 뜨러", 1.8); return true;
+}
+/** 물주기 길에 닿음: 물가면 물을 뜨고(쪼기 동작) 밭으로, 밭이면 붓고(쪼그려 톡톡) 남은 물로 가까운(6칸 안) 마른 밭을 이어서 */
+function arriveWater(u, world, rnd) {
+  const wt = u.water, pl = u.focus;
+  if (wt.fill) {
+    const e = wt.fill; face(u, e.x + 0.5 + e.dir[0], e.z + 0.5 + e.dir[1]); u.state = US.Water; u.tool = "can";
+    doOnce(u, "Attack", () => { u.can = FM.CAN_SIZE; emote(u, "🪣 물 뜨기"); }, () => {
+      wt.fill = null; if (!world.plots.includes(pl) || !startPath(u, world, pl.x, pl.z)) { done(u, 0.2, rnd, world); return; }
+      u.state = US.GoWater; u.water = wt;
+    });
+    return;
+  }
+  face(u, pl.x + 0.5, pl.z + 0.5); u.state = US.Water; u.tool = "can";
+  doOnce(u, "Pave", () => { world.waterPlot(pl, u); u.can = Math.max(0, (u.can || 0) - 1); emote(u, "💧"); }, () => {
+    const next = u.can > 0 && nearest(u, world.plots.filter(p => !p.claimed && FM.needsWater(p) && Math.hypot(p.x - pl.x, p.z - pl.z) <= 6), p => [p.x, p.z]);
+    if (next && startPath(u, world, next.x, next.z)) { pl.claimed = null; next.claimed = u.unitId; u.focus = next; u.state = US.GoWater; u.water = {}; return; }
+    u.tool = null; done(u, 0.7, rnd, world);
+  });
+}
 /** 동네 고치기 시작: 계획을 세우고 첫 칸으로 감 */
 function startImprove(u, world, rnd) {
   const plan = IM.planImprovement(world, u); if (!plan) return false;
@@ -850,6 +882,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
           () => done(u, u.lastReward ?? 0.5, rnd, world, 1 + rnd()));
       }
       break;
+    case US.GoWater:                                                              // 물주기: 물가로 / 밭으로 가는 중(밭이 없어지면 그만)
+      if (!u.water || !world.plots.includes(u.focus)) { setIdle(u, rnd, world); break; }
+      if (followPath(u, dt, world, rnd)) arriveWater(u, world, rnd);
+      break;
     case US.GoFarm: {
       const pl = u.focus;
       if (followPath(u, dt, world, rnd)) {
@@ -924,7 +960,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         if (!ok || u.improve.i >= u.improve.cells.length || !improveNext(u, world)) { const kind = u.improve.kind; endImprove(u, world); emote(u, kind === "pave" ? "🛣 길 완성!" : "🏡 마당 끝!", 2.2); M.learn(u, "build", 0.8); done(u, 1.4, rnd, world); }
       });
       break;
-    case US.Greet: case US.Eat: case US.Farm: break;          // doOnce가 끝나면 풀림
+    case US.Greet: case US.Eat: case US.Farm: case US.Water: break;          // doOnce가 끝나면 풀림
     default: setIdle(u, rnd, world);
   }
   settle(u, dt, world);

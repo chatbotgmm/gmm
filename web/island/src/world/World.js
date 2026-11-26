@@ -27,6 +27,7 @@ import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DA
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import * as P from "./population.js";
+import * as FM from "./farming.js";
 import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -53,7 +54,7 @@ export class World {
     this.animateShape = false; this.shaping = new Map(); // 높이 바꾸기를 스르르(화면에서만 켬)
     this.spots = (extra.spots || []).map(s => ({ ...s, claimed: null }));
     this.zones = extra.zones || [];
-    this.plots = (extra.plots || []).map(p => ({ x: p.x, z: p.z, stage: p.stage || "empty", t: p.t || 0, grow: p.grow || 40, claimed: null }));
+    this.plots = (extra.plots || []).map(p => ({ x: p.x, z: p.z, stage: p.stage || "empty", t: p.t || 0, grow: p.grow || 40, claimed: null, moisture: p.moisture ?? 1 }));   // moisture: 밭 촉촉함 0~1(farming.js, 예전 저장은 다 젖은 것으로)
     this.stall = extra.stall || null;
     this.trees = []; this.ores = []; this.seeds = []; this.seedId = 1;
     // 계절(화면이 기기 날짜로 정해 줌, 없으면 효과 없음)·날씨(따로 굴리는 난수라 다른 일의 순서를 바꾸지 않음)
@@ -888,6 +889,8 @@ export class World {
     if (p.stage === "ripe") { const n = J.harvestYield(u) + this.fx.harvest; this.gain(u, "food", n); p.stage = "empty"; p.t = 0; p.lastYield = n; this.emit("plot", p); return "harvest"; }
     return null;
   }
+  /** 밭에 물을 줌(농부가 물가에서 떠 온 물): 촉촉함이 다 참 */
+  waterPlot(p, u = null) { p.moisture = 1; this.emit("plotWater", { p, u }); return true; }
   /** 격자 좌표(연속)에 서는 높이: 부두처럼 걸을 수 있는 시설 위면 그 높이, 아니면 보이는 땅 높이(경사면 포함). */
   standHeight(gx, gz) {
     const x = Math.floor(gx), z = Math.floor(gz), c = this.grid.get(x, z), o = c?.occupiedId && this.grid.occupants.get(c.occupiedId);
@@ -1005,7 +1008,7 @@ export class World {
     if (def.house && !b.interior.furnished) { b.interior.furnished = true; for (const id of ["chair", "table"]) F.autoPlace(this, b, id); }   // 새 집엔 의자·테이블이 기본으로
     this.openStairs(b);
     if (def.field) for (const [x, z] of b.cells) if (!this.isPlot(x, z)) {
-      this.grid.setGround(x, z, "Dirt"); const p = { x, z, stage: "empty", t: 0, grow: 40, claimed: null, field: b.id }; this.plots.push(p); this.emit("plotAdded", p);
+      this.grid.setGround(x, z, "Dirt"); const p = { x, z, stage: "empty", t: 0, grow: 40, claimed: null, field: b.id, moisture: FM.MOIST_START }; this.plots.push(p); this.emit("plotAdded", p);
     }
     if (def.bridge || def.pier) { const o = this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; } }
     if (def.dock) {
@@ -1076,8 +1079,8 @@ export class World {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
     this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt); this.stepSparkles(dt);
-    const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람
-    for (const p of this.plots) if (p.stage === "growing" && (p.t -= dt * grow) <= 0) { p.stage = "ripe"; this.emit("plot", p); }
+    const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람 × 촉촉함(마른 밭은 1/4 빠르기까지 느려짐, farming.js)
+    for (const p of this.plots) { FM.stepMoisture(p, dt, this.season, this.weather.kind); if (p.stage === "growing" && (p.t -= dt * grow * FM.waterFactor(p.moisture)) <= 0) { p.stage = "ripe"; this.emit("plot", p); } }
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); }
     if ((this.histClock += dt) >= 20) { this.histClock = 0; this.priceHist.push({ t: Math.round(this.time), ...this.prices }); if (this.priceHist.length > 48) this.priceHist.shift(); }
     this.stepWishes(dt); this.stepFestival(dt); this.stepBank();
@@ -1164,7 +1167,7 @@ export class World {
     return { version: 2, ownership: this.ownershipPending ? 0 : 1, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
       spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
-      plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
+      plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,

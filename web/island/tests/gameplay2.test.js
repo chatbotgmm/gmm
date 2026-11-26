@@ -83,3 +83,35 @@ test("재료 예약: 은행 창고의 자재는 먼저 가지러 간 건축가 �
   const big = siteNeed({ defId: "manor", need: 36, hits: 0 }, a);
   assert.equal(big.cycles, 15); assert.equal(big.tripCycles, Math.floor(LOAD_MAX / 5)); assert.ok(big.trip.wood + big.trip.stone <= LOAD_MAX);
 });
+
+test("밭 물주기 규칙: 촉촉함은 맑은 날 마르고(여름 빨리·겨울 천천히) 비에 젖으며, 마른 밭은 죽지 않고 1/4 빠르기로 자람", async () => {
+  const FM = await import("../src/world/farming.js");
+  const p = { moisture: 1 }; FM.stepMoisture(p, FM.DAY_SECS / 2, "autumn", "clear"); assert.ok(Math.abs(p.moisture - 0.55) < 1e-9, `가을 맑음 반나절: ${p.moisture}`);
+  assert.ok(-FM.moistRate("summer", "clear") > -FM.moistRate("spring", "clear") && -FM.moistRate("winter", "clear") < -FM.moistRate("autumn", "cloudy") * 1.01, "여름 빨리, 겨울 천천히");
+  FM.stepMoisture(p, FM.DAY_SECS / 10, "autumn", "rain"); assert.equal(p.moisture, 1, "비 한 시간이면 다 젖음");
+  assert.equal(FM.waterFactor(1), 1); assert.equal(FM.waterFactor(FM.MOIST_OK), 1); assert.equal(FM.waterFactor(0), FM.MOIST_SLOW); assert.ok(FM.waterFactor(0.2) > FM.MOIST_SLOW && FM.waterFactor(0.2) < 1);
+  // 마을: 같은 밭 두 칸(젖은 칸·마른 칸)을 같이 심으면 젖은 칸이 먼저 익고, 마른 칸도 결국 익음(죽지 않음)
+  const w = World.create(7, seededRandom(3), { wild: true }); w.setSeason("autumn"); w.setWeather("cloudy"); w.weather.t = 1e9;
+  const wet = { x: 1, z: 1, stage: "growing", t: 60, grow: 60, claimed: null, moisture: 1 }, dry = { x: 2, z: 1, stage: "growing", t: 60, grow: 60, claimed: null, moisture: 0 };
+  w.plots.push(wet, dry); const ripeAt = {}; w.on("plot", q => { if (q.stage === "ripe") ripeAt[q === wet ? "wet" : "dry"] = w.time; });
+  for (let t = 0; t < 400 && !ripeAt.dry; t += 0.5) { w.update(0.5); wet.moisture = 1; dry.moisture = 0; }
+  assert.ok(ripeAt.wet < 61 && ripeAt.dry > 200, `젖은 칸 ${ripeAt.wet}초, 마른 칸 ${ripeAt.dry}초(1/4 빠르기 → 240초)`);
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1));
+  assert.equal(back.plots.find(q => q.x === 2 && q.z === 1).moisture, 0, "촉촉함은 저장됨");
+});
+
+test("밭 물주기: 농부가 물가에서 물을 떠(쪼기 동작) 마른 밭에 붓고(쪼그려 톡톡), 한 번 뜬 물로 3칸까지", () => {
+  const w = World.create(7, seededRandom(4), { wild: true, firstGull: true }); w.isNight = false; w.setSeason("autumn"); w.setWeather("clear"); w.weather.t = 1e9;
+  const f = w.addUnitByName("미니"); f.x = w.units[0].x; f.z = w.units[0].z;
+  const s = spotFor(w, "field", -8, 8), field = w.placeBuilding("field", s[0], s[1], 0, null, 1e9).building, plots = w.plots.filter(p => p.field === field.id);
+  for (const p of plots) { p.stage = "growing"; p.t = p.grow = 1e6; p.moisture = 0.1; }
+  w.units[0].timer = 1e9; let fillAt = null, pours = 0, anims = new Set();
+  w.on("plotWater", ({ u }) => { if (u === f) pours++; });
+  for (let t = 0; t < 300 && pours < 3; t += 0.05) {
+    f.full = 90; f.needs.energy = 100; w.units[0].timer = 1e9; w.update(0.05);
+    if (f.state === "Water") { anims.add(f.anim); if (f.anim === "Attack" && !fillAt) fillAt = [Math.floor(f.x), Math.floor(f.z)]; }
+  }
+  assert.ok(fillAt, "물가에서 물을 뜸"); assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => w.grid.isWater(fillAt[0] + dx, fillAt[1] + dz)), `물 뜬 칸 옆이 물: ${fillAt}`);
+  assert.ok(anims.has("Attack") && anims.has("Pave"), [...anims].join(","));
+  assert.ok(pours >= 3, `밭 ${pours}칸에 물을 줌`); assert.equal(plots.filter(p => p.moisture > 0.9).length >= 3, true);
+});
