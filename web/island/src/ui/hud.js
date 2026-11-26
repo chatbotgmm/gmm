@@ -856,7 +856,8 @@ export class Hud {
   drawMoneyChips() {
     const w = this.world, bk = w.bank || {}, eco = !!w.economy, p = this.chipParts, supply = eco ? w.moneySupply() : 0;
     const v = this.vaultChip(bk.vault ?? 0);
-    if (!(this.countEnd > performance.now())) cardPut(p.vv, v.text);              // 줄어드는 숫자를 보이는 동안은 countVault가 씀 cardPut(p.vt, eco ? townChipOf(supply, "portrait") : "");
+    if (!(this.countEnd > performance.now())) cardPut(p.vv, v.text);              // 줄어드는 숫자를 보이는 동안은 countVault가 씀
+    cardPut(p.vt, eco ? townChipOf(supply, "portrait") : "");
     const c = this.chipVault; if ((c.dataset.tone || null) !== v.tone) { if (v.tone) c.dataset.tone = v.tone; else delete c.dataset.tone; }
     if (c.dataset.tip !== v.tip) { c.dataset.tip = v.tip; c.setAttribute("aria-label", v.tip); }
     if (this.chipTown.hidden !== !eco) this.chipTown.hidden = !eco; if (eco) cardPut(this.chipTown, townChipOf(supply, this.form));
