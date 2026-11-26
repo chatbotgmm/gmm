@@ -353,3 +353,37 @@ test("갈매미 주문 장식: 다 지은 뒤 마지막 품삯 전에 날이 바
   // 플레이어가 놓은 건물은 그대로 금고에서
   const hs = place(w, "house").building, v2 = w.bank.vault; w.payWage(boss, hs); assert.equal(w.bank.vault, v2 - E.WAGE);
 });
+
+test("장부 몫 칸: 집값(계약금)·상환·옷·가게(코코아·저장고·가구)·진료를 returned 안의 몫으로 따로 적고, 금고·returned 합은 그대로", () => {
+  const { w, mini } = town();
+  const r0 = w.rank; w.rank = 3; w.bank.vault = 1e6; w.instantBuild = true; assert.ok(place(w, "shop").ok, "잡화점"); assert.ok(place(w, "storehouse").ok, "저장고"); w.instantBuild = false; w.rank = r0;
+  assert.equal(w.priceMult(), 1, "물가 1배(계약금 12)");
+  Object.assign(w.bank, { vault: 100, fees: 0, wages: 0, taxed: 0, returned: 0, ledger: [] });
+  const merchant = w.units.find(u => u.name === "황금"); merchant.state = "Idle";   // 상인 몫(계약금에서 1)이 빠지지 않게
+  const h = readyHouse(w); mini.coins = 12; assert.ok(w.buyHouse(mini, h));
+  assert.equal(w.bank.ledger.at(-1).house, 12, "계약금 → house"); assert.equal(w.bank.ledger.at(-1).returned, 12);
+  mini.coins = 14; nextDay(w);
+  let e = w.bank.ledger.at(-1); assert.equal(e.repay, 4, "상환 → repay"); assert.equal(e.house, 0, "새 날은 0부터");
+  mini.coins = 100;
+  assert.ok(w.buyClothes(mini, "scarf")); assert.ok(w.buyCocoa(mini)); assert.ok(w.buyFurniture(mini, "chair"));
+  w.granary = 3; assert.equal(w.takeFood(mini), "buy");
+  e = w.bank.ledger.at(-1);
+  assert.equal(e.clothes, 6); assert.equal(e.shop, 2 + 6 + w.foodPrice(), "코코아 2 + 의자 6 + 저장고 음식");
+  const parts = BK.LEDGER_PARTS.reduce((s, k) => s + e[k], 0);
+  assert.equal(parts, e.returned, "몫 합 = 그날 돌아온 돈(이 받침엔 '그 밖'이 없음)");
+  assert.equal(w.bank.returned, w.bank.ledger.reduce((s, d) => s + d.returned, 0));
+  assert.equal(w.bank.vault, 100 + w.bank.taxed + w.bank.returned - w.bank.fees - w.bank.wages - (w.bank.custom || 0), "금고 항등식 그대로");
+  // 저장/불러오기: 몫 칸이 그대로 · 예전 장부(몫 칸 없음)는 0
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())));
+  for (const k of BK.LEDGER_PARTS) assert.equal(back.bank.ledger.at(-1)[k], e[k], k);
+  const old = BK.bankFromSave({ ledger: [{ day: 2, returned: 9, clinic: 3 }] }).ledger[0];
+  assert.deepEqual([old.returned, old.clinic, old.house, old.repay, old.clothes, old.shop], [9, 3, 0, 0, 0, 0]);
+});
+
+test("장부 몫 칸: 몫 없이 들어온 돈(주문 장식 자재값 등)은 '그 밖'으로 남고 세금은 몫에 안 섞임", () => {
+  const { w } = town(50);
+  w.deposit(7); w.deposit(5, "tax"); w.deposit(3, "returned", "nope");
+  const e = w.bank.ledger.at(-1);
+  assert.equal(e.returned, 10); assert.equal(e.tax, 5); assert.equal(BK.LEDGER_PARTS.reduce((s, k) => s + e[k], 0), 0);
+  assert.equal(w.bank.vault, 65);
+});

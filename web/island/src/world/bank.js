@@ -16,6 +16,11 @@ export const LOAN_RESERVE = 20;      // 빌려주고도 금고에 이만큼 남�
 export const REPAY_KEEP = 10;        // 갚고도 갈매미에게 이만큼은 남김(밥 두 끼 값)
 export const TAX_RATE = 0.05, TAX_KEEP = 20, TAX_CAP = 8;   // 세금: (돈 − 20) × 5%, 한 마리 하루 8까지
 export const LEDGER_DAYS = 7;        // 장부는 최근 7일
+/** 장부 칸 중 returned(돌아온 돈) 안의 몫: 집값(계약금) · 대출 상환 · 진료·약 · 옷 · 가게(코코아·저장고 음식·가구). 몫 합 ≤ returned, 나머지는 '그 밖'(주문 장식 자재값 등) */
+export const LEDGER_PARTS = ["house", "repay", "clinic", "clothes", "shop"];
+const LEDGER_KEYS = ["tax", "returned", "fees", "wages", "lent", "refunds", "custom", ...LEDGER_PARTS];
+/** 하루치 빈 장부 칸 */
+export const ledgerDay = day => Object.fromEntries([["day", day], ...LEDGER_KEYS.map(k => [k, 0])]);
 export const FEE_UNKNOWN = 5;        // 표에 없는 건물의 설계비
 
 /** 설계비(🪙, 금고에서 놓을 때 냄). 집은 집값의 약 ⅓, 장식 2, 다리는 칸마다 1, 눈사람·은행 0 */
@@ -74,7 +79,7 @@ export const newBank = (time = 0) => ({
   short: 0,                              // 1 = 금고 바닥 사태 진행 중(소식지는 사태마다 한 번)
   need: 0,                               // 거절한 대출이 요구한 금고(대출금 + 여유). 이만큼 차면 거절 표시(u.loanRefused)를 풂(사태 끝남과는 따로)
   low: 0,                                // 1 = "얼마 안 남음"을 이미 알림
-  ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds, custom, clinic }] (custom: 그날 꾸미기에 쓴 돈) (clinic: 그날 의원 진료비·약값, returned 안에 든 몫) (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
+  ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds, custom, house, repay, clinic, clothes, shop }] (house·repay·clinic·clothes·shop: returned 안의 몫, LEDGER_PARTS) (custom: 그날 꾸미기에 쓴 돈) (clinic: 그날 의원 진료비·약값, returned 안에 든 몫) (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
 });
 const num = v => Number.isFinite(+v) ? +v : 0;
 /** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_LEGACY(100) + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
@@ -86,7 +91,7 @@ export function bankFromSave(j, time = 0) {
   if (Number.isFinite(j.day) && j.day >= 1) b.day = Math.floor(j.day);
   b.short = j.short ? 1 : 0; b.low = j.low ? 1 : 0;
   b.ledger = (Array.isArray(j.ledger) ? j.ledger : []).filter(e => e && e.day >= 1).slice(-LEDGER_DAYS)
-    .map(e => ({ day: e.day | 0, tax: num(e.tax), returned: num(e.returned), fees: num(e.fees), wages: num(e.wages), lent: num(e.lent), refunds: num(e.refunds), custom: num(e.custom), clinic: num(e.clinic) }));
+    .map(e => { const o = ledgerDay(e.day | 0); for (const k of LEDGER_KEYS) o[k] = num(e[k]); return o; });   // 예전 장부엔 없는 칸(몫·custom·refunds) → 0
   return b;
 }
 /** 저장에서 읽은 갈매미 대출(없으면 null) */

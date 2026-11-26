@@ -362,10 +362,10 @@ export class World {
     emote(u, "품삯이 밀렸어…", 2); this.emit("wageOwed", { u, n: E.WAGE }); this.vaultShort("wage", u);
   }
   /** 시장에서 낸 돈: 상인이 가판에 있으면 몫을 주고 나머지는 금고로(회수) */
-  pay(u, price) {
+  pay(u, price, part = null) {
     u.coins -= price; const m = this.units.find(o => o.job === "merchant" && o.state === UnitState.Trade);
     const cut = m && m !== u ? Math.min(price, E.COMMISSION) : 0; if (cut) m.coins = (m.coins || 0) + cut;
-    this.deposit(price - cut);
+    this.deposit(price - cut, "returned", part);
   }
 
   // ---- 갈매미 주문 공사(improve.js orderDeco): 주문한 갈매미가 놓을 때 맡긴 돈(b.order.left)으로 품삯·자재값을 냄. 금고는 품삯을 내지 않음
@@ -397,13 +397,14 @@ export class World {
   /** 오늘 장부 칸에 더함(최근 LEDGER_DAYS일) */
   led(key, n) {
     const d = newsDay(this.time), L = this.bank.ledger; let e = L[L.length - 1];
-    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0, refunds: 0, custom: 0, clinic: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
+    if (!e || e.day !== d) { e = BK.ledgerDay(d); L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
     e[key] = (e[key] || 0) + n;
   }
-  /** 금고에 돈이 들어옴: kind "returned"(갈매미가 낸 돈) | "tax". 들어올 때마다 밀린 품삯부터 갚음 */
-  deposit(n, kind = "returned") {
+  /** 금고에 돈이 들어옴: kind "returned"(갈매미가 낸 돈) | "tax". part: returned 안의 몫 칸(BK.LEDGER_PARTS — house·repay·clinic·clothes·shop, 없으면 '그 밖'),
+   *  장부 화면이 나눠 보이려고 적을 뿐 금고·returned 합은 몫과 상관없이 같음. 들어올 때마다 밀린 품삯부터 갚음 */
+  deposit(n, kind = "returned", part = null) {
     if (!(n > 0)) return;
-    this.bank.vault += n; if (kind === "tax") { this.bank.taxed += n; this.led("tax", n); } else { this.bank.returned += n; this.led("returned", n); }
+    this.bank.vault += n; if (kind === "tax") { this.bank.taxed += n; this.led("tax", n); } else { this.bank.returned += n; this.led("returned", n); if (BK.LEDGER_PARTS.includes(part)) this.led(part, n); }
     if (this.bank.vault >= BK.VAULT_REARM) this.bank.low = 0;
     this.settleOwed();
   }
@@ -473,7 +474,7 @@ export class World {
       const out = !u.insideBuildingId; let said = false;
       if (u.loan) {
         const k = BK.repayOf(u.loan, u.coins);
-        if (k) { u.coins -= k; u.loan.left -= k; bk.repaid += k; this.deposit(k); }
+        if (k) { u.coins -= k; u.loan.left -= k; bk.repaid += k; this.deposit(k, "returned", "repay"); }
         if (u.loan.left <= 0) { u.loan = null; emote(u, "🏠 집값 다 갚았다!", 2.4); said = true; this.emit("loanPaid", { u }); }
         else if (!k && out) { emote(u, "집값은 내일 갚을게…", 2); said = true; }
       }
@@ -497,7 +498,7 @@ export class World {
     if (!this.marketB() || b.owner || u.home || !this.canFit(u, b)) return false;
     const deal = this.houseDeal(u, b);
     if (!deal.ok) { if (deal.reason === "vault") this.refuseLoan(u, deal); return false; }
-    this.pay(u, deal.down);                                                       // 빌려준 돈은 곧바로 집값으로 돌아오므로 금고에는 계약금만큼 늘어남
+    this.pay(u, deal.down, "house");                                                    // 빌려준 돈은 곧바로 집값으로 돌아오므로 금고에는 계약금만큼 늘어남
     if (deal.loan) { u.loan = { left: deal.loan, per: BK.perOf(deal.loan) }; this.bank.lent += deal.loan; this.led("lent", deal.loan); }
     u.loanRefused = false; b.owner = u.unitId; u.home = b.id;
     for (const [id, n] of Object.entries(u.stash || {})) { const fid = stashFurniture(id); if (!fid || !(n > 0)) continue; const it = F.room(b); it.stash[fid] = (it.stash[fid] || 0) + n; delete u.stash[id]; }   // 들고 다니던 낚시 가구는 새 집 창고로
@@ -543,7 +544,7 @@ export class World {
   /** 카페 코코아: 2🪙(금고로) → 체온 즉시 +0.6(40까지). 돈이 모자라면 그냥 몸만 녹임. 샀으면 true */
   buyCocoa(u) {
     const price = CLIM.COCOA_PRICE; if ((u.coins || 0) < price) return false;
-    u.coins -= price; this.deposit(price); u.bodyT = Math.min(CLIM.BODY_NORMAL, (u.bodyT ?? CLIM.BODY_NORMAL) + CLIM.COCOA_WARM);
+    u.coins -= price; this.deposit(price, "returned", "shop"); u.bodyT = Math.min(CLIM.BODY_NORMAL, (u.bodyT ?? CLIM.BODY_NORMAL) + CLIM.COCOA_WARM);
     this.emit("cocoa", { u, price }); return true;
   }
   // ---- 옷(clothes.js): 잡화점에서 자기 돈으로 사거나(금고로) 도장 가게 선물 "손뜨개 목도리"로 받음
@@ -558,7 +559,7 @@ export class World {
   /** 잡화점에서 옷 사기: 잡화점이 있고 아직 없는 옷이고 돈이 있으면 → 낸 돈은 금고로(돌아온 돈), 추웠던 횟수는 0으로(다음 옷은 다시 추워 봐야 삼), 바로 갈아입음. 샀으면 true */
   buyClothes(u, id) {
     const def = CLOTHES[id]; if (!def || !this.shopB() || (u.clothes || []).includes(id) || (u.coins || 0) < def.price) return false;
-    u.coins -= def.price; this.deposit(def.price); (u.clothes ||= []).push(id); u.feltCold = 0;
+    u.coins -= def.price; this.deposit(def.price, "returned", "clothes"); (u.clothes ||= []).push(id); u.feltCold = 0;
     this.emit("buyClothes", { u, id, price: def.price }); this.dressUnit(u); return true;
   }
   /** 옷 선물(손뜨개 목도리): 옷장에 넣고 그 자리에 바로 입혀 줌(날이 따뜻하면 다음 갈아입기 때 벗음). 새로 받았으면 true */
@@ -611,14 +612,14 @@ export class World {
   /** 의원 접수: 진료비(가진 만큼, 없으면 무료) → 금고, 당번 의사가 있으면 약 */
   clinicCheckIn(u, b) {
     if (!u.sick || !b) return;
-    const fee = Math.min(HL.CLINIC_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee); this.led("clinic", fee); }
+    const fee = Math.min(HL.CLINIC_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee, "returned", "clinic"); }
     const med = this.doctorIn(b) ? this.giveMedicine(u) : 0;
     this.emit("clinicVisit", { u, fee, medicine: med });
   }
   /** 약(당번 의사가 있을 때, 한 번 앓을 때 한 번): 값은 가진 만큼(없으면 무료) → 금고. 낸 값을 돌려줌(못 먹였으면 −1) */
   giveMedicine(u) {
     if (!u.sick || u.sick.med) return -1;
-    const price = Math.min(HL.MEDICINE_PRICE, Math.max(0, Math.floor(u.coins || 0))); if (price) { u.coins -= price; this.deposit(price); this.led("clinic", price); }
+    const price = Math.min(HL.MEDICINE_PRICE, Math.max(0, Math.floor(u.coins || 0))); if (price) { u.coins -= price; this.deposit(price, "returned", "clinic"); }
     HL.takeMedicine(u.sick); return price;
   }
   /** 당번 의사가 의원에 들어옴: 누운 환자 중 약을 안 먹은 갈매미에게 약 */
@@ -757,7 +758,7 @@ export class World {
   buyFurniture(u, id) {
     const def = FURNITURE[id], home = u.home && this.buildings.get(u.home);
     if (!def?.price || !home || !this.shopB() || (u.coins || 0) < def.price) return false;
-    u.coins -= def.price; this.deposit(def.price);
+    u.coins -= def.price; this.deposit(def.price, "returned", "shop");
     if (!F.autoPlace(this, home, id)) { const it = F.room(home); it.stash[id] = (it.stash[id] || 0) + 1; }
     this.emit("furnitureBought", { u, id, b: home }); return true;
   }
@@ -836,7 +837,7 @@ export class World {
   takeFood(u) {
     if (!this.granaryB() || this.granary <= 0) return null;
     const price = this.foodPrice();
-    if ((u.coins || 0) >= price) { u.coins -= price; this.deposit(price); this.granary--; u.inv.food++; this.emit("granary", { u, kind: "buy" }); return "buy"; }
+    if ((u.coins || 0) >= price) { u.coins -= price; this.deposit(price, "returned", "shop"); this.granary--; u.inv.food++; this.emit("granary", { u, kind: "buy" }); return "buy"; }
     if ((u.full ?? 80) < E.RATION_FULL) { this.granary--; u.inv.food++; this.emit("granary", { u, kind: "free" }); return "free"; }
     return null;
   }
