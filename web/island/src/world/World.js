@@ -939,6 +939,7 @@ export class World {
   /** 높이를 실제로 바꾸고, 물에 잠긴 씨앗·갈매미를 정리. was: 바뀌기 전 물이었나(스르르 바뀌기가 넘김, 없으면 지금 칸으로 봄) */
   applyHeight(x, z, e, was = null) {
     const c = this.grid.get(x, z), wasWater = was ?? this.grid.isWater(x, z);
+    if (was === null) this.shaping.delete(this.grid.index(x, z));                  // 바로 바꾸면(파기·메우기·되돌리기) 그 칸의 스르르 바뀌기는 그만둠(아니면 낸 값과 달리 예전 목표 높이로 되돌아감)
     if (!this.grid.setElevation(x, z, e) && was === null) return false;
     if (wasWater && !this.grid.isWater(x, z) && c.groundType !== "Sand") c.groundType = "Sand";
     const nowWater = this.grid.isWater(x, z), key = CU.decorKey(x, z);
@@ -1085,7 +1086,8 @@ export class World {
     { const nb = [];                                                               // 빠른 길: 이 칸으로 드나들던 이웃끼리 가까이에서 이어지면 아무 길도 안 끊김
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && g.canStep(x, z, nx, nz)) nb.push(nz * W + nx); }
       if (this.localLinked(new Set([z * W + x]), nb)) return ""; }
-    const bank = this.bankB(), ref = bank ? bank.door : { x: Math.floor(this.center?.x ?? g.w / 2), z: Math.floor(this.center?.z ?? g.h / 2) };
+    const bank = this.bankB(); let ref = bank ? bank.door : { x: Math.floor(this.center?.x ?? g.w / 2), z: Math.floor(this.center?.z ?? g.h / 2) };
+    if (ref.x === x && ref.z === z) { const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => g.inBounds(x + dx, z + dz) && g.canStep(x, z, x + dx, z + dz)); if (!n) return ""; ref = { x: x + n[0], z: z + n[1] }; }   // 은행 없는 섬의 가운데 칸을 파면 이웃 칸을 기준으로
     const before = this.comps(), at = p => g.inBounds(p.x, p.z) ? before[p.z * W + p.x] : -1, home = at(ref); if (home < 0) return "";
     const doors = bank ? [...this.buildings.values()].filter(b => b !== bank && this.isDone(b) && !BUILDINGS[b.defId].bridge && at(b.door) === home).map(b => b.door) : [];
     const gulls = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && !u.sailing)

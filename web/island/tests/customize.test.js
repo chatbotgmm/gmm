@@ -393,3 +393,13 @@ test("검토 수정: 메울 수 있던 얕은 물을 높이 도구로 깊게(−
   let deep = null; for (let z2 = 0; z2 < w.grid.h && !deep; z2++) for (let x2 = 0; x2 < w.grid.w && !deep; x2++) if (w.grid.get(x2, z2).elevation <= -0.99 && !w.dug.has(`${x2},${z2}`)) deep = [x2, z2];
   assert.equal(w.reshape(...deep, "raise"), false);
 });
+
+test("검토 수정: 스르르 바뀌는 중인 칸을 파거나 메우면 그 바뀌기를 그만둠(값을 내고도 예전 목표 높이로 되돌아가던 것), 은행 없는 섬 가운데 칸 파기", () => {
+  const w = wild(), [x, z] = find(w, openGrass(w, 2)); w.bank.vault = 100; w.animateShape = true;
+  assert.ok(w.reshape(x, z, "raise")); assert.equal(w.shaping.size, 1);                // 0 → 0.5로 스르르(아직 0)
+  const r = w.digCell(x, z); assert.ok(r.ok, r.reason); assert.equal(w.shaping.size, 0, "파기가 스르르 바뀌기를 그만두게 함");
+  for (let i = 0; i < 20; i++) w.update(0.1);
+  assert.ok(w.grid.isWater(x, z), "판 칸은 물로 남음"); assert.ok(w.dug.has(`${x},${z}`)); assert.equal(w.grid.get(x, z).elevation, CU.POND_DEPTH);
+  const o = World.create(7, seededRandom(1), { empty: true }), cx = Math.floor(o.center.x), cz = Math.floor(o.center.z);
+  if (!o.grid.get(cx, cz).occupiedId && !o.grid.isWater(cx, cz)) assert.equal(o.digLinkProblem(cx, cz, CU.POND_DEPTH), "", "가운데 칸을 파도 기준 칸이 이웃으로 옮겨 감");
+});
