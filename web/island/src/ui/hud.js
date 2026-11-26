@@ -25,6 +25,7 @@ import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDe
 import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
+import { readGridPref, saveGridPref } from "./gridView.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
@@ -90,6 +91,15 @@ export class Hud {
     this.crossBtn = auxBtn("", "🎯", "십자선", "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요");
     this.crossBtn.onclick = () => { tools.setCross(!tools.cross); this.crossBtn.classList.toggle("on", tools.cross); this.crossBtn.setAttribute("aria-pressed", String(tools.cross)); };
     aux.appendChild(el("i", "vsep"));
+    // ▦ 격자: 건설 모드 땅 위 칸 경계선 켜기·끄기(G). 처음엔 켜짐, 고른 것은 기억(main.js가 gridOn을 읽어 땅 셰이더 세기만 바꿈)
+    this.gridOn = readGridPref(k => localStorage.getItem(k));
+    this.gridBtn = auxBtn("gridBtn", "▦", "격자 보기", "칸 경계 격자선 켜기·끄기"); this.gridBtn.classList.add("grid");
+    // 세로 폰: 보조 줄에 44px 칸 일곱 개(✋ ↶ ↷ 🎯 ▦ ⟲ ⟳)가 안 들어가(320px에서 ✋가 잘림) 같은 단추를 위 칩 줄(지도 옆)에 둠 — 어느 쪽이 보일지는 CSS(data-form)
+    this.gridChip = el("button", "", "▦"); this.gridChip.id = "gridChip"; this.gridChip.setAttribute("aria-label", "격자 보기"); this.gridChip.dataset.tip = "칸 경계 격자선 켜기·끄기 (G)"; this.gridChip.hidden = true;
+    document.getElementById("mapBtn")?.before(this.gridChip);
+    const gridSync = () => { for (const b of [this.gridBtn, this.gridChip]) { b.classList.toggle("on", this.gridOn); b.setAttribute("aria-pressed", String(this.gridOn)); } };
+    this.gridBtn.onclick = this.gridChip.onclick = () => { this.gridOn = !this.gridOn; gridSync(); saveGridPref((k, v) => localStorage.setItem(k, v), this.gridOn); };
+    gridSync();
     // ⟲ ⟳: 건설 모드는 내려다보는 각도가 고정이라, 화면은 이 버튼(Z · X)으로 90°씩 돌려 봄
     this.viewBtns = [auxBtn("viewL", "⟲", "화면을 왼쪽으로 90° 돌리기", "화면을 왼쪽으로 90° 돌려요"), auxBtn("viewR", "⟳", "화면을 오른쪽으로 90° 돌리기", "화면을 오른쪽으로 90° 돌려요")];
     this.viewBtns[0].onclick = () => this.onViewTurn?.(-1); this.viewBtns[1].onclick = () => this.onViewTurn?.(1);
@@ -605,6 +615,7 @@ export class Hud {
     this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish"; this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
     this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
     for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
+    this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만
     // 트레이: 같은 도구 안에서 고르기만 했으면 밀어 둔 자리를 지킴
     const keep = mode === this.shownMode ? [sub.scrollLeft, sub.scrollTop] : null; this.shownMode = mode;
     sub.replaceChildren(); sub.hidden = !(terrain || nature || mode === "build"); sub.dataset.kind = mode;

@@ -18,6 +18,7 @@ export const KEY_LIST = [
   { code: ["KeyH", "F1"], key: "H", what: "❓ 도움말 · 단축키", app: "help" },
   { code: ["KeyZ"], key: "Z", what: "⟲ 건설 모드: 화면을 왼쪽으로 90° 돌리기", sel: "#viewL" },
   { code: ["KeyX"], key: "X", what: "⟳ 건설 모드: 화면을 오른쪽으로 90° 돌리기", sel: "#viewR" },
+  { code: ["KeyG"], key: "G", what: "▦ 건설 모드: 칸 격자선 켜기·끄기", sel: "#gridBtn" },
 ];
 /** 원래 있던 키(뜻은 그대로) — 도움말 표에만 */
 const KEY_KEEP_LIST = [
@@ -27,7 +28,7 @@ const KEY_KEEP_LIST = [
 ];
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
 const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"],
-  ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"], ["#viewL", "Z"], ["#viewR", "X"]];
+  ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"], ["#viewL", "Z"], ["#viewR", "X"], ["#gridBtn", "G"]];
 const KEY_OVERLAYS = ["ask", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
 const KEY_CONTROL_SEL = "button, a[href], summary, select, [role=button]";
 

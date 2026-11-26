@@ -46,6 +46,8 @@ import { Sfx } from "./audio/sfx.js";
 import { SparkleView } from "./render/sparkles.js";
 import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlerts.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
+import { stepGridLines } from "./render/gridLines.js";
+import { gridShown } from "./ui/gridView.js";
 import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
@@ -387,6 +389,7 @@ function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   if (ready) for (let k = 0; k < simSpeed; k++) world.update(dt);                 // 불러오는 동안은 멈춤. 시간 배수(테스트)면 마을도 여러 번 돌림
+  stepGridLines(dt, gridShown({ mode: tools?.mode, on: hud?.gridOn, room: roomView.isOpen }));   // 건설 모드 격자선(▦, 땅 셰이더 세기만)
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
     roomView.update(dt); quality.frame(dt, performance.now());
     renderer.render(roomView.scene, roomView.camera); requestAnimationFrame(frame); return;
