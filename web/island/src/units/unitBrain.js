@@ -814,8 +814,15 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
   }
 
-  // 밖에서 벤치에 앉아 있거나 자다가 추워지면 일어나 몸 녹이러(다음 프레임에 고름)
-  if (cold && !u.insideBuildingId && (u.state === US.Sit || u.state === US.Sleep)) { if (u.sitOn) standUp(u, world); u.anim = null; setIdle(u, rnd, world, 0); return settle(u, dt, world); }
+  // 밖에서 벤치에 앉아 있거나 자다가 추워지면 일어나 바로 몸 녹이러 감.
+  //  녹일 곳이 없으면(지은 집·공공건물이 없거나 길이 끊김) 자던 갈매미는 그대로 자고(앉아 있던 갈매미는 일어나기만) 10초 뒤에 다시 봄:
+  //  예전엔 깨자마자 다시 잠들어 두 프레임마다 깼다 잤다 했음(검토 재현: 녹일 곳 없는 겨울밤 60초에 상태 600번 바뀜)
+  if (u.noWarmT > 0) u.noWarmT -= dt;
+  if (cold && !u.insideBuildingId && (u.state === US.Sit || u.state === US.Sleep) && !(u.noWarmT > 0)) {
+    const was = u.state, left = u.timer; u.anim = null; setIdle(u, rnd, world, 0);   // 벤치에서 일어남(secs를 주어 난수 안 씀)
+    if (startWarm(u, world)) return settle(u, dt, world);
+    u.noWarmT = 10; if (was === US.Sleep) { u.state = US.Sleep; u.timer = left; } else return settle(u, dt, world);   // 자던 갈매미는 그대로 계속 잠
+  }
 
   switch (u.state) {
     case US.Idle:

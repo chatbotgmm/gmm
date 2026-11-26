@@ -83,6 +83,16 @@ test("검토 수정: 집 문까지 길이 끊긴 갈매미도 추우면 가까�
   assert.ok(warmB && warmB.defId === "bank", `은행에서 녹임(${warmB?.defId})`);
 });
 
+test("검토 수정: 녹일 곳이 하나도 없으면 밖에서 자던 갈매미가 두 프레임마다 깼다 잤다 하지 않고 그대로 잠", () => {
+  const { w, u } = winterVillage(9, "clear", 0); w.instantBuild = false;
+  for (const b of w.buildings.values()) { b.owner = null; b.hits = 0; } u.home = null;   // 다 지은 집·공공건물이 없는 겨울 마을
+  w.isNight = true; u.state = "Sleep"; u.timer = 15; u.bodyT = 38.95; u.needs.energy = 15;
+  let flips = 0, last = u.state, slept = 0;
+  for (let t = 0; t < 60; t += 0.1) { u.full = 90; w.update(0.1); if (u.state !== last) { flips++; last = u.state; } if (u.state === "Sleep") slept += 0.1; }
+  assert.ok(u.bodyT <= CLIM.COLD_AT, `추운 채로(${u.bodyT.toFixed(2)})`);
+  assert.ok(flips <= 4, `상태가 바뀐 횟수 ${flips}`); assert.ok(slept > 55, `잔 시간 ${slept.toFixed(1)}초`);
+});
+
 test("저장·불러오기: 체온·추웠던 횟수 · 예전 저장(칸 없음)은 40.0 · 0", () => {
   const { w, u } = winterVillage(7); u.bodyT = 38.74; u.feltCold = 3;
   const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.units[0].bodyT, 38.7);
