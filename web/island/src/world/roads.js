@@ -37,6 +37,8 @@ export function netsAt(world, net, b) {
   return out;
 }
 const linked = (a, b) => [...a].some(n => b.has(n));
+/** 집이 없어 밖에서 잔 갈매미(u.sleptOutAt, unitBrain startSleep): 그 뒤 ROUGH_SECS(마을 시간 초) 동안 만족도 ROUGH_SAT */
+export const ROUGH_SAT = -5, ROUGH_SECS = 600;
 /** 만족도와 이유(화면용 줄들) */
 export function satisfaction(world, u, net = world.roads?.net) {
   const parts = [["기본", 40]], full = u.full ?? 80;
@@ -54,10 +56,11 @@ export function satisfaction(world, u, net = world.roads?.net) {
     const deco = [...world.buildings.values()].filter(b => BUILDINGS[b.defId].deco && world.isDone(b) && near(b, 6)).length;
     if (deco) parts.push(["🌷 집 근처 장식", Math.min(10, deco * 2)]);
     if ([...world.buildings.values()].some(b => b.defId === "cafe" && world.isDone(b) && near(b, 30))) parts.push(["☕ 가까운 카페", 5]);
-    if ([...world.buildings.values()].some(b => BUILDINGS[b.defId].clinic && world.isDone(b) && near(b, 30))) parts.push(["🏥 가까운 의원", 3]);
+    if ([...world.buildings.values()].some(b => BUILDINGS[b.defId].clinic && world.isDone(b) && near(b, 30))) parts.push(["🏥 가까운 병원", 3]);
     if (world.powered?.(home)) parts.push(["⚡ 전기", 8]);
     if (yardFlat(world, home)) parts.push(["🏡 고른 마당", 5]);
   }
+  if (!home && u.sleptOutAt != null && (world.time || 0) - u.sleptOutAt < ROUGH_SECS) parts.push(["🌙 집이 없어 밖에서 잠", ROUGH_SAT]);
   if (!home && u.loanRefused) parts.push(["🏦 집 대출을 못 받음", -10]);          // 금고가 비어 집을 못 삼(bank.js)
   if ((u.wageOwed || 0) > 0) parts.push(["💸 밀린 품삯", -10]);
   if ((u.cheer || 0) > 0) parts.push(["🎉 축제의 여운", FESTIVAL_SAT]);

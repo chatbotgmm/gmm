@@ -120,19 +120,19 @@ export function clinicBedsOf(b, w) {
 }
 export function clinicCardOf(b, w, more = bdMore) {
   const def = BUILDINGS[b.defId], beds = clinicBedsOf(b, w), used = beds.filter(Boolean).length, doc = w.doctorOf(b), docIn = w.doctorIn?.(b);
-  const head = sumHead({ icon: "🛏", big: `${used}/${def.beds || 0}`, label: "침대", line: doc ? `🩺 당번 의사: ${doc.name}${docIn ? " (의원에 있음)" : ""}` : "🩺 당번 없음 — 침대에서 쉬며 나아요" });
+  const head = sumHead({ icon: "🛏", big: `${used}/${def.beds || 0}`, label: "침대", line: doc ? `🩺 당번 의사: ${doc.name}${docIn ? " (병원에 있음)" : ""}` : "🩺 당번 없음 — 침대에서 쉬며 나아요" });
   const slots = `<ul class="bc-beds">${beds.map(s => !s ? `<li class="dim">🛏 빈 침대</li>`
     : `<li>${(SICK[s.u.sick.kind] || SICK.cold).icon} <b>${bdEsc(s.u.name)}</b> · ${s.coming ? "오는 중" : `${fmtLeft(sickLeftOf(s.u, w))} 남음`}</li>`).join("")}</ul>`;
   const list = [{ id: "", name: "당번 없음", note: "침대만 써요" }, ...w.units.filter(u => !u.sick || u.name === b.doctor).map(u => ({ id: u.unitId, name: u.name, note: `${(JOBS[u.job] || {}).icon || ""} ${(JOBS[u.job] || {}).name || ""}` }))];
-  const pick = `<p class="bc-note">당번은 환자가 오면 의원에 와서 약을 줘요(더 빨리 나아요) · 한 마리 낫게 할 때마다 품삯 🪙${DOCTOR_WAGE}(금고에서)</p><div class="bc-pick">` +
+  const pick = `<p class="bc-note">당번은 환자가 오면 병원에 와서 약을 줘요(더 빨리 나아요) · 한 마리 낫게 할 때마다 품삯 🪙${DOCTOR_WAGE}(금고에서)</p><div class="bc-pick">` +
     list.map(o => { const on = (o.id === "" && !doc) || (doc && o.id === doc.unitId);
       return `<button type="button" data-act="doctor" data-id="${bdEsc(o.id)}" aria-pressed="${on}"${on ? ` class="on"` : ""}>${on ? "✓ " : ""}${bdEsc(o.name)} <span class="dim">${bdEsc(o.note.trim())}</span></button>`; }).join("") + `</div>`;
   const L = w.bank?.ledger, last = L && L[L.length - 1], today = last && last.day === newsDay(w.time) ? last.clinic || 0 : 0;
   const sick = w.units.filter(u => u.sick).map(u => { const ib = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
     return `<li>${(SICK[u.sick.kind] || SICK.cold).icon} ${bdEsc(u.name)} · ${ib ? `${bdEsc(BUILDINGS[ib.defId].name)} 안` : bdEsc(stateLabelOf(u))} · ${fmtLeft(sickLeftOf(u, w))} 남음</li>`; }).join("");
   const info = `<p class="bc-line">🏦 오늘 진료 수입 <b>🪙${fmtNum(today)}</b> <span class="dim">(금고로)</span></p>` +
-    `<b class="bc-sub">아픈 갈매미 (의원 밖 포함)</b>${sick ? `<ul class="bc-list">${sick}</ul>` : `<p class="dim">지금 아픈 갈매미가 없어요</p>`}` +
-    `<p class="bc-note">감기가 낫는 데: 밖에서 600초 · 집 300초 · 의원 침대 100초 · 당번 의사가 약을 주면 더 빨리</p>`;
+    `<b class="bc-sub">아픈 갈매미 (병원 밖 포함)</b>${sick ? `<ul class="bc-list">${sick}</ul>` : `<p class="dim">지금 아픈 갈매미가 없어요</p>`}` +
+    `<p class="bc-note">감기가 낫는 데: 밖에서 600초 · 집 300초 · 병원 침대 100초 · 당번 의사가 약을 주면 더 빨리</p>`;
   return { title: `🏥 ${def.name}`, sub: `침대 ${def.beds || 0}개`, parts: [head, slots,
     more("clinic.doc", "🩺 당번 정하기", pick, { note: doc ? doc.name : "없음" }), more("clinic.more", "자세히 보기", info)] };
 }

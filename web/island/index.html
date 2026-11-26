@@ -181,6 +181,9 @@
   #houseCard .bc-tabs { display: flex; gap: var(--s-1); } #houseCard .bc-tabs button { flex: 1; } #houseCard .bc-tabs button.on { font-weight: 700; box-shadow: inset 0 -3px 0 currentColor; }
   #houseCard .bc-shop li { display: flex; gap: var(--s-2); align-items: center; padding: 2px 0; border-bottom: 1px solid var(--c-line); line-height: 1.35; } #houseCard .bc-ico { font-size: var(--fs-icon); }
   #houseCard .bc-price { font-weight: 700; white-space: nowrap; }
+  #houseCard .upg { background: var(--c-accent-strong); color: var(--c-on-accent); font-weight: 700; }   /* 업그레이드 단추(ui/upgradeView.js): .go와 같은 색, .go 클래스는 꾸미기 단추 전용 */
+  #houseCard[data-kind] .upg { flex: 1 0 100%; } #houseCard .upgWhy { font-size: var(--fs-sm); }
+  #houseCard[data-kind]:not([data-kind="house"]) > span.upgWhy.dim { order: 1; flex: 1 0 100%; align-self: auto; }   /* 업그레이드 못 하는 까닭은 단추 밑에(.dim이라 위 span.dim 규칙에 끌려 제목 줄로 가지 않게) */
   .badge { position: absolute; transform: translate(-50%, -100%); background: #fff; border-radius: var(--r-md); padding: calc(2*var(--u)) calc(7*var(--u)); font-size: var(--fs-sm);
     box-shadow: var(--e-1); white-space: nowrap; text-align: center; z-index: 1; }   /* 건물 표시는 🤧·💧 위(글이 가려지지 않게) */
   .badge .b2 { display: block; font-weight: 600; color: var(--c-ink-2); } .badge .b2[hidden] { display: none; }   /* 공사장 둘째 줄(준비 단계): 첫 줄보다 옅게 */

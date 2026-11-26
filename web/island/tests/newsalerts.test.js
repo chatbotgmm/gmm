@@ -19,7 +19,7 @@ test("news.js에 문장이 있는데 알림 줄(main.js 직접 연결 또는 ALE
   assert.deepEqual(SILENT.filter(ev => !NEWS_EVENTS.includes(ev)), [], "일부러 뺀 목록도 news.js에 있는 이름");
   assert.equal(Object.keys(ALERTS).filter(ev => !NEWS_EVENTS.includes(ev)).length, 0, "표의 이벤트는 모두 문장이 있음");
   assert.equal(Object.keys(ALERTS).filter(ev => direct.has(ev)).length, 0, "표와 직접 연결이 겹치지 않음(같은 알림 두 번 방지)");
-  assert.equal(Object.keys(ALERTS).length, 18, "18개 + 일부러 뺀 2개 = 20개");
+  assert.equal(Object.keys(ALERTS).length, 20, "20개(업그레이드 시작·완료 포함) + 일부러 뺀 2개 = 22개");
   assert.match(MAIN, /Object\.entries\(ALERTS\)/, "main.js가 표를 돌며 연결");
 });
 
@@ -46,7 +46,7 @@ test("덧말: 반짝이는 지금 내 주머니 수, 세금은 금고, 병은 �
   assert.match(line, /^✨ .+ 주웠어요 \(🎁 내 주머니 1\)$/);
   assert.match(alertLine("tax", { total: 5, n: 1 }, w), new RegExp(`금고 🪙${Math.floor(w.bank.vault)}$`));
   assert.equal(alertLine("tax", { total: 0, n: 0 }, w), null, "세금 0이면 알림 없음");
-  assert.match(alertLine("sick", { u, first: true }, w), /의원이 있으면 빨리 나아요\)$/);
+  assert.match(alertLine("sick", { u, first: true }, w), /병원이 있으면 빨리 나아요\)$/);
   assert.match(alertLine("summonBlocked", w.summonInfo(), w), /^🥚 .+ · 📱 소환$/);
   for (const ev of Object.keys(ALERTS)) assert.equal(typeof ALERTS[ev].kind, "string", ev);
   assert.equal(newsFor("fee", { b: { defId: "house" }, fee: 10 }, w).weight, 0, "설계비는 소식지에도 안 실림(알림 줄은 tools 상태 줄)");

@@ -39,11 +39,6 @@ export class BuildingViews {
     }
     holder.updateWorldMatrix(true, false);                                          // 모델이 이미 받아져 있으면(불러오기·같은 건물 또 짓기) 아직 한 번도 안 그려져 holder의 월드 행렬이 비어 있음 → 먼저 맞춤
     const box = new THREE.Box3().setFromObject(model); v.height = box.max.y - holder.position.y + 0.35;   // 🐦 표시는 실제 지붕 위에(holder 기준 높이)
-    if (def.clinic) {                                                               // 의원: 문 위 흰 판에 빨간 십자(사용자 GLB가 오기 전까지 의원임을 알림)
-      const lb = box.clone().applyMatrix4(holder.matrixWorld.clone().invert()), sz = Math.min(0.75, (lb.max.x - lb.min.x) * 0.22);   // holder 좌표(문 = +z) 상자
-      v.cross = new THREE.Mesh(CROSS_GEO, crossMat()); v.cross.scale.setScalar(sz); v.cross.position.set(0, Math.min(lb.max.y * 0.62, 1.55), lb.max.z + 0.03);
-      v.cross.visible = this.world.isDone(b); holder.add(v.cross);
-    }
     if (def.asset) {                                                                // 밑동 그늘: 건물·소품이 땅에 떠 보이지 않게 둘레에 옅은 그늘 판(모두 묶어 그리기 1번, 그림자를 끈 설정에서도 보임)
       const g = v.ground = new THREE.Mesh(GROUND_GEO, groundShadeMat()); g.renderOrder = 1; g.userData.noToon = true;
       g.position.set((box.min.x + box.max.x) / 2, holder.position.y + 0.025, (box.min.z + box.max.z) / 2); g.scale.set((box.max.x - box.min.x) * 1.4, 1, (box.max.z - box.min.z) * 1.4);
@@ -65,7 +60,6 @@ export class BuildingViews {
         v.scaffold.position.y = Math.max(0.6, v.height - 0.3) / 2; v.holder.add(v.scaffold); void size;
       }
       if (v.scaffold) v.scaffold.visible = p < 1;
-      if (v.cross) v.cross.visible = p >= 1;
       if (!v.spin) { v.spin = []; v.model.traverse(o => { if (o.name === "windBlades" || o.name === "fountainWater") v.spin.push(o); }); }   // 움직이는 부분은 한 번만 찾아 둠(매 프레임 모델 전체를 훑지 않게)
       if (p >= 1) for (const o of v.spin) { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; }   // 풍차 날개 돌기 · 분수 물
       if (p >= 1 && v.spin.length && focus && Math.abs(v.holder.position.x - focus.x) < 34 && Math.abs(v.holder.position.z - focus.z) < 34) this.animating = true;
@@ -119,18 +113,6 @@ export async function buildingModel(def, { ramp = null, season = null } = {}) {
   const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
   if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
   return model;
-}
-
-// 의원 십자 판: 흰 네모 + 빨간 십자를 그린 그림 한 장(평면 하나 = 그리기 호출 하나)
-const CROSS_GEO = new THREE.PlaneGeometry(1, 1);
-let CROSS_MAT = null;
-function crossMat() {
-  if (CROSS_MAT) return CROSS_MAT;
-  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
-  g.fillStyle = "#c9c2b4"; g.fillRect(0, 0, 128, 128); g.fillStyle = "#ffffff"; g.fillRect(7, 7, 114, 114);   // 회색 테두리 + 흰 판(roundRect는 옛 Safari에 없어 네모로)
-  g.fillStyle = "#e0332b"; g.fillRect(50, 20, 28, 88); g.fillRect(20, 50, 88, 28);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  return (CROSS_MAT = new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.18 }));   // 살짝 스스로 밝게(그늘진 벽에서도 보임)
 }
 
 // 밑동 그늘 판: 가운데는 진하고(건물에 가려짐) 가장자리로 갈수록 옅어지는 둥근 네모

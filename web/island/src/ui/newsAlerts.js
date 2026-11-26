@@ -28,11 +28,13 @@ export const ALERTS = {
   cocoa: { kind: "info", batch: true },
   dress: { kind: "info", batch: true },
   buyClothes: { kind: "good", snd: "bag" },
-  sick: { kind: "warn", tail: (a, w) => w.clinics?.().length ? " (🏥 의원에서 쉬면 빨리 나아요)" : " (🏥 의원이 있으면 빨리 나아요)", snd: "sneeze" },
+  sick: { kind: "warn", tail: (a, w) => w.clinics?.().length ? " (🏥 병원에서 쉬면 빨리 나아요)" : " (🏥 병원이 있으면 빨리 나아요)", snd: "sneeze" },
   healed: { kind: "good" },
   doctor: { kind: "good" },
+  upgradeStart: { kind: "info", tail: " (🪚 목수가 재료를 모아 지어요)", snd: "bell" },
+  upgraded: { kind: "good", snd: "bell" },
 };
-/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 의원 접수는 소식지만 */
+/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수는 소식지만 */
 export const SILENT = ["fee", "clinicVisit"];
 
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */

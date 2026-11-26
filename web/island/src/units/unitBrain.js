@@ -305,11 +305,7 @@ function startActivityInner(u, kind, world, rnd) {
       const lack = M.REST_UNTIL - (u.needs?.energy ?? 100);
       setIdle(u, rnd, world, lack > 0 ? Math.min(30, Math.max(2, lack / (0.6 + M.REST_GAIN))) : 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
     }
-    case "sleep": {                                                               // 지치면: 가까운 완성된 집에 들어가 자거나, 그 자리에서 잠
-      const home = nearest(u, [...world.buildings.values()].filter(b => world.canEnter(u, b) && Math.hypot(b.door.x - u.x, b.door.z - u.z) < 14), b => [b.door.x, b.door.z]);
-      if (home && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, "졸려…"); return true; }
-      setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; emote(u, "💤", 3); return true;
-    }
+    case "sleep": return startSleep(u, world, rnd, false);                       // 지치면: 잘 시간과 같은 잠자리(내 집 → 빈 집 손님 → 밖)
     case "wander": {
       const [sx, sz] = cellOf(u), r = Math.round(reach(u));
       for (let k = 0; k < 12; k++) {
@@ -564,11 +560,27 @@ function standUp(u, world) {
 /** 잘 시간인가: 보통 갈매미는 밤, 야행성(그림자·불씨)은 낮. world.isNight는 화면(해 높이)이 알려 줌 */
 export const isNocturnal = u => !!(PERSONA[u.name] || {}).nocturnal;
 export const sleepTime = (u, world) => world.isNight == null ? false : (isNocturnal(u) ? !world.isNight : world.isNight);
-/** 잠자리: 내 집(있으면) → 아니면 그 자리에서 */
-function goToBed(u, world, rnd) {
-  const home = u.home && world.buildings.get(u.home);
-  if (home && world.isDone(home) && startPath(u, world, home.door.x, home.door.z)) { u.state = US.GoToBuilding; u.targetBuildingId = home.id; u.sleepy = true; emote(u, isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지", 2.4); return true; }
-  return startActivityInner(u, "sleep", world, rnd);
+/** 잘 시간: 잠자리 고르기(startSleep)와 같음. 집에 가는 말풍선만 다름 */
+function goToBed(u, world, rnd) { return startSleep(u, world, rnd, true); }
+/** 집에 가는 길이 막혔을 때 그 자리에서 조는 시간(초): 이만큼 자고 일어나 다시 집 길을 찾음(매 프레임 길찾기·상태 떨림 없게) */
+export const BLOCKED_NAP = 20;
+/** 잠자리(밤잠·지쳐서 자는 잠 모두):
+ *  · 다 지은 내 집이 있으면 늘 내 집(멀어도). 길이 막혀 못 가면 그 자리에서 BLOCKED_NAP초만 졸고(u.nap) 다시 집 길을 찾음
+ *  · 집이 없으면(아직 못 삼) 주인 없는 다 지은 빈 집에서 손님으로(가까운 3채 중 갈 수 있는 곳, 주인은 안 됨)
+ *  · 그것도 없으면 밖에서 잠: 말풍선 + 만족도 하락(u.sleptOutAt → roads.js ROUGH_SAT, ROUGH_SECS 동안)
+ *  남의 집·카페 같은 다른 건물에서는 자지 않음. 늘 true */
+function startSleep(u, world, rnd, night) {
+  const home = u.home && world.buildings.get(u.home), d = b => Math.hypot(b.door.x - u.x, b.door.z - u.z);
+  const go = (b, say) => { u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.sleepy = true; emote(u, say, 2.4); return true; };
+  if (home && world.isDone(home)) {
+    if (startPath(u, world, home.door.x, home.door.z)) return go(home, night ? (isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지") : "졸려… 집에 가서 자야지");
+    setIdle(u, rnd, world, BLOCKED_NAP); u.state = US.Sleep; u.nap = true; emote(u, "🏠 집에 가는 길이 막혔어… 잠깐만 졸자", 2.6); return true;
+  }
+  const spare = [...world.buildings.values()].filter(b => b.id !== u.home && !b.owner && BUILDINGS[b.defId].house && world.isDone(b) && world.canFit(u, b)).sort((a, b) => d(a) - d(b)).slice(0, 3);   // "집"은 BUILDINGS.house(경제 없는 섬의 isHouse는 의원·시장·카페까지 들어가 손님 잠자리로 고르면 안 됨)
+  for (const b of spare) if (startPath(u, world, b.door.x, b.door.z)) return go(b, "🏠 빈 집에서 하룻밤 신세 질게요");
+  setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false;
+  if (world.economy) u.sleptOutAt = world.time || 0;
+  emote(u, "🌙 집이 없어 밖에서 자요…", 2.6); return true;
 }
 /** 축제 모이기: 광장 둘레(1.5~4칸)의 빈 자리로 걸어감. 갈 수 있으면 true */
 function startGather(u, world, rnd) {
@@ -589,8 +601,8 @@ function partyAt(u, world, rnd) {
   doOnce(u, "Jump", null, () => { setIdle(u, rnd, world, 0.6 + rnd() * 1.8); if (rnd() < 0.3) startActivity(u, "zoomies", world, rnd); });
 }
 // ---------------------------------------------------------------- 추위(climate.js)
-/** 들어가 몸을 녹일 수 있는 공공건물(다 지은 것): 은행·시장·저장고·카페·잡화점·우체국·수족관·의원 */
-const SHELTER = new Set(["bank", "market", "storehouse", "cafe", "shop", "post", "aquarium", "clinic"]);
+/** 들어가 몸을 녹일 수 있는 공공건물(다 지은 것): 은행·시장·저장고·카페·잡화점·우체국·수족관·병원 */
+const SHELTER = new Set(["bank", "market", "storehouse", "cafe", "shop", "post", "aquarium", "clinic", "hospital"]);
 /** 추우면 몸 녹이러: 집이 있으면 집, 카페가 더 가깝고 돈이 있으면 카페에서 코코아(2🪙 → 금고, 체온 +0.6), 집이 없으면 가까운 공공건물(무료).
  *  맡은 공사는 그대로 둠(녹고 나면 바로 돌아감). 난수를 쓰지 않음. 갈 수 있으면 true */
 function startWarm(u, world) {
@@ -619,7 +631,7 @@ function startSickRest(u, world) {
   const d = b => Math.hypot(b.door.x + 0.5 - u.x, b.door.z + 0.5 - u.z);
   const shelters = [...world.buildings.values()].filter(b => world.isDone(b) && SHELTER.has(b.defId) && !BUILDINGS[b.defId].clinic).sort((a, b) => d(a) - d(b)).slice(0, 3);   // 의원·집에 못 가면(집 문까지 길이 끊김 등) 가까운 공공건물에서
   for (const b of [world.clinicFor?.(u), homeOk, ...shelters]) if (b && startPath(u, world, b.door.x, b.door.z)) {
-    u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.goFor = "sick"; emote(u, BUILDINGS[b.defId].clinic ? "🤧 의원에 가 볼래…" : b === homeOk ? "🤧 집에서 쉬어야지" : "🤧 따뜻한 데서 쉬어야지", 2.2); return true;
+    u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.goFor = "sick"; emote(u, BUILDINGS[b.defId].clinic ? "🤧 병원에 가 볼래…" : b === homeOk ? "🤧 집에서 쉬어야지" : "🤧 따뜻한 데서 쉬어야지", 2.2); return true;
   }
   return false;
 }
@@ -844,8 +856,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     case US.Sleep:
       if ((u.emoteT ?? 0) <= 0) emote(u, "💤", 2.5);
-      if (u.timer <= 0 && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY && !festAwake(u, world)) { u.timer = 8; break; }   // 집이 없으면 밖에서 계속 잠
-      if (u.timer <= 0 || ((u.needs?.energy ?? 100) >= 95 && !sleepTime(u, world))) { u.activity = "sleep"; done(u, 1, rnd, world); emote(u, "잘 잤다!"); }
+      if (u.timer <= 0 && !u.nap && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY && !festAwake(u, world)) { u.timer = 8; break; }   // 집이 없으면 밖에서 계속 잠(집 길이 막혀 조는 중이면 깨서 다시 집 길을 찾음)
+      if (u.timer <= 0 || ((u.needs?.energy ?? 100) >= 95 && !sleepTime(u, world))) { const nap = u.nap; u.nap = false; u.activity = "sleep"; done(u, 1, rnd, world); if (!nap) emote(u, "잘 잤다!"); }
       break;
     case US.GoFest:                                                                 // 축제 광장으로 가는 중(그사이 축제가 끝나면 그만둠)
       if (!world.festival) { setIdle(u, rnd, world); break; }
@@ -974,7 +986,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     }
     case US.Inside:
       if (u.timer <= 0 && keepInside(u, world)) { u.timer = 2; break; }       // 몸 녹이는 중(체온 39.6까지, 잘 시간이고 밖이 추우면 그대로 안에서 잠)
-      if (u.timer <= 0) { if (u.insideAct === "sleep" && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY && !festAwake(u, world)) { u.timer = 8; if (u.useFurni?.id && !/bed/i.test(u.useFurni.id)) { const b = world.buildings.get(u.insideBuildingId); u.useFurni = b ? F.pickUse(b, true, rnd) : u.useFurni; } } else exitBuilding(u, world, rnd); }   // 아직 잘 시간이면 계속 잠(축제가 열리면 집에서 자다가도 나옴)
+      if (u.timer <= 0) { const ib = world.buildings.get(u.insideBuildingId), taken = ib && ib.owner != null && ib.owner !== u.unitId && world.isHouse(ib);   // 손님으로 자던 빈 집을 누가 샀으면 깨서 나옴(다시 잠자리를 고름)
+        if (u.insideAct === "sleep" && !taken && sleepTime(u, world) && (u.full ?? 80) >= J.HUNGRY && !festAwake(u, world)) { u.timer = 8; if (u.useFurni?.id && !/bed/i.test(u.useFurni.id)) { const b = world.buildings.get(u.insideBuildingId); u.useFurni = b ? F.pickUse(b, true, rnd) : u.useFurni; } } else exitBuilding(u, world, rnd); }   // 아직 잘 시간이면 계속 잠(축제가 열리면 집에서 자다가도 나옴)
       break;
     case US.GoTrade:
       if (world.economy && followPath(u, dt, world, rnd)) {                         // 경제: 시장 앞에서 한동안 손님을 기다림
