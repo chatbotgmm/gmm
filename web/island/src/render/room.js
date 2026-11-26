@@ -87,6 +87,8 @@ export class RoomView {
     this.touch.addEventListener("pointerdown", e => { this.press = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
     this.touch.addEventListener("pointerup", e => { const p = this.press; this.press = null; if (p && p.id === e.pointerId && Math.hypot(e.clientX - p.x, e.clientY - p.y) < ROOM_TAP_PX) this.tap(e); });
     this.touch.addEventListener("pointermove", e => { if (e.pointerType === "mouse" && this.ghost && !this.press) this.hover(e); });
+    // 마우스: 미리 보기는 커서를 따라가지만, 커서가 방 판(✅ 놓기)으로 나가면 마지막으로 누른 칸으로 되돌림(가는 길에 지나간 방 밖 칸에 남아 「놓기」가 안 되던 것)
+    this.touch.addEventListener("pointerleave", e => { const g = this.ghost; if (e.pointerType !== "mouse" || !g?.pin || (g.x === g.pin.x && g.z === g.pin.z)) return; g.x = g.pin.x; g.z = g.pin.z; this.drawGhost(); this.syncGo(); });
     addEventListener("keydown", e => { if (!this.isOpen) return; if (e.code === "KeyR") this.rotate(); if (e.code === "Escape") this.ghost || this.sel != null ? this.cancel() : this.close(); if (e.code === "Delete") this.stow(); });
     for (const b of this.ui.querySelectorAll(".rexit")) b.onclick = () => this.close();   // 위 머리줄 + (세로 폰) 아래 탭 줄
     for (const b of this.ui.querySelectorAll(".rtabs button[data-tab]")) b.onclick = () => { this.tab = b.dataset.tab; this.refreshUI(); };
@@ -212,7 +214,7 @@ export class RoomView {
     if (this.ghost) {
       const c = this.cellAt(e); if (!c) return; const a = this.anchor(c, this.ghost.id, this.ghost.rot);
       if (a.x === this.ghost.x && a.z === this.ghost.z) return this.commit();   // 같은 칸을 한 번 더 = 놓기
-      Object.assign(this.ghost, a); this.drawGhost(); this.refreshUI(); return;
+      Object.assign(this.ghost, a); this.ghost.pin = { ...a }; this.drawGhost(); this.refreshUI(); return;
     }
     this.rayAt(e);
     const door = this.ray.intersectObjects(this.doorHits || [], false).find(h => h.object.visible);
@@ -222,9 +224,11 @@ export class RoomView {
     this.sel = o ? o.userData.index : null; this.drawSel(); this.refreshUI();
     if (this.sel != null) this.status(`${FURNITURE[this.L.furniture[this.sel].id].name}: 옮기기·돌리기·치우기`);
   }
-  hover(e) { const c = this.cellAt(e); if (!c) return; Object.assign(this.ghost, this.anchor(c, this.ghost.id, this.ghost.rot)); this.drawGhost(); }
-  startPlace(id) { const it = this.L; this.sel = null; this.ghost = { id, rot: 0, x: Math.floor(it.w / 2), z: Math.floor(it.d / 2), moving: null }; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status(`${FURNITURE[id].name}: 놓을 칸을 누르세요(한 번 더 누르면 놓기 · R 돌리기)`); }
-  startMove() { const o = this.L.furniture[this.sel]; if (!o) return; this.ghost = { id: o.id, rot: o.rot, x: o.x, z: o.z, moving: this.sel }; this.items[this.sel].visible = false; this.sel = null; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status("옮길 칸을 누르세요"); }
+  hover(e) { const c = this.cellAt(e); if (!c) return; Object.assign(this.ghost, this.anchor(c, this.ghost.id, this.ghost.rot)); this.drawGhost(); this.syncGo(); }
+  /** ✅ 놓기 단추 색만 지금 자리에 맞춤(마우스로 움직일 때 판 전체를 다시 그리지 않게) */
+  syncGo() { const b = this.ui.querySelector(".racts .commit"); if (b && b.classList.contains("go") !== !!this.ghostOk) b.classList.toggle("go", !!this.ghostOk); }
+  startPlace(id) { const it = this.L; this.sel = null; this.ghost = { id, rot: 0, x: Math.floor(it.w / 2), z: Math.floor(it.d / 2), moving: null }; this.ghost.pin = { x: this.ghost.x, z: this.ghost.z }; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status(`${FURNITURE[id].name}: 놓을 칸을 누르세요(한 번 더 누르면 놓기 · R 돌리기)`); }
+  startMove() { const o = this.L.furniture[this.sel]; if (!o) return; this.ghost = { id: o.id, rot: o.rot, x: o.x, z: o.z, moving: this.sel, pin: { x: o.x, z: o.z } }; this.items[this.sel].visible = false; this.sel = null; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status("옮길 칸을 누르세요"); }
   rotate() {
     if (this.ghost) { this.ghost.rot = (this.ghost.rot + 1) % 4; this.drawGhost(); this.refreshUI(); return; }
     if (this.sel == null) return; const o = this.L.furniture[this.sel];
@@ -275,7 +279,7 @@ export class RoomView {
     }
     const add = (label, fn, cls = "") => { const bt = rel("button", cls, label); bt.onclick = fn; act.appendChild(bt); };
     // 행동 줄: 치우기는 왼쪽 끝에 따로, 주요 행동(놓기·옮기기)은 오른쪽 끝(엄지 쪽)
-    if (this.ghost) { add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("✅ 놓기", () => this.commit(), this.ghostOk ? "go" : ""); }
+    if (this.ghost) { add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("✅ 놓기", () => this.commit(), this.ghostOk ? "commit go" : "commit"); }
     else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("↔ 옮기기", () => this.startMove(), "go"); }
   }
   // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)
