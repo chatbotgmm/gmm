@@ -108,7 +108,7 @@
   #bondBar[hidden], #giftPick[hidden] { display: none; }
   #bondBar .brow { display: none; } #bondBar button { pointer-events: auto; min-height: max(calc(40*var(--u)), var(--hit-sm)); padding: calc(6*var(--u)) calc(12*var(--u)); font-size: var(--fs-body); border-radius: var(--r-md); touch-action: manipulation; }
   #petBtn { color: #b8355c; } #bondBar button:disabled { opacity: .55; }
-  #giftPick { pointer-events: auto; background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u)); box-shadow: var(--e-1); font-size: var(--fs-cap); max-height: 34vh; max-height: 34dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; }
+  #giftPick { pointer-events: auto; background: var(--c-surface); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u)); box-shadow: var(--e-1); font-size: var(--fs-cap); max-height: 34vh; max-height: 34dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; }
   #giftPick p { margin: 0 0 calc(6*var(--u)); } #giftPick .gifts { display: flex; flex-wrap: wrap; gap: calc(5*var(--u)); } #giftPick .gifts button { min-height: max(calc(38*var(--u)), var(--hit-sm)); font-size: var(--fs-sm); }
   #info .hearts { color: #d6456e; letter-spacing: 1px; font-size: var(--fs-sm); }
   .dexcell .keep { align-self: flex-start; margin-top: calc(2*var(--u)); min-height: max(calc(30*var(--u)), var(--hit-sm)); padding: calc(3*var(--u)) calc(8*var(--u)); font-size: var(--fs-cap); border-radius: var(--r-sm); } .dexcell .keep.on { background: #fff1c2; box-shadow: inset 0 0 0 calc(2*var(--u)) #c99a1e, var(--e-1); font-weight: 700; }
@@ -502,7 +502,7 @@
   @media (any-pointer: coarse) { #stat > button { min-width: clamp(30px, calc(44px - (var(--ui-scale) - 0.75) * 56px), 44px); } }
   button.sw2 { white-space: normal; text-align: left; }   /* 크게(130%) 한 좁은 화면에서 긴 이름은 두 줄로 */
   /* 선물 고르기 판: 위쪽 칩·알림(·세로 폰은 미니맵) 자리까지 올라가지 않게 높이를 막고 안에서 밀어 봄. 세로 폰은 고르는 동안 미니맵을 잠깐 접어 둠 */
-  #giftPick { max-height: min(34dvh, calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - var(--info-h) - max(calc(40*var(--u)), var(--hit-sm)) - calc(64*var(--u)) - calc(40*var(--u)))); }
+  #giftPick { max-height: min(34dvh, max(calc(96*var(--u)), calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - var(--info-h) - calc(64*var(--u)) - calc(40*var(--u))))); }   /* 🎁·♥ 버튼은 이제 카드 안(행동 줄)이라 그 줄 높이는 빼지 않음. 낮은 세로 폰(320×568 + 펼친 카드)에서도 안내 글 + 선물 한 줄은 보이게 96px은 남김(예전엔 16px로 눌림) */
   html[data-form="landscape"] #giftPick { max-height: calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - max(calc(40*var(--u)), var(--hit-sm)) - calc(24*var(--u))); }
   html[data-form="portrait"] body:has(#giftPick:not([hidden])) #minimap { display: none; }
   /* 가로 폰 건설: 미니맵을 작게, 확인 막대는 따라가기 카드 바로 위(카드가 없으면 맨 아래) → 크게(130%) 해도 미니맵·확인 막대·카드가 서로 안 덮음 */
