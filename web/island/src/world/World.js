@@ -1,7 +1,7 @@
 // 섬 전체 상태: 격자, 해안 모듈, 자원(나무·광석·씨앗·낚시 자리), 건물, 유닛.
 // 그림과 입력은 모르고, 바뀐 일을 이벤트(on/emit)로 알린다. 뷰가 이벤트와 매 프레임 상태를 읽어 그린다.
 import { BUILDINGS, MODULES, UNITS, RARITY, FISH, ITEMS, PRICES, FURNITURE } from "../data/catalog.js";
-import { WATER_Y } from "../config.js";
+import { WATER_Y, SEA_LEVEL, MAX_STEP } from "../config.js";
 import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
 import { Grid } from "./Grid.js";
@@ -11,7 +11,7 @@ import { terrainHeight } from "./terrain.js";
 import { nearestWalkable, findPath } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere, isNocturnal } from "../units/unitBrain.js";
 import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToNames, friendsFromNames } from "../units/mind.js";
-import { seededRandom } from "../util.js";
+import { seededRandom, josa } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
 import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
@@ -28,6 +28,7 @@ import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFr
 import * as BK from "./bank.js";
 import * as P from "./population.js";
 import * as FM from "./farming.js";
+import * as CU from "./customize.js";
 import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -82,12 +83,12 @@ export class World {
     // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
     this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
     this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
+    // 섬 꾸미기(customize.js): 놓은 덤불·꽃과 치운 소품 자리(불러오기는 fromJSON이 건물을 다시 놓은 뒤 채움) · 플레이어가 판 물 칸 · 되돌리기 표(저장 안 함)
+    this.decor = CU.newDecor(); this.dug = CU.dugFromSave(extra.dug); this.undo = new Map(); this.undoSeq = 0;
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
-      const [x, z] = m.cells[0];
-      if (m.defId === "tree" || m.defId === "palm") this.trees.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
-      if (m.defId === "ore") this.ores.push({ id: m.id, x, z, alive: true, hp: 3, claimed: null });
+      this.trackModule(m);
     }
   }
   /** empty: 갈매미 없이 시작. wild: 넓은 섬(자연만 + 가운데 공식은행 + 다 지은 작은 집 한 채, 갈매미 없음 → 첫 갈매미는 🥚 소환으로. 게임 화면).
@@ -339,8 +340,8 @@ export class World {
   /** 오늘 장부 칸에 더함(최근 LEDGER_DAYS일) */
   led(key, n) {
     const d = newsDay(this.time), L = this.bank.ledger; let e = L[L.length - 1];
-    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0, refunds: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
-    e[key] += n;
+    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0, refunds: 0, custom: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
+    e[key] = (e[key] || 0) + n;
   }
   /** 금고에 돈이 들어옴: kind "returned"(갈매미가 낸 돈) | "tax". 들어올 때마다 밀린 품삯부터 갚음 */
   deposit(n, kind = "returned") {
@@ -797,7 +798,7 @@ export class World {
     if (t.hp > 1e-6) return;
     t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got;
     this.emit("treeFell", { tree: t, dir: [t.x + 0.5 - who.x, t.z + 0.5 - who.z] }); this.notice(t.x + 0.5, t.z + 0.5, "tree", who);
-    this.after(25 + this.rnd() * 15, () => { t.alive = true; t.hp = 3; this.emit("treeGrow", t); });
+    this.after(25 + this.rnd() * 15, () => { if (t.removed) return; t.alive = true; t.hp = 3; this.emit("treeGrow", t); });   // 그사이 치운 나무(꾸미기)는 되살리지 않음
   }
   hitOre(o, who = null) {
     if (!o.alive) return;
@@ -806,7 +807,7 @@ export class World {
     o.alive = false; const got = who ? J.stoneYield(who) : 2; this.gain(who, "stone", got); o.lastYield = got;
     o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron);
     this.emit("oreBroke", o);
-    this.after(20 + this.rnd() * 12, () => { o.alive = true; o.hp = 3; this.emit("oreGrow", o); });
+    this.after(20 + this.rnd() * 12, () => { if (o.removed) return; o.alive = true; o.hp = 3; this.emit("oreGrow", o); });
   }
   /** 낚시 결과: 못 낚음 / 물고기(흔하면 음식, 희귀 이상이면 보물) + 가끔 물건. 도감에 기록. */
   /** bonus: 찌 당기기 배율(희귀 이상 비중에 곱함, 기본 1 = 예전 그대로) */
@@ -857,6 +858,7 @@ export class World {
     const hours = awayHours(ms); if (!hours) return null;
     let ripened = 0; const catches = [];
     for (const p of this.plots) if (p.stage === "growing") { p.stage = "ripe"; p.t = 0; ripened++; this.emit("plot", p); }
+    this.stepCustom(Infinity);                                                    // 심은 묘목·빈 광석 바위도 다 자람(밭과 같은 규칙)
     const fishers = this.spots.length ? this.units.filter(u => u.job === "fisher") : [];
     for (let i = 0, n = fishers.length ? awayCasts(hours) : 0; i < n; i++) {
       const u = fishers[i % fishers.length]; if (rnd() >= J.catchChance(u)) continue;
@@ -933,27 +935,474 @@ export class World {
     e = Math.max(-1, Math.min(3, Math.round(e * 100) / 100));
     if (op === "raise" && cur < 0 && cur > -step && e > 0 && amount >= 0.99) e = 0;      // 모래사장 비탈(-0.15 등)은 0으로 맞춤
     if (Math.abs(e - cur) < 0.005) return false;
-    if (this.animateShape) { this.shaping.set(idx, { x, z, target: e }); return true; }
+    if (!this.reshapeAllowed(x, z, cur, e)) return false;                            // 땅↔물 경계를 넘으면 꾸미기 값·검사(customize.js), 먼 바다 높이기 금지
+    if (this.animateShape) { const prev = this.shaping.get(idx); this.shaping.set(idx, { x, z, target: e, w0: prev ? prev.w0 : this.grid.isWater(x, z) }); return true; }   // w0: 스르르 바뀌기 전 물이었나(중간 높이가 물 높이를 먼저 넘어도 끝에서 땅↔물 정리를 하게)
     return this.applyHeight(x, z, e);
   }
-  /** 높이를 실제로 바꾸고, 물에 잠긴 씨앗·갈매미를 정리. */
-  applyHeight(x, z, e) {
-    const c = this.grid.get(x, z), wasWater = this.grid.isWater(x, z);
-    if (!this.grid.setElevation(x, z, e)) return false;
+  /** 높이를 실제로 바꾸고, 물에 잠긴 씨앗·갈매미를 정리. was: 바뀌기 전 물이었나(스르르 바뀌기가 넘김, 없으면 지금 칸으로 봄) */
+  applyHeight(x, z, e, was = null) {
+    const c = this.grid.get(x, z), wasWater = was ?? this.grid.isWater(x, z);
+    if (was === null) this.shaping.delete(this.grid.index(x, z));                  // 바로 바꾸면(파기·메우기·되돌리기) 그 칸의 스르르 바뀌기는 그만둠(아니면 낸 값과 달리 예전 목표 높이로 되돌아감)
+    if (!this.grid.setElevation(x, z, e) && was === null) return false;
     if (wasWater && !this.grid.isWater(x, z) && c.groundType !== "Sand") c.groundType = "Sand";
+    const nowWater = this.grid.isWater(x, z), key = CU.decorKey(x, z);
+    if (wasWater !== nowWater) { if (nowWater) this.dug.add(key); else this.dug.delete(key); }   // 플레이어가 판 물 칸(깊어도 다시 메울 수 있음)
+    this.dropDecor([[x, z]]);                                                      // 높이가 바뀐 칸의 놓은 덤불·꽃은 지움
     for (const s of [...this.seeds]) if (s.x === x && s.z === z && this.grid.isWater(x, z)) this.eatSeed(s);   // 물에 잠긴 씨앗은 없앰
     for (const u of this.units) if (!u.insideBuildingId && u.state !== UnitState.Held && Math.floor(u.x) === x && Math.floor(u.z) === z && !this.grid.isWalkable(x, z) && !(u.swimming && this.grid.isWater(x, z))) {
       const spot = nearestWalkable(this.grid, x, z); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; } setIdle(u, this.rnd, this);   // 물에 빠지면 가까운 땅으로
     }
+    if (wasWater !== nowWater) this.pruneSpots();                                  // 바라보는 물이 땅이 된 낚시 자리는 지움
     this.emit("ground", { x, z }); return true;
   }
   /** 스르르 바뀌는 중인 칸들을 목표 높이 쪽으로 옮김(초당 1.5 m). */
   stepShaping(dt) {
     for (const [idx, s] of this.shaping) {
       const c = this.grid.get(s.x, s.z), d = s.target - c.elevation, mv = Math.sign(d) * Math.min(Math.abs(d), 1.5 * dt);
-      if (Math.abs(d) <= 1.5 * dt + 1e-6) { this.shaping.delete(idx); this.applyHeight(s.x, s.z, s.target); }
+      if (Math.abs(d) <= 1.5 * dt + 1e-6) { this.shaping.delete(idx); this.applyHeight(s.x, s.z, s.target, s.w0 ?? null); }
       else this.grid.setElevation(s.x, s.z, Math.round((c.elevation + mv) * 1000) / 1000);
     }
+  }
+
+  // ---- 섬 꾸미기(customize.js): 나무·야자수·바위·광석 바위 심기/치우기, 덤불·꽃, 지형지물 옮기기, 연못·물길 파기/메우기.
+  //  결과 모양은 건물 놓기와 같음: 실패 { ok: false, reason, cost }, 성공 { ok: true, cost, …, inverse }. opt.dry = 검사·값만(고스트), opt.free = 돈 안 냄(시험 받침·되돌리기).
+  //  값은 금고에서 바로(경제가 없으면 0), 금고는 맨 마지막에 봄. 난수를 쓰지 않음(variant·rot = 칸 좌표 해시, 일을 멈춘 갈매미의 쉬는 시간도 고정).
+  //  알림: moduleAdded · moduleRemoved · moduleMoved · decorChanged · custom(성공 요약) · customRefused(높이 도구가 막힘) · 기존 treeGrow/oreGrow/ground
+  /** 이 일의 값(🪙). op = place | remove | move | dig | fill */
+  customCost(op, kind) { return CU.customCostOf(op, kind, this.economy, this.priceMult()); }
+  /** 화면 카드용: 지금 수·한도·값표·금고 */
+  customInfo() {
+    const cost = (op, list) => Object.fromEntries(list.map(k => [k, this.customCost(op, k)]));
+    return { trees: this.trees.length, treeMax: CU.LIMITS.trees, ores: this.ores.length, oreMax: CU.LIMITS.ores, rocks: this.modules.filter(m => m.defId === "beachRock").length, rockMax: CU.LIMITS.rocks,
+      decor: this.decor.add.size, decorMax: CU.LIMITS.decor, growing: this.trees.concat(this.ores).filter(t => t.grow > 0).length,
+      landmarks: CU.LANDMARKS.filter(d => this.landmark(d)), economy: this.economy, vault: Math.floor(this.bank.vault), spent: this.bank.custom || 0,
+      costs: { place: cost("place", [...CU.NATURE, ...CU.DECOR]), remove: cost("remove", [...CU.NATURE, ...CU.DECOR]), move: cost("move", CU.LANDMARKS), dig: this.customCost("dig"), fill: this.customCost("fill") } };
+  }
+  /** 모듈 하나를 나무·광석 목록에 넣음(생성자·심기). grow > 0이면 묘목·빈 바위(alive=false → 갈매미가 찜하지 않음) */
+  trackModule(m) {
+    const [x, z] = m.cells[0], grow = m.grow > 0 ? m.grow : 0, e = { id: m.id, x, z, alive: !grow, hp: 3, claimed: null };
+    if (grow) { e.grow = grow; e.sapling = true; }
+    if (m.defId === "tree" || m.defId === "palm") { this.trees.push(e); return { tree: e }; }
+    if (m.defId === "ore") { this.ores.push(e); return { ore: e }; }
+    return {};
+  }
+  /** 묘목·빈 바위 자라기(계절·비와 상관없이 마을 시간으로). 다 자라면 기존 treeGrow/oreGrow */
+  stepCustom(dt) {
+    for (const list of [this.trees, this.ores]) for (const t of list) {
+      if (!(t.grow > 0) || (t.grow -= dt) > 0) continue;
+      t.grow = 0; delete t.sapling; t.alive = true; t.hp = 3;
+      const m = this.modules.find(o => o.id === t.id); if (m) delete m.grow;
+      this.emit(list === this.trees ? "treeGrow" : "oreGrow", t);
+    }
+  }
+  /** 저장 전에 모듈의 남은 자람 시간을 맞춤(모듈 목록이 그대로 저장되므로) */
+  syncGrow() { for (const t of this.trees.concat(this.ores)) if (t.grow > 0) { const m = this.modules.find(o => o.id === t.id); if (m) m.grow = Math.ceil(t.grow); } }
+  /** 금고에서 꾸미기 값을 냄 */
+  payCustom(cost) { if (!(cost > 0)) return; const bk = this.bank; bk.vault -= cost; bk.custom = (bk.custom || 0) + cost; this.led("custom", cost); this.checkLow(); }
+  /** 되돌리기 환불(방금 낸 값만) */
+  refundCustom(n) {
+    if (!(n > 0)) return; const bk = this.bank; bk.vault += n; bk.custom = Math.max(0, (bk.custom || 0) - n); this.led("custom", -n);
+    if (bk.vault >= BK.VAULT_REARM) bk.low = 0; this.settleOwed();
+  }
+  /** 되돌리기 표 하나(한 번짜리, 최근 UNDO_KEEP개만, 저장 안 함) */
+  undoOf(inv, opt = {}) {
+    if (opt.noUndo) return null;
+    const token = `u${++this.undoSeq}`; this.undo.set(token, true);
+    while (this.undo.size > CU.UNDO_KEEP) this.undo.delete(this.undo.keys().next().value);
+    return { ...inv, token };
+  }
+  /** 선착장·낚시터 앞 물 칸(배를 대는 곳·낚시 방향)이면 그 건물(짓는 중 포함), 아니면 null */
+  berthOwner(x, z) {
+    for (const b of this.buildings.values()) { const d = BUILDINGS[b.defId]; if (!d.dock && !d.pier) continue; const p = this.berth(b); if (p.x === x && p.z === z) return b; }
+    return null;
+  }
+  /** 이 칸들에 밖에 나와 선(헤엄 포함) 갈매미가 있나(들려 있거나 건물 안은 빼고). 헤엄치는 갈매미가 올라올 땅 칸(u.swim.sx·sz)도 그 갈매미 자리로 봄
+   *  (거기에 나무·바위·지형지물을 놓으면 헤엄을 마치고 그 안으로 올라와 갇힘) */
+  unitOn(cells) {
+    const keys = new Set(cells.map(([x, z]) => CU.decorKey(x, z)));
+    return this.units.some(u => !u.insideBuildingId && u.state !== UnitState.Held && (keys.has(CU.decorKey(Math.floor(u.x), Math.floor(u.z))) || (u.swimming && u.swim && keys.has(CU.decorKey(u.swim.sx, u.swim.sz)))));
+  }
+  /** 땅 칸에 kind(tree·palm·beachRock·ore·bush·flower)를 놓을 수 없는 까닭, 되면 "". self: 비어 있는 것으로 볼 모듈 id(옮기기) */
+  landProblem(x, z, kind, self = null) {
+    const g = this.grid; if (!g.inBounds(x, z)) return "섬 밖이에요";
+    if (g.isWater(x, z)) return kind === "tree" || kind === "palm" ? "물에는 심을 수 없어요" : "물에는 놓을 수 없어요";
+    const c = g.get(x, z); if (c.occupiedId && c.occupiedId !== self) return "다른 것과 겹쳐요";
+    if (this.isPlot(x, z)) return "밭에는 놓을 수 없어요";
+    if (g.doorOwner(x, z)) return "건물 문 앞이에요";
+    if (!CU.DECOR.includes(kind) && this.spots.some(s => s.x === x && s.z === z)) return "낚시 자리예요";   // 걷기를 막는 것(나무·바위·지형지물)은 낚시 자리에 못 놓음(덤불·꽃은 됨)
+    return kind ? CU.groundReason(kind, c.groundType) : "";
+  }
+  /** 걸어서 이어진 덩어리 번호(캐시·grid.version을 건드리지 않고 지금 칸 상태로 새로 셈). comps()와 같은 규칙 */
+  floodComps() {
+    const g = this.grid, comp = new Int32Array(g.w * g.h).fill(-1); let id = 0;
+    for (let s = 0; s < comp.length; s++) {
+      if (comp[s] >= 0) continue; const sx = s % g.w, sz = (s / g.w) | 0; if (!g.isWalkable(sx, sz)) continue;
+      const q = [s]; comp[s] = id;
+      while (q.length) { const i = q.pop(), x = i % g.w, z = (i / g.w) | 0;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const ni = nz * g.w + nx; if (comp[ni] >= 0 || !g.canStep(x, z, nx, nz)) continue; comp[ni] = id; q.push(ni); } }
+      id++;
+    }
+    return comp;
+  }
+  /** 칸 상태를 잠깐 바꿔(fn) 덩어리를 새로 세고 되돌림(grid.version·캐시는 그대로) */
+  probeComps(cells, free = [], elev = null) {
+    const g = this.grid, saved = [], P = "__probe"; g.occupants.set(P, { kind: "module", walkable: false, surface: 0 });
+    for (const [x, z] of free) { const c = g.get(x, z); saved.push([c, c.occupiedId, c.elevation]); c.occupiedId = null; }
+    for (const [x, z] of cells) { const c = g.get(x, z); saved.push([c, c.occupiedId, c.elevation]); if (elev === null) c.occupiedId = P; else c.elevation = elev; }
+    const comp = this.floodComps();
+    for (let i = saved.length - 1; i >= 0; i--) { const [c, id, e] = saved[i]; c.occupiedId = id; c.elevation = e; }
+    g.occupants.delete(P); return comp;
+  }
+  /** 걸을 수 없는 것을 cells에 놓아도(free 칸은 비운 채로) 둘레 8칸의 걸을 수 있는 칸끼리 이어짐이 그대로인가(길 끊김 검사) */
+  /** 빠른 길: excl 칸을 빼고도 starts 칸들이 둘레 R칸 창 안에서 서로 걸어서 이어지나(이어지면 섬 전체 이어짐도 그대로라 덩어리를 새로 셀 필요 없음) */
+  localLinked(excl, starts, R = 3) {
+    if (starts.length < 2) return true;
+    const g = this.grid, W = g.w, xs = [...excl].map(i => i % W), zs = [...excl].map(i => (i / W) | 0);
+    const x0 = Math.min(...xs) - R, x1 = Math.max(...xs) + R, z0 = Math.min(...zs) - R, z1 = Math.max(...zs) + R;
+    const seen = new Set([starts[0]]), q = [starts[0]];
+    while (q.length) { const i = q.pop(), x = i % W, z = (i / W) | 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz, ni = nz * W + nx;
+        if (nx < x0 || nx > x1 || nz < z0 || nz > z1 || !g.inBounds(nx, nz) || seen.has(ni) || excl.has(ni) || !g.canStep(x, z, nx, nz)) continue; seen.add(ni); q.push(ni); } }
+    return starts.every(i => seen.has(i));
+  }
+  keepsLinks(cells, free = []) {
+    const g = this.grid, W = g.w, own = new Set(cells.map(([x, z]) => z * W + x)), near = [];
+    if (!free.length) {                                                            // 나무·바위 하나: 둘레 걸을 수 있는 칸끼리 가까이에서 이어지면 바로 통과(붓·고스트가 매번 섬 전체를 세지 않게)
+      const nb = []; for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz, i = nz * W + nx; if (g.inBounds(nx, nz) && !own.has(i) && g.isWalkable(nx, nz)) nb.push(i); }
+      if (this.localLinked(own, nb)) return true;
+    }
+    const before = free.length ? this.probeComps([], free) : this.comps();
+    for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const i = nz * W + nx; if (own.has(i) || before[i] < 0) continue; near.push(i);
+    }
+    if (near.length < 2) return true;
+    const after = this.probeComps(cells, free), pair = new Map();
+    for (const i of near) { const b = before[i], a = after[i]; if (!pair.has(b)) pair.set(b, a); else if (pair.get(b) !== a) return false; }
+    return true;
+  }
+  /** 파기: 다 지은 건물 문 → 공식은행 문 이어짐이 끊기지 않나(은행이 없으면 검사 안 함) */
+  keepsBankLink(x, z, e) { return !this.digLinkProblem(x, z, e); }
+  /** 파기(땅 → 물) 길 검사: 다 지은 건물 문 → 공식은행 문 이어짐, 그리고 밖에 있는 갈매미(헤엄 중이면 올라올 칸)가 물에 둘러싸여 갇히지 않는가.
+   *  기준 칸은 공식은행 문(은행이 없는 예전 섬은 섬 가운데). 문제가 있으면 까닭(한국어), 없으면 "" */
+  digLinkProblem(x, z, e) {
+    const g = this.grid, W = g.w;
+    { const nb = [];                                                               // 빠른 길: 이 칸으로 드나들던 이웃끼리 가까이에서 이어지면 아무 길도 안 끊김
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && g.canStep(x, z, nx, nz)) nb.push(nz * W + nx); }
+      if (this.localLinked(new Set([z * W + x]), nb)) return ""; }
+    const bank = this.bankB(); let ref = bank ? bank.door : { x: Math.floor(this.center?.x ?? g.w / 2), z: Math.floor(this.center?.z ?? g.h / 2) };
+    if (ref.x === x && ref.z === z) { const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => g.inBounds(x + dx, z + dz) && g.canStep(x, z, x + dx, z + dz)); if (!n) return ""; ref = { x: x + n[0], z: z + n[1] }; }   // 은행 없는 섬의 가운데 칸을 파면 이웃 칸을 기준으로
+    const before = this.comps(), at = p => g.inBounds(p.x, p.z) ? before[p.z * W + p.x] : -1, home = at(ref); if (home < 0) return "";
+    const doors = bank ? [...this.buildings.values()].filter(b => b !== bank && this.isDone(b) && !BUILDINGS[b.defId].bridge && at(b.door) === home).map(b => b.door) : [];
+    const gulls = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && !u.sailing)
+      .map(u => u.swimming && u.swim ? { x: u.swim.sx, z: u.swim.sz } : { x: Math.floor(u.x), z: Math.floor(u.z) }).filter(p => !(p.x === x && p.z === z) && at(p) === home);
+    if (!doors.length && !gulls.length) return "";
+    const after = this.probeComps([[x, z]], [], e), aid = p => after[p.z * W + p.x], h = aid(ref);
+    if (!doors.every(d => aid(d) === h)) return "길이 끊겨요(다리를 먼저 놓아요)";
+    if (!gulls.every(p => aid(p) === h)) return "갈매미가 갇혀요(물로 둘러싸지 말아 주세요)";
+    return "";
+  }
+  /** 놓은 덤불·꽃을 지움(건물·나무·지형지물·높이 바꾸기). 돈은 안 돌려줌 */
+  dropDecor(cells) {
+    for (const [x, z] of cells) { const key = CU.decorKey(x, z); if (!this.decor.add.has(key)) continue; this.decor.add.delete(key); this.emit("decorChanged", { x, z, k: null, v: 0, off: this.decor.off.has(key) }); }
+  }
+  /** 바라보는 칸이 땅이 되었거나 서는 칸을 못 쓰게 된 낚시 자리를 지움(낚시터 자리 dock은 빼고). 찜한 갈매미는 그만둠 */
+  pruneSpots() {
+    for (const s of [...this.spots]) {
+      if (s.dock || (this.grid.isWater(s.x + s.dir[0], s.z + s.dir[1]) && this.grid.isWalkable(s.x, s.z))) continue;
+      this.spots.splice(this.spots.indexOf(s), 1);
+      for (const u of this.units) if (u.focus === s) setIdle(u, this.rnd, this, 0.6);
+      this.emit("spotRemoved", s);
+    }
+  }
+  /** 그 칸의 나무·야자수·바위·광석 모듈(지형지물·소품은 null) */
+  natureAt(x, z) { const m = this.moduleAt(x, z); return m && CU.NATURE.includes(m.defId) ? m : null; }
+  moduleAt(x, z) { const id = this.grid.get(x, z)?.occupiedId; return id ? this.modules.find(m => m.id === id) || null : null; }
+  natureLimit(kind) {
+    if ((kind === "tree" || kind === "palm") && this.trees.length >= CU.LIMITS.trees) return `나무는 섬에 ${CU.LIMITS.trees}그루까지예요`;
+    if (kind === "ore" && this.ores.length >= CU.LIMITS.ores) return `광석 바위는 섬에 ${CU.LIMITS.ores}개까지예요`;
+    if (kind === "beachRock" && this.modules.filter(m => m.defId === "beachRock").length >= CU.LIMITS.rocks) return `바위는 섬에 ${CU.LIMITS.rocks}개까지예요`;
+    return "";
+  }
+  /** 심기·놓기: kind = tree | palm | beachRock | ore | auto(모래면 야자수, 아니면 나무). 새 나무는 묘목(TREE_GROW초), 새 광석 바위는 빈 바위(ORE_FILL초).
+   *  opt: dry, free, rot, variant(없으면 칸 해시), (되돌리기용) id, grow, by. 성공: { ok, cost, kind, x, z, module, tree?, ore?, inverse } */
+  placeNature(kind, x, z, opt = {}) {
+    const g = this.grid, fail = (reason, cost = 0, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    if (kind === "auto") kind = g.inBounds(x, z) ? CU.autoKind(g.get(x, z).groundType) : "tree";
+    if (!CU.NATURE.includes(kind)) return fail("심을 수 없는 것이에요");
+    const cost = opt.free ? 0 : this.customCost("place", kind);
+    const why = this.landProblem(x, z, kind); if (why) return fail(why, cost);
+    if (this.unitOn([[x, z]])) return fail("갈매미가 서 있어요", cost);
+    const lim = this.natureLimit(kind); if (lim) return fail(lim, cost);
+    if (!opt.restore && !this.keepsLinks([[x, z]])) return fail("길이 막혀요(갈매미가 지나갈 틈을 남겨 주세요)", cost);   // 되돌리기(restore)는 원래 있던 자리라 길 검사 안 함
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), cost, true);
+    if (opt.dry) return { ok: true, dry: true, cost, kind, x, z };
+    const m = { id: opt.id || `${kind}-c${this.nextId++}`, defId: kind, cells: [[x, z]], rot: opt.rot ?? CU.rotAt(x, z), variant: opt.variant ?? CU.variantAt(x, z) };
+    const by = "by" in opt ? opt.by : "player"; if (by) m.by = by;
+    const grow = opt.grow ?? (kind === "tree" || kind === "palm" ? CU.TREE_GROW : kind === "ore" ? CU.ORE_FILL : 0); if (grow > 0) m.grow = grow;
+    const def = MODULES[kind]; g.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
+    this.modules.push(m); const t = this.trackModule(m);
+    this.payCustom(cost); this.dropDecor(m.cells);
+    this.emit("moduleAdded", { module: m, ...t }); if (!opt.quiet) this.emit("custom", { op: "place", kind, cost, x, z });
+    return { ok: true, cost, kind, x, z, module: m, ...t, inverse: this.undoOf({ op: "removeNature", args: { id: m.id }, refund: cost }, opt) };
+  }
+  /** 치우기·뽑기: 모듈 id 또는 { x, z }. 나무·돌을 주지 않음(공짜 자원 막기). 이 나무·광석을 노리던 갈매미는 찜을 풀고 그만둠.
+   *  지형지물은 "옮기기만", 그 밖의 소품은 치울 수 없음. 성공: { ok, cost, module, inverse } */
+  removeNature(target, opt = {}) {
+    const fail = (reason, cost = 0, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    const m = typeof target === "string" ? this.modules.find(o => o.id === target) : target && this.grid.inBounds(target.x, target.z) ? this.moduleAt(target.x, target.z) : null;
+    if (!m) return fail("치울 게 없어요");
+    if (CU.LANDMARKS.includes(m.defId)) return fail(`${josa(CU.NAMES[m.defId], "은", "는")} 옮기기만 할 수 있어요`);
+    if (!CU.NATURE.includes(m.defId)) return fail("치울 수 없어요");
+    const cost = opt.free ? 0 : this.customCost("remove", m.defId);
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), cost, true);
+    const [x, z] = m.cells[0];
+    if (opt.dry) return { ok: true, dry: true, cost, kind: m.defId, x, z, module: m };
+    const list = m.defId === "ore" ? this.ores : m.defId === "beachRock" ? null : this.trees, e = list?.find(t => t.id === m.id);
+    const grow = !e ? 0 : e.grow > 0 ? Math.ceil(e.grow) : e.alive ? 0 : 30;      // 되돌리면: 묘목은 남은 시간 그대로, 다 베인 그루터기는 30초 뒤 다시 자람
+    if (e) {
+      e.alive = false; e.removed = true;                                           // 다시 자라기 타이머가 되살리지 않게
+      for (const u of this.units) if (u.focus === e) setIdle(u, this.rnd, this, 0.6);   // 찜 풀기(도끼질 중이던 갈매미는 나무를 못 얻음)
+      list.splice(list.indexOf(e), 1);
+    }
+    this.modules.splice(this.modules.indexOf(m), 1); this.grid.release(m.id);
+    this.payCustom(cost);
+    this.emit("moduleRemoved", { module: m }); if (!opt.quiet) this.emit("custom", { op: "remove", kind: m.defId, cost, x, z });
+    const args = { kind: m.defId, x, z, id: m.id, rot: m.rot, variant: m.variant, grow, by: m.by ?? null };
+    return { ok: true, cost, kind: m.defId, x, z, module: m, inverse: this.undoOf({ op: "placeNature", args, refund: cost }, opt) };
+  }
+  /** 덤불·꽃 놓기(걷기를 막지 않음, 칸마다 하나). opt.v = 모양(0~3, 없으면 칸 해시). 성공: { ok, cost, x, z, k, v, inverse } */
+  placeDecor(kind, x, z, opt = {}) {
+    const fail = (reason, cost = 0, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    if (!CU.DECOR.includes(kind)) return fail("놓을 수 없는 것이에요");
+    const cost = opt.free ? 0 : this.customCost("place", kind);
+    const why = this.landProblem(x, z, kind); if (why) return fail(why, cost);
+    const key = CU.decorKey(x, z), had = this.decor.add.get(key);
+    if (had) return fail(`이미 ${josa(CU.NAMES[had.k], "이", "가")} 있어요`, cost);
+    if (this.decor.add.size >= CU.LIMITS.decor) return fail(`덤불·꽃은 섬에 ${CU.LIMITS.decor}개까지예요`, cost);
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), cost, true);
+    const v = Math.max(0, Math.min(3, (opt.v ?? CU.variantAt(x, z, 4)) | 0));
+    if (opt.dry) return { ok: true, dry: true, cost, x, z, k: kind, v };
+    this.decor.add.set(key, { k: kind, v }); this.payCustom(cost);
+    this.emit("decorChanged", { x, z, k: kind, v, off: this.decor.off.has(key) }); if (!opt.quiet) this.emit("custom", { op: "place", kind, cost, x, z });
+    return { ok: true, cost, x, z, k: kind, v, inverse: this.undoOf({ op: "clearDecor", args: { x, z, k: kind }, refund: cost }, opt) };
+  }
+  /** 덤불·꽃 치우기: 놓은 것이 있으면 그것을, 없으면 그림이 씨앗으로 만든 소품을 숨길 칸(off)에 넣음(잔디·모래·바위·흙 땅). 성공: { ok, cost, x, z, was: { k, v } | "seed", inverse } */
+  clearDecor(x, z, opt = {}) {
+    const fail = (reason, cost = 0, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    const key = CU.decorKey(x, z), had = this.decor.add.get(key), g = this.grid;
+    const kind = had ? had.k : "bush", cost = opt.free ? 0 : this.customCost("remove", kind);
+    if (!had) {
+      const c = g.get(x, z);
+      if (!c || g.isWater(x, z) || c.occupiedId || this.isPlot(x, z) || CU.pavedGround(c.groundType) || this.decor.off.has(key)) return fail("치울 게 없어요");
+    }
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), cost, true);
+    const was = had ? { ...had } : "seed";
+    if (opt.dry) return { ok: true, dry: true, cost, x, z, was };
+    if (had) this.decor.add.delete(key); else this.decor.off.add(key);
+    this.payCustom(cost);
+    this.emit("decorChanged", { x, z, k: null, v: 0, off: this.decor.off.has(key) }); if (!opt.quiet) this.emit("custom", { op: "remove", kind: had ? had.k : "decor", cost, x, z });
+    const inv = had ? { op: "placeDecor", args: { x, z, k: had.k, v: had.v }, refund: cost } : { op: "unhideDecor", args: { x, z }, refund: cost };
+    return { ok: true, cost, x, z, was, inverse: this.undoOf(inv, opt) };
+  }
+  /** 지형지물(cave · lighthouse · pier · breakwater) 모듈, 이 섬에 없으면 null. 지우는 API는 없음(옮기기만) */
+  landmark(defId) { return CU.LANDMARKS.includes(defId) ? this.modules.find(m => m.defId === defId) || null : null; }
+  /** 옮긴 뒤 차지 칸(고스트용, 아무것도 안 바꿈). 기준 칸 (ax, az) = 돌린 모양의 왼쪽 위 */
+  landmarkCells(defId, ax, az, rot = 0) { const m = this.landmark(defId); return m ? CU.landmarkCellsOf(m, ax, az, rot) : null; }
+  /** 이야기·화면용 "발치" 칸 { x, z }: 동굴은 입구 앞 걸을 수 있는 칸, 그 밖은 가장 가까운 걸을 수 있는 칸. 좌표를 박지 말고 이것으로 찾음 */
+  landmarkFront(defId) {
+    const m = this.landmark(defId); if (!m) return null;
+    if (defId === "cave") { const f = CU.frontCells(m.cells, m.rot || 0).sort((p, q) => p[1] - q[1] || p[0] - q[0]); const ok = f.find(([x, z]) => this.grid.isWalkable(x, z)) || f[0]; if (ok) return { x: ok[0], z: ok[1] }; }
+    const s = nearestWalkable(this.grid, m.cells[0][0], m.cells[0][1], 6); return s ? { x: s[0], z: s[1] } : null;
+  }
+  /** 지형지물을 cells·rot에 둘 수 없는 까닭, 되면 "" (자기 칸은 비어 있는 것으로 봄) */
+  landmarkProblem(m, cells, rot, restore = false) {
+    const g = this.grid, self = m.id, def = m.defId;
+    if (!cells.every(([x, z]) => g.inBounds(x, z))) return "섬 밖이에요";
+    const other = (x, z) => { const id = g.get(x, z).occupiedId; return id && id !== self; };
+    if (def === "pier" || def === "breakwater") {
+      for (const [x, z] of cells) {
+        if (!g.isWater(x, z)) return def === "pier" ? "부두는 물 위에 놓아요" : "방파제는 바다에만 놓아요";
+        if (other(x, z)) return "다른 것과 겹쳐요";
+        const b = this.berthOwner(x, z); if (b) return `${BUILDINGS[b.defId].name} 앞 물이에요`;
+        if (this.spots.some(s => s.x + s.dir[0] === x && s.z + s.dir[1] === z && !(def === "pier" && !s.dock && m.cells.some(([a, c]) => a === s.x && c === s.z)))) return "낚시 자리 앞 물이에요";   // 부두 위 자리는 부두와 같이 옮겨지므로 뺌
+      }
+      if (def === "pier") for (const [x, z] of CU.backCells(cells, rot)) {
+        const c = g.get(x, z), occ = c && c.occupiedId && c.occupiedId !== self ? g.occupants.get(c.occupiedId) : null;
+        if (!c || g.isWater(x, z) || (occ && !occ.walkable)) return "부두는 물가에서 바다 쪽으로 놓아요(R로 방향 돌리기)";
+      }
+      if (this.unitOn(cells.filter(([x, z]) => !m.cells.some(([a, b]) => a === x && b === z)))) return "갈매미가 있어요";
+      return "";
+    }
+    for (const [x, z] of cells) { const why = this.landProblem(x, z, null, self); if (why) return why; }
+    const e = g.get(cells[0][0], cells[0][1]).elevation;
+    if (cells.some(([x, z]) => Math.abs(g.get(x, z).elevation - e) > 1e-6)) return "바닥이 평평하지 않아요";
+    if (def === "cave") for (const [x, z] of CU.frontCells(cells, rot)) {
+      const c = g.get(x, z); if (!c) return "동굴 입구 앞이 막혀 있어요(R로 방향 돌리기)";
+      const h = c.occupiedId === self ? (g.isWater(x, z) ? null : c.elevation) : g.walkHeight(x, z);
+      if (h === null || Math.abs(h - e) > MAX_STEP + 1e-6 || g.doorOwner(x, z)) return "동굴 입구 앞이 막혀 있어요(R로 방향 돌리기)";
+    }
+    if (def === "lighthouse") {
+      const R = CU.LIGHTHOUSE_SEA, sea = cells.some(([x, z]) => { for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (g.inBounds(x + dx, z + dz) && g.isWater(x + dx, z + dz)) return true; return false; });
+      if (!sea) return `등대는 바닷가(물에서 ${R}칸 안)에 세워요`;
+    }
+    if (this.unitOn(cells)) return "갈매미가 서 있어요";
+    if (!restore && !this.keepsLinks(cells, m.cells)) return "길이 막혀요(갈매미가 지나갈 틈을 남겨 주세요)";   // 되돌리기는 원래 있던 자리(섬이 만든 동굴 뒤 비탈처럼 그 자리로만 이어지던 길도 원래대로)
+    return "";
+  }
+  /** 지형지물 옮기기(섬에 하나씩, 지우기 없음). rot = 0~3(동굴 입구·부두가 바다로 뻗는 방향). 부두는 끝 낚시 자리를 같이 옮김, 동굴은 이름표(zones)를 입구 앞으로.
+   *  성공: { ok, cost, module, from: { cells, rot }, inverse } */
+  moveLandmark(defId, ax, az, rot = null, opt = {}) {
+    const fail = (reason, cost = 0, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    if (!CU.LANDMARKS.includes(defId)) return fail("옮길 수 없는 것이에요");
+    const m = this.landmark(defId); if (!m) return fail("이 섬에는 없어요");
+    rot = (((rot ?? m.rot ?? 0) | 0) % 4 + 4) % 4;
+    const cells = opt.cells ? opt.cells.map(c => [c[0], c[1]]) : CU.landmarkCellsOf(m, ax, az, rot);
+    const cost = opt.free ? 0 : this.customCost("move", defId);
+    const same = cells.length === m.cells.length && cells.every((c, i) => c[0] === m.cells[i][0] && c[1] === m.cells[i][1]) && rot === (m.rot || 0);
+    if (same) return fail("지금 자리와 같아요", cost);
+    const why = this.landmarkProblem(m, cells, rot, !!opt.restore); if (why) return fail(why, cost);
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), cost, true);
+    if (opt.dry) return { ok: true, dry: true, cost, cells, rot };
+    const from = { cells: m.cells.map(c => [c[0], c[1]]), rot: m.rot || 0 }, def = MODULES[defId];
+    const riders = defId === "pier" ? this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && from.cells.some(([x, z]) => x === Math.floor(u.x) && z === Math.floor(u.z))) : [];
+    this.grid.release(m.id); m.cells = cells; m.rot = rot;
+    this.grid.occupy(cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
+    if (defId === "pier") {
+      for (const s of this.spots) {                                                // 부두 위 낚시 자리(낚시터 자리 아님)는 같은 모양으로 따라감
+        const i = s.dock ? -1 : from.cells.findIndex(([x, z]) => x === s.x && z === s.z); if (i < 0) continue;
+        s.x = cells[i][0]; s.z = cells[i][1]; s.dir = CU.frontDir(rot);
+        for (const u of this.units) if (u.focus === s) setIdle(u, this.rnd, this, 0.6);
+      }
+      const end = CU.frontCells(cells, rot), fz = this.zones.find(z => z.id === "fishing"), [dx, dz] = CU.frontDir(rot);
+      if (fz && end.length) { fz.x = end.reduce((s, c) => s + c[0], 0) / end.length - dx; fz.z = end.reduce((s, c) => s + c[1], 0) / end.length - dz; }
+      for (const u of riders) { if (this.grid.isWalkable(Math.floor(u.x), Math.floor(u.z))) continue; const s = nearestWalkable(this.grid, Math.floor(u.x), Math.floor(u.z)); if (s) { u.x = s[0] + 0.5; u.z = s[1] + 0.5; u.y = this.standHeight(u.x, u.z); } setIdle(u, this.rnd, this, 0.6); }
+    }
+    if (defId === "cave") { const z = this.zones.find(o => o.id === "cave"), at = CU.caveLabelAt(cells, rot); if (z && at) { z.x = at.x; z.z = at.z; } }
+    if (defId === "cave" || defId === "lighthouse") this.dropDecor(cells);
+    this.pruneSpots(); this.payCustom(cost);
+    this.emit("moduleMoved", { module: m, from }); if (!opt.quiet) this.emit("custom", { op: "move", kind: defId, cost, x: cells[0][0], z: cells[0][1] });
+    return { ok: true, cost, module: m, from, inverse: this.undoOf({ op: "moveLandmark", args: { defId, cells: from.cells, rot: from.rot, expect: cells.map(c => [c[0], c[1]]) }, refund: cost }, opt) };
+  }
+  /** 파기 검사(땅 → 물). opt.cur: 지금 높이 대신 볼 높이(높이 도구의 스르르 목표), e: 바뀔 높이 */
+  checkDig(x, z, opt = {}, e = CU.POND_DEPTH) {
+    const g = this.grid, cost = opt.free ? 0 : this.customCost("dig"), fail = (reason, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    if (!g.inBounds(x, z)) return fail("섬 밖이에요");
+    const c = g.get(x, z), cur = opt.cur ?? c.elevation; if (cur < SEA_LEVEL) return fail("이미 물이에요");
+    if (c.occupiedId) return fail("건물·나무가 있는 칸은 팔 수 없어요");
+    if (this.isPlot(x, z)) return fail("밭은 팔 수 없어요");
+    if (g.doorOwner(x, z)) return fail("건물 문 앞은 팔 수 없어요");
+    const cut = this.digLinkProblem(x, z, e); if (cut) return fail(cut);
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), true);
+    return { ok: true, cost, x, z };
+  }
+  /** 메우기 검사(물 → 땅): 다리·부두가 없고, 선착장·낚시터 앞 물이 아니고, 얕은 물(FILL_MIN 이상, 플레이어가 판 칸은 깊어도 됨)이고, 4방향에 땅이 있어야 함 */
+  checkFill(x, z, opt = {}) {
+    const g = this.grid, cost = opt.free ? 0 : this.customCost("fill"), fail = (reason, short = false) => ({ ok: false, reason, cost, ...(short ? { short } : {}) });
+    if (!g.inBounds(x, z)) return fail("섬 밖이에요");
+    const c = g.get(x, z), cur = opt.cur ?? c.elevation; if (cur >= SEA_LEVEL) return fail("이미 땅이에요");
+    if (c.occupiedId) return fail("다리·부두가 있는 칸은 메울 수 없어요");
+    const b = this.berthOwner(x, z); if (b) return fail(`${BUILDINGS[b.defId].name} 앞 물이에요`);
+    if (cur < CU.FILL_MIN - 1e-9 && !this.dug.has(CU.decorKey(x, z))) return fail("먼 바다는 메울 수 없어요");
+    if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => g.inBounds(x + dx, z + dz) && !g.isWater(x + dx, z + dz))) return fail("땅에 붙은 물만 메울 수 있어요");
+    if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), true);
+    return { ok: true, cost, x, z };
+  }
+  /** 높이 도구(reshape)용: 땅↔물 경계를 넘으면 파기·메우기 검사를 거치고 값을 냄, 섬이 만든 먼 바다는 높이지 못함. 막히면 customRefused를 알리고 false */
+  reshapeAllowed(x, z, cur, e) {
+    const wasW = cur < SEA_LEVEL, willW = e < SEA_LEVEL;
+    if (wasW && willW) {
+      if (e > cur && cur < CU.FILL_MIN - 1e-9 && !this.dug.has(CU.decorKey(x, z))) { this.emit("customRefused", { op: "fill", reason: "먼 바다는 메울 수 없어요", cost: 0, x, z }); return false; }
+      if (e < cur && cur >= CU.FILL_MIN - 1e-9 && e < CU.FILL_MIN - 1e-9) this.dug.add(CU.decorKey(x, z));   // 메울 수 있던 얕은 물을 플레이어가 깊게 팜 → 다시 높이거나 메울 수 있게(먼 바다로 잠기지 않게)
+      return true;
+    }
+    if (wasW === willW) return true;
+    const op = willW ? "dig" : "fill", r = willW ? this.checkDig(x, z, { cur }, e) : this.checkFill(x, z, { cur });
+    if (!r.ok) { this.emit("customRefused", { op, reason: r.reason, cost: r.cost, x, z }); return false; }
+    this.payCustom(r.cost); this.emit("custom", { op, kind: "reshape", cost: r.cost, x, z });
+    return true;
+  }
+  /** 한 칸 파기: 높이를 POND_DEPTH(−0.6 m)로(물·모래 바닥). 선 갈매미는 가까운 땅으로(applyHeight). 성공: { ok, cost, x, z, cell: { x, z, e0, g0, e1 }, inverse } */
+  digCell(x, z, opt = {}) {
+    const r = this.checkDig(x, z, opt); if (!r.ok || opt.dry) return opt.dry && r.ok ? { ...r, dry: true } : r;
+    const c = this.grid.get(x, z), cell = { x, z, e0: c.elevation, g0: c.groundType, e1: CU.POND_DEPTH };
+    this.grid.setGround(x, z, "Sand"); this.applyHeight(x, z, CU.POND_DEPTH); this.payCustom(r.cost);
+    if (!opt.quiet) this.emit("custom", { op: "dig", kind: "cell", cost: r.cost, x, z });
+    return { ok: true, cost: r.cost, x, z, cell, inverse: this.undoOf({ op: "restoreCells", args: { cells: [cell] }, refund: r.cost }, opt) };
+  }
+  /** 한 칸 메우기: 높이를 FILL_HEIGHT(0 m, 모래)로. 바라보던 물이 땅이 된 낚시 자리는 지워짐. 성공은 digCell과 같은 모양 */
+  fillCell(x, z, opt = {}) {
+    const r = this.checkFill(x, z, opt); if (!r.ok || opt.dry) return opt.dry && r.ok ? { ...r, dry: true } : r;
+    const c = this.grid.get(x, z), cell = { x, z, e0: c.elevation, g0: c.groundType, e1: CU.FILL_HEIGHT };
+    this.applyHeight(x, z, CU.FILL_HEIGHT); this.payCustom(r.cost);
+    if (!opt.quiet) this.emit("custom", { op: "fill", kind: "cell", cost: r.cost, x, z });
+    return { ok: true, cost: r.cost, x, z, cell, inverse: this.undoOf({ op: "restoreCells", args: { cells: [cell] }, refund: r.cost }, opt) };
+  }
+  /** 여러 칸 파기·메우기(붓·길·네모): 못 하는 칸은 건너뛰고(skipped), 돈이 떨어지면 거기서 멈춤(앞의 칸은 됨). 되돌리기 하나로 묶음.
+   *  { ok: 한 칸이라도 됐나, done 칸 수, cost, skipped: [{ x, z, reason }], cells, inverse, reason(아무것도 못 했을 때) } */
+  digCells(cells, opt = {}) { return this.cellsOp("dig", cells, opt); }
+  fillCells(cells, opt = {}) { return this.cellsOp("fill", cells, opt); }
+  cellsOp(op, cells, opt) {
+    const done = [], skipped = []; let cost = 0, stop = -1;
+    for (let i = 0; i < cells.length; i++) {
+      const [x, z] = cells[i];
+      if (opt.dry) {                                                               // 미리보기: 칸마다 따로 보고 값은 쌓아서 금고와 비교
+        const r = op === "dig" ? this.checkDig(x, z, { free: opt.free }) : this.checkFill(x, z, { free: opt.free });
+        if (r.ok && cost + r.cost > this.bank.vault) { skipped.push({ x, z, reason: CU.customReason(cost + r.cost, this.bank.vault) }); stop = i; break; }
+        if (r.ok || r.short) { if (!r.ok) { skipped.push({ x, z, reason: r.reason }); stop = i; break; } done.push({ x, z }); cost += r.cost; } else skipped.push({ x, z, reason: r.reason });
+        continue;
+      }
+      const r = op === "dig" ? this.digCell(x, z, { free: opt.free, noUndo: true, quiet: true }) : this.fillCell(x, z, { free: opt.free, noUndo: true, quiet: true });
+      if (r.ok) { done.push(r.cell); cost += r.cost; continue; }
+      skipped.push({ x, z, reason: r.reason }); if (r.short) { stop = i; break; }
+    }
+    if (stop >= 0) for (let i = stop + 1; i < cells.length; i++) skipped.push({ x: cells[i][0], z: cells[i][1], reason: "금고가 모자라 멈췄어요" });
+    const out = { ok: done.length > 0, done: done.length, cost, skipped, cells: done, reason: done.length ? "" : skipped[0]?.reason || "할 칸이 없어요" };
+    if (opt.dry || !done.length) return { ...out, dry: !!opt.dry };
+    this.emit("custom", { op, kind: "cells", cost, n: done.length, x: done[0].x, z: done[0].z });
+    return { ...out, inverse: this.undoOf({ op: "restoreCells", args: { cells: done }, refund: cost }, opt) };
+  }
+  /** 높이 도구의 되돌리기·다시하기용(화면이 applyHeight를 바로 부르지 않게): 칸을 바닥 g·높이 e로. canReshape를 보고, 땅↔물 경계를 넘으면 파기·메우기 검사·값 */
+  restoreCell(x, z, ground, e, opt = {}) {
+    if (!this.canReshape(x, z)) return { ok: false, reason: "건물·나무·문 앞·밭 칸은 바꿀 수 없어요", cost: 0 };
+    const c = this.grid.get(x, z), wasW = c.elevation < SEA_LEVEL, willW = e < SEA_LEVEL; let cost = 0;
+    if (wasW !== willW) { const r = willW ? this.checkDig(x, z, opt, e) : this.checkFill(x, z, opt); if (!r.ok) return r; cost = r.cost; }
+    if (opt.dry) return { ok: true, dry: true, cost };
+    this.applyHeight(x, z, e); if (ground && c.groundType !== ground && !willW) { this.grid.setGround(x, z, ground); this.emit("ground", { x, z }); }
+    this.payCustom(cost); return { ok: true, cost };
+  }
+  /** 되돌리기: 꾸미기 결과의 inverse를 실행하고 낸 값을 돌려줌. 표가 살아 있고 대상이 그대로일 때만(한 번만). 성공: { ok, refund, … } */
+  applyInverse(inv) {
+    const changed = why => ({ ok: false, reason: `그사이 바뀌어서 되돌릴 수 없어요${why ? ` (${why})` : ""}`, cost: 0 });
+    if (!inv || !this.undo.has(inv.token)) return { ok: false, reason: "이미 되돌렸거나 되돌릴 수 없어요", cost: 0 };
+    const a = inv.args || {}, free = { free: true, noUndo: true, quiet: true, restore: true }; let r;
+    switch (inv.op) {
+      case "removeNature": {
+        const m = this.modules.find(o => o.id === a.id), e = this.trees.concat(this.ores).find(t => t.id === a.id);
+        r = !m ? changed("이미 없어요") : e && (!e.sapling || e.claimed) ? changed("다 자랐거나 갈매미가 쓰는 중") : this.removeNature(a.id, free); break;
+      }
+      case "placeNature": r = this.placeNature(a.kind, a.x, a.z, { ...free, id: a.id, rot: a.rot, variant: a.variant, grow: a.grow, by: a.by }); break;
+      case "moveLandmark": {
+        const m = this.landmark(a.defId), same = m && m.cells.length === a.expect.length && m.cells.every((c, i) => c[0] === a.expect[i][0] && c[1] === a.expect[i][1]);
+        r = same ? this.moveLandmark(a.defId, 0, 0, a.rot, { ...free, cells: a.cells }) : changed(); break;
+      }
+      case "restoreCells": {
+        const g = this.grid, bad = a.cells.find(c => Math.abs(g.get(c.x, c.z).elevation - c.e1) > 1e-6 || !this.canReshape(c.x, c.z));
+        if (bad) { r = changed(); break; }
+        for (const c of a.cells) { this.applyHeight(c.x, c.z, c.e0); if (g.get(c.x, c.z).groundType !== c.g0) { g.setGround(c.x, c.z, c.g0); this.emit("ground", { x: c.x, z: c.z }); } }
+        r = { ok: true, cells: a.cells }; break;
+      }
+      case "clearDecor": r = this.decor.add.get(CU.decorKey(a.x, a.z))?.k === a.k ? this.clearDecor(a.x, a.z, free) : changed(); break;
+      case "placeDecor": r = this.placeDecor(a.k, a.x, a.z, { ...free, v: a.v }); break;
+      case "unhideDecor": {
+        const key = CU.decorKey(a.x, a.z); if (!this.decor.off.has(key)) { r = changed(); break; }
+        this.decor.off.delete(key); this.emit("decorChanged", { x: a.x, z: a.z, k: this.decor.add.get(key)?.k ?? null, v: this.decor.add.get(key)?.v ?? 0, off: false }); r = { ok: true }; break;
+      }
+      default: r = { ok: false, reason: "모르는 되돌리기예요" };
+    }
+    if (!r.ok) return r.reason?.startsWith("그사이") || r.reason === "모르는 되돌리기예요" ? r : changed(r.reason);
+    this.undo.delete(inv.token); const refund = Math.max(0, inv.refund || 0); this.refundCustom(refund);
+    this.emit("custom", { op: "undo", kind: inv.op, cost: 0, refund, x: a.x ?? a.cells?.[0]?.x ?? a.cells?.[0]?.[0], z: a.z ?? a.cells?.[0]?.z ?? a.cells?.[0]?.[1] });
+    return { ...r, refund, inverse: null };
   }
 
   // ---- 건물(지시서 4-1). 놓으면 공사장이 되고, 갈매미가 나무 1·돌 1을 들고 와서 망치질 3번씩 해서 완공한다.
@@ -987,6 +1436,7 @@ export class World {
     if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
     this.buildings.set(b.id, b); this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
+    this.dropDecor(b.cells);                                                     // 지은 칸의 놓은 덤불·꽃은 지움(돈은 안 돌려줌)
     if (this.isDone(b)) { this.completed(b); if (hits === null) this.builtNow(b); if (b.order) this.settleOrder(b); }   // ⚡ 바로 완공도 다 지은 것(불러오기·시험 받침은 hits를 넘김 → 아님)
     return { ok: true, building: b };
   }
@@ -1013,7 +1463,9 @@ export class World {
     if (def.bridge || def.pier) { const o = this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; } }
     if (def.dock) {
       const o = this.grid.occupants.get(b.id); if (o && !o.walkable) { o.walkable = true; this.grid.version++; }
-      const [x, z] = b.cells[0]; if (!this.spots.some(s => s.x === x && s.z === z)) this.spots.push({ x, z, dir: [x - b.door.x, z - b.door.z], claimed: null, dock: b.id });
+      const [x, z] = b.cells[0], had = this.spots.find(s => s.x === x && s.z === z);
+      if (had) had.dock = b.id;                                                    // 불러온 예전 저장(낚시 자리에 dock 표시가 빠짐)도 철거하면 같이 지워지게
+      else this.spots.push({ x, z, dir: [x - b.door.x, z - b.door.z], claimed: null, dock: b.id });
     }
   }
   /** 다 지은 계단을 걸을 수 있게(길찾기 다시) */
@@ -1078,6 +1530,7 @@ export class World {
   update(dt) {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
+    this.stepCustom(dt);
     this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt); this.stepSparkles(dt);
     const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람 × 촉촉함(마른 밭은 1/4 빠르기까지 느려짐, farming.js)
     for (const p of this.plots) { FM.stepMoisture(p, dt, this.season, this.weather.kind); if (p.stage === "growing" && (p.t -= dt * grow * FM.waterFactor(p.moisture)) <= 0) { p.stage = "ripe"; this.emit("plot", p); } }
@@ -1164,8 +1617,10 @@ export class World {
   // ---- 저장/불러오기
   /** savedAt: 저장하는 실제 시각(ms). 월드는 기기 시계를 모르므로 화면이 넣어 줌. */
   serialize(savedAt = null) {
+    this.syncGrow();
     return { version: 2, ownership: this.ownershipPending ? 0 : 1, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
-      spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.resWithLoads(),
+      spots: this.spots.map(({ x, z, dir, dock }) => dock ? { x, z, dir, dock } : { x, z, dir }), zones: this.zones,
+      decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
@@ -1184,6 +1639,7 @@ export class World {
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
     for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; } }
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
+    w.decor = CU.decorFromSave(j.decor, (x, z, k) => !w.landProblem(x, z, k));      // 덤불·꽃 겹(예전 저장엔 없음 → 빈 겹). 건물을 다시 놓은 뒤에(그사이 못 쓰게 된 칸은 버림)
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
