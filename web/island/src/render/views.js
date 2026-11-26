@@ -35,7 +35,8 @@ export class BuildingViews {
       holder.updateMatrixWorld(true); const o = new THREE.Vector3(0, 5, 0.2).applyMatrix4(holder.matrixWorld);
       const hit = new THREE.Raycaster(o, new THREE.Vector3(0, -1, 0)).intersectObject(model, true)[0]; if (hit) b.seatY = hit.point.y;
     }
-    const box = new THREE.Box3().setFromObject(model); v.height = box.max.y + 0.35;   // 🐦 표시는 실제 지붕 위에
+    holder.updateWorldMatrix(true, false);                                          // 모델이 이미 받아져 있으면(불러오기·같은 건물 또 짓기) 아직 한 번도 안 그려져 holder의 월드 행렬이 비어 있음 → 먼저 맞춤
+    const box = new THREE.Box3().setFromObject(model); v.height = box.max.y - holder.position.y + 0.35;   // 🐦 표시는 실제 지붕 위에(holder 기준 높이)
     if (def.asset) {                                                                // 밑동 그늘: 건물·소품이 땅에 떠 보이지 않게 둘레에 옅은 그늘 판(모두 묶어 그리기 1번, 그림자를 끈 설정에서도 보임)
       const g = v.ground = new THREE.Mesh(GROUND_GEO, groundShadeMat()); g.renderOrder = 1; g.userData.noToon = true;
       g.position.set((box.min.x + box.max.x) / 2, holder.position.y + 0.025, (box.min.z + box.max.z) / 2); g.scale.set((box.max.x - box.min.x) * 1.4, 1, (box.max.z - box.min.z) * 1.4);
