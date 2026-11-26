@@ -149,5 +149,10 @@ export class CoachMarks {
       if (!hit) left = `${Math.round(nl + b.width / 2)}px`;
     }
     box.style.left = left;
+    // 그래도 🎣 당기기 버튼을 덮으면(작은 세로 폰, 입질은 1~2초뿐) 그 위로 올림: 눌러야 할 버튼이 가려지는 것보다 위쪽 미니맵을 잠깐 덮는 게 나음
+    if (!left) { let lim = Infinity;
+      for (const sel of ["#tugBtn"]) { const e = document.querySelector(sel); if (!e || e.hidden || !e.getClientRects().length) continue;
+        const q = e.getBoundingClientRect(); if (q.width >= 2 && q.top < bottom && q.bottom > top && q.right > b.left && q.left < b.right) lim = Math.min(lim, q.top); }
+      if (lim < Infinity) { const up = `${Math.round(Math.max(8, lim - b.height - 8))}px`; if (box.style.top !== up) box.style.top = up; } }
   }
 }
