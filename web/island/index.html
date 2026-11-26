@@ -638,6 +638,7 @@
   :where(html[data-form="landscape"]) #stat { flex-wrap: nowrap; } :where(html[data-form="landscape"]) #stat > * { flex: 0 1 auto; min-width: 0; }   /* 가로 폰은 높이가 귀해서 상태 묶음은 한 줄(넘치면 말줄임) */
   :where(html[data-form="landscape"]) #tools .tbtn { max-width: calc(58*var(--u)); }   /* 왼쪽 레일 폭이 글자 길이로 늘지 않게(건물 열·카드 자리는 --edit-w 그대로) */
   html[data-form="wide"] #tools .tbtn .tl, html[data-form="medium"] #tools .tbtn .ts { display: inline-block; vertical-align: bottom; max-width: calc(100% - 1.7em); }
+  html[data-form="wide"][data-input="touch"] #tools .tbtn .tl { max-width: none; }   /* 큰 터치 화면(1280×800): 아이콘이 커서 「100% − 1.7em」 칸이 모자라 「바닥 칠…」「완.」으로 잘리던 것 — 탭은 제 이름 폭(판이 그만큼 넓어짐, 모자란 폭은 보조 줄이 양보) */
   :where(html[data-form="landscape"]) #info .iacts { flex-wrap: nowrap; }   /* 가로 폰: 행동 줄은 한 줄(긴 글자는 말줄임) → 카드가 위로 넘치지 않게 */
   /* 방 안(가로 폰·태블릿·PC): 오른쪽 세로 판을 비켜 그 왼쪽 가운데에 */
   html:not([data-form="portrait"]) body.inroom #coach { --room-w: calc(320*var(--u)); left: calc((100vw - var(--room-w) - var(--safe-r)) / 2); max-width: calc(100vw - var(--room-w) - var(--safe-r) - var(--safe-l) - calc(16*var(--u))); }
