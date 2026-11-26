@@ -5,7 +5,7 @@
 //  · 많을 때: 카메라에서 NP_NEAR m까지는 제 크기, 멀수록 NP_MIN_S배까지 작아짐. 가로등은 NP_LAMP_FADE m부터 옅어져 NP_LAMP_HIDE m 밖은 숨김(건물은 NP_HOUSE_FADE~NP_HOUSE_HIDE).
 //    화면에서 서로 겹치면(가운데 사이가 NP_GAP px × 크기 안) 건물 먼저·가까운 것 먼저 하나만 남김 → 멀리서 본 가로등 줄은 띄엄띄엄 몇 개만
 //  · DOM은 바뀐 값만 씀. 카메라·화면 크기·건물 목록·건물 표시가 그대로면 아무것도 안 함
-//  · 건물을 누르면(main.js onTapGround) 카드(#houseCard)에 까닭을 적음: 집은 집 카드 글 뒤에 덧붙이고, 가로등·가게는 카드를 따로 엶
+//  · 건물을 누르면(main.js onTapGround) 카드(#houseCard)에 까닭을 적음: hud가 카드를 열었으면(집·잡화점) 그 글 뒤에 덧붙이고, 아니면(가로등·카페·우체국) 카드를 따로 엶
 import * as THREE from "three";
 import { BUILDINGS } from "../data/catalog.js";
 import { POWER_RANGE, lacksPower, unpowered } from "../world/power.js";
@@ -32,11 +32,11 @@ export class NoPowerBadges {
   /** 섬에서 건물을 눌렀을 때(main.js: hud.houseCard · powerRange.tap 다음). 전기가 안 닿는 불 달린 건물이면 카드에 까닭을 적음 */
   tap(b) {
     const c = this.card, w = this.getWorld(); this.sel = null; if (!c || !b || !lacksPower(w, b)) return;
-    const def = BUILDINGS[b.defId], span = c.querySelector("span");
-    if (def.house && !c.hidden) span.textContent += ` · ${NO_POWER_WHY}`;            // 집 카드(주인·아늑함) 뒤에
+    const def = BUILDINGS[b.defId], span = c.querySelector("span"), mine = c.hidden;
+    if (!mine) span.textContent += ` · ${NO_POWER_WHY}`;                           // hud가 연 카드(집: 주인·아늑함 · 잡화점: 가구·옷) 뒤에
     else { c.querySelector("b").textContent = `${NP_EMOJI[def.id] || "🏠"} ${def.name}`; span.textContent = NO_POWER_WHY;
       const go = c.querySelector(".go"); if (go) go.hidden = true; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false; }
-    this.sel = b; this.own = !def.house;
+    this.sel = b; this.own = mine;
   }
   /** 카드를 연 건물에 전기가 들어오면(풍차 완공) 까닭 글을 지움 */
   cardSync(w) {

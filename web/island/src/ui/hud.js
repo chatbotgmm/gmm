@@ -18,10 +18,12 @@ import { stashTotals } from "../world/belongings.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
+import { josa } from "../util.js";
 import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 import { bankHtml } from "./bankView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
+import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
 import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
@@ -176,6 +178,10 @@ export class Hud {
     this.chipTown.onclick = () => { this.moreOpen.set("bank.town", true); this.openPhone(); this.openApp("bank"); };   // 마을 돈 → 은행 앱의 「마을에 도는 돈」 접기를 펼친 채로(2단계가 열쇠 bank.town을 씀)
     // 자세히 보기 접기(details.more): 펼침을 이번 실행 동안 기억(저장 안 함) → 앱이 5Hz로 다시 그려도 펼친 채. toggle은 거품이 안 올라와서 잡는 단계(capture)에서 들음
     this.moreOpen = new Map();
+    { const hx = document.querySelector("#houseCard .hcx"); hx.addEventListener("click", e => this.bldCardClick(e));   // 건물 카드 안 단추(칸을 다시 그려도 그대로)
+      // 누르는 동안(+ 뗀 뒤 0.3초)은 칸을 다시 그리지 않음: 누름과 뗌 사이에 단추·접기 줄이 바뀌면 그 누름이 사라짐(환자 남은 시간은 1초마다 바뀜)
+      // 뗌은 문서 전체에서 들음: 마우스를 누른 채 카드 밖으로 끌고 가 떼도 칸이 멈춘 채로 남지 않게
+      hx.addEventListener("pointerdown", () => { this.cardPress = Infinity; }); for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, () => { if (this.cardPress === Infinity) this.cardPress = performance.now() + 300; }, true); }
     document.addEventListener("toggle", e => { const d = e.target; if (d instanceof HTMLDetailsElement && d.classList.contains("more") && d.dataset.more) this.moreOpen.set(d.dataset.more, d.open); }, true);
     this.wishBtn = document.getElementById("chipWish"); this.wishBtn.onclick = () => { this.openPhone(); this.openApp("wish"); };
     this.seasonBtn = document.getElementById("seasonMode");                       // 이제 라벨(고르기는 옆 #segSeason)
@@ -253,12 +259,62 @@ export class Hud {
     const sw = (id, on) => { const b = $(id); b.classList.toggle("off", !on); b.setAttribute("aria-pressed", String(on)); };
     sw("motionBtn", root.dataset.motion === "reduce"); sw("leftHand", root.dataset.hand === "left"); sw("vibeBtn", root.dataset.vibe !== "off");
   }
-  /** 섬에서 집을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기) */
+  /** 섬에서 건물을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기 · 갈매미 따라가기).
+   *  다 지은 집은 예전 집 카드 그대로(🛋 들어가 꾸미기). 공사장·밭·의원·잡화점은 아래 칸(.hcx)에 핵심 요약 + 자세히 보기(bldView.js) — 5Hz로 바뀐 칸만 다시 그림.
+   *  b·span.dim·.go·.hx 구조는 그대로(noPower가 span 뒤에 「전기 없음」 까닭을 덧붙이고, powerRange가 풍차 카드로 씀). 카드 종류가 없는 건물이면 닫음 */
   houseCard(b) {
-    const c = document.getElementById("houseCard"); if (!b) { c.hidden = true; return; }
-    const w = this.world, owner = w.units.find(u => u.unitId === b.owner);
-    c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
-    c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
+    const c = document.getElementById("houseCard"), x = c.querySelector(".hcx"), w = this.world, kind = b ? bldKindOf(b, w) : null;
+    this.cardB = kind ? b : null; this.cardKind = kind; this.cardParts = [];
+    x.textContent = ""; if (!x.hidden) x.hidden = true;
+    if (!kind) { delete c.dataset.kind; c.hidden = true; return; }
+    c.dataset.kind = kind; c.setAttribute("aria-label", BUILDINGS[b.defId].name);
+    const go = c.querySelector(".go"); go.hidden = kind !== "house"; c.querySelector(".hx").onclick = () => { c.hidden = true; };
+    if (kind === "house") {
+      const owner = w.units.find(u => u.unitId === b.owner);
+      c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
+      go.onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); }; c.hidden = false; return;
+    }
+    const card = this.bldCardOf(b, kind); c.querySelector("b").textContent = card.title; c.querySelector("span").textContent = card.sub;
+    x.hidden = false; c.hidden = false; this.syncBldCard(card);
+  }
+  /** 카드 종류별 글(bldView.js) */
+  bldCardOf(b, kind) {
+    const w = this.world, more = (k, t, h, o) => this.more(k, t, h, o);
+    if (kind === "site") return siteCardOf(b, w, more);
+    if (kind === "field") return fieldCardOf(b, w, more);
+    if (kind === "clinic") return clinicCardOf(b, w, more);
+    return shopCardOf(b, w, this.shopTab || shopTabDefault(w));
+  }
+  /** 건물 카드 아래 칸: 칸마다 HTML이 바뀐 것만 고침(update 5Hz). 다 지어져 종류가 바뀌면 다시 열고, 철거되면 닫음 */
+  syncBldCard(card = null) {
+    const c = document.getElementById("houseCard"), b = this.cardB, w = this.world;
+    if (!b || c.hidden || this.cardKind === "house") return;
+    if (!card && this.cardPress && performance.now() < this.cardPress) return;      // 누르는 중
+    if (w.buildings.get(b.id) !== b) { this.houseCard(null); return; }
+    const kind = bldKindOf(b, w);
+    if (kind !== this.cardKind) {                                                  // 다 지어짐: 풍차는 powerRange가 쓰는 카드라 아래 칸만 비우고 둠, 나머지는 새 종류로 다시 열거나 닫음
+      if (!kind && BUILDINGS[b.defId].power) { const x = c.querySelector(".hcx"); x.textContent = ""; x.hidden = true; delete c.dataset.kind; this.cardB = null; this.cardKind = null; return; }
+      this.houseCard(b); return; }
+    card ||= this.bldCardOf(b, kind);
+    const x = c.querySelector(".hcx"), P = this.cardParts;
+    card.parts.forEach((h, i) => { let d = x.children[i]; if (!d) { d = el("div", "hcp"); x.appendChild(d); }
+      if (P[i] !== h) { P[i] = h; d.innerHTML = h; } });
+    while (x.children.length > card.parts.length) { x.lastChild.remove(); P.length = card.parts.length; }
+  }
+  /** 건물 카드 안 단추(한 번만 붙임): 맡은 갈매미 따라가기 · 당번 정하기 · 잡화점 탭 · 도장 가게 바로가기 */
+  bldCardClick(e) {
+    const t = e.target.closest?.("[data-act]"), b = this.cardB, w = this.world; if (!t || !b) return;
+    const act = t.dataset.act; this.cardPress = 0;                                 // 누름은 끝났음: 이 단추가 바꾼 칸은 바로 다시 그림(0.3초 막기를 풀어 탭·당번 결과가 늦지 않게)
+    if (act === "follow") { const u = w.units.find(o => String(o.unitId) === t.dataset.id); if (u) this.onUnitClick?.(u); return; }
+    if (act === "tab") { this.shopTab = t.dataset.tab; this.syncBldCard(); return; }
+    if (act === "stamp") { this.openPhone(); this.openApp("wish"); const d = document.querySelector("#dailyBody details.sshop"); if (d) { d.open = true; d.scrollIntoView?.({ block: "nearest" }); } return; }
+    if (act === "doctor") {
+      const id = t.dataset.id, u = id ? w.units.find(o => String(o.unitId) === id) : null, r = w.setDoctor(b.id, u ? u.unitId : null);
+      if (!r.ok) { this.status(r.reason, { kind: "warn" }); return; }
+      this.moreOpen.set("clinic.doc", false);
+      this.status(u ? `${josa(u.name, "이", "가")} 당번 의사가 됐어요 · 환자가 오면 의원으로 가요` : "당번 의사를 비웠어요 · 환자는 침대에서 쉬며 나아요", { kind: "good" });
+      this.syncBldCard();
+    }
   }
   /** 확인창(브라우저 confirm 대신): 취소에 먼저 포커스, Esc·바깥 누르기 = 취소. 결과는 Promise<boolean> */
   confirm({ title, body = "", ok = "확인", cancel = "취소", danger = false } = {}) {
@@ -623,7 +679,7 @@ export class Hud {
     const why = document.getElementById("summonWhy"), whyText = v.giantOnly ? "" : btn.why; if (why.textContent !== whyText) why.textContent = whyText; why.hidden = !whyText;
     for (const [id, html] of [["summonHead", v.head], ["summonMid", v.mid], ["summonMore", v.bottom]]) { const e = document.getElementById(id); if (e.dataset.html !== html) { e.dataset.html = html; e.innerHTML = html; } }
   }
-  showFollow(u) { this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); if (this.ic) this.syncInfo(); }   // 카드는 바로(다음 갱신까지 기다리지 않게)
+  showFollow(u) { if (u) { const hc = document.getElementById("houseCard"); if (!hc.hidden) hc.hidden = true; } this.follow = u; this.rows?.forEach((r, i) => r.classList.toggle("on", this.world.units[i] === u)); if (this.ic) this.syncInfo(); }   // 카드는 바로(다음 갱신까지 기다리지 않게)
   /** 🎣 당기기! 버튼: 따라가기 카드 바로 위에 붙여서 보여 줌(입질 동안만). 매 프레임 불러도 바뀔 때만 손댐 */
   showTug(on, secs = 1.5) {
     const b = this.tugBtn; if (b.hidden === !on) return;
@@ -756,6 +812,7 @@ export class Hud {
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
     this.syncInfo();                                                               // 따라가는 갈매미 카드(값만 고침)
+    this.syncBldCard();                                                            // 건물 카드(공사장·밭·의원·잡화점): 바뀐 칸만
   }
   /** 위쪽 줄 🏦 내 금고 · 🪙 마을 돈: 글자·색이 바뀔 때만 DOM을 고침(5Hz 갱신) */
   drawMoneyChips() {

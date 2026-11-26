@@ -164,6 +164,23 @@
   #houseCard { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--row-b) + calc(66*var(--u))); z-index: var(--z-context); background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u));
     box-shadow: var(--e-2); display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; width: max-content; max-width: calc(100vw - var(--safe-l) - var(--safe-r)); box-sizing: border-box; } #houseCard[hidden] { display: none; }
   #houseCard button { min-height: var(--hit); } #houseCard .hx { margin-left: auto; }
+  /* 화면 연결 6단계: 일반 건물 카드(공사장·밭·의원·잡화점) — 집 카드와 같은 상자에 아래 칸(.hcx)만 늘림. 폭을 정해 두고, 길면 카드 안에서 밀기 */
+  #houseCard[data-kind]:not([data-kind="house"]) { width: min(calc(400*var(--u)), calc(100vw - var(--safe-l) - var(--safe-r))); max-height: calc(100dvh - var(--row-b) - calc(66*var(--u)) - calc(96*var(--u))); overflow-y: auto; overscroll-behavior: contain; align-items: flex-start; }
+  #houseCard[data-kind]:not([data-kind="house"]) > b { order: -2; } #houseCard[data-kind]:not([data-kind="house"]) > .hx { order: -1; }
+  #houseCard[data-kind]:not([data-kind="house"]) > span.dim { order: -1; flex: 1 1 auto; align-self: center; font-size: var(--fs-sm); }
+  #houseCard .hcx { flex: 1 0 100%; min-width: 0; display: flex; flex-direction: column; gap: var(--s-1); } #houseCard .hcx[hidden] { display: none; }
+  #houseCard .hcx .sum { margin: 0; } #houseCard .hcp:empty { display: none; }
+  #houseCard .hcx p { margin: 0; } #houseCard .bc-line, #houseCard .bc-note, #houseCard .bc-warn { font-size: var(--fs-sm); line-height: 1.4; } #houseCard .bc-note { color: var(--c-ink-2); }
+  #houseCard .bc-warn { color: var(--c-danger-ink); font-weight: 700; } #houseCard .bc-sub { display: block; font-size: var(--fs-sm); margin: var(--s-1) 0 2px; }
+  #houseCard .bc-who, #houseCard .bc-go { width: 100%; text-align: left; } #houseCard .bc-tbl { width: 100%; font-size: var(--fs-sm); } #houseCard .bc-tbl td:last-child { text-align: right; white-space: nowrap; }
+  #houseCard .bc-plots td:nth-child(2) { white-space: nowrap; } #houseCard .bc-moist { display: inline-block; vertical-align: middle; width: calc(34*var(--u)); height: calc(7*var(--u)); border-radius: 4px; background: var(--c-line); overflow: hidden; }
+  #houseCard .bc-moist i { display: block; height: 100%; background: #3d8fd6; } #houseCard .bc-moist[data-tone="low"] i { background: #d6a03d; } #houseCard .bc-moist[data-tone="dry"] i { background: #d6603d; }
+  #houseCard .bc-beds, #houseCard .bc-list, #houseCard .bc-shop { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); }
+  #houseCard .bc-beds li { padding: calc(4*var(--u)) calc(8*var(--u)); border-radius: var(--r-sm); background: var(--c-line); } #houseCard .bc-beds li.dim { background: transparent; border: 1px dashed var(--c-line); }
+  #houseCard .bc-pick { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-1); } #houseCard .bc-pick button { font-size: var(--fs-sm); } #houseCard .bc-pick button.on { outline: 2px solid currentColor; font-weight: 700; }
+  #houseCard .bc-tabs { display: flex; gap: var(--s-1); } #houseCard .bc-tabs button { flex: 1; } #houseCard .bc-tabs button.on { font-weight: 700; box-shadow: inset 0 -3px 0 currentColor; }
+  #houseCard .bc-shop li { display: flex; gap: var(--s-2); align-items: center; padding: 2px 0; border-bottom: 1px solid var(--c-line); line-height: 1.35; } #houseCard .bc-ico { font-size: var(--fs-icon); }
+  #houseCard .bc-price { font-weight: 700; white-space: nowrap; }
   .badge { position: absolute; transform: translate(-50%, -100%); background: #fff; border-radius: var(--r-md); padding: calc(2*var(--u)) calc(7*var(--u)); font-size: var(--fs-sm);
     box-shadow: var(--e-1); white-space: nowrap; }
   /* 말풍선: 갈매미 머리 위. 보통 말(둥근 네모 + 꼬리) · 생각(💭, 점점이 꼬리) · 감정 아이콘(동그라미) */
@@ -218,6 +235,7 @@
   :where(html[data-form="portrait"]) #minimap canvas { width: calc(120*var(--u)); height: calc(120*var(--u)); }
   /* 집 카드: 세로 폰은 따라가기 카드와 같은 자리(🔨·📱 줄 위) */
   :where(html[data-form="portrait"]) #houseCard { left: var(--safe-l); right: var(--safe-r); bottom: var(--info-b); transform: none; width: auto; max-width: none; }
+  :where(html[data-form="portrait"]) #houseCard[data-kind]:not([data-kind="house"]) { width: auto; max-height: calc(100dvh - var(--info-b) - calc(110*var(--u))); }
   /* 휴대폰(세로·가로) 공통: 도구 막대는 아이콘 위·짧은 이름 아래로 — 철거·✋까지 밀지 않고 다 보이게 */
   :where(html[data-form="portrait"], html[data-form="landscape"]) #tools .tbtn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
     padding: calc(3*var(--u)) calc(4*var(--u)); font-size: var(--fs-cap); line-height: 1.15; }
@@ -737,7 +755,7 @@
     <div class="rtabs"><button data-tab="furniture">🛋 가구</button><button data-tab="floor">🟫 바닥</button><button data-tab="wall">🎨 벽지</button><button class="rexit rx2 ghost" aria-label="집에서 나가기">🚪 나가기</button></div>
     <div class="rlist"></div></div>
 </div>
-<div id="houseCard" hidden role="group" aria-label="집"><b></b><span class="dim"></span><button class="go">🛋 들어가 꾸미기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
+<div id="houseCard" hidden role="group" aria-label="집"><b></b><span class="dim"></span><div class="hcx" hidden></div><button class="go">🛋 들어가 꾸미기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
 <div id="letter" hidden role="dialog" aria-modal="true" aria-labelledby="letterTitle"><div class="card"><div class="head"><b id="letterTitle">💌 다녀온 사이에</b></div><div id="letterBody"></div><div class="lbtns"><button id="letterNews">📰 소식지 보기</button><button id="letterClose" class="go">고마워요!</button></div></div></div>
 <div id="ask" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle"><div class="card"><b id="askTitle"></b><p id="askBody"></p><div class="lbtns"><button id="askNo" class="ghost">취소</button><button id="askYes" class="go">확인</button></div></div></div>
 <div id="loading"><div class="gull" aria-hidden="true">🐦</div><div class="title">갈매미맨 마을</div><div class="track"><div id="loadBar"></div></div><div id="loadText" role="status">불러오는 중…</div></div>
