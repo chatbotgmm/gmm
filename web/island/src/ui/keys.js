@@ -8,6 +8,7 @@ export const KEY_LIST = [
   { code: ["Digit3", "Numpad3"], key: "3", what: "⛰ 높이", sel: '#tools [data-mode="height"]' },
   { code: ["Digit4", "Numpad4"], key: "4", what: "🏠 건물 짓기", sel: '#tools [data-mode="build"]' },
   { code: ["Digit5", "Numpad5"], key: "5", what: "🧹 철거", sel: '#tools [data-mode="demolish"]' },
+  { code: ["Digit6", "Numpad6"], key: "6", what: "🌳 자연·지형", sel: '#tools [data-mode="nature"]' },
   { code: ["KeyP"], key: "P", what: "📱 갈매폰 열기·닫기", sel: "#phoneBtn" },
   { code: ["KeyM"], key: "M", what: "🗺 미니맵 켜기·끄기", sel: "#mapBtn" },
   { code: ["KeyJ"], key: "J", what: "💭 소원 · 오늘의 부탁", app: "wish" },
@@ -25,7 +26,7 @@ const KEY_KEEP_LIST = [
   ["Esc", "한 단계씩 닫기(창 → 페이지 → 카드 → 도구 끄기) · 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기 (Enter·Space로 누르기)"],
 ];
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
-const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"],
+const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"],
   ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"], ["#viewL", "Z"], ["#viewR", "X"]];
 const KEY_OVERLAYS = ["ask", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
 const KEY_CONTROL_SEL = "button, a[href], summary, select, [role=button]";
@@ -149,8 +150,8 @@ export function installKeys({ hud, tools, roomView }) {
   const kb = s => s.split(/( · | \/ | \+ |~)/).map(p => /^( · | \/ | \+ |~)$/.test(p) ? p : p.split(" ").map(x => /[가-힣]/.test(x) ? x : `<kbd>${x}</kbd>`).join(" ")).join("");
   const box = $("keyHelp");
   if (box) box.innerHTML = `<p class="dim">키보드가 있을 때 써요.</p><table class="tbl keytbl">` +
-    `<tr><td>${kb("2~5")}</td><td>🔨 건설 도구(칠하기 · 높이 · 짓기 · 철거) — 누르면 건설 모드로</td></tr><tr><td>${kb("1")}</td><td>${KEY_LIST[0].what}</td></tr>` +
-    KEY_LIST.slice(5).map(k => `<tr><td>${kb(k.key)}${k.code.includes("F1") ? ` · ${kb("F1")}` : ""}</td><td>${k.what}</td></tr>`).join("") +
+    `<tr><td>${kb("2~6")}</td><td>🔨 건설 도구(칠하기 · 높이 · 짓기 · 철거 · 자연·지형) — 누르면 건설 모드로</td></tr><tr><td>${kb("1")}</td><td>${KEY_LIST[0].what}</td></tr>` +
+    KEY_LIST.slice(6).map(k => `<tr><td>${kb(k.key)}${k.code.includes("F1") ? ` · ${kb("F1")}` : ""}</td><td>${k.what}</td></tr>`).join("") +
     KEY_KEEP_LIST.map(([k, v]) => `<tr><td>${kb(k)}</td><td>${v}</td></tr>`).join("") + `</table>` +
     `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰(도감·메뉴 포함)·편지가 열려 있는 동안은 뒤의 화면이 키에 움직이지 않아요.</p>`;
   const kbtn = $("keysBtn"); if (kbtn) kbtn.onclick = () => { hud.openApp("help"); const sec = box?.closest("details"); if (sec) sec.open = true; (sec || box)?.scrollIntoView({ block: "start" }); };   // 도움말의 ⌨️ 단축키 칸을 펼쳐서

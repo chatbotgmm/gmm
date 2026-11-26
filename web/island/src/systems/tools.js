@@ -1,4 +1,4 @@
-// 도구(입력): 둘러보기 / 바닥 칠하기 / 건물 짓기(고스트 미리보기) / 철거.
+// 도구(입력): 둘러보기 / 바닥 칠하기 / 건물 짓기(고스트 미리보기) / 철거 / 자연·지형(심기·치우기·파기·메우기·지형지물 옮기기, 월드 꾸미기 API의 dry로 미리보기).
 // 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 화면 옮기기(건설 모드는 고정 쿼터뷰라 돌리기 없음), 휠·두 손가락은 확대·축소.
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ, toGridX, toGridZ, WATER_Y } from "../config.js";
@@ -7,6 +7,8 @@ import { anchorFor } from "../world/placement.js";
 import { josa } from "../util.js";
 import { terrainHeight } from "../world/terrain.js";
 import { findPath } from "../world/pathfinding.js";
+import { frontCells } from "../world/customize.js";
+import { natureAction, natureHover, strokeText, undoText, redoText } from "../ui/natureView.js";
 const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
 const OK = 0x4fcf78, BAD = 0xe0574f;
@@ -50,8 +52,11 @@ export class Tools {
   }
 
   setMode(mode, arg = null) {
+    this.commitNature?.();
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null; this.plan = null;
     this.heightOp = mode === "height" ? (arg || "raise") : null; this.shapeStart = null; this.commitStroke?.();
+    this.natArg = mode === "nature" ? (arg || "auto") : null; this.natLast = null;
+    const na = this.natAct; if (na?.kind === "move") this.rot = this.world.landmark(na.what)?.rot || 0;   // 옮기기: 지금 방향에서 시작(↻·R로 돌림)
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
     this.onStatus(""); this.refresh(); this.onMode?.(mode, arg);
@@ -69,7 +74,52 @@ export class Tools {
   }
   setHand(on) { this.hand = on; this.cancelStroke(); this.applyControls(); this.onHand?.(on); }
   /** 칠하던·올리던 것을 멈춤(두 번째 손가락이 닿거나 화면 조작으로 바뀔 때). */
-  cancelStroke() { clearTimeout(this.pendingT); this.pending = null; this.painting = false; if (this.press) this.press.multi = true; this.commitStroke(); }
+  cancelStroke() { clearTimeout(this.pendingT); this.pending = null; this.painting = false; if (this.press) this.press.multi = true; this.commitStroke(); this.commitNature(); }
+  // ---- 자연·지형(mode "nature", arg = auto|palm|beachRock|ore|bush|flower|clear|dig|fill|move:cave|move:lighthouse|move:pier|move:breakwater)
+  get natAct() { return this.mode === "nature" ? natureAction(this.natArg) : null; }
+  /** 붓·길·네모를 쓰는 도구: 칠하기 · 높이 · 파기·메우기 */
+  usesShape() { const a = this.natAct; return this.mode === "paint" || this.mode === "height" || a?.kind === "dig" || a?.kind === "fill"; }
+  /** 누른 채 끌면 계속 하는 도구(옮기기 빼고) */
+  strokeMode() { const a = this.natAct; return this.mode === "paint" || this.mode === "height" || (!!a && a.kind !== "move"); }
+  shapeNow() { return this.usesShape() ? this.shape : "brush"; }
+  /** 칸 하나에 할 월드 일 { op, args }(args 끝에 opt를 붙여 부름). 치우기는 그 칸의 나무·바위·광석 → 놓은 덤불·꽃 → 씨앗 소품 차례 */
+  natureCall(a, x, z) {
+    const w = this.world;
+    if (a.kind === "place") return { op: "placeNature", args: [a.what, x, z] };
+    if (a.kind === "decor") return { op: "placeDecor", args: [a.what, x, z] };
+    if (a.kind === "clear") {
+      if (w.natureAt(x, z)) return { op: "removeNature", args: [{ x, z }] };
+      if (w.decor?.add.has(`${x},${z}`) || !this.seedAt || this.seedAt(x, z)) return { op: "clearDecor", args: [x, z] };   // 씨앗 소품이 보이는 칸만(그림 층이 알려 줌)
+    }
+    return null;
+  }
+  /** 한 번의 꾸미기 결과를 이번 획 묶음에 쌓음(되돌리기 한 번 = 한 획) */
+  natNote(r, call) {
+    const b = this.natBatch ||= { arg: this.natArg, items: [], done: 0, cost: 0, fail: "", kinds: [] };
+    if (!r.ok) { b.fail = r.reason; return; }
+    const redo = call.op === "placeNature" ? { op: call.op, args: [r.kind, call.args[1], call.args[2]] } : call.op === "digCells" || call.op === "fillCells" ? { op: call.op, args: [r.cells.map(c => [c.x, c.z])] } : call;
+    if (r.inverse) b.items.push({ inverse: r.inverse, redo }); b.done += r.done ?? 1; b.cost += r.cost || 0; if (r.kind) b.kinds.push(r.kind);
+    if (r.skipped?.length) b.fail = r.skipped[0].reason;
+  }
+  /** 획이 끝나면: 되돌리기 목록에 한 항목 + 상태 줄 요약 */
+  commitNature() {
+    const b = this.natBatch; if (!b) return; this.natBatch = null;
+    if (b.items.length) { this.history.push({ kind: "custom", arg: b.arg, items: b.items }); if (this.history.length > 60) this.history.shift(); this.redoStack = []; this.onHistory?.(); if (b.done) this.buzz(); }
+    this.natLast = null; this.refresh();
+    const t = strokeText(b.arg, b, this.world.bank?.vault || 0, !!this.world.economy); if (t) { this.natLast = t; this.onStatus(t); }
+  }
+  /** 칸들 파기·메우기(붓·길·네모 한 번 = 묶음 하나) */
+  natureCells(cells) {
+    const a = this.natAct, op = a.kind === "dig" ? "digCells" : "fillCells";
+    const todo = cells.filter(([x, z]) => { const k = `${x},${z}`; if (this.stroke?.has(k)) return false; this.stroke?.add(k); return true; });
+    if (!todo.length) return; this.natNote(this.world[op](todo, {}), { op, args: [todo] });
+  }
+  /** 지형지물 옮기기 자리: 누른 칸이 모양 가운데가 되게 기준 칸(왼쪽 위)을 정함 */
+  movePlan(h, defId) {
+    if (!h) return null; const s = this.world.landmarkCells(defId, 0, 0, this.rot); if (!s) return null;
+    const wx = Math.max(...s.map(c => c[0])) + 1, dz = Math.max(...s.map(c => c[1])) + 1, ax = h.x - Math.floor((wx - 1) / 2), az = h.z - Math.floor((dz - 1) / 2);
+    return { defId, ax, az, rot: this.rot, cells: this.world.landmarkCells(defId, ax, az, this.rot) };
+  }
   // ---- 되돌리기·다시하기: 한 획(또는 길·네모 한 번)에 바뀐 칸들의 전·후(바닥 종류·높이)
   record(x, z) {
     const g = this.world.grid, c = g.get(x, z); if (!c) return; this.diff ||= new Map(); const k = `${x},${z}`; if (this.diff.has(k)) return;
@@ -82,13 +132,48 @@ export class Tools {
     this.diff = null; if (!cells.length) return;
     this.history.push(cells); if (this.history.length > 60) this.history.shift(); this.redoStack = []; this.onHistory?.();
   }
+  /** 칸 하나를 바닥 g·높이 e로(되돌리기·다시하기). 높이가 바뀌면 world.restoreCell(건물·나무·문 앞·밭 검사 + 땅↔물 경계 값)을 거침 → { ok, reason, cost } */
   setCell(d, g, e) {
-    const w = this.world, c = w.grid.get(d.x, d.z); w.shaping.delete(w.grid.index(d.x, d.z));
-    if (Math.abs(c.elevation - e) > 1e-6) w.applyHeight(d.x, d.z, e);
+    const w = this.world, c = w.grid.get(d.x, d.z), idx = w.grid.index(d.x, d.z);
+    if (Math.abs(c.elevation - e) > 1e-6 || w.shaping.has(idx)) {
+      const t = w.restoreCell(d.x, d.z, g, e, { dry: true }); if (!t.ok) return t;   // 못 하면 스르르 바뀌던 것도 그대로 둠
+      w.shaping.delete(idx); return w.restoreCell(d.x, d.z, g, e);
+    }
     if (c.groundType !== g) { w.grid.setGround(d.x, d.z, g); w.emit("ground", { x: d.x, z: d.z, type: g }); }
+    return { ok: true, cost: 0 };
   }
-  undo() { this.commitStroke(); const s = this.history.pop(); if (!s) return this.onStatus("되돌릴 게 없어요"); for (const d of s) this.setCell(d, d.g0, d.e0); this.redoStack.push(s); this.onUndoSound?.(); this.onStatus(`↶ 되돌렸어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
-  redo() { const s = this.redoStack.pop(); if (!s) return this.onStatus("다시 할 게 없어요"); for (const d of s) this.setCell(d, d.g1, d.e1); this.history.push(s); this.onStatus(`↷ 다시 했어요(${s.length}칸)`); this.onHistory?.(); this.refresh(); }
+  /** 칸 묶음(칠하기·높이)을 전(0)·후(1)로: 된 칸만 돌려줌 */
+  cellsTo(s, after) {
+    const ok = [], fails = []; let paid = 0;
+    for (const d of s) { const r = this.setCell(d, after ? d.g1 : d.g0, after ? d.e1 : d.e0); if (r.ok) { ok.push(d); paid += r.cost || 0; } else fails.push(r.reason); }
+    return { ok, fails, paid };
+  }
+  undo() {
+    this.commitStroke(); this.commitNature(); const s = this.history.pop(); if (!s) return this.onStatus("되돌릴 게 없어요");
+    let text;
+    if (s.kind === "custom") {                                                   // 꾸미기: 월드가 만든 반대 일(낸 값 돌려받음, 그사이 바뀌었으면 못 함)
+      const ok = [], fails = []; let refund = 0;
+      for (const it of [...s.items].reverse()) { const r = this.world.applyInverse(it.inverse); if (r.ok) { ok.unshift(it); refund += r.refund || 0; } else fails.push(r.reason); }
+      if (ok.length) this.redoStack.push({ ...s, items: ok }); text = undoText({ n: ok.length, refund, fails });
+    } else {
+      const r = this.cellsTo(s, false); if (r.ok.length) this.redoStack.push(r.ok);
+      text = r.ok.length ? `↶ 되돌렸어요(${r.ok.length}칸)${r.paid ? ` · 땅↔물 🪙${r.paid}` : ""}${r.fails.length ? ` · ${r.fails.length}칸은 못 되돌렸어요(${r.fails[0]})` : ""}` : `🚫 ${r.fails[0] || "되돌릴 수 없어요"}`;
+    }
+    this.onUndoSound?.(); this.refresh(); this.natLast = text; this.onStatus(text); this.onHistory?.();
+  }
+  redo() {
+    const s = this.redoStack.pop(); if (!s) return this.onStatus("다시 할 게 없어요");
+    let text;
+    if (s.kind === "custom") {                                                   // 꾸미기: 처음 한 일을 다시(값도 다시 냄)
+      const ok = [], fails = []; let cost = 0;
+      for (const it of s.items) { const r = this.world[it.redo.op](...it.redo.args, {}); if (r.ok) { ok.push({ ...it, inverse: r.inverse }); cost += r.cost || 0; } else fails.push(r.reason); }
+      if (ok.length) this.history.push({ ...s, items: ok }); text = redoText({ n: ok.length, cost, fails });
+    } else {
+      const r = this.cellsTo(s, true); if (r.ok.length) this.history.push(r.ok);
+      text = r.ok.length ? `↷ 다시 했어요(${r.ok.length}칸)${r.paid ? ` · 땅↔물 🪙${r.paid}` : ""}${r.fails.length ? ` · ${r.fails.length}칸은 못 했어요(${r.fails[0]})` : ""}` : `🚫 ${r.fails[0] || "다시 할 수 없어요"}`;
+    }
+    this.refresh(); this.natLast = text; this.onStatus(text); this.onHistory?.();
+  }
   /** 모양: brush(붓) · line(길: 두 칸을 누르면 걸어가는 길을 따라) · rect(네모 채우기) */
   setShape(s) { this.shape = s; this.shapeStart = null; this.refresh(); this.onStatus(s === "line" ? "길: 시작 칸 → 끝 칸을 누르면 걸어가는 길을 따라 칠해요" : s === "rect" ? "네모: 두 모서리 칸을 누르면 그 안을 채워요" : ""); }
   shapeCells(a, b) {
@@ -160,7 +245,7 @@ export class Tools {
     if (!this.toolActive || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
     this.hover = this.pick(e.clientX, e.clientY); this.refresh();
     this.press = { x: e.clientX, y: e.clientY, multi: false };
-    if ((this.mode === "paint" || this.mode === "height") && this.shape === "brush") {
+    if (this.strokeMode() && this.shapeNow() === "brush") {
       const begin = () => {
         if (!this.press || this.press.multi) return;
         this.pending = null; this.painting = true; this.stroke = new Set();   // 한 번 끌 때 같은 칸은 한 번만 올리고 내림
@@ -184,15 +269,16 @@ export class Tools {
     if (!e.isPrimary || !this.press) return;
     const p = this.press; this.press = null;
     if (this.pending && !p.multi) { clearTimeout(this.pendingT); const f = this.pending; this.press = p; f(); this.press = null; }   // 짧게 톡: 한 번 칠함
-    if (this.mode !== "view" && ((this.mode !== "paint" && this.mode !== "height") || this.shape !== "brush") && !p.multi) this.apply();
-    this.painting = false; this.pending = null; this.commitStroke();
+    if (this.mode !== "view" && (!this.strokeMode() || this.shapeNow() !== "brush") && !p.multi) this.apply();
+    this.painting = false; this.pending = null; this.commitStroke(); this.commitNature();
   }
 
   apply() {
     const h = this.hover; if (!h) return;
-    if ((this.mode === "paint" || this.mode === "height") && this.shape !== "brush") {   // 길·네모: 첫 칸 → 둘째 칸
-      if (!this.shapeStart) { this.shapeStart = { x: h.x, z: h.z }; this.onStatus(`${this.shape === "line" ? "길" : "네모"}: 끝 칸을 누르세요`); this.refresh(); return; }
+    if (this.usesShape() && this.shape !== "brush") {                              // 길·네모: 첫 칸 → 둘째 칸
+      if (!this.shapeStart) { this.shapeStart = { x: h.x, z: h.z }; this.natLast = null; this.onStatus(`${this.shape === "line" ? "길" : "네모"}: 끝 칸을 누르세요`); this.refresh(); return; }
       const cells = this.shapeCells(this.shapeStart, h); if (this.mode === "height") this.flatTarget = this.world.grid.get(this.shapeStart.x, this.shapeStart.z).elevation;
+      if (this.mode === "nature") { this.stroke = null; this.shapeStart = null; this.natureCells(cells); this.commitNature(); return; }   // 파기·메우기 길·네모: 묶음 하나
       for (const [x, z] of cells) this.editCell(x, z);
       this.commitStroke(); this.shapeStart = null; this.buzz(); this.onStatus(`${cells.length}칸을 바꿨어요 · ↶ 되돌리기`); this.refresh(); return;
     }
@@ -213,6 +299,12 @@ export class Tools {
         this.refresh(); return;
       }
       this.plan = { x: h.x, z: h.z }; this.refresh(); return;
+    } else if (this.mode === "nature") {
+      const a = this.natAct;
+      if (a.kind === "move") { this.plan = { x: h.x, z: h.z, move: a.what }; this.natLast = null; this.refresh(); return; }   // 옮기기는 자리만 정함 → 🚚 옮기기(또는 Enter)
+      if (a.kind === "dig" || a.kind === "fill") { this.natureCells(this.brushCells(h)); return; }
+      const k = `${h.x},${h.z}`; if (this.stroke?.has(k)) return; this.stroke?.add(k);   // 한 번 끌 때 같은 칸은 한 번만
+      const call = this.natureCall(a, h.x, h.z); this.natNote(call ? this.world[call.op](...call.args, {}) : { ok: false, reason: "치울 게 없어요" }, call); return;
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
       if (b && BUILDINGS[b.defId].fixed) { this.onStatus(`${BUILDINGS[b.defId].name}은 철거할 수 없어요`); return; }
@@ -230,7 +322,13 @@ export class Tools {
     return { cells, ok, water };
   }
   confirmBuild() {
-    const h = this.plan; if (this.mode !== "build" || !h) return;
+    const h = this.plan;
+    if (this.mode === "nature" && h?.move) {                                      // 🚚 지형지물 옮기기
+      const p = this.movePlan(h, h.move), r = p ? this.world.moveLandmark(p.defId, p.ax, p.az, p.rot, {}) : { ok: false, reason: "이 섬에는 없어요" };
+      if (r.ok) { this.plan = null; this.natNote(r, { op: "moveLandmark", args: [p.defId, p.ax, p.az, p.rot] }); this.natBatch.arg = `move:${p.defId}`; this.commitNature(); return; }
+      this.refresh(); this.onStatus(`🚫 ${r.reason}`); return;
+    }
+    if (this.mode !== "build" || !h) return;
     if (h.bridge) {
       const { ok } = this.bridgeLine(h); let n = 0, fee = 0; for (const [x, z] of ok) { const r = this.world.placeBuilding("bridge", x, z, 0); if (r.ok) { n++; fee += r.building.fee || 0; } }
       const paid = fee ? ` · 설계비 🪙${fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "", cut = n && n < ok.length ? ` · 금고가 모자라 ${ok.length - n}칸은 못 놓았어요` : "";
@@ -245,20 +343,24 @@ export class Tools {
 
   // 미리보기 갱신: 칸 커서 / 고스트 색(초록 = 지을 수 있음, 빨강 = 못 지음 + 이유) / 철거 대상 강조
   refresh() {
-    const plan = this.mode === "build" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
+    const plan = this.mode === "build" || this.mode === "nature" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false;
     // onPlan(보이나, 지을 수 있나, 자리) — 자리: 건물 { defId, ax, az, rot } · 다리 { bridge, ok: 놓을 수 있는 칸 수, water: 물 칸 수 }(확인창이 설계비·금고를 다시 셈)
     if (this.mode === "build" && plan?.bridge) { const L = this.bridgeLine(plan); this.onPlan?.(plan.done, L.ok.length > 0, { bridge: true, ok: L.ok.length, water: L.water.length }); }
+    else if (this.mode === "nature" && plan?.move) { const p = this.movePlan(plan, plan.move); this.onPlan?.(true, !!p && this.world.moveLandmark(p.defId, p.ax, p.az, p.rot, { dry: true }).ok, p && { move: p.defId, ax: p.ax, az: p.az, rot: p.rot }); }
     else if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok, { defId: this.buildId, ax: a.x, az: a.z, rot: this.rot }); }
     else this.onPlan?.(false);
     if (!h) { this.buildingViews.setHighlight(null); return; }
     const cell = grid.get(h.x, h.z);
-    if (this.mode === "paint" || this.mode === "height") {
+    if (this.mode === "nature" && !this.usesShape()) return this.refreshNature(h, plan);
+    if (this.usesShape()) {
       const cells = this.brushCells(h), top = Math.max(...cells.map(([x, z]) => Math.max(terrainHeight(grid, x + 0.5, z + 0.5), grid.walkHeight(x, z) ?? -9)));
       this.cursor.visible = true; this.cursor.scale.set(this.brush, this.brush, 1);
       this.cursor.position.set(toWorldX(h.x + 0.5), top + 0.03, toWorldZ(h.z + 0.5));
-      this.cursor.material.color.setHex(cells.some(([x, z]) => this.mode === "height" ? this.world.canReshape(x, z) : this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
-      if (this.shape !== "brush") { this.cursor.scale.set(1, 1, 1); this.cursor.material.color.setHex(0xffd36b); }
+      const dry = this.mode === "nature" ? this.world[this.natAct.kind === "dig" ? "digCells" : "fillCells"](this.shapeStart && this.shape === "rect" ? this.shapeCells(this.shapeStart, h) : this.shape === "brush" ? cells : [[h.x, h.z]], { dry: true }) : null;   // 파기·메우기: 미리보기(dry)로 값·까닭
+      this.cursor.material.color.setHex(dry ? (dry.ok ? OK : BAD) : cells.some(([x, z]) => this.mode === "height" ? this.world.canReshape(x, z) : this.world.canPaint(x, z)) ? 0xffffff : BAD);   // 칠할 수 있는 칸이 하나도 없으면 빨강
+      if (dry) this.natStatus(dry);
+      if (this.shape !== "brush") { this.cursor.scale.set(1, 1, 1); if (!dry) this.cursor.material.color.setHex(0xffd36b); }
       const a = this.shapeStart;
       if (a && this.shape === "rect") { const w = Math.abs(h.x - a.x) + 1, d = Math.abs(h.z - a.z) + 1; this.cursor.scale.set(w, d, 1); this.cursor.position.set(toWorldX(Math.min(a.x, h.x) + w / 2), top + 0.03, toWorldZ(Math.min(a.z, h.z) + d / 2)); }
     } else if (this.mode === "build" && plan?.bridge) {                           // 다리 줄 미리보기: 줄 전체를 한 상자로
@@ -281,5 +383,36 @@ export class Tools {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
     }
+  }
+  /** 미리보기 상태 줄(같은 글이면 다시 안 띄움 — 끝낸 일의 요약을 덮지 않게) */
+  natStatus(r) { const w = this.world, t = natureHover(this.natArg, r, Math.floor(w.bank?.vault || 0), !!w.economy); if (t && t !== this.natLast) { this.natLast = t; this.onStatus(t); } }
+  /** 자연·지형 고스트: 심기·놓기 = 칸 위 작은 상자(초록/빨강), 치우기 = 칸 판(주황/빨강), 옮기기 = 차지 칸 전체 + 동굴 입구 화살표. 모두 dry 결과로(아무것도 안 바꿈) */
+  refreshNature(h, plan) {
+    const a = this.natAct, w = this.world, grid = w.grid;
+    if (a.kind === "move") {
+      const p = this.movePlan(plan || h, a.what);
+      if (!p) { if (!this.world.landmark(a.what)) this.natStatus({ ok: false, reason: "이 섬에는 없어요" }); return; }
+      const r = w.moveLandmark(p.defId, p.ax, p.az, p.rot, { dry: true }), xs = p.cells.map(c => c[0]), zs = p.cells.map(c => c[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs) + 1, z0 = Math.min(...zs), z1 = Math.max(...zs) + 1, col = r.ok ? OK : BAD;
+      const y = Math.max(...p.cells.map(([x, z]) => grid.inBounds(x, z) ? terrainHeight(grid, x + 0.5, z + 0.5) : 0), WATER_Y);
+      this.ghost.visible = true; this.ghost.rotation.y = 0; this.ghost.position.set(toWorldX((x0 + x1) / 2), y, toWorldZ((z0 + z1) / 2));
+      this.ghostBox.scale.set((x1 - x0) * 0.9, 1.6, (z1 - z0) * 0.9); this.ghostBox.position.y = 0.8; this.ghostFloor.scale.set(x1 - x0, z1 - z0, 1); this.ghostFloor.position.y = 0.04;
+      this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
+      if (a.what === "cave") { const f = frontCells(p.cells, p.rot); if (f.length) { const fx = f.reduce((s, c) => s + c[0], 0) / f.length, fz = f.reduce((s, c) => s + c[1], 0) / f.length; this.doorMark.visible = true; this.doorMark.position.set(toWorldX(fx + 0.5), y + 0.35, toWorldZ(fz + 0.5)); } }   // 동굴 입구 앞
+      if (plan) { const t = r.ok ? "이 자리로 옮길까요? · 🚚 옮기기를 누르면 옮겨요" : `🚫 ${r.reason}`; if (t !== this.natLast) { this.natLast = t; this.onStatus(t); } }
+      else this.natStatus(r);
+      return;
+    }
+    const call = this.natureCall(a, h.x, h.z), r = call ? w[call.op](...call.args, { dry: true }) : { ok: false, reason: "치울 게 없어요" };
+    const y = Math.max(terrainHeight(grid, h.x + 0.5, h.z + 0.5), grid.walkHeight(h.x, h.z) ?? -9, WATER_Y);
+    if (a.kind === "clear") {
+      this.cursor.visible = true; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), y + 0.05, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(r.ok ? 0xffa64d : BAD);
+    } else {
+      const tall = a.what === "bush" || a.what === "flower" ? 0.35 : a.what === "beachRock" || a.what === "ore" ? 0.6 : 1.4, col = r.ok ? OK : BAD;
+      this.ghost.visible = true; this.ghost.rotation.y = 0; this.ghost.position.set(toWorldX(h.x + 0.5), y, toWorldZ(h.z + 0.5));
+      this.ghostBox.scale.set(0.55, tall, 0.55); this.ghostBox.position.y = tall / 2; this.ghostFloor.scale.set(1, 1, 1); this.ghostFloor.position.y = 0.04;
+      this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
+    }
+    this.natStatus(r);
   }
 }

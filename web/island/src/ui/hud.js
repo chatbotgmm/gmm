@@ -26,6 +26,7 @@ import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
 import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
+import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -64,9 +65,9 @@ export class Hud {
     this.initUiPrefs();
     this.coach = new CoachMarks(this);                                               // 처음 안내(3단계 말풍선 · 처음 여는 앱 안내)
     // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]. 건설 모드에서만 보이고, 맨 앞 ✓ 완료(view)를 누르면 평소 화면으로
-    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"]];
+    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"], ["nature", "🌳", "자연·지형", "자연"]];
     this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn(m === "view" ? "done" : "", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
-      b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : null); return b; });
+      b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : m === "nature" ? (this.lastNature || "auto") : null); return b; });
     this.modeBtns[0].setAttribute("aria-label", "완료 — 건설 모드 끝내기");
     // 🔨 건설: 평소 화면의 유일한 건설 입구. 마지막에 쓴 건설 도구로 들어감(처음엔 건물 짓기)
     this.lastEdit = "build";
@@ -583,9 +584,12 @@ export class Hud {
     const p = this.planNow, box = document.getElementById("cfInfo"), w = this.world;
     if (!p || !box) { if (box && box.innerHTML) { box.innerHTML = ""; this.planHtmlNow = ""; } return; }
     let info;
-    if (p.bridge) info = bridgeInfo(w, p.ok, p.water);
+    if (p.move) info = moveInfo(w, p.move, w.moveLandmark(p.move, p.ax, p.az, p.rot, { dry: true }));   // 🚚 지형지물 옮기기(dry: 아무것도 안 바꿈)
+    else if (p.bridge) info = bridgeInfo(w, p.ok, p.water);
     else info = planInfo(w, p.defId, w.check(p.defId, p.ax, p.az, p.rot));
-    const html = planHtml(info); if (html !== this.planHtmlNow) { this.planHtmlNow = html; box.innerHTML = html; }
+    const html = p.move ? moveHtml(info) : planHtml(info);
+    const goText = p.move ? "🚚 옮기기" : "🔨 건설", cfGo = document.getElementById("cfBuild"); if (cfGo.firstChild?.nodeType === 3 && cfGo.firstChild.nodeValue !== goText) cfGo.firstChild.nodeValue = goText;   // 키 힌트(.kbd)는 그대로
+    if (html !== this.planHtmlNow) { this.planHtmlNow = html; box.innerHTML = html; }
     const cfBuild = document.getElementById("cfBuild"); if (cfBuild.disabled !== !info.ok) cfBuild.disabled = !info.ok;
     box.parentElement.classList.toggle("bad", !info.ok);
   }
@@ -637,15 +641,16 @@ export class Hud {
     if (mode !== "view") this.lastEdit = mode;
     this.modeBtns.forEach(b => { const on = b.dataset.mode === mode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
     if (mode === "view" && this.tools.hand) this.tools.setHand(false);
-    const terrain = mode === "paint" || mode === "height", sub = this.sub;
+    const terrain = mode === "paint" || mode === "height", nature = mode === "nature", sub = this.sub;
     if (!terrain && this.tools.cross) this.tools.setCross(false);                   // 십자선은 칠하기·높이에서만(켜 둔 채 짓기로 가면 누르기가 안 먹던 것)
     // 보조 줄: 도구에 맞는 것만
     this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish"; this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
-    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
+    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
     for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
     // 트레이: 같은 도구 안에서 고르기만 했으면 밀어 둔 자리를 지킴
     const keep = mode === this.shownMode ? [sub.scrollLeft, sub.scrollTop] : null; this.shownMode = mode;
-    sub.replaceChildren(); sub.hidden = !(terrain || mode === "build"); sub.dataset.kind = mode;
+    sub.replaceChildren(); sub.hidden = !(terrain || nature || mode === "build"); sub.dataset.kind = mode;
+    if (nature) this.drawNatureTray(arg);
     if (mode === "height") {
       this.lastHeight = arg; const ob = this.trayGroup("높이 바꾸기");
       for (const [op, label] of [["raise", "⬆ 올리기"], ["lower", "⬇ 내리기"], ["smooth", "〰 다듬기"], ["flatten", "▬ 평평하게"], ["level", "🎚 단 맞추기"]]) {
@@ -669,9 +674,40 @@ export class Hud {
     if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 누르면 바로 사라져요 · 되돌릴 수 없으니 천천히 골라요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
     else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
+    if (!keep && nature) { const c = this.natCards?.find(x => x.dataset.nat === arg); if (c && (c.offsetLeft + c.offsetWidth > sub.clientWidth || c.offsetTop + c.offsetHeight > sub.clientHeight)) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 도구가 보이게
     if (!keep && mode === "build") { const c = this.buildCards.find(x => x.dataset.build === arg && !x.hidden); if (c) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 건물이 보이게
     if (mode === "height" && arg === "level" && this.shownOp !== "level") { const g = sub.querySelector("[data-level]")?.closest(".tgrp"); if (g) { sub.scrollLeft = Math.max(0, g.offsetLeft - 64); sub.scrollTop = Math.max(0, g.offsetTop - 64); } }   // 🎚 단 맞추기를 고르면 「맞출 높이」가 바로 보이게(세로 폰은 옆으로 미는 한 줄)
     this.shownOp = mode === "height" ? arg : null;
+  }
+  /** 🌳 자연·지형 트레이: 묶음(심기·놓기 · 치우기 · 땅 · 옮기기)마다 카드(아이콘 + 이름 + 값·한도). 파기·메우기를 고르면 붓 크기·모양도 */
+  drawNatureTray(arg) {
+    const w = this.world, info = w.customInfo(), tools = natureToolsFor(info), a = natureAction(arg); this.lastNature = arg; this.natCards = [];
+    for (const [g, label] of NATURE_GROUPS) {
+      const list = tools.filter(t => t.group === g); if (!list.length) continue; const box = this.trayGroup(label);
+      for (const t of list) {
+        const b = el("button", "ncard"), m = natureCard(t, info), on = t.arg === arg; b.dataset.nat = t.arg; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+        b.append(el("span", "ni", t.icon), el("span", "nn", t.name), el("span", "nm", m.meta)); b.dataset.tip = `${t.icon} ${t.name} ${t.verb}: ${t.tip}`;
+        b.classList.toggle("off", m.off); b.classList.toggle("short", !!m.short); b.setAttribute("aria-label", `${t.name} ${t.verb}, ${m.meta}`);
+        b.onclick = m.off ? () => this.status(`${t.icon} ${t.name}: ${m.why}`) : () => this.tools.setMode("nature", t.arg);
+        box.appendChild(b); this.natCards.push(b);
+      }
+    }
+    if (a.kind === "dig" || a.kind === "fill") this.addEditTools();
+    const t = tools.find(x => x.arg === arg); if (t) this.status(`${t.icon} ${t.name} ${t.verb}: ${t.tip}${a.kind === "move" ? " · 자리를 누르고 🚚 옮기기" : a.kind === "dig" || a.kind === "fill" ? "" : " · 누르거나 끌어서"}`);
+  }
+  /** 자연·지형 카드 아래 글(값·한도·금고 모자람)을 금고·수에 맞춰 고침(바뀐 카드만) */
+  drawNatureMeta() {
+    if (!this.natCards?.length) return; const info = this.world.customInfo(), tools = natureToolsFor(info);
+    for (const c of this.natCards) { const t = tools.find(x => x.arg === c.dataset.nat); if (!t) continue; const m = natureCard(t, info), nm = c.querySelector(".nm");
+      if (nm.textContent !== m.meta) { nm.textContent = m.meta; c.setAttribute("aria-label", `${t.name} ${t.verb}, ${m.meta}`); } c.classList.toggle("short", !!m.short); }
+  }
+  /** 꾸미기로 낸 돈·돌려받은 돈을 금고 칩 옆에 잠깐(3초, 이어서 하면 합쳐서) */
+  customSpent(e) {
+    const d = (e?.refund || 0) - (e?.cost || 0); if (!d) return;
+    const now = performance.now(); if (now > (this.spendUntil || 0)) this.spendSum = 0; this.spendSum += d; this.spendUntil = now + 3000;
+    let s = this.chipVault.querySelector(".vspend"); if (!s) { s = el("span", "vspend"); s.setAttribute("aria-hidden", "true"); this.chipVault.appendChild(s); }
+    s.textContent = `${this.spendSum > 0 ? "+" : "−"}${Math.abs(this.spendSum)}`; s.dataset.sign = this.spendSum > 0 ? "plus" : "minus"; s.hidden = !this.spendSum;
+    clearTimeout(this.spendT); this.spendT = setTimeout(() => { s.hidden = true; this.spendSum = 0; }, 3000);
   }
   /** 🥚 소환 페이지: 지금 부를 수 있는 수(인구 = 집 수) · 단추(못 부르면 꺼짐 + 까닭) · 다음 갈매미 · 자이언트 안내 · 자세히. 글이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게) */
   setSummon(world) {
@@ -793,6 +829,7 @@ export class Hud {
     this.drawMoneyChips();
     if (this.planNow) this.drawPlan();                                               // 건설 확인창: 품삯·세금으로 금고가 바뀌면 설계비 줄·단추를 다시
     if (document.body.dataset.mode === "edit" && this.tools?.mode === "build") this.drawCardMeta();
+    if (document.body.dataset.mode === "edit" && this.tools?.mode === "nature") this.drawNatureMeta();
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";
     const small = this.phoneForm;                                                    // 휴대폰(세로·가로): 칩은 아이콘 위주(세로 폰은 포만감도 뺌 — 배고프면 알림 칩이 따로 뜸)
     cardPut(this.chipPop, small ? `🐦${w.units.length} ${face}${sat.toFixed(0)}${this.form === "portrait" ? "" : ` ${mood}${avg.toFixed(0)}`}` : `🐦 ${w.units.length} · ${face} ${sat.toFixed(0)} · ${mood} ${avg.toFixed(0)}`); if (!this.chipPop.dataset.tip) this.chipPop.dataset.tip = "갈매미 수 · 평균 만족도 · 평균 포만감";   // "만족" 낱말은 툴팁으로(금고·마을 돈 칸이 늘어 한 줄에 들어가게)

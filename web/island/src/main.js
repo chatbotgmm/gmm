@@ -194,6 +194,9 @@ function mount(w) {
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
   const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
+  // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
+  world.on("custom", e => hud?.customSpent(e));
+  { let last = "", at = 0; world.on("customRefused", e => { const t = `🚫 ${e.reason}`, now = performance.now(); if (t === last && now - at < 1500) return; last = t; at = now; hud?.status(t); }); }
   // 금고·품삯·대출·세금·소환·반짝이·소지품·추위·옷·병·의원 알림: 표 하나(ui/newsAlerts.js ALERTS)로. 문장은 news.js, 색·덧말·소리·거르기는 표
   const gate = makeGate(), batches = new Map(), mine = world;
   const ring = (a, arg) => { const f = a.snd && ALERT_SND[a.snd]; if (f) f(arg?.u ? at(arg.u) : null); };
@@ -232,7 +235,7 @@ function mount(w) {
   world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
-  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }
+  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
 }
 let tools = null, hud = null;
@@ -302,7 +305,9 @@ addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.targe
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
 sfx.listener = { target: controls.target, camera };
-tools.onEdit = kind => sfx.play(kind === "height" ? "dig" : "paint", { vol: 0.5 }); tools.onUndoSound = () => sfx.play("undo", { vol: 0.6 });
+tools.onEdit = kind => { if (kind !== "nature") sfx.play(kind === "height" ? "dig" : "paint", { vol: 0.5 }); };   // 자연·지형은 월드 custom 이벤트가 소리를 냄
+tools.onUndoSound = () => sfx.play("undo", { vol: 0.6 });
+tools.seedAt = (x, z) => decor ? decor.seedAt(x, z) : true;                   // 🪓 치우기: 씨앗 소품이 보이는 칸만
 roomView.onSound = n => sfx.play(n, { vol: 0.7 });
 hud.sfx = sfx; hud.initSound?.();
 addEventListener("pointerdown", e => { if (e.target.closest?.("button")) sfx.play("click", { vol: 0.35 }); }, true);   // 버튼 누를 때 작은 소리

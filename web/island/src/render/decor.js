@@ -109,6 +109,12 @@ export class Decor {
     this.disposed = true; for (const m of Object.values(this.meshes)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); m.dispose?.(); }
     for (const m of Object.values(this.added || {})) { this.scene.remove(m); m.dispose?.(); } this.added?.blossom.material.dispose();
   }
+  /** 이 칸에 보이는 씨앗 소품(덤불·꽃·자갈)이 있나 — 🪓 치우기가 빈 칸에 값을 내지 않게(tools.seedAt) */
+  seedAt(x, z) {
+    const key = `${x},${z}`, list = this.byCell?.get(key), g = this.world.grid, c = g.get(x, z), dc = this.world.decor; if (!list || !c) return false;
+    if (c.occupiedId || g.isWater(x, z) || dc?.off.has(key) || dc?.add.has(key)) return false;
+    return list.some(it => it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : c.groundType === "Grass");
+  }
   /** 소품 하나를 제자리에(칸에 건물이 있거나 맞지 않는 바닥이면 숨김) */
   place(it) {
     const g = this.world.grid, [x, z] = it.cell.split(",").map(Number), c = g.get(x, z), def = this.types[it.type], m = new THREE.Matrix4();

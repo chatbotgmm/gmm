@@ -36,7 +36,7 @@
   #cfInfo .cf-sub { margin-top: calc(2*var(--u)); font-size: var(--fs-cap); color: var(--c-ink-2); } #cfInfo .cf-have { color: var(--c-ink-2); font-size: var(--fs-cap); }
   #cfInfo .cf-bad { margin-top: var(--s-1); padding: var(--s-1) var(--s-2); border-radius: var(--r-sm); background: var(--c-danger-soft); color: var(--c-danger-ink); font-size: var(--fs-sm); font-weight: 600; }
   #cfInfo .cf-hint { font-weight: 400; font-size: var(--fs-cap); }
-  #cfInfo { cursor: pointer; border-radius: var(--r-sm); }
+  #cfInfo { cursor: pointer; border-radius: var(--r-sm); } #cfInfo:not(:empty) { min-height: var(--hit-sm); }   /* 누르면 펼치는 칸: 한 줄로 접혀도 누르는 칸은 44px(터치) */
   /* 휴대폰: 핵심 줄은 굵게 남기고, 재료·짓는 이·돈 안내는 한 줄로 줄여 둠(누르면 펼침) → 확인 막대가 섬을 덜 가림 */
   :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo .cf-main { font-size: calc(15*var(--u)); }
   :where(html[data-form="portrait"], html[data-form="landscape"]) #cfInfo:not([data-open="1"]) :is(.cf-sub, .cf-bad) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -434,9 +434,25 @@
   .bcard.locked { opacity: 1; background: var(--c-surface-2); } .bcard.locked .bimg img { filter: grayscale(.85); opacity: .6; } .bcard.locked .bmeta { color: var(--c-danger-ink); font-weight: 600; }
   .bcard .bmeta .fee { color: var(--c-ink); } .bcard.short .bmeta .fee-short { color: var(--c-danger-ink); }   /* 설계비가 금고보다 비싸면 빨간 숫자 */
   .bcard.on { box-shadow: inset 0 0 0 calc(3*var(--u)) var(--c-accent-strong), var(--e-1); }
+  /* 🌳 자연·지형 트레이: 묶음(심기·놓기 · 치우기 · 땅 · 옮기기)마다 작은 카드 = 아이콘 + 이름 + 값·한도. 태블릿·PC·세로 폰은 한 줄(옆으로 밀기), 가로 폰은 왼쪽 세로 열 */
+  #sub[data-kind="nature"] { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; align-items: stretch; }
+  #sub[data-kind="nature"] .tgrp { justify-content: flex-end; }
+  #sub .ncard { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; width: max-content; min-height: max(var(--hit-sm), calc(62*var(--u))); padding: calc(3*var(--u)) calc(7*var(--u)); white-space: nowrap; text-align: center; }
+  #sub .tgb .ncard { min-width: calc(78*var(--u)); }   /* 붓·모양 단추의 min-width(44px)보다 앞서게 */
+  #sub .ncard .ni { font-size: var(--fs-icon); line-height: 1.1; } #sub .ncard .nn { font-size: var(--fs-sm); font-weight: 700; line-height: calc(16*var(--u)); }
+  #sub .ncard .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-cap); line-height: calc(15*var(--u)); color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
+  #sub .ncard.on { box-shadow: inset 0 0 0 calc(3*var(--u)) var(--c-accent-strong), var(--e-1); }
+  #sub .ncard.off { background: var(--c-surface-2); } #sub .ncard.off .ni { filter: grayscale(.9); opacity: .55; } #sub .ncard.off .nm { color: var(--c-ink-2); }
+  #sub .ncard.short .nm { color: var(--c-danger-ink); font-weight: 600; }   /* 값이 금고보다 비싸면 빨간 글 */
+  /* 꾸미기로 낸 값·돌려받은 값: 금고 칩 왼쪽에 잠깐(건설 중엔 상태 묶음이 금고 하나라 비어 있는 자리 · 아래는 알림 줄이 덮음) — 자리를 차지하지 않게 떠 있음 */
+  #chipVault .vspend { position: absolute; top: 50%; right: calc(100% + calc(4*var(--u))); transform: translateY(-50%); padding: 0 calc(6*var(--u)); border-radius: var(--r-pill); background: var(--c-hud); box-shadow: var(--e-1);
+    font-size: var(--fs-cap); font-weight: 800; line-height: calc(18*var(--u)); white-space: nowrap; pointer-events: none; color: var(--c-danger-ink); }
+  #chipVault .vspend[data-sign="plus"] { color: var(--c-ok-ink); } #chipVault .vspend[hidden] { display: none; }
+  #stat > #chipVault:has(> .vspend:not([hidden])) { overflow: visible; }   /* 칩 밖으로 뜨는 −n이 잘리지 않게(그동안만: 평소엔 좁은 폭 말줄임 그대로) */
   #sub[data-kind="build"] { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, calc(98*var(--u))); grid-auto-columns: calc(104*var(--u)); gap: var(--s-1); overflow-x: auto; align-items: stretch; }   /* 태블릿·PC: 두 줄 격자 */
   /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 900px보다 좁으면 보조 줄을 탭 위 한 줄로 */
   html[data-form="medium"] #top { grid-template-columns: max-content minmax(0, 1fr); }
+  html[data-form="wide"] #tools .tbtn { flex: none; }
   html[data-form="medium"] #tools .tbtn { flex: none; } html[data-form="medium"] #tools .tbtn .tl { display: none; } html[data-form="medium"] #tools .tbtn .ts { display: inline; }
   html[data-form="medium"][data-narrow] #top { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sub" "ebar" "tools"; } html[data-form="medium"][data-narrow] #tools .tbtn { flex: 1 1 auto; }
   /* 세로 폰: 아래에 한 판 — 트레이(한 줄, 옆으로 밀기, 오른쪽 끝이 흐려짐) → 보조 줄 → 도구 탭 */
@@ -447,6 +463,7 @@
   html[data-form="portrait"] #sub::-webkit-scrollbar { display: none; }
   html[data-form="portrait"] #sub .tgrp { justify-content: flex-end; } html[data-form="portrait"] #sub .tgrp + .tgrp { padding-left: var(--s-2); }
   html[data-form="portrait"] .bcard { flex: 0 0 calc(104*var(--u)); }
+  html[data-form="portrait"] #sub .ncard { min-height: 0; flex: 1 1 auto; }   /* 한 줄 88px 안: 묶음 이름 + 카드 */
   html[data-form="portrait"] #ebar .ecats { padding-right: calc(14*var(--u)); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - calc(14*var(--u))), transparent); mask-image: linear-gradient(to right, #000 calc(100% - calc(14*var(--u))), transparent); }   /* 분류 칩이 더 있으면 옆으로 밀기(끝이 흐려짐) */
   html[data-form="portrait"] #ebar .ecats button { padding: 0 calc(6*var(--u)); }
   html[data-form="portrait"] #ebar .abtn { padding: 0; }
@@ -457,6 +474,7 @@
   html[data-form="landscape"] #tools { flex-direction: column; } html[data-form="landscape"] #ebar { justify-self: start; }
   html[data-form="landscape"] #sub, html[data-form="landscape"] #sub[data-kind="build"] { width: calc(212*var(--u)); max-height: 100%; overflow-x: hidden; overflow-y: auto; align-self: start; }
   html[data-form="landscape"] #sub[data-kind="build"] { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: 1fr 1fr; grid-auto-rows: calc(92*var(--u)); }
+  html[data-form="landscape"] #sub[data-kind="nature"] { flex-wrap: wrap; overflow-x: hidden; overflow-y: auto; } html[data-form="landscape"] #sub .tgb .ncard { width: calc(100*var(--u)); min-width: 0; padding-left: calc(2*var(--u)); padding-right: calc(2*var(--u)); }
   html[data-form="landscape"] #sub .tgrp + .tgrp { padding-left: 0; border-left: 0; } html[data-form="landscape"] #sub .tgrp { max-width: 100%; } html[data-form="landscape"] #sub .tgb { flex-wrap: wrap; }
   html[data-form="landscape"] #ebar .ecats { max-width: calc(236*var(--u)); } html[data-form="landscape"] #ebar .ehint { max-width: calc(220*var(--u)); }
   html[data-form="landscape"] body[data-mode="edit"] :is(#info, #tugBtn) { left: calc(var(--safe-l) + var(--edit-w)); } html[data-form="landscape"] body[data-mode="edit"] #tugBtn { bottom: calc(var(--info-b) + var(--info-h) + calc(8*var(--u))); }
