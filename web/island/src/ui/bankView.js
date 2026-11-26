@@ -11,7 +11,7 @@ import { sumHead, moreBox, valueRows, fmtNum } from "./hudParts.js";
 
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 들어온 돈 몫 이름(장부 칸 → 글자). 'other' = returned − 몫 합(주문 장식 자재값 등) */
-export const IN_NAMES = { tax: "🧾 세금", house: "🏠 집값(계약금)", repay: "💳 대출 상환", clinic: "🏥 진료·약", clothes: "🧣 옷", shop: "☕ 코코아·저장고·가구", other: "📦 그 밖(주문 자재값 등)", refunds: "↩️ 설계비 환불(공사 취소)" };
+export const IN_NAMES = { tax: "🧾 세금", house: "🏠 집값(계약금)", repay: "💳 대출 상환", clinic: "🏥 진료·약", clothes: "🧣 옷", shop: "☕ 코코아·저장고·가구", lodging: "🛏 숙박(빈 집 손님)", other: "📦 그 밖(주문 자재값 등)", refunds: "↩️ 설계비 환불(공사 취소)" };
 export const OUT_NAMES = { fees: "📐 설계비", wages: "🔨 품삯", custom: "🌳 섬 꾸미기" };
 
 /** 하루 장부 → { inRows, outRows, inSum, outSum, lent }. 꾸미기 환불이 쓴 돈보다 많아 custom이 음수면 들어온 돈 쪽으로 */
