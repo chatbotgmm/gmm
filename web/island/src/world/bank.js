@@ -67,25 +67,26 @@ export const newBank = (time = 0) => ({
   issued: 0, returned: 0,               // 찍은 돈 · 금고로 돌아온 돈(계약금·상환·저장고·가구)
   vault: VAULT_START,                    // 금고(플레이어 돈)
   taxed: 0, fees: 0, wages: 0,           // 누계: 세금 · 설계비(환불 뺌) · 금고에서 나간 품삯
+  custom: 0,                             // 누계: 섬 꾸미기(customize.js)에 쓴 돈(되돌리기 환불 뺌)
   owed: 0,                               // 지금 밀린 품삯 합(갈매미별 u.wageOwed의 합)
   lent: 0, repaid: 0, forgiven: 0,       // 누계: 빌려준 돈 · 갚은 돈 · 집이 철거돼 없애 준 빚
   day: newsDay(time),                    // 마지막으로 세금을 걷은 마을 날
   short: 0,                              // 1 = 금고 바닥 사태 진행 중(소식지는 사태마다 한 번)
   need: 0,                               // 거절한 대출이 요구한 금고(대출금 + 여유). 이만큼 차면 거절 표시(u.loanRefused)를 풂(사태 끝남과는 따로)
   low: 0,                                // 1 = "얼마 안 남음"을 이미 알림
-  ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds }] (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
+  ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds, custom }] (custom: 그날 꾸미기에 쓴 돈) (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
 });
 const num = v => Number.isFinite(+v) ? +v : 0;
 /** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_LEGACY(100) + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
  *  세금 날은 불러온 날로(불러오자마자 걷지 않게). 이상한 값은 0 이상으로 */
 export function bankFromSave(j, time = 0) {
   const b = newBank(time); if (!j || typeof j !== "object") { b.vault = VAULT_LEGACY; return b; }   // 은행 기록이 아예 없는 예전 저장도 100
-  for (const k of ["issued", "returned", "taxed", "fees", "wages", "lent", "repaid", "forgiven", "need"]) b[k] = Math.max(0, num(j[k]));
+  for (const k of ["issued", "returned", "taxed", "fees", "wages", "lent", "repaid", "forgiven", "need", "custom"]) b[k] = Math.max(0, num(j[k]));
   b.vault = "vault" in j ? Math.max(0, num(j.vault)) : VAULT_LEGACY + b.returned;
   if (Number.isFinite(j.day) && j.day >= 1) b.day = Math.floor(j.day);
   b.short = j.short ? 1 : 0; b.low = j.low ? 1 : 0;
   b.ledger = (Array.isArray(j.ledger) ? j.ledger : []).filter(e => e && e.day >= 1).slice(-LEDGER_DAYS)
-    .map(e => ({ day: e.day | 0, tax: num(e.tax), returned: num(e.returned), fees: num(e.fees), wages: num(e.wages), lent: num(e.lent), refunds: num(e.refunds) }));
+    .map(e => ({ day: e.day | 0, tax: num(e.tax), returned: num(e.returned), fees: num(e.fees), wages: num(e.wages), lent: num(e.lent), refunds: num(e.refunds), custom: num(e.custom) }));
   return b;
 }
 /** 저장에서 읽은 갈매미 대출(없으면 null) */
