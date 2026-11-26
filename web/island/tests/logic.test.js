@@ -1698,3 +1698,59 @@ test("전기 없음 배지 규칙: 다 지은 가로등·등불 건물·집 가�
   // 철거하면 다시 뜸
   w.removeBuilding(wm.id); assert.deepEqual(ids(), of(starter, lamp, house, cottage, cafe, far, site));
 });
+
+// ---------- 하루 빛 전환(src/render/dayKeys.js · src/world/sun.js)
+import { dayLook, moonMix, nightLook, DAY_CHANNELS } from "../src/render/dayKeys.js";
+import { sunPosition } from "../src/world/sun.js";
+
+test("하루 빛: 점심·밤은 전과 같은 값, 아침 하늘과 저녁 하늘은 다른 빛", () => {
+  const noon = dayLook(40, 180), night = dayLook(-30, 0);
+  assert.ok(Math.abs(noon[15] - 3.3) < 1e-6 && Math.abs(noon[18] - 1.12) < 1e-6 && Math.abs(noon[16] - 0.85) < 1e-6);   // 햇빛·노출·하늘빛 세기(점심)
+  assert.ok(Math.abs(night[15] - 0.35) < 1e-6 && Math.abs(night[18] - 0.95) < 1e-6);
+  const dawn = dayLook(-2, 90), dusk = dayLook(-2, 270);                          // 같은 해 높이, 동쪽(새벽) / 서쪽(저녁)
+  assert.ok(dusk[0] / dusk[2] > dawn[0] / dawn[2], "저녁 하늘 위는 더 보랏빛");
+  assert.ok(dawn[2] > dusk[2] && dawn[4] > dusk[4], "새벽 수평선은 더 푸르스름한 분홍(파랑·초록이 많음)");
+  assert.equal(dayLook(5, 120).length, DAY_CHANNELS);
+});
+
+test("하루 빛: 1분마다 훑어도 색·세기·해/달 바뀜이 툭 튀지 않음(봄·여름·가을·겨울)", () => {
+  const out = new Float32Array(DAY_CHANNELS), prev = new Float32Array(DAY_CHANNELS);
+  const srgb = c => 255 * (c < 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+  const MOON = [0xae, 0xbc, 0xff].map(v => Math.pow((v / 255) * 0.9478672986 + 0.0521327014, 2.4));   // daylight.js 달빛 0xaebcff(선형)
+  for (const ds of ["2026-03-20", "2026-06-21", "2026-09-23", "2026-12-21"]) {
+    const t0 = new Date(ds + "T00:00:00").getTime(); let p = sunPosition(new Date(t0)); dayLook(p.elev, p.azim, prev); let pm = moonMix(p.elev), pa = p.azim;
+    for (let i = 1; i <= 1440; i++) {
+      const s = sunPosition(new Date(t0 + i * 60e3)); dayLook(s.elev, s.azim, out);
+      const m = moonMix(s.elev);
+      for (let c = 0; c < 15; c++) {
+        if (c >= 6 && c < 9) { const sb = out[c] + (MOON[c - 6] - out[c]) * m, pb = prev[c] + (MOON[c - 6] - prev[c]) * pm; assert.ok(Math.abs(srgb(sb) - srgb(pb)) < 12, `${ds} ${i}분 해/달빛 색 ${c}`); continue; }   // 햇빛 색은 달빛과 섞인 뒤가 보이는 값
+        assert.ok(Math.abs(srgb(out[c]) - srgb(prev[c])) < 12, `${ds} ${i}분 색 ${c}`);   // 화면 색(0~255)으로 1분에 12 미만
+      }
+      assert.ok(Math.abs(out[15] - prev[15]) < 0.06, `${ds} ${i}분 햇빛 세기`); assert.ok(Math.abs(m - pm) < 0.05, `${ds} ${i}분 해→달`);
+      const da = Math.abs(((s.azim - pa) % 360 + 540) % 360 - 180); assert.ok(da < 5, `${ds} ${i}분 방위 ${da}`);   // 자정에 방위가 뒤집히지 않음
+      prev.set(out); pm = m; pa = s.azim;
+    }
+  }
+  assert.equal(nightLook(0), 0); assert.equal(nightLook(1), 1); assert.equal(nightLook(0.5), 0.5);   // 밤 판정 경계(0.5)는 같은 자리
+});
+
+test("새 넓은 섬엔 늘 공식은행: 가운데가 울퉁불퉁한 섬(흙길 비탈·고지대가 가운데까지)은 가까운 평평한 자리로 비켜 섬", async () => {
+  const { placeTownBank } = await import("../src/world/World.js");
+  for (const seed of [1, 4, 36, 108, 150]) {                                        // 고치기 전엔 은행이 안 생기던 seed
+    const w = World.create(seed, seededRandom(1), { wild: true, firstGull: true }), b = w.bankB();   // 인구 = 집 수 규칙: 넓은 섬은 갈매미 없이 시작 → 시험 받침으로 기본 갈매미
+    assert.ok(b, `seed ${seed}: 공식은행이 있어야 함`);
+    assert.ok(Math.hypot(b.x - 94, b.z - 94) <= 16, `seed ${seed}: 가운데 근처`);
+    assert.ok(b.cells.every(([x, z]) => w.grid.get(x, z).elevation === 0), "평지에 섬");
+    const u = w.units[0]; assert.ok(findPath(w.grid, Math.floor(u.x), Math.floor(u.z), b.door.x, b.door.z, 60000), "기본 갈매미가 은행 문까지 걸어감");
+    assert.equal(World.create(seed, seededRandom(1), { wild: true }).bankB().x, b.x, "같은 seed → 같은 자리");
+    const zb = w.zones.find(z => z.id === "bank"); assert.equal(zb.x, w.center.x); assert.equal(zb.z, w.center.z - 3);
+  }
+  const w7 = World.create(7, seededRandom(1), { wild: true }), b7 = w7.bankB();   // 원래 가운데에 놓이던 섬은 그대로
+  assert.deepEqual([b7.x, b7.z], [94, 94]); assert.deepEqual(w7.center, { x: 96, z: 96 });
+  // 평평한 자리가 아예 없으면 땅을 골라 놓음(체크무늬 높이: 어디에도 5×4 평지가 없음)
+  const g = new Grid(40, 40, 8); for (let z = 0; z < 40; z++) for (let x = 0; x < 40; x++) g.get(x, z).elevation = (x + z) % 2 ? 0.1 : 0;
+  const w = new World(g, [], seededRandom(1), {}); w.wild = true;
+  const b = placeTownBank(w); assert.ok(b && w.bankB() === b, "땅을 골라 은행을 놓음");
+  assert.ok(b.cells.every(([x, z]) => g.get(x, z).elevation === 0), "은행 칸은 높이 0");
+  assert.ok(Math.hypot(b.x - 18, b.z - 18) <= 16);
+});
