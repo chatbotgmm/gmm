@@ -650,7 +650,9 @@ const WORKING = new Set(["Chop", "Mine", "Build", "Farm", "Trade", "Fish", "Impr
 function bodyTick(u, dt, world) {
   const air = world.air ?? CLIM.NEUTRAL_AIR, inside = !!u.insideBuildingId, f = world.festival;
   const extra = !inside && f && Math.hypot(f.x - u.x, f.z - u.z) <= CLIM.FEST_HEAT_R ? CLIM.FEST_HEAT : 0;
-  const feel = CLIM.feelTemp(inside ? CLIM.indoorTemp(air) : air, { warmth: world.warmthOf?.(u) ?? 0, working: !inside && WORKING.has(u.state), name: u.name, extra });
+  const working = !inside && WORKING.has(u.state), feel = CLIM.feelTemp(inside ? CLIM.indoorTemp(air) : air, { warmth: world.warmthOf?.(u) ?? 0, working, name: u.name, extra });
+  u.chilly = !inside && feel - (working ? CLIM.WORK_HEAT : 0) < HL.CHILL_DAY;     // 추운 날 밖(일하는 열은 빼고): 젖음·과로 감기 굴림의 조건
+  u.wet = HL.stepWet(u.wet, { inside, weather: world.weather?.kind, chilly: u.chilly }, dt); u.workRun = HL.stepWorkRun(u.workRun, { inside, working, chilly: u.chilly }, dt);
   const was = u.bodyT ?? CLIM.BODY_NORMAL, now = CLIM.stepBody(was, CLIM.bodyTarget(feel), dt, CLIM.bodyTau(u.name)); u.bodyT = now;
   if (was > CLIM.COLD_AT && now <= CLIM.COLD_AT) world.noteChill?.(u);
 }

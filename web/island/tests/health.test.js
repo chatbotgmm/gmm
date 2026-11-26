@@ -166,13 +166,13 @@ test("감기 걸림: 30초마다 꽁꽁(38.3 이하)·밖인 갈매미만 hrnd�
   w.stepHealth(30); assert.equal(w.units.filter(o => o.sick).length, 1, `상한 ${[a, b, c].map(o => !!o.sick)}`);
 });
 
-test("감기 옮음: 밖에 있는 감기 갈매미 2칸 안 · 30초마다 2%(목도리면 1%) · 멀거나 건물 안이면 안 옮음", () => {
+test("감기 옮음: 밖에 있는 감기 갈매미 2칸 안 · 30초마다 8%(목도리면 4%) · 멀거나 한쪽만 건물 안이면 안 옮음", () => {
   const { w, u } = winterVillage(11); const o = w.addUnitByName("목수"); w.addUnitByName("미니"); w.addUnitByName("꽃");   // 4마리 → 상한 1이 되지 않게 6마리
   w.addUnitByName("황금"); w.addUnitByName("물방울");
   for (const x of w.units) { x.bodyT = 40; x.x = 1000; x.z = 1000; } u.x = 50; u.z = 50; o.x = 51.5; o.z = 50; u.sick = { kind: "cold", left: 300, med: false };
   const got = []; w.on("sick", e => got.push(e)); w.healthStats.sick = 5;
-  w.hrnd = () => 0.021; w.stepHealth(30); assert.equal(o.sick, undefined, "2.1%면 안 옮음");
-  o.wear = { neck: "scarf", body: null, head: null }; w.hrnd = () => 0.015; w.stepHealth(30); assert.equal(o.sick, undefined, "목도리면 1%까지만");
+  w.hrnd = () => 0.081; w.stepHealth(30); assert.equal(o.sick, undefined, "8.1%면 안 옮음");
+  o.wear = { neck: "scarf", body: null, head: null }; w.hrnd = () => 0.041; w.stepHealth(30); assert.equal(o.sick, undefined, "목도리면 4%까지만");
   o.wear = null; o.x = 52.5; w.hrnd = () => 0; w.stepHealth(30); assert.equal(o.sick, undefined, "2.5칸이면 안 옮음");
   o.x = 51.9; o.insideBuildingId = "h"; w.stepHealth(30); assert.equal(o.sick, undefined, "건물 안이면 안 옮음"); o.insideBuildingId = null;
   w.stepHealth(30); assert.equal(o.sick?.kind, "cold"); assert.equal(got.at(-1).from, u); assert.equal(w.newsLog.at(-1).text, "목수가 기본에게서 감기가 옮았어요");
@@ -245,4 +245,71 @@ test("저장·불러오기: 병·면역·당번 의사·병 기록 · 예전 저
   const old = World.fromJSON(o, seededRandom(1)); assert.ok(old.units.every(x => !x.sick && !x.immune)); assert.equal(old.healthStats.sick, 0); assert.equal(old.buildings.get(cl.id).doctor, null); assert.equal(old.bank.ledger.every(e => e.clinic === 0), true);
   const gone = JSON.parse(JSON.stringify(j)); gone.units = gone.units.filter(x => x.name !== "목수"); assert.equal(World.fromJSON(gone, seededRandom(1)).buildings.get(cl.id).doctor, null);
   const RK = BUILDINGS.clinic; assert.equal(RK.builtBy, "carpenter"); assert.equal(RK.beds, 3); assert.equal(RK.rank, 1);
+});
+
+// ---- 빈도 조정(사용자 결정 2 "가끔 보이게"): 젖음 · 과로 · 실내 전염 · 상한
+test("젖음: 추운 날 밖에서 비 30초·폭풍 15초·눈 120초면 흠뻑(1), 건물 안 20초·맑음 60초면 마름, 따뜻한 날 비는 그대로 · 저장·불러오기(예전 저장은 0)", async () => {
+  const HL = await import("../src/world/health.js");
+  assert.equal(HL.stepWet(0, { weather: "rain", chilly: true }, 15), 0.5); assert.equal(HL.stepWet(0, { weather: "rain", chilly: true }, 30), 1);
+  assert.equal(HL.stepWet(0, { weather: "storm", chilly: true }, 15), 1); assert.equal(HL.stepWet(0, { weather: "snow", chilly: true }, 60), 0.5);
+  assert.equal(HL.stepWet(0.5, { weather: "rain", chilly: false }, 30), 0.5, "따뜻한 날 비는 차지도 마르지도 않음");
+  assert.equal(HL.stepWet(1, { inside: true, weather: "storm" }, 10), 0.5); assert.equal(HL.stepWet(1, { weather: "clear" }, 30), 0.5); assert.equal(HL.stepWet(0.2, { weather: "cloudy" }, 60), 0);
+  // 갈매미에 붙여서: 겨울 비(1 + 2 − 3 = 0°C, 옷 없음 → 추운 날) 밖에 15초 → 약 0.5, 집에 들어가면 마름
+  const { w, u } = winterVillage(20, "rain", 0); u.state = "Held"; w.update(0.01); u.wet = 0;
+  for (let t = 0; t < 15; t += 0.1) w.update(0.1);
+  assert.ok(u.chilly, "겨울 비 = 추운 날"); assert.ok(Math.abs(u.wet - 0.5) < 0.02, `15초 비 ${u.wet}`);
+  const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.units[0].wet, Math.round(u.wet * 100) / 100);
+  assert.equal(World.fromJSON(j, seededRandom(1)).units[0].wet, j.units[0].wet);
+  delete j.units[0].wet; assert.equal(World.fromJSON(j, seededRandom(1)).units[0].wet, 0, "예전 저장 → 0");
+  // 옷(목도리+외투 +12)을 입으면 겨울 비(0°C)는 체감 12 → 추운 날이 아니어서 안 젖음
+  const z = winterVillage(21, "rain", 0); z.u.state = "Held"; z.u.clothes = ["scarf", "coat"]; z.u.wear = { neck: "scarf", body: "coat", head: null }; z.u.wet = 0;
+  for (let t = 0; t < 30; t += 0.1) z.w.update(0.1); assert.equal(z.u.chilly, false); assert.equal(z.u.wet, 0);
+});
+
+test("젖음·과로 감기 굴림: 젖은 채(0.5↑) 추우면(체온 ≤ 39.0) 10% · 추운 날 밖에서 90초 넘게 일하면(안 추워도) 2% · 건물에 들어가면 과로 시간 0 · 소식 문장", async () => {
+  const HL = await import("../src/world/health.js");
+  assert.equal(HL.stepWorkRun(80, { working: true, chilly: true }, 10), 90); assert.equal(HL.stepWorkRun(80, { working: false, chilly: true }, 10), 80, "일 사이 걷는 길은 이어서");
+  assert.equal(HL.stepWorkRun(80, { working: true, chilly: false }, 10), 80); assert.equal(HL.stepWorkRun(80, { inside: true, working: true, chilly: true }, 10), 0);
+  assert.deepEqual(HL.chillRisk({ wet: 0.5, bodyT: 39.0 }), { why: "wet", p: 0.1 }); assert.equal(HL.chillRisk({ wet: 0.5, bodyT: 39.1 }), null, "젖어도 안 추우면 안 굴림");
+  assert.deepEqual(HL.chillRisk({ chilly: true, workRun: 90, bodyT: 40 }), { why: "overwork", p: 0.02 }); assert.equal(HL.chillRisk({ chilly: false, workRun: 500 }), null);
+  const { w, u } = winterVillage(22, "rain", 0); const got = []; w.on("sick", e => got.push(e)); w.healthStats.sick = 5;
+  u.wet = 0.6; u.bodyT = 38.9; u.chilly = true; w.hrnd = () => 0.101; w.stepHealth(30); assert.equal(u.sick, undefined, "10.1%면 안 걸림");
+  w.hrnd = () => 0.099; w.stepHealth(30); assert.equal(u.sick?.kind, "cold"); assert.equal(got.at(-1).why, "wet"); assert.equal(w.newsLog.at(-1).text, "기본이 젖은 채 떨다가 감기에 걸렸어요");
+  u.sick = null; u.immune = 0; u.wet = 0; u.bodyT = 39.6; u.workRun = 89; w.hrnd = () => 0; w.stepHealth(30); assert.equal(u.sick, null, "89초는 아직");
+  u.workRun = 90; w.hrnd = () => 0.021; w.stepHealth(30); assert.equal(u.sick, null, "2.1%면 안 걸림");
+  w.hrnd = () => 0.019; w.stepHealth(30); assert.equal(got.at(-1).why, "overwork"); assert.equal(w.newsLog.at(-1).text, "기본이 추운 날 너무 오래 일하다 감기에 걸렸어요");
+  u.sick = null; u.immune = 0; u.sailing = true; w.hrnd = () => 0; w.stepHealth(30); assert.equal(u.sick, null, "배 위에선 안 굴림"); u.sailing = false;
+  u.insideBuildingId = "x"; w.stepHealth(30); assert.equal(u.sick, null, "건물 안이면 안 굴림"); u.insideBuildingId = null;
+  // 갈매미에 붙여서: 겨울 밖에서 일하면 과로 시간이 쌓이고, 들어가면 0
+  const z = winterVillage(23, "clear", 0), v = z.u; z.w.update(0.01); v.workRun = 0;
+  for (let t = 0; t < 5; t += 0.1) { v.state = "Chop"; v.once = { t: 0, len: 1e9 }; z.w.update(0.1); }   // 도끼질 한 동작이 이어지는 중(once)으로 붙잡아 둠
+  v.once = null;
+  assert.ok(v.chilly && v.workRun > 4.5, `일한 시간 ${v.workRun}`); v.insideBuildingId = z.h.id; v.once = { t: 0, len: 1e9 }; z.w.update(0.1); v.once = null; v.insideBuildingId = null; assert.equal(v.workRun, 0);
+});
+
+test("실내 전염: 같은 건물(의원 빼고) 안에 감기 갈매미와 있으면 30초마다 15% · 의원 안은 안 옮음 · 동시 상한 ⌊n/3⌋ 넘지 않음(굴림이 늘 걸려도)", () => {
+  const { w, u, h } = winterVillage(24, "clear", 0); const o = w.addUnitByName("목수"); for (const n of ["미니", "꽃", "황금", "물방울", "불씨", "그림자", "자이언트"]) w.addUnitByName(n);
+  assert.equal(w.units.length, 9); w.healthStats.sick = 5;
+  for (const x of w.units) { x.bodyT = 40; x.x = 1000 + x.unitId * 10; x.z = 1000; x.wet = 0; x.workRun = 0; x.chilly = false; }
+  u.sick = { kind: "cold", left: 300, med: false }; u.insideBuildingId = h.id; o.insideBuildingId = h.id;
+  w.hrnd = () => 0.151; w.stepHealth(30); assert.equal(o.sick, undefined, "15.1%면 안 옮음");
+  w.hrnd = () => 0.149; w.stepHealth(30); assert.equal(o.sick?.kind, "cold"); assert.equal(w.newsLog.at(-1).text, "목수가 기본에게서 감기가 옮았어요");
+  const cl = placeNear(w, "clinic", h.door.x, h.door.z); const m = w.units.find(x => x.name === "미니"); m.insideBuildingId = cl.id; o.insideBuildingId = cl.id;
+  u.insideBuildingId = null; u.x = 2000; w.hrnd = () => 0; w.stepHealth(30); assert.equal(m.sick, undefined, "의원 안(환자와 당번)은 안 옮음");
+  // 상한: 9마리면 3마리까지. 모두 밖에서 젖고 추움 + 굴림이 늘 걸려도 3마리
+  for (const x of w.units) { x.insideBuildingId = null; x.sick = null; x.immune = 0; x.wet = 1; x.bodyT = 38.9; x.chilly = true; }
+  w.stepHealth(30); assert.equal(w.units.filter(x => x.sick).length, 3);
+  for (const x of w.units) x.insideBuildingId = h.id; w.stepHealth(30); assert.equal(w.units.filter(x => x.sick).length, 3, "실내 전염도 상한에서 멈춤");
+});
+
+test("빈도 상한: 눈 오는 겨울 낮 9마리 · 굴림이 늘 걸려도(hrnd 0) 옷(목도리+외투) 다 입으면 300초 동안 아무도 안 걸리고(추운 날은 미니뿐), 옷이 없으면 걸려도 동시 3마리(⌊9/3⌋)까지", () => {
+  const run = dressed => {
+    const { w } = winterVillage(25, "snow", 1); for (const n of ["목수", "미니", "꽃", "황금", "물방울", "불씨", "그림자", "자이언트"]) w.addUnitByName(n);
+    for (const x of w.units) { x.full = 90; if (dressed) { x.clothes = ["scarf", "coat"]; x.wear = { neck: "scarf", body: "coat", head: null }; } }
+    w.hrnd = () => 0; let most = 0; const chilly = new Set();
+    for (let t = 0; t < 300; t += 0.1) { for (const x of w.units) x.full = Math.max(x.full, 60); w.update(0.1); most = Math.max(most, w.units.filter(x => x.sick).length); for (const x of w.units) if (x.chilly) chilly.add(x.name); }
+    return { most, chilly, sick: w.healthStats.sick };
+  };
+  const a = run(true); assert.equal(a.sick, 0, `옷 다 입음: 걸림 ${a.sick}`); assert.deepEqual([...a.chilly], ["미니"], "체감 −1 + 12 = 11°C → 추운 날 아님(작은 몸 미니만 −2 → 9°C)");
+  const b = run(false); assert.ok(b.sick >= 1 && b.most <= 3, `옷 없음: 걸림 ${b.sick} · 최대 동시 ${b.most}`);
 });

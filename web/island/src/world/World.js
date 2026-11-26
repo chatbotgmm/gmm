@@ -546,12 +546,12 @@ export class World {
     for (const o of this.buildings.values()) if (o !== b && o.doctor === u.name) o.doctor = null;
     b.doctor = u.name; emote(u, "🩺 오늘은 내가 당번!", 2.4); this.emit("doctor", { b, u }); return { ok: true, reason: "" };
   }
-  /** 병에 걸림(한 번에 하나). from: 옮긴 갈매미(전염) */
-  makeSick(u, kind = "cold", from = null) {
+  /** 병에 걸림(한 번에 하나). from: 옮긴 갈매미(전염) · why: 까닭("freeze" 꽁꽁 · "wet" 젖음 · "overwork" 과로 · "spread" 옮음) */
+  makeSick(u, kind = "cold", from = null, why = from ? "spread" : null) {
     if (!HL.canCatch(u)) return false;
     u.sick = HL.newSick(kind); this.healthStats.sick++;
     if (!u.insideBuildingId) emote(u, "🤧 에취!", 2.4);
-    this.emit("sick", { u, kind, from, first: this.healthStats.sick === 1 }); return true;
+    this.emit("sick", { u, kind, from, why, first: this.healthStats.sick === 1 }); return true;
   }
   /** 다 나음: 면역(IMMUNE_SECS) · 의원에서 당번 의사가 돌봤으면 의사 품삯(금고에서, 모자라면 밀림) */
   heal(u, where = "out") {
@@ -582,7 +582,17 @@ export class World {
     const cap = HL.sickCap(this.units.length); let n = this.units.filter(u => u.sick).length;
     for (const u of this.units) {
       if (n >= cap) return;
-      if (!u.insideBuildingId && u.state !== UnitState.Held && (u.bodyT ?? CLIM.BODY_NORMAL) <= CLIM.FREEZE_AT && HL.canCatch(u) && this.hrnd() < HL.FREEZE_CHANCE && this.makeSick(u, "cold")) n++;
+      if (u.insideBuildingId || u.state === UnitState.Held || !HL.canCatch(u)) continue;
+      if ((u.bodyT ?? CLIM.BODY_NORMAL) <= CLIM.FREEZE_AT) { if (this.hrnd() < HL.FREEZE_CHANCE && this.makeSick(u, "cold", null, "freeze")) n++; }
+      else if (!u.sailing) { const r = HL.chillRisk(u, CLIM.COLD_AT); if (r && this.hrnd() < r.p && this.makeSick(u, "cold", null, r.why)) n++; }   // 젖은 채 · 오래 일해서(추운 날 밖)
+    }
+    for (const src of this.units.filter(u => u.sick && u.insideBuildingId)) {                      // 같은 건물 안(의원 빼고)에서 조금 옮음
+      const b = this.buildings.get(src.insideBuildingId); if (!b || BUILDINGS[b.defId].clinic) continue;
+      for (const o of this.units) {
+        if (n >= cap) return;
+        if (o === src || o.insideBuildingId !== src.insideBuildingId || !HL.canCatch(o)) continue;
+        if (this.hrnd() < HL.INDOOR_P && this.makeSick(o, src.sick.kind, src)) n++;
+      }
     }
     const out = u => !u.insideBuildingId && !u.sailing && u.state !== UnitState.Held;
     for (const src of this.units.filter(u => u.sick && out(u))) for (const o of this.units) {
@@ -1744,7 +1754,7 @@ export class World {
       decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0) })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
@@ -1768,7 +1778,7 @@ export class World {
       u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused;   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
       u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0);   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
       u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes);   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)
-      u.sick = HL.sickFromSave(s.sick); u.immune = Math.max(0, Math.min(HL.IMMUNE_SECS, +s.immune || 0)); }   // 병·면역(예전 저장엔 없음 → 건강)
+      u.sick = HL.sickFromSave(s.sick); u.immune = Math.max(0, Math.min(HL.IMMUNE_SECS, +s.immune || 0)); u.wet = Math.max(0, Math.min(1, +s.wet || 0)); }   // 병·면역(예전 저장엔 없음 → 건강)
     w.bank = BK.bankFromSave(j.bank, w.time);                                     // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게). 금고가 없는 예전 저장은 100 + 돌아온 돈
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);
     for (const b of w.buildings.values()) if (b.doctor && !w.units.some(u => u.name === b.doctor)) b.doctor = null;   // 마을에 없는 당번 의사는 비움
