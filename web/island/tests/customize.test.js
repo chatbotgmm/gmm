@@ -363,3 +363,11 @@ test("검토 수정: 낚시 자리 칸에는 나무·바위·지형지물을 못
   }
   assert.ok(seen > 0); assert.ok(bw);
 });
+
+test("검토 수정: 붓·고스트 길 검사는 가까이에서 이어지면 섬 전체를 다시 세지 않음(7×7 파기 미리보기·실제가 덩어리 세기 0번)", () => {
+  const w = wild(); w.bank.vault = 1000; const [x, z] = find(w, openGrass(w, 4)); let floods = 0; const f0 = w.floodComps.bind(w); w.floodComps = () => { floods++; return f0(); };
+  const cells = []; for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) cells.push([x + dx, z + dz]);
+  w.comps(); const dry = w.digCells(cells, { dry: true }); assert.equal(dry.done, 49); assert.equal(floods, 0, "미리보기");
+  assert.ok(w.placeNature("tree", x + 6, z, { dry: true }).ok); assert.equal(floods, 0, "나무 고스트");
+  const r = w.digCells(cells); assert.equal(r.done, 49); assert.equal(floods, 0, "실제 파기");
+});

@@ -1050,8 +1050,23 @@ export class World {
     g.occupants.delete(P); return comp;
   }
   /** 걸을 수 없는 것을 cells에 놓아도(free 칸은 비운 채로) 둘레 8칸의 걸을 수 있는 칸끼리 이어짐이 그대로인가(길 끊김 검사) */
+  /** 빠른 길: excl 칸을 빼고도 starts 칸들이 둘레 R칸 창 안에서 서로 걸어서 이어지나(이어지면 섬 전체 이어짐도 그대로라 덩어리를 새로 셀 필요 없음) */
+  localLinked(excl, starts, R = 3) {
+    if (starts.length < 2) return true;
+    const g = this.grid, W = g.w, xs = [...excl].map(i => i % W), zs = [...excl].map(i => (i / W) | 0);
+    const x0 = Math.min(...xs) - R, x1 = Math.max(...xs) + R, z0 = Math.min(...zs) - R, z1 = Math.max(...zs) + R;
+    const seen = new Set([starts[0]]), q = [starts[0]];
+    while (q.length) { const i = q.pop(), x = i % W, z = (i / W) | 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz, ni = nz * W + nx;
+        if (nx < x0 || nx > x1 || nz < z0 || nz > z1 || !g.inBounds(nx, nz) || seen.has(ni) || excl.has(ni) || !g.canStep(x, z, nx, nz)) continue; seen.add(ni); q.push(ni); } }
+    return starts.every(i => seen.has(i));
+  }
   keepsLinks(cells, free = []) {
     const g = this.grid, W = g.w, own = new Set(cells.map(([x, z]) => z * W + x)), near = [];
+    if (!free.length) {                                                            // 나무·바위 하나: 둘레 걸을 수 있는 칸끼리 가까이에서 이어지면 바로 통과(붓·고스트가 매번 섬 전체를 세지 않게)
+      const nb = []; for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz, i = nz * W + nx; if (g.inBounds(nx, nz) && !own.has(i) && g.isWalkable(nx, nz)) nb.push(i); }
+      if (this.localLinked(own, nb)) return true;
+    }
     const before = free.length ? this.probeComps([], free) : this.comps();
     for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const i = nz * W + nx; if (own.has(i) || before[i] < 0) continue; near.push(i);
@@ -1064,6 +1079,9 @@ export class World {
   /** 파기: 다 지은 건물 문 → 공식은행 문 이어짐이 끊기지 않나(은행이 없으면 검사 안 함) */
   keepsBankLink(x, z, e) {
     const bank = this.bankB(); if (!bank) return true;
+    { const g = this.grid, W = g.w, nb = [];                                       // 빠른 길: 이 칸으로 드나들던 이웃끼리 가까이에서 이어지면 아무 길도 안 끊김
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && g.canStep(x, z, nx, nz)) nb.push(nz * W + nx); }
+      if (this.localLinked(new Set([z * W + x]), nb)) return true; }
     const g = this.grid, before = this.comps(), at = (p) => g.inBounds(p.x, p.z) ? before[p.z * g.w + p.x] : -1, home = at(bank.door); if (home < 0) return true;
     const doors = [...this.buildings.values()].filter(b => b !== bank && this.isDone(b) && !BUILDINGS[b.defId].bridge && at(b.door) === home).map(b => b.door);
     if (!doors.length) return true;
