@@ -32,7 +32,7 @@
   #confirm { flex-direction: column; align-items: stretch; gap: var(--s-2); } #confirm .cfBtns { display: flex; gap: var(--s-3); justify-content: flex-end; }
   /* 확인창 요약(화면 연결 3단계): 핵심 한 줄(이름 · 설계비 · 금고 → 낸 뒤) 크게 + 재료·짓는 이 작게. 못 지으면 '🚫 착공 불가' 띠 */
   #cfInfo { min-width: 0; font-size: var(--fs-body); line-height: var(--lh-tight); font-variant-numeric: tabular-nums; } #cfInfo:empty { display: none; }
-  #cfInfo .cf-main { font-size: var(--fs-title); font-weight: 600; }
+  #cfInfo .cf-main { font-size: var(--fs-title); font-weight: 600; } #cfInfo .cf-nw { white-space: nowrap; }
   #cfInfo .cf-sub { margin-top: calc(2*var(--u)); font-size: var(--fs-cap); color: var(--c-ink-2); } #cfInfo .cf-have { color: var(--c-ink-2); font-size: var(--fs-cap); }
   #cfInfo .cf-bad { margin-top: var(--s-1); padding: var(--s-1) var(--s-2); border-radius: var(--r-sm); background: var(--c-danger-soft); color: var(--c-danger-ink); font-size: var(--fs-sm); font-weight: 600; }
   #cfInfo .cf-hint { font-weight: 400; font-size: var(--fs-cap); }

@@ -51,8 +51,9 @@ export function bridgeInfo(w, okN, waterN) {
 export function planHtml(info) {
   const coin = n => `🪙${fmtNum(n)}`;
   let main;
-  if (info.kind === "bridge") main = `<b>🌉 다리 ${info.n}칸</b>` + (info.eco ? ` · 설계비 합 <b>${coin(info.total)}</b> · 금고 ${coin(info.vault)}${info.k ? ` → <b>${coin(info.after)}</b>` : ""}` : "");
-  else main = `<b>${bvEsc(info.name)}</b>` + (info.eco ? ` · 설계비 <b>${coin(info.fee)}</b> · 금고 ${coin(info.vault)}${info.ok ? ` → <b>${coin(info.after)}</b>` : ""}` : "");
+  const nw = t => `<span class="cf-nw">${t}</span>`;   // 좁은 폭에서 '🪙'과 숫자, '금고 60 → 50'이 줄 사이로 갈라지지 않게(덩어리째 다음 줄로)
+  if (info.kind === "bridge") main = `<b>🌉 다리 ${info.n}칸</b>` + (info.eco ? ` · ${nw(`설계비 합 <b>${coin(info.total)}</b>`)} · ${nw(`금고 ${coin(info.vault)}${info.k ? ` → <b>${coin(info.after)}</b>` : ""}`)}` : "");
+  else main = `<b>${bvEsc(info.name)}</b>` + (info.eco ? ` · ${nw(`설계비 <b>${coin(info.fee)}</b>`)} · ${nw(`금고 ${coin(info.vault)}${info.ok ? ` → <b>${coin(info.after)}</b>` : ""}`)}` : "");
   const mats = info.mats.length ? `재료 ${info.mats.map(([ic, n, have]) => `${ic}${n}${info.eco ? `<span class="cf-have">(창고 ${have})</span>` : ""}`).join(" ")}` : "";
   const sub = [mats, info.who, info.sell ? `다 지으면 🪙${fmtNum(info.sell)}에 팔려요` : "", info.freeWhy ? `설계비 🪙0: ${info.freeWhy}` : "",
     info.kind === "bridge" && info.k && info.k < info.n ? `금고가 모자라 앞 ${info.k}칸만 놓여요` : ""].filter(Boolean).join(" · ");
