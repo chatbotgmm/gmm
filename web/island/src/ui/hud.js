@@ -18,6 +18,7 @@ import { DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
 import { josa } from "../util.js";
 import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
+import { makeSpendSum, chipSpendText, countAt, VF_SUM_MS, VF_COUNT_MS, VF_FLASH_MS } from "./vaultFx.js";
 import { bankHtml } from "./bankView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
@@ -705,12 +706,32 @@ export class Hud {
       if (nm.textContent !== m.meta) { nm.textContent = m.meta; c.setAttribute("aria-label", `${t.name} ${t.verb}, ${m.meta}`); } c.classList.toggle("short", !!m.short); }
   }
   /** 꾸미기로 낸 돈·돌려받은 돈을 금고 칩 옆에 잠깐(3초, 이어서 하면 합쳐서) */
-  customSpent(e) {
-    const d = (e?.refund || 0) - (e?.cost || 0); if (!d) return;
-    const now = performance.now(); if (now > (this.spendUntil || 0)) this.spendSum = 0; this.spendSum += d; this.spendUntil = now + 3000;
+  customSpent(e) { this.vaultSpent((e?.refund || 0) - (e?.cost || 0)); }
+  /** 금고 칩 옆 ±n(꾸미기·설계비·품삯을 한 합으로, VF_SUM_MS 안에 이어서 나가면 합침). count: 칩 숫자가 줄어드는 움직임 + 잠깐 빨간 글(설계비·품삯) */
+  vaultSpent(d, { count = false } = {}) {
+    if (!d) return;
+    const sum = (this.spendSum ||= makeSpendSum(VF_SUM_MS)).add(d, performance.now()).sum;
     let s = this.chipVault.querySelector(".vspend"); if (!s) { s = el("span", "vspend"); s.setAttribute("aria-hidden", "true"); this.chipVault.appendChild(s); }
-    s.textContent = `${this.spendSum > 0 ? "+" : "−"}${Math.abs(this.spendSum)}`; s.dataset.sign = this.spendSum > 0 ? "plus" : "minus"; s.hidden = !this.spendSum;
-    clearTimeout(this.spendT); this.spendT = setTimeout(() => { s.hidden = true; this.spendSum = 0; }, 3000);
+    s.textContent = chipSpendText(sum); s.dataset.sign = sum > 0 ? "plus" : "minus"; s.hidden = !sum;
+    clearTimeout(this.spendT); this.spendT = setTimeout(() => { s.hidden = true; this.spendSum.reset(); }, VF_SUM_MS);
+    if (count && d < 0) this.countVault(-d);
+  }
+  /** 칩 숫자: 지금 보이는 값(또는 나가기 전 값)에서 금고 값까지 VF_COUNT_MS 동안 줄어듦. 움직임 줄이기면 바로 새 값(빨간 글은 그대로 — 움직임이 아님) */
+  countVault(n) {
+    const w = this.world, c = this.chipVault; if (!w?.economy || !c) return;
+    c.classList.add("spent"); clearTimeout(this.flashT); this.flashT = setTimeout(() => c.classList.remove("spent"), VF_FLASH_MS);
+    const to = Math.floor(w.bank?.vault ?? 0);
+    if (document.documentElement.dataset.motion === "reduce") { this.countEnd = 0; this.drawMoneyChips(); return; }
+    const from = this.countEnd > performance.now() ? this.countShown : to + n;
+    this.countFrom = from; this.countTo = to; this.countT0 = performance.now(); this.countEnd = this.countT0 + VF_COUNT_MS; this.countShown = from;
+    if (this.countRaf) return;
+    const step = () => {
+      const now = performance.now(), k = (now - this.countT0) / VF_COUNT_MS, live = Math.floor(this.world?.bank?.vault ?? this.countTo);
+      if (live !== this.countTo) { this.countTo = live; }                         // 세는 동안 금고가 또 바뀌면 그 값으로
+      this.countShown = countAt(this.countFrom, this.countTo, k); cardPut(this.chipParts.vv, this.vaultChip(this.countShown).text);
+      if (k < 1) this.countRaf = requestAnimationFrame(step); else { this.countRaf = 0; this.countEnd = 0; this.drawMoneyChips(); }
+    };
+    this.countRaf = requestAnimationFrame(step);
   }
   /** 🥚 소환 페이지: 지금 부를 수 있는 수(인구 = 집 수) · 단추(못 부르면 꺼짐 + 까닭) · 다음 갈매미 · 자이언트 안내 · 자세히. 글이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게) */
   setSummon(world) {
@@ -863,11 +884,13 @@ export class Hud {
     this.syncInfo();                                                               // 따라가는 갈매미 카드(값만 고침)
     this.syncBldCard();                                                            // 건물 카드(공사장·밭·의원·잡화점): 바뀐 칸만
   }
+  /** 금고 칩 글(금고 값 vault로) */
+  vaultChip(vault) { const w = this.world, bk = w.bank || {}, eco = !!w.economy; return vaultChipOf({ economy: eco, vault, owed: bk.owed ?? 0, state: eco && w.vaultState ? w.vaultState() : "ok", coins: w.res?.coins ?? 0 }, this.form); }
   /** 위쪽 줄 🏦 내 금고 · 🪙 마을 돈: 글자·색이 바뀔 때만 DOM을 고침(5Hz 갱신) */
   drawMoneyChips() {
     const w = this.world, bk = w.bank || {}, eco = !!w.economy, p = this.chipParts, supply = eco ? w.moneySupply() : 0;
-    const v = vaultChipOf({ economy: eco, vault: bk.vault ?? 0, owed: bk.owed ?? 0, state: eco && w.vaultState ? w.vaultState() : "ok", coins: w.res?.coins ?? 0 }, this.form);
-    cardPut(p.vv, v.text); cardPut(p.vt, eco ? townChipOf(supply, "portrait") : "");
+    const v = this.vaultChip(bk.vault ?? 0);
+    if (!(this.countEnd > performance.now())) cardPut(p.vv, v.text);              // 줄어드는 숫자를 보이는 동안은 countVault가 씀 cardPut(p.vt, eco ? townChipOf(supply, "portrait") : "");
     const c = this.chipVault; if ((c.dataset.tone || null) !== v.tone) { if (v.tone) c.dataset.tone = v.tone; else delete c.dataset.tone; }
     if (c.dataset.tip !== v.tip) { c.dataset.tip = v.tip; c.setAttribute("aria-label", v.tip); }
     if (this.chipTown.hidden !== !eco) this.chipTown.hidden = !eco; if (eco) cardPut(this.chipTown, townChipOf(supply, this.form));

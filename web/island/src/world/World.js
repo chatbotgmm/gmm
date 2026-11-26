@@ -357,9 +357,9 @@ export class World {
     if (!this.economy || !u) return;
     if (b?.order || b?.orderBy != null) { const n = this.payOrder(b, E.WAGE); u.coins = (u.coins || 0) + n; if (b.order && this.isDone(b)) this.settleOrder(b); return; }   // 이미 정산된 주문 공사(orderBy)의 마지막 품삯도 금고가 아니라 주문한 갈매미 지갑에서
     this.settleOwed();
-    if (this.bank.vault >= E.WAGE && !(u.wageOwed > 0)) { this.bank.vault -= E.WAGE; this.bank.wages += E.WAGE; this.led("wages", E.WAGE); u.coins = (u.coins || 0) + E.WAGE; this.checkLow(); return; }
+    if (this.bank.vault >= E.WAGE && !(u.wageOwed > 0)) { this.bank.vault -= E.WAGE; this.bank.wages += E.WAGE; this.led("wages", E.WAGE); u.coins = (u.coins || 0) + E.WAGE; this.emit("wage", { u, b, n: E.WAGE }); this.checkLow(); return; }   // wage: 금고 칩 −n·공사장 위 🪙−n(ui/vaultFx.js · 밀린 품삯 갚기는 wagePaid)
     u.wageOwed = (u.wageOwed || 0) + E.WAGE; this.bank.owed += E.WAGE;
-    emote(u, "품삯이 밀렸어…", 2); this.emit("wageOwed", { u, n: E.WAGE }); this.vaultShort("wage", u);
+    emote(u, "품삯이 밀렸어…", 2); this.emit("wageOwed", { u, n: E.WAGE, b }); this.vaultShort("wage", u);
   }
   /** 시장에서 낸 돈: 상인이 가판에 있으면 몫을 주고 나머지는 금고로(회수) */
   pay(u, price, part = null) {

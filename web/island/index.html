@@ -191,6 +191,15 @@
   .sickb { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font-size: var(--fs-body); line-height: 1; padding: calc(3*var(--u)) calc(4*var(--u)); border-radius: var(--r-pill);
     background: #fffdf8; border: calc(2*var(--u)) solid #4a3a2a22; box-shadow: 0 calc(2*var(--u)) calc(5*var(--u)) rgba(40, 30, 20, .22); }   /* 아픈 갈매미 머리 위 🤧(말풍선이 뜨면 숨김) */
   .soilw { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font-size: var(--fs-body); line-height: 1; opacity: .92; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }   /* 목마른 밭 칸 위 💧(가까울 때만) */
+  /* 건축에서 금고 돈이 나감(render/spendFx.js): 공사장 위 「설계비 🪙−n」·「🪙−n」(빨간 글) · 「💸 품삯 밀림」(주황 경고) — 공사장 표시(.badge) 위에 떠오르며 옅어짐. 자리·투명도는 JS(바뀔 때만) */
+  .vfx { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform, opacity; z-index: 2; }
+  .vfx > b { display: block; transform: translate(-50%, -100%); padding: calc(2*var(--u)) calc(8*var(--u)); border-radius: var(--r-pill); background: #fffdf8; box-shadow: var(--e-2);
+    font-size: var(--fs-sm); font-weight: 800; line-height: calc(18*var(--u)); white-space: nowrap; color: var(--c-danger-ink); font-variant-numeric: tabular-nums; }
+  .vfx[data-kind="owed"] > b { background: var(--c-low-bg); color: var(--c-low-ink); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-low-ink), var(--e-2); }
+  .vfx.bump > b { animation: vfxBump .22s ease-out; }
+  @keyframes vfxBump { 40% { transform: translate(-50%, -100%) scale(1.14); } }
+  .vfxCoin { position: absolute; left: 0; top: 0; margin: calc(-9*var(--u)) 0 0 calc(-9*var(--u)); font-size: calc(18*var(--u)); line-height: 1; pointer-events: none; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
+  .vfxCoin[hidden], .vfx[hidden] { display: none; }
   /* 말풍선: 갈매미 머리 위. 보통 말(둥근 네모 + 꼬리) · 생각(💭, 점점이 꼬리) · 감정 아이콘(동그라미) */
   .emote { position: absolute; --s: 1; transform: translate(-50%, calc(-100% - calc(10*var(--u)))) scale(var(--s)); transform-origin: 50% 100%; white-space: nowrap; pointer-events: none;
     background: #fffdf8; color: #4a3a2a; font: 600 var(--fs-body)/var(--lh-tight) system-ui, sans-serif; padding: calc(4*var(--u)) calc(10*var(--u)); border-radius: var(--r-md); border: calc(2*var(--u)) solid #4a3a2a22;
@@ -469,11 +478,13 @@
   #sub .ncard.on { box-shadow: inset 0 0 0 calc(3*var(--u)) var(--c-accent-strong), var(--e-1); }
   #sub .ncard.off { background: var(--c-surface-2); } #sub .ncard.off .ni { filter: grayscale(.9); opacity: .55; } #sub .ncard.off .nm { color: var(--c-ink-2); }
   #sub .ncard.short .nm { color: var(--c-danger-ink); font-weight: 600; }   /* 값이 금고보다 비싸면 빨간 글 */
-  /* 꾸미기로 낸 값·돌려받은 값: 금고 칩 왼쪽에 잠깐(건설 중엔 상태 묶음이 금고 하나라 비어 있는 자리 · 아래는 알림 줄이 덮음) — 자리를 차지하지 않게 떠 있음 */
+  /* 꾸미기·설계비·품삯으로 낸 값·돌려받은 값: 금고 칩 왼쪽에 잠깐(건설 중엔 상태 묶음이 금고 하나라 비어 있는 자리 · 아래는 알림 줄이 덮음) — 자리를 차지하지 않게 떠 있음 */
   #chipVault .vspend { position: absolute; top: 50%; right: calc(100% + calc(4*var(--u))); transform: translateY(-50%); padding: 0 calc(6*var(--u)); border-radius: var(--r-pill); background: var(--c-hud); box-shadow: var(--e-1);
     font-size: var(--fs-cap); font-weight: 800; line-height: calc(18*var(--u)); white-space: nowrap; pointer-events: none; color: var(--c-danger-ink); }
+  body:not([data-mode="edit"]) #chipVault .vspend { top: calc(100% + calc(4*var(--u))); right: auto; left: 50%; transform: translateX(-50%); }   /* 건설 밖(설계비·품삯은 언제나 나감): 왼쪽엔 날씨·시간 칩이 있어 칩 바로 아래에(겹치지 않게) */
   #chipVault .vspend[data-sign="plus"] { color: var(--c-ok-ink); } #chipVault .vspend[hidden] { display: none; }
-  #stat > #chipVault:has(> .vspend:not([hidden])) { overflow: visible; }   /* 칩 밖으로 뜨는 −n이 잘리지 않게(그동안만: 평소엔 좁은 폭 말줄임 그대로) */
+  #stat > #chipVault:has(> .vspend:not([hidden])) { overflow: visible; }
+  #chipVault .vv { transition: color var(--t-fast); } #chipVault.spent .vv { color: var(--c-danger-ink); }   /* 설계비·품삯이 나가면 숫자가 잠깐 빨간 글(0.7초, 흔들지 않음) + 줄어드는 숫자(hud.js countVault) */   /* 칩 밖으로 뜨는 −n이 잘리지 않게(그동안만: 평소엔 좁은 폭 말줄임 그대로) */
   #sub[data-kind="build"] { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, calc(98*var(--u))); grid-auto-columns: calc(104*var(--u)); gap: var(--s-1); overflow-x: auto; align-items: stretch; }   /* 태블릿·PC: 두 줄 격자 */
   /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 900px보다 좁으면 보조 줄을 탭 위 한 줄로 */
   html[data-form="medium"] #top { grid-template-columns: max-content minmax(0, 1fr); }
@@ -584,7 +595,7 @@
   /* ===== 7단계: 화면 맞춤 설정(이 기기에만 기억) — html[data-motion|data-hand|data-keyhint]는 hud.js가 붙임 ===== */
   html[data-motion="full"] { --t-fast: 120ms; --t-med: 200ms; }   /* 설정에서 일부러 켠 움직임은 기기 설정보다 앞섬 */
   html[data-motion="reduce"] { --t-fast: 0ms; --t-med: 0ms; }
-  html[data-motion="reduce"] :is(#tugBtn, .emote.pop, #loading .gull, .roomWait .gull, .bcard .bimg, #msg) { animation: none; }   /* 당기기 남은 시간 줄(::after)은 정보라서 그대로 */
+  html[data-motion="reduce"] :is(#tugBtn, .emote.pop, #loading .gull, .roomWait .gull, .bcard .bimg, #msg, .vfx.bump > b) { animation: none; }   /* 당기기 남은 시간 줄(::after)은 정보라서 그대로 */
   html[data-motion="reduce"] button { transition: none; }
   /* 왼손 배치: 아래 두 버튼(🔨 건설 ↔ 📱 갈매폰)의 자리를 바꿈 */
   html[data-hand="left"] #editBtn { left: auto; right: var(--safe-r); }

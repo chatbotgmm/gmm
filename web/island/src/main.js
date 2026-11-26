@@ -9,6 +9,7 @@ import { skyBackground, createClouds } from "./render/sky.js";
 import { Daylight } from "./render/daylight.js";
 import { PowerRange } from "./render/powerRange.js";
 import { NoPowerBadges } from "./render/noPower.js";
+import { SiteSpendFx } from "./render/spendFx.js";
 import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, ModuleViews, setGroundShade } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
@@ -103,6 +104,7 @@ const SEASON_NOTE = { spring: "밭이 빨리 자라요", summer: "밭이 조금 
 const WEATHER_NOTE = { clear: "", cloudy: "", rain: "밭이 빨리 자라고 물고기가 잘 잡혀요", storm: "낚시를 못 하고 배가 빨리 고파요", snow: "밭이 천천히 자라요" };
 
 const overlay = document.getElementById("overlay");
+const spendFx = new SiteSpendFx({ camera, overlay, getWorld: () => world, getViews: () => buildingViews });   // 건축에서 금고 돈이 나감: 공사장 위 🪙−n·설계비·품삯 밀림 + 칩에서 날아가는 🪙
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
 let world, chunks, buildingViews, unitViews, lifeViews, sparkleView, worldRoot, waterDirty = false, lastWater = 0;
@@ -202,6 +204,10 @@ function mount(w) {
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
   // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
   world.on("custom", e => hud?.customSpent(e));
+  // 건축에서 금고 돈이 나감: 설계비(놓는 순간)·공사 한 바퀴 품삯 → 금고 칩 −n(합침)·숫자 줄어듦·빨간 글 + 공사장 위 표시. 밀리면 공사장 위 「💸 품삯 밀림」. 주문 공사(갈매미 돈)는 이벤트가 없어 안 뜸
+  world.on("fee", e => { hud?.vaultSpent(-e.fee, { count: true }); queueMicrotask(() => spendFx.push(e.b, "fee", e.fee)); });   // 설계비는 공사장 모습(buildingAdded)보다 먼저 옴 → 다 놓은 뒤에
+  world.on("wage", e => { if (!e.b) return; hud?.vaultSpent(-e.n, { count: true }); spendFx.push(e.b, "wage", e.n); });   // b 없음 = 의원 진료 품삯(건축 아님)
+  { const owed = "wageOwed"; world.on(owed, e => { if (e.b) spendFx.push(e.b, "owed", e.n); }); }   // 알림 줄 글은 ALERTS 표가 그대로 냄(여기는 공사장 위 표시만 — 같은 알림 두 번 아님)
   { let last = "", at = 0; world.on("customRefused", e => { const t = `🚫 ${e.reason}`, now = performance.now(); if (t === last && now - at < 1500) return; last = t; at = now; hud?.status(t); }); }
   // 금고·품삯·대출·세금·소환·반짝이·소지품·추위·옷·병·의원 알림: 표 하나(ui/newsAlerts.js ALERTS)로. 문장은 news.js, 색·덧말·소리·거르기는 표
   const gate = makeGate(), batches = new Map(), mine = world;
@@ -452,7 +458,7 @@ function frameBody() {
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
-  buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight);
+  buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight); spendFx.update(innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
   if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }
