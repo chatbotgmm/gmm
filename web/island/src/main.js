@@ -125,7 +125,7 @@ function hookSounds(w) {
   w.on("wishDone", () => sfx.chime([784, 988, 1175, 1568], 0.1, 0.2));
   w.on("rank", () => sfx.fanfare());
   w.on("unitAdded", () => { if (ready) sfx.summon(); });
-  w.on("custom", e => { const p = at(e); if (e.op === "dig" || e.op === "fill") sfx.splash(p, e.op === "dig" ? 0.6 : 0.35);   // 꾸미기: 파기·메우기 첨벙, 놓기·옮기기 툭, 치우기 도끼
+  w.on("custom", e => { if (e.op === "undo") return; const p = at(e); if (e.op === "dig" || e.op === "fill") sfx.splash(p, e.op === "dig" ? 0.6 : 0.35);   // 꾸미기: 파기·메우기 첨벙, 놓기·옮기기 툭, 치우기 도끼(되돌리기는 tools.onUndoSound가 한 번만 냄)
     else sfx.play(e.op === "remove" ? "chop" : "place", { pos: p, vol: 0.7 }); });
 }
 // 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)

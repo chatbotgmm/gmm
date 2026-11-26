@@ -75,6 +75,10 @@ export class Decor {
     world.on("buildingRemoved", b => { this.refresh(b.cells); again(); });
     world.on("ground", e => { this.refresh([[e.x, e.z]]); again(); });
     world.on("decorChanged", e => { this.refresh([[e.x, e.z]]); again(); });
+    // 꾸미기로 나무·바위를 심거나 치우고 동굴·등대를 옮기면 그 칸(옮기기는 옛 칸도)의 씨앗 소품을 다시(새 칸은 숨기고 비운 칸은 다시 보임)
+    world.on("moduleAdded", e => this.refresh(e.module.cells));
+    world.on("moduleRemoved", e => this.refresh(e.module.cells));
+    world.on("moduleMoved", e => this.refresh([...(e.from?.cells || []), ...e.module.cells]));
   }
   /** 같은 순간 여러 칸이 바뀌어도(붓·되돌리기 묶음) 놓은 소품은 한 번만 다시 채움 */
   later() { if (this.pending || this.disposed) return; this.pending = true; queueMicrotask(() => { this.pending = false; if (!this.disposed) this.syncAdded(); }); }
