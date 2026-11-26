@@ -182,6 +182,8 @@ test("갈매미 의원: 아프면 빈 침대가 있는 의원에 가서 진료�
   const { w, u } = winterVillage(12, "clear", 0); for (const o of w.units) o.full = 90;
   const cl = placeNear(w, "clinic", u.x, u.z); assert.ok(cl && w.clinics().length === 1);
   assert.equal(w.canEnter(u, cl), false, "건강하면 못 들어감(구경 안 감)");
+  { const c = (() => { for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (w.buildingAt(cl.x + dx, cl.z + dz) === cl) return [cl.x + dx, cl.z + dz]; })();   // 검토 수정: 건강한 갈매미를 의원에 내려놓으면 "너무 작아요"가 아니라 의원 규칙을 알려 줌
+    assert.ok(w.pickUpUnit(u)); const r = w.dropUnit(u, c[0], c[1]); assert.equal(r.ok, false); assert.equal(r.reason, "의원에는 아픈 갈매미와 당번 의사만 들어가요"); assert.equal(u.insideBuildingId, null); }
   u.sick = { kind: "cold", left: 300, med: false }; u.coins = 10; u.state = "Idle"; u.timer = 0; u.needs.energy = 90; const v0 = w.bank.vault;
   assert.equal(w.canEnter(u, cl), true);
   const visits = [], healed = []; w.on("clinicVisit", e => visits.push(e)); w.on("healed", e => healed.push(e));
