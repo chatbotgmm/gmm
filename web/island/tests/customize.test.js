@@ -338,3 +338,14 @@ test("검토 수정: 스르르 높이 바꾸기(animateShape)로 물↔땅을 �
   assert.ok(o.reshape(fx, fz, "flatten", 0, 1)); for (let i = 0; i < 20 && o.shaping.size; i++) o.update(0.1);
   assert.ok(!o.grid.isWater(fx, fz)); assert.ok(!o.spots.includes(s), "바라보는 물이 땅이 된 낚시 자리는 지워짐");
 });
+
+test("검토 수정: 헤엄치는 갈매미가 올라올 땅 칸에는 나무·바위·지형지물을 못 놓음(올라와서 바위 속에 갇히던 것)", async () => {
+  const { startSwimHere } = await import("../src/units/unitBrain.js");
+  const w = wild(), [x, z] = find(w, openGrass(w, 3)); w.bank.vault = 100;
+  assert.ok(w.digCell(x + 1, z).ok); const u = w.units[0];
+  u.x = x + 1.5; u.z = z + 0.5; startSwimHere(u, w, seededRandom(2), x, z); u.timer = 0.5;
+  const r = w.placeNature("beachRock", x, z); assert.equal(r.ok, false); assert.equal(r.reason, "갈매미가 서 있어요");
+  assert.equal(w.placeNature("tree", x, z).reason, "갈매미가 서 있어요");
+  for (let i = 0; i < 100 && u.swimming; i++) w.update(0.1);
+  assert.ok(!u.swimming); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), "헤엄을 마치고 걸을 수 있는 칸에 섬");
+});

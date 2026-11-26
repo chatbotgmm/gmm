@@ -1012,10 +1012,11 @@ export class World {
     for (const b of this.buildings.values()) { const d = BUILDINGS[b.defId]; if (!d.dock && !d.pier) continue; const p = this.berth(b); if (p.x === x && p.z === z) return b; }
     return null;
   }
-  /** 이 칸들에 밖에 나와 선(헤엄 포함) 갈매미가 있나(들려 있거나 건물 안은 빼고) */
+  /** 이 칸들에 밖에 나와 선(헤엄 포함) 갈매미가 있나(들려 있거나 건물 안은 빼고). 헤엄치는 갈매미가 올라올 땅 칸(u.swim.sx·sz)도 그 갈매미 자리로 봄
+   *  (거기에 나무·바위·지형지물을 놓으면 헤엄을 마치고 그 안으로 올라와 갇힘) */
   unitOn(cells) {
     const keys = new Set(cells.map(([x, z]) => CU.decorKey(x, z)));
-    return this.units.some(u => !u.insideBuildingId && u.state !== UnitState.Held && keys.has(CU.decorKey(Math.floor(u.x), Math.floor(u.z))));
+    return this.units.some(u => !u.insideBuildingId && u.state !== UnitState.Held && (keys.has(CU.decorKey(Math.floor(u.x), Math.floor(u.z))) || (u.swimming && u.swim && keys.has(CU.decorKey(u.swim.sx, u.swim.sz)))));
   }
   /** 땅 칸에 kind(tree·palm·beachRock·ore·bush·flower)를 놓을 수 없는 까닭, 되면 "". self: 비어 있는 것으로 볼 모듈 id(옮기기) */
   landProblem(x, z, kind, self = null) {
