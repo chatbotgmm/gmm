@@ -182,7 +182,11 @@
   #houseCard .bc-shop li { display: flex; gap: var(--s-2); align-items: center; padding: 2px 0; border-bottom: 1px solid var(--c-line); line-height: 1.35; } #houseCard .bc-ico { font-size: var(--fs-icon); }
   #houseCard .bc-price { font-weight: 700; white-space: nowrap; }
   .badge { position: absolute; transform: translate(-50%, -100%); background: #fff; border-radius: var(--r-md); padding: calc(2*var(--u)) calc(7*var(--u)); font-size: var(--fs-sm);
-    box-shadow: var(--e-1); white-space: nowrap; }
+    box-shadow: var(--e-1); white-space: nowrap; text-align: center; z-index: 1; }   /* 건물 표시는 🤧·💧 위(글이 가려지지 않게) */
+  .badge .b2 { display: block; font-weight: 600; color: var(--c-ink-2); } .badge .b2[hidden] { display: none; }   /* 공사장 둘째 줄(준비 단계): 첫 줄보다 옅게 */
+  .sickb { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font-size: var(--fs-body); line-height: 1; padding: calc(3*var(--u)) calc(4*var(--u)); border-radius: var(--r-pill);
+    background: #fffdf8; border: calc(2*var(--u)) solid #4a3a2a22; box-shadow: 0 calc(2*var(--u)) calc(5*var(--u)) rgba(40, 30, 20, .22); }   /* 아픈 갈매미 머리 위 🤧(말풍선이 뜨면 숨김) */
+  .soilw { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font-size: var(--fs-body); line-height: 1; opacity: .92; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }   /* 목마른 밭 칸 위 💧(가까울 때만) */
   /* 말풍선: 갈매미 머리 위. 보통 말(둥근 네모 + 꼬리) · 생각(💭, 점점이 꼬리) · 감정 아이콘(동그라미) */
   .emote { position: absolute; --s: 1; transform: translate(-50%, calc(-100% - calc(10*var(--u)))) scale(var(--s)); transform-origin: 50% 100%; white-space: nowrap; pointer-events: none;
     background: #fffdf8; color: #4a3a2a; font: 600 var(--fs-body)/var(--lh-tight) system-ui, sans-serif; padding: calc(4*var(--u)) calc(10*var(--u)); border-radius: var(--r-md); border: calc(2*var(--u)) solid #4a3a2a22;

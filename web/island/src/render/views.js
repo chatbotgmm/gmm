@@ -9,8 +9,10 @@ import { tintRoofs } from "./roofTint.js";
 import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
 import { placeEl, showEl, textEl } from "../util.js";
+import { siteStepOf } from "../ui/bldView.js";
 
-const _badgeP = new THREE.Vector3(), _lineP = new THREE.Vector3();
+const _badgeP = new THREE.Vector3(), _badgeQ = new THREE.Vector3(), _lineP = new THREE.Vector3(), _tipP = new THREE.Vector3();
+const SITE_NEAR = 34;                                                            // 공사장 배지 둘째 줄은 카메라에서 이 거리(m) 안에서만(전기 없음 배지와 같은 거리)
 
 export class BuildingViews {
   constructor(scene, world, overlay) {
@@ -24,7 +26,8 @@ export class BuildingViews {
     holder.position.set(toWorldX(b.x + (b.rot % 2 ? def.footprint.d : def.footprint.w) / 2), b.elevation ?? 0,
                         toWorldZ(b.z + (b.rot % 2 ? def.footprint.w : def.footprint.d) / 2));
     holder.rotation.y = b.rot * Math.PI / 2; holder.userData.buildingId = b.id;
-    const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; this.overlay.appendChild(badge);
+    const badge = document.createElement("div"); badge.className = "badge"; badge.hidden = true; badge.innerHTML = `<span class="b1"></span><span class="b2" hidden></span>`; this.overlay.appendChild(badge);
+    badge.b1 = badge.firstChild; badge.b2 = badge.lastChild;                        // 첫 줄(🔨 40% · 🐦 2 · 🪧 🪙42) · 둘째 줄(공사장 준비 단계, 가까울 때만)
     const v = { holder, badge, building: b, height: def.height + 0.4 }; this.views.set(b.id, v); this.scene.add(holder);
     const model = await buildingModel(def, { ramp: b.ramp, season: this.world.season });
     if (this.views.get(b.id) !== v) return;                                       // 불러오는 사이 철거됐으면 버림
@@ -36,6 +39,11 @@ export class BuildingViews {
     }
     holder.updateWorldMatrix(true, false);                                          // 모델이 이미 받아져 있으면(불러오기·같은 건물 또 짓기) 아직 한 번도 안 그려져 holder의 월드 행렬이 비어 있음 → 먼저 맞춤
     const box = new THREE.Box3().setFromObject(model); v.height = box.max.y - holder.position.y + 0.35;   // 🐦 표시는 실제 지붕 위에(holder 기준 높이)
+    if (def.clinic) {                                                               // 의원: 문 위 흰 판에 빨간 십자(사용자 GLB가 오기 전까지 의원임을 알림)
+      const lb = box.clone().applyMatrix4(holder.matrixWorld.clone().invert()), sz = Math.min(0.75, (lb.max.x - lb.min.x) * 0.22);   // holder 좌표(문 = +z) 상자
+      v.cross = new THREE.Mesh(CROSS_GEO, crossMat()); v.cross.scale.setScalar(sz); v.cross.position.set(0, Math.min(lb.max.y * 0.62, 1.55), lb.max.z + 0.03);
+      v.cross.visible = this.world.isDone(b); holder.add(v.cross);
+    }
     if (def.asset) {                                                                // 밑동 그늘: 건물·소품이 땅에 떠 보이지 않게 둘레에 옅은 그늘 판(모두 묶어 그리기 1번, 그림자를 끈 설정에서도 보임)
       const g = v.ground = new THREE.Mesh(GROUND_GEO, groundShadeMat()); g.renderOrder = 1; g.userData.noToon = true;
       g.position.set((box.min.x + box.max.x) / 2, holder.position.y + 0.025, (box.min.z + box.max.z) / 2); g.scale.set((box.max.x - box.min.x) * 1.4, 1, (box.max.z - box.min.z) * 1.4);
@@ -57,6 +65,7 @@ export class BuildingViews {
         v.scaffold.position.y = Math.max(0.6, v.height - 0.3) / 2; v.holder.add(v.scaffold); void size;
       }
       if (v.scaffold) v.scaffold.visible = p < 1;
+      if (v.cross) v.cross.visible = p >= 1;
       if (!v.spin) { v.spin = []; v.model.traverse(o => { if (o.name === "windBlades" || o.name === "fountainWater") v.spin.push(o); }); }   // 움직이는 부분은 한 번만 찾아 둠(매 프레임 모델 전체를 훑지 않게)
       if (p >= 1) for (const o of v.spin) { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; }   // 풍차 날개 돌기 · 분수 물
       if (p >= 1 && v.spin.length && focus && Math.abs(v.holder.position.x - focus.x) < 34 && Math.abs(v.holder.position.z - focus.z) < 34) this.animating = true;
@@ -93,8 +102,13 @@ export class BuildingViews {
       if (n === 0 && !building && !forSale) { showEl(v.badge, false); continue; }
       tmp.set(v.holder.position.x, v.holder.position.y + v.height, v.holder.position.z).project(camera);
       if (tmp.z > 1 || Math.abs(tmp.x) > 1.2 || Math.abs(tmp.y) > 1.2) { showEl(v.badge, false); continue; }   // 카메라 뒤·화면 밖은 숨기고 건드리지 않음
-      textEl(v.badge, building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${def.price}`);
-      placeEl(v.badge, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); showEl(v.badge, true);   // 글자·자리는 바뀔 때만 씀(util.js)
+      textEl(v.badge.b1, building ? `🔨 ${Math.round(b.hits / b.need * 100)}%` : n ? `🐦 ${n}` : `🪧 🪙${this.world.housePrice(b)}`);   // 매물 값은 물가를 따름(시장 앱과 같은 값)
+      const near = building && camera.position.distanceTo(_badgeQ.set(v.holder.position.x, v.holder.position.y + v.height, v.holder.position.z)) < SITE_NEAR;
+      if (near) textEl(v.badge.b2, siteStepOf(b, this.world).text); showEl(v.badge.b2, near);   // 공사장 둘째 줄: 🪵 3/5 · 🪨 0/5 모으는 중 · 🏦 재료 가지러 가는 중 · 🔨 짓는 중 · 2바퀴 남음 · ⏳ 일꾼을 기다려요
+      showEl(v.badge, true);
+      const key = v.badge.b1._txt + "|" + (near ? v.badge.b2._txt : ""); if (v.badge._key !== key) { v.badge._key = key; v.badge._w = v.badge.offsetWidth; }   // 폭은 글이 바뀔 때만 잼
+      const half = v.badge._w / 2 + 4, x = Math.min(Math.max((tmp.x * 0.5 + 0.5) * w, half), Math.max(half, w - half));   // 화면 가장자리에서 잘리지 않게 안쪽으로(두 줄 배지는 폭이 넓음)
+      placeEl(v.badge, x, (-tmp.y * 0.5 + 0.5) * h);                               // 글자·자리는 바뀔 때만 씀(util.js)
     }
   }
 }
@@ -105,6 +119,18 @@ export async function buildingModel(def, { ramp = null, season = null } = {}) {
   const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
   if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
   return model;
+}
+
+// 의원 십자 판: 흰 네모 + 빨간 십자를 그린 그림 한 장(평면 하나 = 그리기 호출 하나)
+const CROSS_GEO = new THREE.PlaneGeometry(1, 1);
+let CROSS_MAT = null;
+function crossMat() {
+  if (CROSS_MAT) return CROSS_MAT;
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  g.fillStyle = "#c9c2b4"; g.fillRect(0, 0, 128, 128); g.fillStyle = "#ffffff"; g.fillRect(7, 7, 114, 114);   // 회색 테두리 + 흰 판(roundRect는 옛 Safari에 없어 네모로)
+  g.fillStyle = "#e0332b"; g.fillRect(50, 20, 28, 88); g.fillRect(20, 50, 88, 28);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return (CROSS_MAT = new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.18 }));   // 살짝 스스로 밝게(그늘진 벽에서도 보임)
 }
 
 // 밑동 그늘 판: 가운데는 진하고(건물에 가려짐) 가장자리로 갈수록 옅어지는 둥근 네모
@@ -280,6 +306,12 @@ export async function addModuleViews(scene, world) {
   return map;
 }
 
+const WEAR_SLOT = [["neck", "scarf"], ["body", "coat"]];                     // 입은 옷 자리 → 장신구(characters.js fitWear)
+const SICK_GLOW = new THREE.Color(0x4a1208), NO_GLOW = new THREE.Color(0x000000);
+/** 아픈 갈매미: 몸 재질의 발광 색을 살짝 붉게(툰으로 바꾼 재질과 원래 재질 둘 다 — 그림체를 바꿔도 그대로). 장신구·도구 재질은 건드리지 않음 */
+function sickTint(ch, on) {
+  ch.root.traverse(o => { if (!o.isSkinnedMesh) return; for (const m of [].concat(o.material)) for (const x of [m, m.userData.src]) if (x?.emissive) { x.userData.glow0 ??= x.emissive.getHex(); x.emissive.copy(on ? SICK_GLOW : NO_GLOW.setHex(x.userData.glow0)); } });
+}
 const BLOB_GEO = new THREE.CircleGeometry(1, 20);
 const WAKE_GEO = new THREE.RingGeometry(0.86, 1, 28);
 const WAKE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
@@ -312,6 +344,11 @@ export class UnitViews {
       v.castOn = undefined;                                                         // 그림자는 거리 보고 sync에서 정함
     });
     return v;
+  }
+  /** 이 갈매미 손의 물뿌리개 끝(월드 좌표, 보일 때만) — life.js 물방울이 여기서 나옴. 없으면 null */
+  canTip(u) {
+    const v = this.views[this.world.units.indexOf(u)], can = v?.ch?.inHand.can; if (!can?.visible || !v.g.visible) return null;
+    const tip = can.getObjectByName("tip"); return tip ? tip.getWorldPosition(_tipP) : null;
   }
   /** 그래픽 설정: 카메라에서 이 거리(m) 안의 갈매미만 실제 그림자, 그 밖은 발밑 원판(0이면 모두 원판) */
   setShadowDist(d) { this.shadowDist = d; for (const v of this.views) v.castOn = undefined; }
@@ -377,7 +414,10 @@ export class UnitViews {
         if (!(u.anim && playAnim(ch, u.anim, workSpeed, 0.12, restart))) {
           if (!walking) playAnim(ch, "Idle", 1); else if (u.running) playAnim(ch, "Run", runScale * speedBoost); else playAnim(ch, "Walk", walkScale * speedBoost);
         }
-        for (const [k, t] of Object.entries(ch.inHand)) t.visible = u.tool === k;
+        const watering = u.state === "GoWater" || u.state === "Water";               // 물주기 길(물 뜨러·밭으로) 내내 물뿌리개를 듦
+        for (const [k, t] of Object.entries(ch.inHand)) { const on = k === "can" ? watering || u.tool === k : u.tool === k && !watering; if (t.visible !== on) t.visible = on; }
+        if (ch.wear) for (const [slot, kind] of WEAR_SLOT) { const m = ch.wear[kind], on = u.wear?.[slot] === kind; if (m && m.visible !== on) m.visible = on; }   // 입은 옷(바뀔 때만)
+        const sick = !!u.sick; if (v.sickOn !== sick || v.sickOf !== ch) { v.sickOn = sick; v.sickOf = ch; sickTint(ch, sick); }   // 아픈 동안 몸이 살짝 붉게
         // 애니메이션 계산: 화면 밖이면 건너뛰고, 멀면 두 프레임에 한 번(시간은 모아서)
         sphere.center.copy(g.position); sphere.radius = 1.5 * (u.scale || 1);
         const onScreen = !camera || frustum.intersectsSphere(sphere), far = camera && camera.position.distanceTo(g.position) > 28;

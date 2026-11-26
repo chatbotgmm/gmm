@@ -7,8 +7,19 @@ import { modelFor, rawModel } from "./assets.js";
 import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
 import { placeEl, showEl } from "../util.js";
+import { DRY_BELOW } from "../world/farming.js";
 
-const _lifeP = new THREE.Vector3();
+const _lifeP = new THREE.Vector3(), _lifeM = new THREE.Matrix4(), _lifeC = new THREE.Color();
+// 밭 칸: 흙 판(촉촉함 색) · 자라는 단계 3가지 · 목마른 칸 위 💧 · 물 줄 때 물방울
+export const SOIL_WET = new THREE.Color(0x4e3420), SOIL_DRY = new THREE.Color(0xc9a46e);   // 촉촉함 WET_AT 이상 짙은 갈색 · DRY_BELOW 아래 밝은 마른 흙(사이는 섞음)
+export const SOIL_WET_AT = 0.35, SOIL_Y = 0.13, SOIL_SIZE = 0.8;                // 흙 판 높이(m, 밭 틀 안 흙 위)·크기(칸에 대한 비율)
+export const CROP_STAGE = [[0.33, 0.4], [0.8, 0.7], [Infinity, 1]];             // 자란 정도(1 − 남은 시간/자랄 시간) < 앞 값 → 크기: 새싹 0.4 · 반쯤 0.7 · 다 자람 1
+export const DROP_SECS = 0.8;                                                   // 물방울이 떨어지는 시간
+const SOIL_ICON_NEAR = { portrait: 25, landscape: 25 }, SOIL_ICON_FAR = 40;     // 💧은 폰에서 카메라 25m 안만(넓은 화면 40m)
+/** 촉촉함 → 흙 색(out에 씀) */
+export function soilColor(m, out) { const k = Math.max(0, Math.min(1, ((m ?? 1) - DRY_BELOW) / (SOIL_WET_AT - DRY_BELOW))); return out.copy(SOIL_DRY).lerp(SOIL_WET, k); }
+/** 자란 정도(0~1) → 단계 크기 */
+export const cropStageScale = f => CROP_STAGE.find(([lim]) => f < lim)[1];
 
 export class LifeViews {
   constructor(scene, world, overlay) {
@@ -41,11 +52,20 @@ export class LifeViews {
     Promise.all(["assets/props/carrot_{T}.glb", "assets/props/cabbage_{T}.glb"].map(u => rawModel(u))).then(ms => { this.cropModels = ms; this.crops.forEach(swap); }).catch(() => {});
     this.swapCrop = swap;
     world.plots.forEach(addCrop);
-    world.on("plotAdded", addCrop);                                                  // 목수가 지은 밭
-    world.on("plotRemoved", p => { const i = this.crops.findIndex(c => c.p === p); if (i >= 0) { scene.remove(this.crops[i].g); this.crops.splice(i, 1); } });
+    world.on("plotAdded", p => { addCrop(p); this.soilDirty = true; });              // 목수가 지은 밭
+    world.on("plotRemoved", p => { const i = this.crops.findIndex(c => c.p === p); if (i >= 0) { scene.remove(this.crops[i].g); this.crops.splice(i, 1); this.soilDirty = true; } });
+    // 흙 판: 모든 칸을 InstancedMesh 하나로(그리기 호출 1). 칸 수가 용량을 넘으면 두 배로 다시 만듦. 색은 촉촉함이 바뀐 칸만 씀
+    this.soilGeo = new THREE.PlaneGeometry(SOIL_SIZE, SOIL_SIZE).rotateX(-Math.PI / 2);
+    this.soilMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }); this.soilMat.userData.noSnow = true;
+    this.soil = null; this.soilDirty = true; this.soilIcons = [];
+    world.on("plotWater", e => this.splash(e.p, e.u));                               // 물 주기: 물뿌리개 끝(없으면 칸 위)에서 물방울
+    this.dropGeo = new THREE.SphereGeometry(0.022, 5, 4); this.dropMat = new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.9 });
+    this.canTip = null;                                                              // main.js가 줌: 갈매미 → 손의 물뿌리개 끝 월드 좌표(없으면 null)
     // 말풍선(유닛마다 하나)과 구역 이름
     this.emotes = [];                                                              // 갈매미마다 말풍선(소환되면 그때 만듦)
     this.emoteFor = i => this.emotes[i] ||= (() => { const e = document.createElement("div"); e.className = "emote"; e.hidden = true; overlay.appendChild(e); return e; })();
+    this.sickEls = [];                                                             // 아픈 갈매미 머리 위 🤧(갈매미마다 하나, 처음 아플 때 만듦)
+    this.sickFor = i => this.sickEls[i] ||= (() => { const e = document.createElement("div"); e.className = "sickb"; e.textContent = "🤧"; e.hidden = true; overlay.appendChild(e); return e; })();
     this.zoneEls = world.zones.map(z => { const e = document.createElement("div"); e.className = "zone"; e.textContent = z.label; overlay.appendChild(e); return { z, e }; });
     this.showZones = true;
   }
@@ -89,6 +109,34 @@ export class LifeViews {
     for (let i = 0; i < 5; i++) { const m = new THREE.Mesh(this.leafGeo, this.leafMat); m.position.set(toWorldX(t.x + 0.5 + (Math.random() - 0.5) * 0.8), top + Math.random() * 0.5, toWorldZ(t.z + 0.5 + (Math.random() - 0.5) * 0.8)); m.rotation.set(Math.random() * 3, Math.random() * 3, 0); this.scene.add(m);
       this.sparks.push({ m, v: new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.3, (Math.random() - 0.5) * 0.6), t: 1.4, leaf: true }); }
   }
+  /** 물 주기 물방울: 물뿌리개 끝(없으면 칸 0.5m 위)에서 칸 쪽으로 6방울, DROP_SECS 뒤 다 사라짐(남는 물체 0) */
+  splash(p, u) {
+    const gx = toWorldX(p.x + 0.5), gz = toWorldZ(p.z + 0.5), gy = this.world.standHeight(p.x + 0.5, p.z + 0.5) + SOIL_Y, from = (u && this.canTip?.(u)) || _lifeP.set(gx, gy + 0.5, gz);
+    const fx = from.x, fy = from.y, fz = from.z;
+    for (let i = 0; i < 6; i++) {
+      const m = new THREE.Mesh(this.dropGeo, this.dropMat); m.position.set(fx, fy, fz); this.scene.add(m);
+      const t = DROP_SECS * (0.7 + 0.3 * i / 5), vx = (gx - fx) / t + (Math.random() - 0.5) * 0.4, vz = (gz - fz) / t + (Math.random() - 0.5) * 0.4, vy = (gy - fy) / t + 4.9 * t * 0.5;   // 칸에 닿게 던짐(중력 아래 4.9 m/s²)
+      this.sparks.push({ m, v: new THREE.Vector3(vx, vy, vz), t, drop: true });
+    }
+  }
+  /** 흙 판 자리(칸이 바뀌었을 때만)와 색(촉촉함이 바뀐 칸만) */
+  syncSoil() {
+    const crops = this.crops;
+    if (this.soilDirty) {
+      this.soilDirty = false;
+      if (!this.soil || this.soil.instanceMatrix.count < crops.length) {
+        if (this.soil) { this.scene.remove(this.soil); this.soil.dispose(); }
+        const cap = Math.max(16, 2 ** Math.ceil(Math.log2(Math.max(1, crops.length))));
+        this.soil = new THREE.InstancedMesh(this.soilGeo, this.soilMat, cap); this.soil.receiveShadow = true; this.soil.name = "soil"; this.soil.frustumCulled = false; this.scene.add(this.soil);
+      }
+      crops.forEach((c, i) => { _lifeM.makeTranslation(toWorldX(c.p.x + 0.5), this.world.standHeight(c.p.x + 0.5, c.p.z + 0.5) + SOIL_Y, toWorldZ(c.p.z + 0.5)); this.soil.setMatrixAt(i, _lifeM); c.wet = undefined; });
+      this.soil.count = crops.length; this.soil.instanceMatrix.needsUpdate = true;
+    }
+    if (!this.soil) return;
+    let changed = false;
+    crops.forEach((c, i) => { const m = Math.round((c.p.moisture ?? 1) * 50) / 50; if (c.wet !== m) { c.wet = m; this.soil.setColorAt(i, soilColor(m, _lifeC)); changed = true; } });   // 0.02 단위로만 다시 씀
+    if (changed && this.soil.instanceColor) this.soil.instanceColor.needsUpdate = true;
+  }
   spark(o) {
     const y = terrainHeight(this.world.grid, o.x + 0.5, o.z + 0.5) + 0.2;
     for (let i = 0; i < 6; i++) {
@@ -124,21 +172,35 @@ export class LifeViews {
       }
     }
     for (let i = this.sparks.length - 1; i >= 0; i--) {
-      const s = this.sparks[i]; s.t -= dt; s.v.y -= (s.leaf ? 0.9 : 9.8) * dt; if (s.leaf) { s.v.y = Math.max(s.v.y, -0.6); s.m.rotation.x += dt * 3; s.m.rotation.z += dt * 2; } s.m.position.addScaledVector(s.v, dt);   // 잎은 천천히 팔랑
+      const s = this.sparks[i]; s.t -= dt; s.v.y -= (s.leaf ? 0.9 : s.drop ? 4.9 : 9.8) * dt; if (s.leaf) { s.v.y = Math.max(s.v.y, -0.6); s.m.rotation.x += dt * 3; s.m.rotation.z += dt * 2; } s.m.position.addScaledVector(s.v, dt);   // 잎은 천천히 팔랑
       if (s.t <= 0) { this.scene.remove(s.m); this.sparks.splice(i, 1); }
     }
-    for (const { p, g } of this.crops) {
-      const grow = p.stage === "growing" ? 1 - Math.max(0, p.t) / (p.grow || 40) : p.stage === "ripe" ? 1 : 0;
-      g.visible = p.stage !== "empty"; g.scale.setScalar(0.25 + 0.75 * grow);
+    this.syncSoil();
+    const phone = SOIL_ICON_NEAR[document.documentElement.dataset.form], iconNear = phone ?? SOIL_ICON_FAR; let nIcon = 0;
+    for (const c of this.crops) {
+      const { p, g } = c, grow = p.stage === "growing" ? 1 - Math.max(0, p.t) / (p.grow || 40) : p.stage === "ripe" ? 1 : 0, sc = p.stage === "ripe" ? 1 : cropStageScale(grow);   // 자라는 단계 3가지(새싹·반쯤·다 자람)
+      g.visible = p.stage !== "empty"; if (c.sc !== sc) { c.sc = sc; g.scale.setScalar(sc); }
       if (!g.userData.model) for (const m of g.children) m.material = p.stage === "ripe" ? this.cropRipe : this.cropGreen;
-      else g.position.y = this.world.standHeight(p.x + 0.5, p.z + 0.5) + 0.06 - (p.stage === "ripe" ? 0 : 0.05 * (1 - grow));   // 모델: 자라며 커지고 땅 위로
+      else g.position.y = this.world.standHeight(p.x + 0.5, p.z + 0.5) + 0.06 - (p.stage === "ripe" ? 0 : 0.05 * (1 - sc));   // 모델: 단계마다 커지고 땅 위로
+      if ((p.moisture ?? 1) >= DRY_BELOW || p.stage === "ripe") continue;          // 목마른 칸(거둘 것은 빼고): 칸 위 💧(가까울 때만)
+      tmp.set(toWorldX(p.x + 0.5), this.world.standHeight(p.x + 0.5, p.z + 0.5) + 0.35, toWorldZ(p.z + 0.5));
+      if (camera.position.distanceTo(tmp) > iconNear) continue; tmp.project(camera); if (tmp.z > 1 || Math.abs(tmp.x) > 1.1 || Math.abs(tmp.y) > 1.1) continue;
+      const e = this.soilIcons[nIcon] ||= (() => { const d = document.createElement("div"); d.className = "soilw"; d.textContent = "💧"; d.hidden = true; this.overlay.appendChild(d); return d; })();
+      if (!e.isConnected) this.overlay.appendChild(e);
+      placeEl(e, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); showEl(e, true); nIcon++;
     }
+    for (let i = nIcon; i < this.soilIcons.length; i++) showEl(this.soilIcons[i], false);
     // 말풍선(자리·크기·투명도는 바뀔 때만 씀 → 가만히 있을 땐 DOM을 건드리지 않음)
     this.world.units.forEach((u, i) => {
-      const e = this.emoteFor(i), show = u.emoteT > 0 && !!u.emoteText && !u.insideBuildingId; if (!show) { showEl(e, false); if (e.dataset.t) e.dataset.t = ""; return; }
+      const e = this.emoteFor(i), show = u.emoteT > 0 && !!u.emoteText && !u.insideBuildingId, sick = !!u.sick && !show && !u.insideBuildingId;   // 🤧은 말풍선이 없을 때만(겹치지 않게)
+      if (!sick) { if (this.sickEls[i]) showEl(this.sickEls[i], false); }
+      if (!show && !sick) { showEl(e, false); if (e.dataset.t) e.dataset.t = ""; return; }
+      if (!show) { showEl(e, false); if (e.dataset.t) e.dataset.t = ""; }
       tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z));
       const dist = camera.position.distanceTo(tmp); tmp.project(camera);
-      if (tmp.z > 1 || dist > 75 || Math.abs(tmp.x) > 1.3 || Math.abs(tmp.y) > 1.3) { showEl(e, false); return; }   // 너무 멀거나 화면 밖이면 숨김(화면이 어지럽지 않게)
+      const off = tmp.z > 1 || dist > 75 || Math.abs(tmp.x) > 1.3 || Math.abs(tmp.y) > 1.3;   // 너무 멀거나 화면 밖이면 숨김(화면이 어지럽지 않게)
+      if (sick) { const se = this.sickFor(i); if (!se.isConnected) this.overlay.appendChild(se); showEl(se, !off); if (!off) placeEl(se, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); return; }
+      if (off) { showEl(e, false); return; }
       showEl(e, true);
       if (e.dataset.t !== u.emoteText) {                                          // 새 말: 모양 고르고 톡 튀어나오게
         e.dataset.t = u.emoteText; e.textContent = u.emoteText;

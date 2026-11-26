@@ -71,6 +71,7 @@ export const TOOL_GRIP = {
   hammer:  { up: [0, 0, 1], side: [-1, 0, 0] },
   rod:     { up: [0.56, 0.77, 0.29], side: [0, 0, 1] },
   hoe:     { up: [0, 0, 1], side: [0, -1, 0] },                                   // 괭이: 도끼처럼 쥠(날은 자루 끝에 앞으로)
+  can:     { up: [0, 0, 1], side: [1, 0, 0] },                                    // 물뿌리개: 손잡이를 쥐고 몸통은 아래, 주둥이는 옆(+X)
 };
 function gripQuaternion(g) {
   const y = new THREE.Vector3(...g.up).normalize();
@@ -100,6 +101,17 @@ function hoeModel() {
   const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.012, 0.07), iron); blade.position.set(0.035, 0.37, 0); blade.rotation.z = -0.25; g.add(blade);
   return g;
 }
+/** 물뿌리개(직접 만듦, 색 하나, 모양 하나 = 그리기 호출 하나): 원기둥 몸통 + 비스듬한 주둥이·꽃잎 머리 + 위 손잡이. 쥐는 곳(손잡이)이 원점, 몸통은 그 아래(−Y) */
+const CAN_MAT = new THREE.MeshStandardMaterial({ color: 0x4f9bd9, roughness: 0.55 });
+function canModel() {
+  const body = new THREE.CylinderGeometry(0.05, 0.055, 0.1, 10).translate(0, -0.07, 0);
+  const spout = new THREE.CylinderGeometry(0.008, 0.014, 0.12, 6).rotateZ(-1.0).translate(0.075, -0.06, 0);
+  const rose = new THREE.CylinderGeometry(0.018, 0.01, 0.02, 8).rotateZ(-1.0).translate(0.125, -0.025, 0);
+  const handle = new THREE.TorusGeometry(0.035, 0.007, 5, 10, Math.PI).translate(0, -0.02, 0);
+  const g = new THREE.Group(), m = new THREE.Mesh(mergeGeos([body, spout, rose, handle]), CAN_MAT); m.castShadow = true; g.add(m);
+  const tip = new THREE.Object3D(); tip.name = "tip"; tip.position.set(0.135, -0.02, 0); g.add(tip);   // 물이 나오는 곳(life.js 물방울)
+  return g;
+}
 export function loadTools(props) {
   if (toolProtos) return toolProtos;
   const rod = new THREE.Group();
@@ -110,7 +122,7 @@ export function loadTools(props) {
   const tip = new THREE.Object3D(); tip.name = "tip"; tip.position.y = 0.56; rod.add(tip);
   const tryTool = (url, len) => toolModel(url, len).catch(e => { console.warn("도구 모델을 못 불러옴", url, e); return null; });
   toolProtos = Promise.all([tryTool(props.axe, 0.34), tryTool(props.pickaxe, 0.34), tryTool(props.hammer, 0.24)])
-    .then(([axe, pickaxe, hammer]) => ({ axe, pickaxe, hammer, rod, hoe: hoeModel() }));
+    .then(([axe, pickaxe, hammer]) => ({ axe, pickaxe, hammer, rod, hoe: hoeModel(), can: canModel() }));
   return toolProtos;
 }
 
@@ -241,6 +253,65 @@ function makePoseClips(root, idle) {
   return out;
 }
 
+// ---- 옷(목도리·외투): 입은 옷(u.wear)을 보이게 하는 장신구. 모양·재질은 모두가 같이 씀(그리기 호출 = 입은 장신구 수, 갈매미당 많아야 2).
+//  자리·크기는 갈매미마다 서 있기 자세의 피부 꼭짓점에서 잼: 목도리는 머리 뼈 높이(목), 외투는 골반~목. 둘 다 몸통 뼈(spine/chest)에 붙여 몸을 따라 움직임.
+//  반지름은 앞뒤(z) 두께로 잼 — 갈매미 날개가 옆(x)으로 펼쳐져 있어 옆 폭으로 재면 날개까지 감쌈(외투 옆 폭만 그 높이 꼭짓점 옆 거리의 가운데 값으로 따로).
+export const WEAR_MAT = {
+  scarf: new THREE.MeshStandardMaterial({ color: 0xd9433a, roughness: 0.9 }),
+  coat: new THREE.MeshStandardMaterial({ color: 0x2f3f73, roughness: 0.85 }),
+};
+for (const m of Object.values(WEAR_MAT)) m.userData.noSnow = true;
+const WEAR_GEO = {
+  scarf: (() => { const ring = new THREE.TorusGeometry(1, 0.2, 6, 16).rotateX(Math.PI / 2), tail = new THREE.BoxGeometry(0.34, 0.9, 0.12).translate(0.35, -0.5, 1.02);   // 둥근 고리 + 앞으로 늘어진 끝자락
+    return mergeGeos([ring, tail]); })(),
+  coat: (() => { const body = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, Math.PI * 0.3, Math.PI * 0.42), top = Math.cos(Math.PI * 0.3), rt = Math.sin(Math.PI * 0.3);   // 둥근 몸을 감싸는 공의 가운데 띠(가슴~배) + 위 깃
+    return mergeGeos([body, new THREE.TorusGeometry(rt, 0.07, 5, 16).rotateX(Math.PI / 2).translate(0, top, 0)]); })(),
+};
+/** 여러 모양을 한 모양으로(그리기 호출 하나) — BufferGeometryUtils 없이: 위치·법선·색인만 */
+function mergeGeos(list) {
+  const g = new THREE.BufferGeometry(), total = list.reduce((a, x) => a + x.attributes.position.count, 0);
+  const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), idx = []; let o = 0;
+  for (const x of list) {
+    const n = x.attributes.position.count; pos.set(x.attributes.position.array, o * 3); nor.set(x.attributes.normal.array, o * 3);
+    if (x.index) for (const i of x.index.array) idx.push(i + o); else for (let i = 0; i < n; i++) idx.push(i + o);
+    o += n;
+  }
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("normal", new THREE.BufferAttribute(nor, 3)); g.setIndex(idx); g.computeBoundingSphere();
+  return g;
+}
+function fitWear(root) {
+  const bones = {}; root.traverse(o => { if (o.isBone) bones[o.name.replace(/[._]/g, "").toLowerCase()] = o; });
+  const head = bones.head, torso = bones.chest || bones.spine, hips = bones.hips || bones.pelvis; let mesh = null;
+  root.traverse(o => { if (o.isSkinnedMesh && !mesh) mesh = o; });
+  if (!head || !torso || !hips || !mesh) return {};
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert(), at = o => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+  const pos = mesh.geometry.attributes.position, p = new THREE.Vector3(), pts = [];
+  for (let i = 0; i < pos.count; i += 2) { mesh.getVertexPosition(i, p); pts.push(p.clone().applyMatrix4(mesh.matrixWorld).applyMatrix4(inv)); }
+  let y0 = Infinity, y1 = -Infinity; for (const q of pts) { y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
+  const H = y1 - y0, cx = at(hips).x;
+  /** y 높이 띠에서 몸 가운데(z)와 앞뒤 반지름(가운데 x 띠 안 꼭짓점의 95번째 값) */
+  const ring = y => {
+    const band = pts.filter(q => Math.abs(q.y - y) < H * 0.05 && Math.abs(q.x - cx) < H * 0.12); if (band.length < 4) return null;
+    const zs = band.map(q => q.z).sort((a, b) => a - b), lo = zs[Math.floor(zs.length * 0.03)], hi = zs[Math.ceil(zs.length * 0.97) - 1];
+    return { z: (lo + hi) / 2, r: (hi - lo) / 2 };
+  };
+  const neckY = at(head).y, hipY = at(hips).y, neck = ring(neckY), mid = ring((neckY + hipY) / 2), low = ring(hipY + (neckY - hipY) * 0.15);
+  if (!neck || !mid || !low) return {};
+  const tM = inv.clone().multiply(torso.matrixWorld).invert(), out = {};          // 몸 좌표 → 몸통 뼈 좌표
+  const put = (kind, x, y, z, rx, ry, rz) => {
+    const m = new THREE.Mesh(WEAR_GEO[kind], WEAR_MAT[kind]); m.castShadow = true; m.visible = false; m.name = "wear_" + kind;
+    new THREE.Matrix4().multiplyMatrices(tM, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(rx, ry, rz))).decompose(m.position, m.quaternion, m.scale);
+    torso.add(m); out[kind] = m;
+  };
+  const rs = neck.r * 1.12;                                                         // 목도리: 목 둘레보다 조금 크게, 고리 두께는 반지름의 0.2
+  put("scarf", cx, neckY - rs * 0.1, neck.z, rs, rs * 0.9, rs);
+  const cy = (neckY + hipY) / 2, ry = (neckY - hipY) * 0.62, rc = Math.max(mid.r, low.r) * 1.07;   // 외투: 골반~목 가운데를 중심으로 몸 두께보다 7% 크게(띠 위끝이 목도리 밑에 닿음)
+  const xs = pts.filter(q => Math.abs(q.y - cy) < H * 0.05).map(q => Math.abs(q.x - cx)).sort((a, b) => a - b), rx = Math.max(rc, (xs[Math.floor(xs.length * 0.5)] || 0) * 1.12);   // 옆 폭: 몸이 앞뒤보다 넓은 갈매미(자이언트·물방울)는 옆으로 넓게(가운데 값 — 팔·날개 끝은 뺌)
+  put("coat", cx, cy, (mid.z + low.z) / 2, rx, ry, rc);
+  return out;
+}
+
 /** 갈매미 8종 모델을 모두 미리 받아 이름 → 캐릭터 Map으로(못 받은 것은 빠짐 → 캡슐). */
 export async function preloadCharacters(set, tools = null, simplifyRatio = 1) {
   const res = await Promise.allSettled(set.chars.map(c => loadCharacter(set.dir, c, tools, simplifyRatio)));
@@ -279,6 +350,7 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
   const swim = human || makeSwimClip(acts.Idle?.getClip(), acts.Walk?.getClip());
   if (swim) { acts.Swim = mixer.clipAction(swim); clip.Swim = { len: swim.duration, hit: swim.duration }; }
   for (const [k, c] of Object.entries(makePoseClips(root, acts.Idle?.getClip()))) { acts[k] = mixer.clipAction(c); clip[k] = { len: c.duration, hit: POSE_HIT[k] }; }   // 앉기·괭이질·길 깔기
+  const wear = fitWear(root);                                                       // 목도리·외투(숨긴 채로 붙여 둠, views.js가 u.wear대로 보임)
   let hand = null; root.traverse(o => { if (o.isBone && /^prop.?R$/i.test(o.name)) hand = o; });
   const inHand = {};
   if (hand && tools) {
@@ -292,7 +364,7 @@ export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
       t.visible = false; hand.add(t); inHand[k] = t;                                       // 크기는 몸 크기에 비례(자이언트는 큰 도구)
     }
   }
-  return { root, mixer, acts, cfg, anim: "", clip, inHand, onceRef: null, humanSwim: !!human };
+  return { root, mixer, acts, cfg, anim: "", clip, inHand, wear, onceRef: null, humanSwim: !!human };
 }
 
 export function playAnim(ch, key, speed = 1, fade = 0.2, restart = false) {
