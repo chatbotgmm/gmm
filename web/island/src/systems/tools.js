@@ -1,5 +1,6 @@
 // 도구(입력): 둘러보기 / 바닥 칠하기 / 건물 짓기(고스트 미리보기) / 철거 / 자연·지형(심기·치우기·파기·메우기·지형지물 옮기기, 월드 꾸미기 API의 dry로 미리보기).
 // 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 화면 옮기기(건설 모드는 고정 쿼터뷰라 돌리기 없음), 휠·두 손가락은 확대·축소.
+// 단 「누르면 고르는」 도구(짓기·철거·지형지물 옮기기)는 끌기 = 화면 옮기기, 짧게 톡 = 자리 정하기(pressKind.js).
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ, toGridX, toGridZ, WATER_Y } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
@@ -8,6 +9,7 @@ import { josa } from "../util.js";
 import { terrainHeight } from "../world/terrain.js";
 import { findPath } from "../world/pathfinding.js";
 import { frontCells } from "../world/customize.js";
+import { pressKind, tapTool } from "./pressKind.js";
 import { natureAction, natureHover, strokeText, undoText, redoText } from "../ui/natureView.js";
 const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
@@ -63,14 +65,16 @@ export class Tools {
   }
   /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
   get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld && !this.cross; }   // 십자선 모드: 한 손가락은 화면 옮기기, 칠하기는 버튼으로
+  /** 톡 = 고르기 · 끌기 = 화면 옮기기인 도구가 켜져 있나(짓기·철거·지형지물 옮기기). 이때 ✋는 필요 없음 */
+  get tapPick() { return this.toolActive && tapTool(this.mode, this.natAct?.kind); }
   /** 조작 배치: 도구 중에는 한 손가락·왼쪽 = 도구, 두 손가락 = 돌리기·확대, 오른쪽 = 돌리기, 가운데 = 확대.
    *  둘러보기(또는 ✋)에서는 한 손가락 = 화면 옮기기, 두 손가락 = 돌리기·확대 / 마우스 왼쪽 = 돌리기, 오른쪽 = 옮기기.
    *  건설 모드의 고정 쿼터뷰(viewLock, main.js가 켬)에서는 돌리기가 없음: 오른쪽 = 옮기기, ✋·스페이스 + 왼쪽 = 옮기기, 두 손가락 = 옮기기·확대. */
   applyControls() {
-    const t = this.toolActive, q = !!this.viewLock, M = THREE.MOUSE, T = THREE.TOUCH;
+    const t = this.toolActive && !this.tapPick, q = !!this.viewLock, M = THREE.MOUSE, T = THREE.TOUCH;
     this.controls.mouseButtons = { LEFT: t ? null : q ? M.PAN : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t && !q ? M.ROTATE : M.PAN };
     this.controls.touches = { ONE: t ? null : T.PAN, TWO: null };                           // 터치: 한 손가락 = 옮기기, 두 손가락(비틀기 돌리기·벌려 확대)은 twoFinger.js
-    this.dom.style.cursor = this.mode === "view" ? "" : t ? "crosshair" : "grab";
+    this.dom.style.cursor = this.mode === "view" ? "" : t || this.tapPick ? "crosshair" : "grab";
   }
   setHand(on) { this.hand = on; this.cancelStroke(); this.applyControls(); this.onHand?.(on); }
   /** 칠하던·올리던 것을 멈춤(두 번째 손가락이 닿거나 화면 조작으로 바뀔 때). */
@@ -243,6 +247,9 @@ export class Tools {
     if (this.mode === "view") return;
     if (e.pointerType === "touch" && this.touchIds.size > 1) { this.cancelStroke(); return; }   // 두 손가락 = 화면 돌리기·확대
     if (!this.toolActive || (e.pointerType === "mouse" && e.button !== 0) || !e.isPrimary) return;
+    if (this.tapPick) {                                                          // 누르면 고르는 도구: 끌기는 OrbitControls가 화면을 옮기고, 손을 뗄 때 톡이었으면 자리를 정함
+      this.press = { x: e.clientX, y: e.clientY, t: e.timeStamp, far: 0, type: e.pointerType, multi: false, tap: true }; return;
+    }
     this.hover = this.pick(e.clientX, e.clientY); this.refresh();
     this.press = { x: e.clientX, y: e.clientY, multi: false };
     if (this.strokeMode() && this.shapeNow() === "brush") {
@@ -258,6 +265,8 @@ export class Tools {
   }
   move(e) {
     if (this.mode === "view") return;
+    const tp = this.press?.tap ? this.press : null;
+    if (tp) { tp.far = Math.max(tp.far, Math.hypot(e.clientX - tp.x, e.clientY - tp.y)); if (tp.type !== "mouse") return; }   // 터치로 끄는 동안은 고스트·강조를 그대로(손을 떼도 자리 안 바뀜)
     if (this.pending && this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 8) { clearTimeout(this.pendingT); this.pending(); }
     const h = this.pick(e.clientX, e.clientY);
     if (h?.x === this.hover?.x && h?.z === this.hover?.z) return;
@@ -268,6 +277,13 @@ export class Tools {
     if (e.pointerType === "touch") this.touchIds.delete(e.pointerId);
     if (!e.isPrimary || !this.press) return;
     const p = this.press; this.press = null;
+    if (p.tap) {                                                                 // 톡이면 손을 뗀 곳의 칸을 고름(끄는 동안 화면이 손가락을 따라왔으니 뗀 곳 = 누른 땅)
+      const far = Math.max(p.far, Math.hypot(e.clientX - p.x, e.clientY - p.y));
+      const ms = e.timeStamp - p.t;                                              // 이벤트가 생긴 때끼리(그림 그리느라 늦게 받아도 누른 시간이 늘지 않게)
+      this.lastPress = pressKind({ dist: far, ms, pointer: p.type, multi: p.multi }); this.lastPressInfo = { dist: Math.round(far * 10) / 10, ms: Math.round(ms) };
+      if (this.lastPress === "tap" && this.tapPick) { this.hover = this.pick(e.clientX, e.clientY); this.apply(); }
+      return;
+    }
     if (this.pending && !p.multi) { clearTimeout(this.pendingT); const f = this.pending; this.press = p; f(); this.press = null; }   // 짧게 톡: 한 번 칠함
     if (this.mode !== "view" && (!this.strokeMode() || this.shapeNow() !== "brush") && !p.multi) this.apply();
     this.painting = false; this.pending = null; this.commitStroke(); this.commitNature();
@@ -378,7 +394,7 @@ export class Tools {
       this.ghostFloor.scale.set(def.footprint.w, def.footprint.d, 1); this.ghostFloor.position.y = 0.04;
       this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
       this.doorMark.visible = true; this.doorMark.position.set(toWorldX(r.door.x + 0.5), y + 0.35, toWorldZ(r.door.z + 0.5));
-      this.onStatus(!r.ok ? r.reason : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 누르면 옮김 · ↻ 돌리기)` : `${def.name} · 눌러서 자리 정하기 · R 돌리기`);
+      this.onStatus(!r.ok ? r.reason : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 톡 누르면 옮김 · 끌면 화면 이동 · ↻ 돌리기)` : `${def.name} · 톡 눌러서 자리 정하기 · 끌면 화면 이동 · R 돌리기`);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);
