@@ -133,6 +133,13 @@ export const FURNITURE = {
   starBed:    { id: "starBed", name: "별밤 침대", footprint: { w: 1, d: 2 }, height: 0.5, comfort: 6, use: "sleep", useLabel: "별밤 침대에서 낮잠", shape: "bed", colors: [0x3b3f73, 0xf4f1ea, 0x6f78c9] },
   snowSofa:   { id: "snowSofa", name: "눈꽃 소파", footprint: { w: 2, d: 1 }, height: 0.8, comfort: 4, use: "sit", useLabel: "눈꽃 소파에서 뒹굴", shape: "sofa", colors: [0xbfdcf2, 0xffffff] },
 };
+// 옷(clothes.js): 갈매미가 잡화점에서 자기 돈으로 사거나(낸 돈은 금고로) 도장 가게 선물 "손뜨개 목도리"로 받음. slot: 입는 자리 · warmth: 체감 보온(°C) ·
+// price: 잡화점 값(🪙) · below: 공기가 이 온도(°C) 이하일 때 입음. 우비·밀짚모자는 2단계(젖음·더위)
+export const CLOTHES = {
+  scarf: { id: "scarf", name: "털목도리", icon: "🧣", slot: "neck", warmth: 4, price: 6, below: 14, say: "목도리 둘러야지 🧣" },
+  coat:  { id: "coat", name: "누빔 외투", icon: "🧥", slot: "body", warmth: 8, price: 14, below: 4, say: "외투 입어야지 🧥" },
+};
+export const CLOTHES_ORDER = ["scarf", "coat"];                                 // 잡화점에서 사는 순서
 export const SHOP_FURNITURE = Object.values(FURNITURE).filter(f => f.price).map(f => f.id);
 // 실내 바닥·벽지 색
 export const FLOORS = { wood: { name: "나무", color: 0xc49a6c }, tile: { name: "타일", color: 0xe8e2d6 }, carpet: { name: "카펫", color: 0x9fb7c9 }, dark: { name: "짙은 나무", color: 0x7a5236 } };
@@ -303,6 +310,7 @@ export const ITEMS = [
   { id: "snowGlobe",    name: "눈꽃 스노볼",       rarity: "epic", gift: true, stampGift: 1 },
   { id: "fishTin",      name: "황금 생선 통조림",  rarity: "epic", gift: true, stampGift: 1 },
   { id: "crownCookie",  name: "갈매미 왕관 쿠키",  rarity: "epic", gift: true, stampGift: 2 },
+  { id: "knitScarf",    name: "손뜨개 목도리",     rarity: "epic", gift: true, stampGift: 1, clothes: "scarf" },   // 주면 그 갈매미 옷(털목도리)이 되어 바로 둘러 줌
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

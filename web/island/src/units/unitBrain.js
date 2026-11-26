@@ -15,7 +15,8 @@ import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
 import * as IM from "../world/improve.js";
 import * as FM from "../world/farming.js";
-import { FURNITURE } from "../data/catalog.js";
+import { FURNITURE, CLOTHES } from "../data/catalog.js";
+import * as CLO from "../world/clothes.js";
 import { FESTIVAL_JOIN_CHANCE, FESTIVAL_FUN, FESTIVAL_PAL } from "../world/festival.js";
 import { STASH_SELL_AT, stashSellable } from "../world/belongings.js";
 import * as CLIM from "../world/climate.js";
@@ -650,6 +651,9 @@ function chooseNext(u, world, rnd) {
       if (h && startActivity(u, "market", world, rnd)) { u.shop = { kind: "house", b: h.id }; emote(u, "집 사러!"); return; }
     }
     const home = u.home && world.buildings.get(u.home), shop = world.shopB();
+    // 추웠던 적이 있으면 잡화점에서 옷을 삼(목도리 → 외투, 밥값 두 번어치는 남김). 난수를 안 써서 안 추운 계절엔 예전과 똑같음
+    const cw = shop && (u.feltCold || 0) >= 1 ? CLO.nextClothes(u) : null, cdef = cw && CLOTHES[cw];
+    if (cdef && (u.coins || 0) >= cdef.price + 2 * world.foodPrice() && startPath(u, world, shop.door.x, shop.door.z)) { u.state = US.GoMarket; u.shop = { kind: "clothes", id: cw }; emote(u, `추웠으니 ${cdef.name} 사야지 ${cdef.icon}`, 2.4); return; }
     if (home && shop && rnd() < 0.35) {                                           // 집이 있으면 남는 돈으로 잡화점에서 가구를 삼(밥값 두 번어치는 남김)
       const want = F.nextWant(home), price = want && FURNITURE[want].price;
       if (want && (u.coins || 0) >= price + 2 * world.foodPrice() && startPath(u, world, shop.door.x, shop.door.z)) { u.state = US.GoMarket; u.shop = { kind: "furnish", id: want }; emote(u, `${FURNITURE[want].name} 사러!`); return; }
@@ -699,7 +703,7 @@ export function exitBuilding(u, world, rnd) {
   if (b) b.occupants = b.occupants.filter(id => id !== u.unitId);
   const spot = b ? nearestWalkable(world.grid, b.door.x, b.door.z) : nearestWalkable(world.grid, Math.floor(u.x), Math.floor(u.z));
   if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; }
-  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null;
+  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null; u.dressT = 0;   // 나서면 바로 옷을 고름
   done(u, 0.7, rnd, world);                                                // 집 구경·잠 = 좋은 경험
 }
 
@@ -719,6 +723,7 @@ export function moodBubble(u, dt, world) {
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
   moodBubble(u, dt, world);
+  if (u.clothes?.length && !u.insideBuildingId && (u.dressT = (u.dressT ?? 0) - dt) <= 0) { u.dressT = CLO.DRESS_EVERY; world.dressUnit?.(u); }   // 옷 갈아입기(나설 때·30초마다)
   bodyTick(u, dt, world); const cold = CLIM.isCold(u.bodyT);                     // 체온(추우면 배고픔 ×1.1 · 능률 ×0.85. 더위는 말풍선만 — 효과는 2단계)
   u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * (world.fx?.hunger ?? 1) * dt * (cold ? CLIM.COLD_HUNGER : 1)); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
@@ -975,6 +980,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         if (world.buyFood(u)) { emote(u, "🛒 음식"); world.eatFood(u); done(u, 0.8, rnd, world); } else { emote(u, "다 팔렸네…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "furnish") {
         if (world.buyFurniture(u, shop.id)) { emote(u, `🛋 ${FURNITURE[shop.id].name}!`, 2.6); done(u, 1.5, rnd, world); } else { emote(u, "돈이 모자라…"); setIdle(u, rnd, world); }
+      } else if (shop.kind === "clothes") {
+        if (world.buyClothes(u, shop.id)) { emote(u, `${CLOTHES[shop.id].icon} ${CLOTHES[shop.id].name}!`, 2.6); done(u, 1.2, rnd, world); } else { emote(u, "돈이 모자라…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "stock") {
         const n = world.stockFood(u); emote(u, n ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고가 꽉 찼네", 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
       } else if (shop.kind === "granary") {

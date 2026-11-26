@@ -17,12 +17,14 @@ export const bondHearts = v => { const s = bondStage(v), n = BOND_STAGES.length 
 
 // 선물 갈래: 가방 물건마다 하나, 보물 물고기는 모두 "fish". 갈매미마다 좋아하는·꺼리는 갈래는 PERSONA의 likes·dislikes
 // best: 도장 가게의 왕관 쿠키처럼 누구나 좋아하는 것(giftTier가 늘 2)
-export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는 것", plant: "꽃과 잎", sea: "바다 조개", ice: "차가운 것", fish: "귀한 물고기", best: "모두가 좋아하는 것" };
+export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는 것", plant: "꽃과 잎", sea: "바다 조개", ice: "차가운 것", fish: "귀한 물고기", best: "모두가 좋아하는 것", warm: "따뜻한 것" };
 const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice", stardust: "shiny",
   // ✨ 반짝이(내 주머니): 갈매미마다 계절마다 좋아하는 반짝이가 하나 이상 있게 고름
   shell: "sea", seaglass: "shiny", goby: "fish", postcard: "letter", blossom: "plant", clover: "plant", acorn: "plant", pinecone: "plant", icicle: "ice",
   // 도장 선물(갈래마다 하나 + 누구나 좋아하는 왕관 쿠키)
-  goldLetter: "letter", starBrooch: "shiny", bouquet: "plant", rainbowShell: "sea", snowGlobe: "ice", fishTin: "fish", crownCookie: "best" };
+  goldLetter: "letter", starBrooch: "shiny", bouquet: "plant", rainbowShell: "sea", snowGlobe: "ice", fishTin: "fish", crownCookie: "best",
+  // 손뜨개 목도리(옷 선물): 누구에게나 보통(고마워), 받으면 그 갈매미 옷이 됨
+  knitScarf: "warm" };
 /** 도장 선물(ITEMS의 stampGift)을 받으면 오르는 정이 GIFT_TIERS의 이 배수 */
 export const STAMP_GIFT_BOND = 2;
 // 반응 3단계: 꺼리는 것 · 보통 · 좋아하는 것 → 말풍선, 오르는 정, 재미

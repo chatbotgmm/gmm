@@ -81,3 +81,42 @@ test("저장·불러오기: 체온·추웠던 횟수 · 예전 저장(칸 없음
   const back = World.fromJSON(j, seededRandom(1)); assert.equal(back.units[0].bodyT, 38.7); assert.equal(back.units[0].feltCold, 3);
   delete j.units[0].bodyT; delete j.units[0].feltCold; const old = World.fromJSON(j, seededRandom(1)); assert.equal(old.units[0].bodyT, 40); assert.equal(old.units[0].feltCold, 0);
 });
+
+test("옷: 털목도리는 14°C 이하, 누빔 외투는 4°C 이하에 입고(가진 것만), 보온은 4·8 · 겨울 낮 목도리면 추워지지 않음", async () => {
+  const CLO = await import("../src/world/clothes.js");
+  const u = { clothes: ["scarf", "coat"], wear: CLO.emptyWear() };
+  assert.deepEqual(CLO.outfitFor(u, 15), { neck: null, body: null, head: null }); assert.deepEqual(CLO.outfitFor(u, 14), { neck: "scarf", body: null, head: null });
+  assert.deepEqual(CLO.outfitFor(u, 4), { neck: "scarf", body: "coat", head: null }); assert.deepEqual(CLO.outfitFor({ clothes: ["coat"] }, 10), { neck: null, body: null, head: null }, "외투만 있으면 10°C엔 안 입음");
+  let r = CLO.dress(u, 2); assert.equal(r.changed, true); assert.deepEqual(r.put, ["scarf", "coat"]); assert.equal(CLO.warmthOf(u), 12);
+  r = CLO.dress(u, 2); assert.equal(r.changed, false, "그대로면 안 바꿈"); r = CLO.dress(u, 20); assert.equal(r.changed, true); assert.equal(CLO.warmthOf(u), 0, "따뜻하면 벗음");
+  assert.equal(CLO.nextClothes({ clothes: [] }), "scarf"); assert.equal(CLO.nextClothes({ clothes: ["scarf"] }), "coat"); assert.equal(CLO.nextClothes({ clothes: ["scarf", "coat"] }), null);
+  // 겨울 아침(−2°C 근처) 옷 없이 feel 0 → 38.5 추움, 목도리면 feel 4 → 39.1 괜찮음(설계 숫자)
+  assert.ok(CLIM.bodyTarget(CLIM.feelTemp(-2, { working: true })) < CLIM.COLD_AT); assert.ok(CLIM.bodyTarget(CLIM.feelTemp(-2, { working: true, warmth: 4 })) > CLIM.COLD_AT);
+});
+
+test("잡화점에서 옷 사기: 추웠던 적이 있으면 자기 돈으로 목도리(6🪙 → 금고) → 바로 두르고, 추웠던 횟수는 0(외투는 다시 추워 봐야 삼)", () => {
+  const { w, u } = winterVillage(8, "cloudy", 0.55); for (const o of w.units) o.full = 90;
+  const shop = placeNear(w, "shop", u.x, u.z); assert.ok(shop && w.shopB());
+  u.coins = 40; u.feltCold = 1; u.bodyT = 40; u.state = "Idle"; u.timer = 0; u.needs.energy = 90; const v0 = w.bank.vault;
+  const bought = []; w.on("buyClothes", e => bought.push(e.id));
+  for (let t = 0; t < 200 && !bought.length; t += 0.1) { u.full = 90; u.bodyT = 40; w.update(0.1); }
+  assert.deepEqual(bought, ["scarf"]); assert.equal(u.coins, 34); assert.equal(w.bank.vault - v0, 6); assert.deepEqual(u.clothes, ["scarf"]); assert.equal(u.feltCold, 0);
+  assert.equal(u.wear.neck, "scarf", "공기 −1.1°C(흐림·눈 0.55·낮) → 바로 두름"); assert.equal(w.warmthOf(u), 4);
+  for (let t = 0; t < 60; t += 0.1) { u.full = 90; u.bodyT = 40; w.update(0.1); } assert.deepEqual(bought, ["scarf"], "다시 추워 보기 전엔 외투를 안 삼");
+  // 돈이 밥값 두 번어치 + 값보다 적으면 안 삼
+  u.feltCold = 1; u.coins = 14 + 2 * w.foodPrice() - 1; for (let t = 0; t < 60; t += 0.1) { u.full = 90; u.bodyT = 40; w.update(0.1); } assert.deepEqual(bought, ["scarf"]);
+  // 잡화점이 없으면 안 삼
+  w.removeBuilding(shop.id); u.coins = 100; for (let t = 0; t < 60; t += 0.1) { u.full = 90; u.bodyT = 40; w.update(0.1); } assert.deepEqual(bought, ["scarf"]);
+});
+
+test("도장 가게 '손뜨개 목도리': 도장 1개로 사서 주면 정이 두 배로 오르고 그 갈매미 옷이 되어 바로 두름 · 저장·예전 저장 호환", () => {
+  const { w, u } = winterVillage(9); w.stamps = 1;
+  assert.equal(w.buyStamp("knitScarf"), true); assert.equal(w.items.knitScarf, 1);
+  const r = w.giveGift(u, "knitScarf"); assert.equal(r.tier, 1, "누구에게나 보통(고마워)"); assert.equal(u.bond, 4, "보통 2 × 도장 선물 2배");
+  assert.deepEqual(u.clothes, ["scarf"]); assert.equal(u.wear.neck, "scarf"); assert.equal(w.warmthOf(u), 4);
+  const j = JSON.parse(JSON.stringify(w.serialize())); const back = World.fromJSON(j, seededRandom(1)).units[0];
+  assert.deepEqual(back.clothes, ["scarf"]); assert.equal(back.wear.neck, "scarf");
+  j.units[0].clothes = ["scarf", "nope", "scarf"]; j.units[0].wear = { neck: "coat", body: "coat", head: 3 }; const odd = World.fromJSON(j, seededRandom(1)).units[0];
+  assert.deepEqual(odd.clothes, ["scarf"]); assert.deepEqual(odd.wear, { neck: null, body: null, head: null }, "없는 옷·안 맞는 자리는 버림");
+  delete j.units[0].clothes; delete j.units[0].wear; const old = World.fromJSON(j, seededRandom(1)).units[0]; assert.deepEqual(old.clothes, []); assert.deepEqual(old.wear, { neck: null, body: null, head: null });
+});

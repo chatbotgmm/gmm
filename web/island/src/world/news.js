@@ -1,7 +1,7 @@
 // 마을 소식지 + 다녀온 사이 편지(순수 계산: 화면·기기 시계를 모름).
 // 소식: 월드가 알리는 일(emit) 가운데 기억할 만한 것을 { day, t, icon, text, weight }로 모음. 알림 줄(main.js)도 같은 문장을 씀.
 // 편지: 게임을 꺼 둔 동안 지난 실제 시간(밀리초)을 밖에서 받아, 가볍게 셈한 일(익은 밭·낚은 물고기)을 글로 적음.
-import { BUILDINGS, FURNITURE, RARITY } from "../data/catalog.js";
+import { BUILDINGS, FURNITURE, RARITY, CLOTHES } from "../data/catalog.js";
 import { SEASONS, WEATHER } from "./season.js";
 import { wishText } from "./wishes.js";
 import { FRIEND_STAGES } from "../units/mind.js";
@@ -62,6 +62,9 @@ const NEWS_MAKERS = {
   // 기온·체온(climate.js): 그날 처음 추워함 · 카페 코코아(알림 줄에만)
   chill: ({ u }) => ({ icon: "🥶", text: `${josa(u.name, "이", "가")} 추워해요`, weight: 0 }),
   cocoa: ({ u, price }) => ({ icon: "☕", text: `${josa(u.name, "이", "가")} 카페에서 코코아로 몸을 녹였어요 🪙${price}`, weight: 0 }),
+  // 옷(clothes.js): 갈아입기(알림 줄에만) · 잡화점에서 삼 · 선물로 받아 바로 두름
+  dress: ({ u, put, gift }) => put?.length ? { icon: CLOTHES[put[0]]?.icon || "🧣", text: `${josa(u.name, "이", "가")} ${gift ? "선물 받은 " : ""}${josa(CLOTHES[put[0]]?.name || "옷", "을", "를")} ${CLOTHES[put[0]]?.slot === "neck" ? "둘렀어요" : "입었어요"}`, weight: 0 } : null,
+  buyClothes: ({ u, id, price }) => CLOTHES[id] ? { icon: CLOTHES[id].icon, text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(CLOTHES[id].name, "을", "를")} 샀어요 🪙${price}`, weight: 1 } : null,
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 이 일의 소식 한 줄(없으면 null) */
