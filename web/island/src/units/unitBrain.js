@@ -31,21 +31,77 @@ const visible = u => !u.insideBuildingId && u.state !== US.Held;
 export function emote(u, text, secs = 1.6) { if (text == null || text === "") return; u.emoteText = String(text); u.emoteT = secs; }
 
 // 공사 한 번(망치질 3번)에 드는 재료: 건물마다 cost(없으면 나무 1·돌 1), 3등급 이상 건물은 철 1도.
-// 짓는 갈매미 가방에 있는 것부터 쓰고, 모자라면 은행 창고(마을 자재)에서.
+// 짓는 갈매미 가방(inv: 스스로 캔 것) → 짐(load: 은행 창고에서 꺼내 온 것) 순으로 쓰고, 공식은행이 없는 섬(경제 없음)은 마을 자재(world.res)를 바로 씀.
+// 재료 한번에 모으기: 공사를 맡으면 남은 바퀴 × 한 바퀴 재료를 셈(siteNeed) → 가방·짐에 다 있으면 지으러 감 →
+//  모자라면 은행 창고에 있는 만큼 한 번에 꺼내 오고(GoFetch), 그래도 모자라면 벌목·채광으로 다 모은 뒤에 감. 한 번에 드는 짐은 LOAD_MAX개까지(넘으면 그만큼 지은 뒤 다시).
+export const LOAD_MAX = 16;
 const needsIron = b => (BUILDINGS[b.defId].tier || 1) >= 3;
 const costOf = b => { const c = { ...(BUILDINGS[b.defId].cost || { wood: 1, stone: 1 }) }; if (needsIron(b)) c.iron = (c.iron || 0) + 1; return c; };
-const have = (world, u, k) => (u?.inv?.[k] || 0) + (world.res[k] || 0);
+const have = (world, u, k) => (u?.inv?.[k] || 0) + (u?.load?.[k] || 0) + (world.economy ? 0 : world.res[k] || 0);
 const hasMaterials = (world, b, u = null) => Object.entries(costOf(b)).every(([k, n]) => have(world, u, k) >= n);
+/** 이 공사장을 끝내는 데 남은 재료: 남은 바퀴(망치질 3번 = 한 바퀴, 짓는 갈매미 망치 힘으로) × 한 바퀴 재료.
+ *  trip: 이번에 들고 갈 몫(LOAD_MAX개 안에서 바퀴 단위, 적어도 한 바퀴) */
+export function siteNeed(b, u = null) {
+  const per = costOf(b), unit = Object.values(per).reduce((a, n) => a + n, 0) || 1;
+  const cycles = Math.max(0, Math.ceil((b.need - b.hits) / (3 * (u ? J.hammerPower(u) : 1)) - 1e-9)), tripCycles = Math.min(cycles, Math.max(1, Math.floor(LOAD_MAX / unit)));
+  const total = {}, trip = {}; for (const [k, n] of Object.entries(per)) { total[k] = n * cycles; trip[k] = n * tripCycles; }
+  return { per, cycles, tripCycles, total, trip };
+}
+/** 이번 몫 중 아직 모자란 것 { k: 개수 }(가방 + 짐 + 은행 없는 섬의 마을 자재로 셈) */
+function lackFor(world, b, u) {
+  const { trip } = siteNeed(b, u), lack = {};
+  for (const [k, n] of Object.entries(trip)) { const l = n - have(world, u, k); if (l > 0) lack[k] = l; }
+  return lack;
+}
+/** 공사장에 보이는 준비 상황(화면용, 저장 안 함): { by 맡은 갈매미, need 이번 몫, got 가방·짐에 든 것, total 끝까지 남은 재료, cycles, step "fetch"|"gather"|"build" } */
+function markSupply(world, b, u, step) {
+  const { trip, total, cycles } = siteNeed(b, u), got = {}; for (const k of Object.keys(trip)) got[k] = Math.min(trip[k], have(world, u, k));
+  b.supply = { by: u.unitId, need: trip, got, total, cycles, step };
+}
 function useMaterials(world, b, u = null) {
   const fromBag = {}, fromWare = {};
-  for (const [k, n] of Object.entries(costOf(b))) { let left = n; const mine = Math.min(left, u?.inv?.[k] || 0); if (mine) { u.inv[k] -= mine; left -= mine; } world.res[k] -= left; fromBag[k] = mine; fromWare[k] = left; }
+  for (const [k, n] of Object.entries(costOf(b))) {
+    let left = n; const mine = Math.min(left, u?.inv?.[k] || 0); if (mine) { u.inv[k] -= mine; left -= mine; }
+    const carried = Math.min(left, u?.load?.[k] || 0); if (carried) { u.load[k] -= carried; left -= carried; }   // 은행 창고에서 꺼내 온 짐(창고 몫으로 셈)
+    world.res[k] -= left; fromBag[k] = mine; fromWare[k] = left + carried;
+  }
   if (b.order) world.orderMaterials(b, u, fromBag, fromWare);                     // 갈매미 주문 공사: 주문한 갈매미가 자재값을 냄(창고 것은 금고로, 가방 것은 짓는 갈매미에게)
+  if (u && b.supply) markSupply(world, b, u, "build");
 }
-/** 모자란 재료를 구하러 감: 나무가 모자라면 벌목, 돌·철이 모자라면 채광. */
-function gatherFor(u, world, b, rnd) {
-  const c = costOf(b), lackWood = have(world, u, "wood") < (c.wood || 0), first = lackWood ? "chop" : "mine", second = first === "chop" ? "mine" : "chop";
-  if (startActivity(u, first, world, rnd) || (!lackWood || (c.stone || c.iron)) && startActivity(u, second, world, rnd)) { emote(u, "재료 구하러!"); return true; }
+/** 모자란 재료를 구하러 감: 나무가 모자라면 벌목, 돌·철이 모자라면 채광(모자란 것부터, 안 되면 다른 것). */
+function gatherFor(u, world, b, rnd, lack = lackFor(world, b, u)) {
+  const lackWood = (lack.wood || 0) > 0, lackRock = (lack.stone || 0) + (lack.iron || 0) > 0, first = lackWood ? "chop" : "mine", second = first === "chop" ? "mine" : "chop";
+  if (startActivity(u, first, world, rnd) || (lackWood && lackRock) && startActivity(u, second, world, rnd)) { u.supplyTrips = (u.supplyTrips || 0) + 1; markSupply(world, b, u, "gather"); emote(u, `재료 모으기 ${lackText(lack)}`); return true; }
   return false;
+}
+const lackText = lack => Object.entries(lack).map(([k, n]) => `${E.ITEM_ICON[k] || k}${n}`).join(" ");
+/** 은행 창고에서 이 갈매미가 꺼낼 수 있는 수: 창고 − 다른 건축가가 가지러 가는 중인 몫(u.fetch = 예약). 두 건축가가 같은 자재를 겹쳐 가지러 가지 않게 */
+export function spareStock(world, k, u = null) {
+  let n = Math.floor(world.res[k] || 0);
+  for (const o of world.units) if (o !== u && o.fetch?.take?.[k]) n -= o.fetch.take[k];
+  return Math.max(0, n);
+}
+/** 은행 창고에 모자란 재료가 있으면 한 번에 꺼내러 감(공식은행이 있을 때만). 정한 몫은 가는 동안 예약(u.fetch)돼 다른 건축가가 못 가져감 */
+function fetchFor(u, world, b, lack) {
+  const bk = world.bankB(); if (!bk) return false;
+  const take = {}; let n = 0;
+  for (const [k, l] of Object.entries(lack)) { const t = Math.min(l, spareStock(world, k, u)); if (t > 0) { take[k] = t; n += t; } }
+  if (!n || !startPath(u, world, bk.door.x, bk.door.z)) return false;
+  u.fetch = { b: b.id, take }; u.state = US.GoFetch; u.supplyTrips = (u.supplyTrips || 0) + 1; markSupply(world, b, u, "fetch"); emote(u, `🏦 자재 가지러 ${lackText(take)}`); return true;
+}
+/** 은행 문 앞에 닿음: 정한 만큼(그새 줄었으면 있는 만큼) 창고에서 짐으로 옮김 */
+function takeFetch(u, world) {
+  const f = u.fetch; u.fetch = null; if (!f) return 0;
+  let n = 0; u.load ||= {};
+  for (const [k, t] of Object.entries(f.take)) { const g = Math.min(t, Math.max(0, Math.floor(world.res[k] || 0))); if (g > 0) { world.res[k] -= g; u.load[k] = (u.load[k] || 0) + g; n += g; } }
+  const b = world.buildings.get(f.b); if (b && b.busy === u.unitId) markSupply(world, b, u, "build");
+  return n;
+}
+/** 들고 있던 은행 짐을 창고로 돌려놓음(공사가 끝나 남았거나, 맡은 공사를 내려놓을 때) */
+function returnLoad(u, world) {
+  if (!u.load || !world) { u.load = null; return; }
+  for (const [k, n] of Object.entries(u.load)) if (n > 0) world.res[k] = (world.res[k] || 0) + n;
+  u.load = null;
 }
 
 /** 찜해 둔 것(나무·광석·씨앗·낚시 자리·공사장)을 놓고 손을 비운다. */
@@ -53,13 +109,14 @@ function release(u) {
   const f = u.focus;
   if (f && f.claimed === u.unitId) f.claimed = null;
   if (f && f.busy === u.unitId && u.committed !== f.id) f.busy = null;   // 맡은 공사장(committed)은 끝날 때까지 찜 유지
+  u.fetch = null;                                                       // 은행 자재 예약도 풀림(가는 길에 그만두면 다른 건축가가 가져갈 수 있게)
   u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined; u.bite = u.tugged = false; u.processing = false;
 }
 /** 맡은 공사를 내려놓음(완공·들어 올림·철거 때). */
 export function uncommit(u, world) {
   const b = u.committed && world && world.buildings.get(u.committed);
-  if (b && b.busy === u.unitId) b.busy = null;
-  u.committed = null;
+  if (b && b.busy === u.unitId) { b.busy = null; b.supply = null; }
+  u.committed = null; u.fetch = null; returnLoad(u, world);
 }
 export function setIdle(u, rnd, world = null, secs = null) {
   if (u.activity) { M.learn(u, u.activity, -0.2); u.activity = null; }   // 끝내지 못하고 그만둔 일 = 조금 나쁜 경험
@@ -125,6 +182,12 @@ const AROUND8 = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1
 export function workCells(grid, tx, tz) {
   const c = grid.get(tx, tz); if (!c) return [];
   return AROUND8.map(([dx, dz]) => [tx + dx, tz + dz]).filter(([x, z]) => { const h = grid.walkHeight(x, z); return h !== null && !grid.doorOwner(x, z) && Math.abs(h - c.elevation) <= MAX_STEP + 1e-6; });
+}
+/** 걸어서(또는 배로) 닿을 수 있는 칸인가: 이어진 땅 덩어리(compAt)로 싸게 봄. 못 재면 닿는다고 봄 */
+function canReach(u, world, x, z) {
+  if (!world.compAt) return true;
+  const a = world.compAt(Math.floor(u.x), Math.floor(u.z)), b = world.compAt(x, z);
+  return a < 0 || (b >= 0 && (a === b || !!world.ferryRoute?.(Math.floor(u.x), Math.floor(u.z), x, z)));
 }
 /** (tx,tz) 칸 바로 옆의 걸을 수 있는 칸으로 가는 길. 가까운 칸부터 시도. sameLevel: 대상과 같은 높이(한 단 안)의 칸만(나무·광석, workCells) */
 function pathBeside(u, world, tx, tz, sameLevel = false) {
@@ -286,10 +349,14 @@ function startActivityInner(u, kind, world, rnd) {
         .sort((a, c) => c.hits / c.need - a.hits / a.need)[0];
       if (!b) return false;
       u.committed = b.id; b.busy = u.unitId;
-      if (!hasMaterials(world, b, u)) return gatherFor(u, world, b, rnd);          // 재료가 없으면 구하러 갔다가 이 공사장으로 돌아옴
       const spot = world.workSpot(b); if (!spot) { uncommit(u, world); return false; }   // 다리: 땅이나 다 지은 다리에 붙은 칸부터
+      if (!canReach(u, world, spot.x, spot.z)) { (u.noWay ||= {})[b.id] = world.time + 60; uncommit(u, world); return false; }   // 문 앞이 막힌 공사장은 재료부터 모으지 않음(헛걸음 방지)
+      // 계획 → 재료 확인 → 이번 몫을 한 번에 모으기(은행 창고 → 벌목·채광) → 다 모이면 지으러 감. 모을 길이 없으면 한 바퀴 몫이라도 있을 때 그것으로 지음
+      const lack = lackFor(world, b, u);
+      if (Object.keys(lack).length && (fetchFor(u, world, b, lack) || gatherFor(u, world, b, rnd, lack))) return true;
+      if (!hasMaterials(world, b, u)) { markSupply(world, b, u, "gather"); return false; }
       if (!startPath(u, world, spot.x, spot.z)) { (u.noWay ||= {})[b.id] = world.time + 60; uncommit(u, world); return false; }
-      u.focus = b; u.state = US.GoBuild; return true;
+      u.focus = b; u.state = US.GoBuild; markSupply(world, b, u, "build"); return true;
     }
     case "eat": {                                                                 // 음식이 있으면 그 자리에서 먹고, 없으면 씨앗을 찾음
       if (world.economy) {                                                         // 경제: 내 가방 → 시장에서 사기 → 물물교환 → 씨앗
@@ -729,6 +796,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       }
       break;
     }
+    case US.GoFetch:                                                              // 공사 재료를 은행 창고에서 꺼내러(맡은 공사가 없어졌으면 그만)
+      if (!u.committed || !world.buildings.has(u.committed)) { u.fetch = null; setIdle(u, rnd, world); break; }
+      if (followPath(u, dt, world, rnd)) { const n = takeFetch(u, world); emote(u, n ? `📦 자재 ${n}개` : "창고가 비었네…", 2); done(u, 0.5, rnd, world, 0.2); }
+      break;
     case US.GoBuild: {
       const b = u.focus;
       if (!world.buildings.has(b.id) || world.isDone(b)) { setIdle(u, rnd, world); break; }
@@ -745,12 +816,12 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const c = b.cells.reduce((a, [x, z]) => [a[0] + x + 0.5, a[1] + z + 0.5], [0, 0]); face(u, c[0] / b.cells.length, c[1] / b.cells.length);
       // 망치질 3번마다 나무 1·돌 1을 더 써서 그 자리에서 계속. 재료가 없으면 구하러 갔다가 돌아옴. 100%가 되면 끝.
       workLoop(u, dt, "Build", 3, () => world.hammer(b, u), () => {
-        if (world.isDone(b)) { world.payWage(u, b); uncommit(u, world); done(u, 2, rnd, world); return; }
+        if (world.isDone(b)) { world.payWage(u, b); b.supply = null; uncommit(u, world); done(u, 2, rnd, world); return; }
         M.learn(u, "build", 0.8);                                               // 한 바퀴 지을 때마다 보람
         world.payWage(u, b);                                                    // 한 바퀴 품삯(금고에서, 모자라면 밀림. 갈매미 주문 공사는 주문한 갈매미 돈에서)
         if (hasMaterials(world, b, u)) { useMaterials(world, b, u); return; }         // u.work가 비었으니 다음 바퀴부터 다시
-        u.activity = null;
-        emote(u, "재료가 없어!"); setIdle(u, rnd, world, 0.3);
+        u.activity = null;                                                      // 이번 몫을 다 씀(짐 한도를 넘는 큰 공사) → 다음 몫을 모으러
+        emote(u, "다음 재료 가지러!"); setIdle(u, rnd, world, 0.3);
       });
       break;
     }

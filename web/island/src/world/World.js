@@ -988,6 +988,8 @@ export class World {
     return { ok: true, building: b };
   }
   isDone(b) { return b.hits >= b.need; }
+  /** 저장할 은행 창고: 짓는 갈매미가 공사 재료로 꺼내 들고 있는 짐(u.load, 저장 안 함)을 창고에 되돌려 셈 */
+  resWithLoads() { const r = { ...this.res }; for (const u of this.units) for (const [k, n] of Object.entries(u.load || {})) r[k] = (r[k] || 0) + n; return r; }
   hammer(b, u) {
     if (this.isDone(b)) return;
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
@@ -1026,7 +1028,7 @@ export class World {
     if (b.fee && !this.isDone(b)) { this.bank.vault += b.fee; this.bank.fees -= b.fee; this.led("refunds", b.fee); b.fee = 0; this.settleOwed(); }   // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로)
     if (b.order) this.settleOrder(b);                                              // 갈매미 주문 공사를 철거: 남은 맡긴 돈을 주문한 갈매미에게
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
-    for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) u.committed = null; }   // 짓던 갈매미는 그만
+    for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) uncommit(u, this); }   // 짓던 갈매미는 그만(은행에서 꺼내 온 짐은 창고로)
     this.grid.release(id); this.buildings.delete(id); this.emit("buildingRemoved", b);
     for (const p of this.plots.filter(p => p.field === id)) { this.plots.splice(this.plots.indexOf(p), 1); this.emit("plotRemoved", p); }
     this.spots = this.spots.filter(s => s.dock !== id);
@@ -1160,7 +1162,7 @@ export class World {
   /** savedAt: 저장하는 실제 시각(ms). 월드는 기기 시계를 모르므로 화면이 넣어 줌. */
   serialize(savedAt = null) {
     return { version: 2, ownership: this.ownershipPending ? 0 : 1, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
-      spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.res,
+      spots: this.spots.map(({ x, z, dir }) => ({ x, z, dir })), zones: this.zones, res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow }) => ({ x, z, stage, t, grow })),
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
