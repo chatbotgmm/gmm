@@ -21,6 +21,7 @@ export const ALERTS = {
   loanRefused: { kind: "warn", tail: " (🏠 집을 못 샀어요)" },
   loanPaid: { kind: "good", snd: "bell" },
   tax: { kind: "info", daily: true, tail: (a, w) => ` · 금고 🪙${Math.floor(w.bank?.vault ?? 0)}`, snd: "coins" },
+  lodging: { kind: "info", daily: true },                          // 빈 집 손님 숙박비: 마을 하루에 한 번 지난 하루 합계 한 줄(손님마다 띄우면 너무 잦음)
   summonBlocked: { kind: "warn", tail: " · 📱 소환", now: true },   // 까닭 글 끝에 이미 (집 n채 · 갈매미 n마리)가 있어 괄호를 겹치지 않음
   sparkle: { kind: "good", tail: (a, w) => ` (🎁 내 주머니 ${pocketCount(w)})`, snd: "glint", now: true },
   stashSale: { kind: "info", snd: "coins" },

@@ -754,6 +754,7 @@ export function exitBuilding(u, world, rnd) {
   if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; }
   u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null; u.dressT = 0;   // 나서면 바로 옷을 고름
   done(u, 0.7, rnd, world);                                                // 집 구경·잠 = 좋은 경험
+  if (u.lodgeSay) { emote(u, u.lodgeSay, 2.4); u.lodgeSay = null; }        // 빈 집에서 자고 나오면 숙박비 말풍선(안에 있을 땐 바깥 화면에 말풍선이 안 보임)
 }
 
 // ---------------------------------------------------------------- 매 프레임
@@ -980,6 +981,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (!b) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
         const cocoa = u.cocoa; u.cocoa = false; enterBuilding(u, b, rnd); if (cocoa && b.defId === "cafe") world.buyCocoa?.(u);
+        if (u.insideAct === "sleep") world.lodge?.(u, b);                         // 빈 집 손님이면 숙박비(마을 하루에 한 번, World.lodge가 가림)
         if (BUILDINGS[b.defId].clinic) { if (u.insideAct === "sick") world.clinicCheckIn?.(u, b); else if (u.insideAct === "doctor") world.doctorArrived?.(u, b); }
       }
       break;
