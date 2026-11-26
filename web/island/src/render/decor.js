@@ -3,11 +3,15 @@
 //  · 꽃: 잔디밭 곳곳에 무리 지어(노랑·하양·분홍·하늘색)
 //  · 자갈: 모래·바위 위
 // 건물을 짓거나 땅을 칠하고 높이를 바꾼 칸의 소품은 숨기거나 높이를 다시 맞춘다.
+// 꾸미기(world.decor): 치운 칸(off)·놓은 칸(add)의 씨앗 소품은 숨기고, 플레이어가 놓은 덤불·꽃은 따로 InstancedMesh 둘(덤불 덩이 · 꽃송이, 용량 800칸)로 그림.
 import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 import { seededRandom } from "../util.js";
 
 const BUSH_COLORS = [0x5aa845, 0x6bb84e, 0x4f9a3f], FLOWER_COLORS = [0xffe066, 0xffffff, 0xff9cc0, 0x9fd4ff], PEBBLE_COLORS = [0xb9b3a8, 0xa9a397, 0xc9c3b6];
+// 놓은 꽃: 노란 작은 공은 씨앗(🌻)처럼 보여서 분홍·하양·하늘·보라 꽃송이(조금 납작하게)를 초록 덤불 덩이 위에 다섯 송이
+const ADD_FLOWER_COLORS = [0xff8fb8, 0xfff6f0, 0x8fc8ff, 0xc39bff], ADD_CELLS = 800, BUSH_PER = 2, BLOSSOM_PER = 5;
+const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _dv = new THREE.Vector3(), _ds = new THREE.Vector3(), _dy = new THREE.Vector3(0, 1, 0), _dc = new THREE.Color();
 
 export class Decor {
   /** opt: { density: 0~1(양), simple: 단순한 모양(삼각형 1/4), bushShadow: 덤불 그림자 } — 그래픽 설정 */
@@ -56,16 +60,56 @@ export class Decor {
     this.byCell = new Map(); for (const it of this.items) { if (!this.byCell.has(it.cell)) this.byCell.set(it.cell, []); this.byCell.get(it.cell).push(it); }
     for (const it of this.items) this.place(it);
     for (const m of Object.values(this.meshes)) m.instanceMatrix.needsUpdate = true;
-    world.on("buildingAdded", b => this.refresh(b.cells));
-    world.on("buildingRemoved", b => this.refresh(b.cells));
-    world.on("ground", e => this.refresh([[e.x, e.z]]));
+    for (const m of Object.values(this.meshes)) m.visible = m.count > 0;           // 빈 소품(꺼진 꽃 등)은 그리기 호출을 쓰지 않게
+    // 놓은 덤불·꽃: 덤불 덩이(씨앗 덤불과 같은 모양·재질 → 계절 색·그림체가 같이 바뀜) + 꽃송이
+    const bush = this.types.bush, flower = this.types.flower;
+    this.added = {
+      bush: new THREE.InstancedMesh(bush.geo, this.meshes.bush.material, ADD_CELLS * BUSH_PER),
+      blossom: new THREE.InstancedMesh(flower.geo, new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0 }), ADD_CELLS * BLOSSOM_PER),
+    };
+    this.added.bush.castShadow = bush.shadow; this.added.blossom.castShadow = false;
+    for (const [k, m] of Object.entries(this.added)) { m.name = `decorAdd-${k}`; m.count = 0; m.visible = false; m.frustumCulled = false; m.receiveShadow = false; m.setColorAt(0, _dc.setHex(0xffffff)); scene.add(m); }   // 색 칸을 처음부터(나중에 생기면 셰이더를 다시 만들어야 함)
+    this.syncAdded();
+    const again = () => this.later();
+    world.on("buildingAdded", b => { this.refresh(b.cells); again(); });
+    world.on("buildingRemoved", b => { this.refresh(b.cells); again(); });
+    world.on("ground", e => { this.refresh([[e.x, e.z]]); again(); });
+    world.on("decorChanged", e => { this.refresh([[e.x, e.z]]); again(); });
   }
-  /** 그래픽 설정이 바뀌어 다시 만들 때: 장면에서 빼고 메모리 반납 */
-  dispose() { this.disposed = true; for (const m of Object.values(this.meshes)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); m.dispose?.(); } }
+  /** 같은 순간 여러 칸이 바뀌어도(붓·되돌리기 묶음) 놓은 소품은 한 번만 다시 채움 */
+  later() { if (this.pending || this.disposed) return; this.pending = true; queueMicrotask(() => { this.pending = false; if (!this.disposed) this.syncAdded(); }); }
+  /** 놓은 덤불·꽃(world.decor.add)을 처음부터 다시 채움. 칸마다 같은 모양(칸 좌표 해시 + v), 건물·물 칸은 건너뜀 */
+  syncAdded() {
+    const w = this.world, g = w.grid, add = w.decor?.add, B = this.added.bush, F = this.added.blossom; let nb = 0, nf = 0;
+    const put = (mesh, i, gx, gz, lift, s, squash, rot, hex) => {
+      _dv.set(toWorldX(gx), w.standHeight(gx, gz) + lift, toWorldZ(gz)); _dq.setFromAxisAngle(_dy, rot); _ds.set(s, s * squash, s);
+      mesh.setMatrixAt(i, _dm.compose(_dv, _dq, _ds)); mesh.setColorAt(i, _dc.setHex(hex));
+    };
+    for (const [key, d] of add || []) {
+      const [x, z] = key.split(",").map(Number), c = g.get(x, z); if (!c || c.occupiedId || g.isWater(x, z)) continue;
+      const r = seededRandom(((x * 73856093) ^ (z * 19349663) ^ (d.v * 83492791)) >>> 0);
+      if (d.k === "bush") {
+        if (nb + BUSH_PER > B.instanceMatrix.count) continue;
+        for (let k = 0; k < BUSH_PER; k++) { const s = 0.85 + r() * 0.4; put(B, nb++, x + 0.3 + r() * 0.4, z + 0.3 + r() * 0.4, 0.17 * s, s, 0.78, r() * 6.28, BUSH_COLORS[(d.v + k) % BUSH_COLORS.length]); }
+      } else {
+        if (nb + 1 > B.instanceMatrix.count || nf + BLOSSOM_PER > F.instanceMatrix.count) continue;
+        put(B, nb++, x + 0.5, z + 0.5, 0.07, 0.7, 0.6, r() * 6.28, BUSH_COLORS[d.v % BUSH_COLORS.length]);   // 꽃 밑 초록 잎 덩이
+        const hex = ADD_FLOWER_COLORS[d.v % ADD_FLOWER_COLORS.length];
+        for (let k = 0; k < BLOSSOM_PER; k++) { const a = k / BLOSSOM_PER * 6.283 + r() * 0.5, rr = k ? 0.2 + r() * 0.05 : 0; put(F, nf++, x + 0.5 + Math.cos(a) * rr, z + 0.5 + Math.sin(a) * rr, 0.24 + r() * 0.06, 2.3, 0.7, r() * 6.28, hex); }
+      }
+    }
+    for (const [m, n] of [[B, nb], [F, nf]]) { m.count = n; m.visible = n > 0; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  }
+  /** 그래픽 설정이 바뀌어 다시 만들 때: 장면에서 빼고 메모리 반납(놓은 덤불은 씨앗 덤불과 모양·재질을 같이 씀) */
+  dispose() {
+    this.disposed = true; for (const m of Object.values(this.meshes)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); m.dispose?.(); }
+    for (const m of Object.values(this.added || {})) { this.scene.remove(m); m.dispose?.(); } this.added?.blossom.material.dispose();
+  }
   /** 소품 하나를 제자리에(칸에 건물이 있거나 맞지 않는 바닥이면 숨김) */
   place(it) {
     const g = this.world.grid, [x, z] = it.cell.split(",").map(Number), c = g.get(x, z), def = this.types[it.type], m = new THREE.Matrix4();
-    const ok = c && !c.occupiedId && !g.isWater(x, z) && (it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : c.groundType === "Grass");
+    const dc = this.world.decor, ok = c && !c.occupiedId && !g.isWater(x, z) && (it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : c.groundType === "Grass")
+      && !dc?.off.has(it.cell) && !dc?.add.has(it.cell);                             // 꾸미기로 치운 칸·덤불이나 꽃을 놓은 칸의 씨앗 소품은 숨김
     if (!ok) m.makeScale(0, 0, 0);
     else {
       const y = this.world.standHeight(it.gx, it.gz) + it.lift;

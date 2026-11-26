@@ -46,6 +46,17 @@ export class InstancePool {
     g.cap = cap; g.dirty = true;
   }
   leave(e) { const g = e.group; if (!g) return; g.ents.splice(g.ents.indexOf(e), 1); g.dirty = true; e.group = null; e.shown = false; }
+  /** obj 아래 메쉬를 묶어 그리기에서 바로 뺌(꾸미기로 치운 나무·다시 만드는 지형지물·지운 그루터기). 다음 sync에서 인스턴스 수가 줄어듦.
+   *  장면에서 떼기만 해도 sync가 언젠가 빼지만 가만히 있는 물체는 4프레임에 한 번만 보므로 기다리지 않게. 뺀 메쉬 수를 돌려줌 */
+  remove(obj) {
+    const ms = new Set(); obj.traverse(m => { if (m.userData.pooled) ms.add(m); }); if (!ms.size) return 0;
+    let n = 0;
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      const e = this.entries[i]; if (!ms.has(e.mesh)) continue;
+      this.leave(e); e.mesh.userData.pooled = false; e.mesh.visible = true; this.entries.splice(i, 1); n++;
+    }
+    return n;
+  }
   /** 매 프레임(그리기 직전): 바뀐 물체의 자리를 다시 읽고(가만히 있는 물체는 4프레임에 한 번만 확인), 화면·그림자 범위에 든 물체만 채움 */
   sync(camera, light) {
     const f = ++this.frame, E = this.entries, root = this.root, wf = ++tick;

@@ -71,18 +71,20 @@ export class SeasonLook {
   }
   /** 나무들(모듈 id → 물체)에 계절 색을 입힘 */
   applyTrees(world, objs, season) {
-    for (const t of world.modules) {
-      if (t.defId !== "tree") continue; const o = objs.get(t.id); if (!o) continue;
-      const i = Math.abs(((t.cells[0][0] * 73856093) ^ (t.cells[0][1] * 19349663)) >>> 0);   // 나무마다 같은 색이 나오게
-      o.traverse(x => {
-        if (!x.isMesh) return;
-        const cur = x.material, std = cur.userData.src || cur, base = x.userData.leafBase || std.userData.seasonBase || std;
-        if (!/^leafs/.test(base.name)) { patchTree(std); if (cur !== std) patchTree(cur); return; }   // 한 장짜리 텍스처 나무: 셰이더로 계절 색
-        x.userData.leafBase = base;
-        const want = this.leafMat(base, season, i, base.name === "leafsDark");
-        x.material = this.toon?.on ? this.toon.convert(want) : want;
-      });
-    }
+    for (const t of world.modules) { const o = objs.get(t.id); if (o) this.applyTree(t, o, season); }
+  }
+  /** 나무 하나(모듈 t의 물체 o)에 계절 색(꾸미기로 새로 심은 나무도 이것으로 한 번) */
+  applyTree(t, o, season) {
+    if (t.defId !== "tree") return;
+    const i = Math.abs(((t.cells[0][0] * 73856093) ^ (t.cells[0][1] * 19349663)) >>> 0);   // 나무마다 같은 색이 나오게
+    o.traverse(x => {
+      if (!x.isMesh) return;
+      const cur = x.material, std = cur.userData.src || cur, base = x.userData.leafBase || std.userData.seasonBase || std;
+      if (!/^leafs/.test(base.name)) { patchTree(std); if (cur !== std) patchTree(cur); return; }   // 한 장짜리 텍스처 나무: 셰이더로 계절 색
+      x.userData.leafBase = base;
+      const want = this.leafMat(base, season, i, base.name === "leafsDark");
+      x.material = this.toon?.on ? this.toon.convert(want) : want;
+    });
   }
   /** 덤불 색(툰 복사본도 같이) */
   applyDecor(decor, season) {

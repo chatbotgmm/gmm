@@ -273,20 +273,84 @@ async function lighthouseModel(obj, def) {
   lamp.material.userData.noToon = true; lamp.castShadow = lamp.receiveShadow = false; lamp.renderOrder = 2;
 }
 
-export async function addModuleViews(scene, world) {
-  const map = new Map();
-  await Promise.all(world.modules.map(async m => {
-    const def = MODULES[m.defId], cellsWorld = m.cells.map(([x, z]) => [toWorldX(x + 0.5), toWorldZ(z + 0.5)]);
-    const asset = def.assets ? def.assets[(m.variant ?? 0) % def.assets.length] : def.asset;
-    if (!asset) { const obj = modulePlaceholder(m.defId, cellsWorld, m.rot); obj.name = m.id; scene.add(obj); if (def.model) await lighthouseModel(obj, def).catch(e => console.warn(`에셋을 못 불러와 임시 도형을 씁니다: ${def.model}`, e)); return; }
-    // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
-    const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
-    obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
-    if (def.vary) { const h = Math.abs(((x * 73856093) ^ (z * 19349663)) >>> 0) / 4294967295; obj.scale.multiplyScalar(0.85 + h * 0.4); obj.rotation.y = h * 6.283 * 7; }   // 나무: 칸마다 크기 0.85~1.25배·방향 제각각
-    obj.name = m.id; scene.add(obj); map.set(m.id, obj); poolFor(scene).add(obj);   // 나무·야자수·바위: 같은 모델끼리 구역마다 묶어 그림(instances.js)
-  }));
-  return map;
+export const SAPLING_SCALE = 0.35;                                               // 묘목·빈 광석 바위(꾸미기로 새로 놓아 자라는 중)의 크기
+const LANDMARK_MOVE = new Set(["cave", "lighthouse"]);                          // 옮길 때 물체를 다시 만들지 않고 받침만 옮김(등대 모델·불빛이 그대로)
+/** 지형지물 받침(landmarkBase)을 칸에 맞춤: 칸들 가운데, 칸 높이(가장 낮은 칸 — 등대는 2 cm 더 묻음), 동굴은 입구 방향(rot)만큼 돌림 */
+export function placeLandmark(obj, world, m) {
+  const t = obj.getObjectByName("landmarkBase"); if (!t) return false;
+  const n = m.cells.length, cx = m.cells.reduce((s, c) => s + c[0], 0) / n, cz = m.cells.reduce((s, c) => s + c[1], 0) / n;
+  const e = Math.min(...m.cells.map(([x, z]) => world.grid.get(x, z)?.elevation ?? 0));
+  t.position.set(toWorldX(cx + 0.5), m.defId === "lighthouse" ? e - 0.02 : e, toWorldZ(cz + 0.5));
+  if (m.defId === "cave") t.rotation.y = (m.rot || 0) * Math.PI / 2;
+  return true;
 }
+/** 모듈 하나의 그림(장면에는 아직 안 붙임). 나무·야자수·바위·광석 = 모델 하나(칸 가운데·칸 높이), 지형지물 = 칸으로 그리는 임시 도형(+ 등대 모델).
+ *  지형지물 물체는 userData.landmark = true(묶어 그리기·거리 숨기기에 넣지 않음 — 등대 불빛은 멀리서도 보여야 함) */
+export async function makeModuleView(world, m) {
+  const def = MODULES[m.defId], cellsWorld = m.cells.map(([x, z]) => [toWorldX(x + 0.5), toWorldZ(z + 0.5)]);
+  const asset = def.assets ? def.assets[(m.variant ?? 0) % def.assets.length] : def.asset;
+  if (!asset) {
+    const obj = modulePlaceholder(m.defId, cellsWorld, m.rot); obj.name = m.id; obj.userData.landmark = true; obj.userData.ownGeo = !LANDMARK_MOVE.has(m.defId);
+    placeLandmark(obj, world, m);
+    if (def.model) await lighthouseModel(obj, def).catch(e => console.warn(`에셋을 못 불러와 임시 도형을 씁니다: ${def.model}`, e));
+    return obj;
+  }
+  // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
+  const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
+  obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
+  if (def.vary) { const h = Math.abs(((x * 73856093) ^ (z * 19349663)) >>> 0) / 4294967295; obj.scale.multiplyScalar(0.85 + h * 0.4); obj.rotation.y = h * 6.283 * 7; }   // 나무: 칸마다 크기 0.85~1.25배·방향 제각각
+  obj.name = m.id; return obj;
+}
+/** 섬의 자연·지형지물 그림: 불러올 때 world.modules를 모두 그리고, 꾸미기(moduleAdded·moduleRemoved·moduleMoved)와 파기·메우기(ground)를 따라감.
+ *  objs: 모듈 id → 물체(나무·야자수·바위·광석, 같은 Map을 계속 씀 — life.js 움직임·main.js 거리 숨기기·계절 색이 같이 읽음), marks: 지형지물.
+ *  모델을 받는 동안 같은 id가 치워지거나 다시 놓이면(되돌리기) 늦게 온 물체는 버림(gen 표). onAdd(m, obj)·onRemove(id, obj): main.js가 이음 */
+export class ModuleViews {
+  constructor(scene, world) {
+    this.scene = scene; this.world = world; this.objs = new Map(); this.marks = new Map(); this.gen = new Map(); this.onAdd = null; this.onRemove = null;
+    this.ready = Promise.all(world.modules.map(m => this.add(m))).then(() => this.objs);
+    world.on("moduleAdded", e => this.add(e.module));
+    world.on("moduleRemoved", e => this.remove(e.module.id));
+    world.on("moduleMoved", e => this.moved(e.module));
+    world.on("ground", e => this.ground(e.x, e.z));
+  }
+  /** 묘목·빈 광석 바위(남은 자람 시간이 있음) */
+  growing(m) { const list = m.defId === "ore" ? this.world.ores : m.defId === "tree" || m.defId === "palm" ? this.world.trees : null, e = list?.find(t => t.id === m.id); return (e ? e.grow : m.grow) > 0; }
+  async add(m) {
+    const tok = {}; this.gen.set(m.id, tok);
+    const obj = await makeModuleView(this.world, m);
+    if (this.disposed || this.gen.get(m.id) !== tok || !this.world.modules.includes(m)) { dropOwn(obj); return null; }   // 받는 사이 치워짐·다시 놓임
+    this.scene.add(obj);
+    if (obj.userData.landmark) { this.marks.set(m.id, obj); return obj; }
+    this.objs.set(m.id, obj); poolFor(this.scene).add(obj);   // 나무·야자수·바위: 같은 모델끼리 구역마다 묶어 그림(instances.js)
+    this.onAdd?.(m, obj);                                                         // 움직임 기준 크기(life.js)는 다 자란 크기로 적고
+    if (this.growing(m)) obj.scale.multiplyScalar(SAPLING_SCALE);                 // 그 다음 작게(treeGrow·oreGrow에서 life.js가 원래 크기로 키움)
+    return obj;
+  }
+  remove(id) {
+    this.gen.delete(id);
+    const o = this.objs.get(id) || this.marks.get(id); if (!o) return;
+    this.scene.remove(o); poolFor(this.scene).remove(o); this.objs.delete(id); this.marks.delete(id);
+    this.onRemove?.(id, o); dropOwn(o);
+  }
+  moved(m) {
+    const o = this.marks.get(m.id);
+    if (o && LANDMARK_MOVE.has(m.defId) && placeLandmark(o, this.world, m)) return;   // 동굴·등대: 받침만 새 자리·높이·방향으로
+    this.remove(m.id); this.add(m);                                               // 부두·방파제: 칸 모양이 돌아가므로 다시 만듦
+  }
+  /** 파기·메우기·높이 바꾸기: 둘레 칸 모듈의 높이를 다시(모서리 높이가 이웃 칸을 따라 바뀜) */
+  ground(x, z) {
+    const g = this.world.grid;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const id = g.get(x + dx, z + dz)?.occupiedId; if (!id) continue;
+      const o = this.objs.get(id), mk = this.marks.get(id);
+      if (mk) { const m = this.world.modules.find(q => q.id === id); if (m) placeLandmark(mk, this.world, m); continue; }
+      if (!o) continue; const y = terrainHeight(g, x + dx + 0.5, z + dz + 0.5); o.position.y = y; if (o.userData.base) o.userData.base.y = y;
+    }
+  }
+  dispose() { this.disposed = true; }
+}
+/** 다시 만드는 지형지물(부두·방파제)의 임시 도형 모양만 반납(재질은 placeholders.js가 같이 씀, 모델 복제본은 모양을 같이 써서 건드리지 않음) */
+function dropOwn(o) { if (o?.userData.ownGeo) o.traverse(x => { if (x.isMesh) x.geometry.dispose(); }); }
 
 const WEAR_SLOT = [["neck", "scarf"], ["body", "coat"]];                     // 입은 옷 자리 → 장신구(characters.js fitWear)
 const SICK_GLOW = new THREE.Color(0x4a1208), NO_GLOW = new THREE.Color(0x000000);

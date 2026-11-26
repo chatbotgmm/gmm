@@ -60,7 +60,7 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
     });
   } else if (defId === "lighthouse") {
     const cx = cellsWorld.reduce((s, c) => s + c[0], 0) / cellsWorld.length, cz = cellsWorld.reduce((s, c) => s + c[1], 0) / cellsWorld.length;
-    const t = new THREE.Group(); t.position.set(cx, -0.15, cz); g.add(t);
+    const t = new THREE.Group(); t.name = "landmarkBase"; t.position.set(cx, -0.15, cz); g.add(t);   // 받침(높이·자리는 views.js placeLandmark가 칸에 맞춤)
     const body = new THREE.Group(); body.name = "lighthouseBody"; t.add(body);   // 임시 몸통(받침·줄무늬 탑·지붕). 등대 모델을 받으면 이것만 바뀜(views.js lighthouseModel)
     body.add(box(1.7, 0.3, 1.7, 0xb9b5ad));
     for (let k = 0; k < 4; k++) {
@@ -94,9 +94,9 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
     }
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 12), mat(0xd9574b)); cap.position.y = 3.95; cap.castShadow = true; body.add(cap);
   } else if (defId === "cave") {
-    // 동굴 입구: 바위 덩이들이 둘러싼 검은 아치(+z 쪽으로 열림)
+    // 동굴 입구: 바위 덩이들이 둘러싼 검은 아치(rot 0이면 +z 쪽으로 열림, rot만큼 90°씩 돌림 — customize.js frontDir과 같은 방향)
     const cx = cellsWorld.reduce((s, c) => s + c[0], 0) / cellsWorld.length, cz = cellsWorld.reduce((s, c) => s + c[1], 0) / cellsWorld.length;
-    const t = new THREE.Group(); t.position.set(cx, 0, cz); g.add(t);
+    const t = new THREE.Group(); t.name = "landmarkBase"; t.position.set(cx, 0, cz); t.rotation.y = rot * Math.PI / 2; g.add(t);
     const rock = (r, x, y, z, col) => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat(col)); m.position.set(x, y, z); m.rotation.set(x * 3, z * 5, y * 7); m.castShadow = m.receiveShadow = true; t.add(m); };
     rock(1.15, 0, 0.75, -0.35, 0x8d8a84); rock(0.75, -0.85, 0.45, 0.2, 0x9b978f); rock(0.7, 0.9, 0.42, 0.15, 0x86827b); rock(0.55, 0.15, 1.45, -0.1, 0xa29e96);
     const hole = new THREE.Mesh(new THREE.CircleGeometry(0.55, 16, 0, Math.PI), mat(0x15120f)); hole.position.set(0, 0.02, 0.62); t.add(hole);

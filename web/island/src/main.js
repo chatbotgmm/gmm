@@ -10,7 +10,7 @@ import { Daylight } from "./render/daylight.js";
 import { PowerRange } from "./render/powerRange.js";
 import { NoPowerBadges } from "./render/noPower.js";
 import { Toon } from "./render/toon.js";
-import { BuildingViews, UnitViews, addModuleViews, setGroundShade } from "./render/views.js";
+import { BuildingViews, UnitViews, ModuleViews, setGroundShade } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
 import { Decor } from "./render/decor.js";
 import { WeatherViews } from "./render/weather.js";
@@ -88,7 +88,7 @@ const seasonNow = () => seasonPick || seasonOf(daylight.now());
 const seasonLook = new SeasonLook(toon), leaves = new FallingLeaves(scene), footprints = new Footprints(scene);   // 눈·모래 위 발자국
 footprints.onStep = (u, kind) => sfx.play("step", { pos: { x: toWorldX(u.x), z: toWorldZ(u.z) }, vol: kind === "snow" ? 0.35 : 0.22, rate: kind === "snow" ? 0.7 : kind === "sand" ? 0.85 : 1.05 });   // 발소리(가까운 갈매미만)
 weatherViews.onBolt = () => sfx.thunder(0.9);
-let moduleObjs = null;                                                            // 나무 등 모듈 물체(계절 잎 색)
+let moduleObjs = null, moduleViews = null;                                        // 나무 등 모듈 물체(계절 잎 색·거리 숨기기) · 그것을 꾸미기에 맞춰 만들고 빼는 것(views.js)
 function tintGround() {                                                           // 나무 잎·덤불을 지금 계절로(땅은 셰이더가 천천히 바꿈)
   if (!world?.season) return;
   if (moduleObjs) seasonLook.applyTrees(world, moduleObjs, world.season);
@@ -125,6 +125,8 @@ function hookSounds(w) {
   w.on("wishDone", () => sfx.chime([784, 988, 1175, 1568], 0.1, 0.2));
   w.on("rank", () => sfx.fanfare());
   w.on("unitAdded", () => { if (ready) sfx.summon(); });
+  w.on("custom", e => { const p = at(e); if (e.op === "dig" || e.op === "fill") sfx.splash(p, e.op === "dig" ? 0.6 : 0.35);   // 꾸미기: 파기·메우기 첨벙, 놓기·옮기기 툭, 치우기 도끼
+    else sfx.play(e.op === "remove" ? "chop" : "place", { pos: p, vol: 0.7 }); });
 }
 // 사용자 제공 소품(가로등·야자수): 최고 품질·높음은 원래 모양, 그 아래는 가벼운 판(새로 만들어지는 것부터)
 function applyAssetTier(c) {
@@ -176,8 +178,12 @@ function mount(w) {
   lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
   sparkleView?.dispose(); sparkleView = new SparkleView(worldRoot);             // ✨ 반짝이(world.sparkles) · 주운 것은 위로 떠오르며 사라짐
   world.on("sparkleGone", s => { if (s.picked) sparkleView?.pop(s.id); });
-  moduleObjs = null; decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정)
-  const waits = [buildingViews.ready, addModuleViews(worldRoot, world).then(map => { lifeViews.attachModules(map); moduleObjs = map; tintGround(); })];
+  decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정) + 꾸미기로 놓은 덤불·꽃(world.decor)
+  // 나무·바위·광석·지형지물: 불러올 때 다 그리고, 꾸미기로 심기·치우기·옮기기·파기를 하면 그 하나만 만들고 뺌(다시 열지 않아도 보임)
+  moduleViews?.dispose(); const mv = moduleViews = new ModuleViews(worldRoot, world), lv = lifeViews, mw = world; moduleObjs = mv.objs; lv.attachModules(moduleObjs);
+  mv.onAdd = (m, o) => { lv.attachModule(m.id, o); if (mw.season) seasonLook.applyTree(m, o, mw.season); };   // 흔들기·쓰러지기 기준 + 지금 계절 잎 색
+  mv.onRemove = id => lv.detachModule(id);                                        // 그루터기·움직임도 같이
+  const waits = [buildingViews.ready, mv.ready.then(() => tintGround())];
   if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true }); });
@@ -449,5 +455,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get lifeViews() { return lifeViews; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

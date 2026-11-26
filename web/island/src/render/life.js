@@ -69,7 +69,14 @@ export class LifeViews {
     this.zoneEls = world.zones.map(z => { const e = document.createElement("div"); e.className = "zone"; e.textContent = z.label; overlay.appendChild(e); return { z, e }; });
     this.showZones = true;
   }
-  attachModules(map) { this.objs = map; for (const [id, o] of map) o.userData.base = { scale: o.scale.x, x: o.position.x, y: o.position.y, z: o.position.z }; }
+  attachModules(map) { this.objs = map; for (const [id, o] of map) this.attachModule(id, o); }
+  /** 모듈 물체 하나(꾸미기로 새로 놓은 것 포함): 움직임 기준(원래 크기·자리)을 적고 objs에 넣음 */
+  attachModule(id, o) { o.userData.base = { scale: o.scale.x, x: o.position.x, y: o.position.y, z: o.position.z }; this.objs.set(id, o); }
+  /** 치운 모듈: 움직임·그루터기도 같이 지움(남는 물체 0) */
+  detachModule(id) {
+    const o = this.objs.get(id); if (o) this.anims = this.anims.filter(a => a.o !== o); this.objs.delete(id);
+    const s = this.stumps.get(id); if (s) { this.scene.remove(s); poolFor(this.scene).remove(s); this.stumps.delete(id); }
+  }
 
   addSeed(s) {
     const m = new THREE.Mesh(this.seedGeo, this.seedMat); m.castShadow = true;
@@ -88,6 +95,7 @@ export class LifeViews {
     let s = this.stumps.get(tree.id);
     if (!s && on) {
       s = await modelFor({ footprint: { w: 0.55, d: 0.55 } }, () => new THREE.Group(), PROPS.stump);
+      if (tree.removed || this.stumps.has(tree.id)) return;                       // 받는 사이 치움(꾸미기)·이미 만듦
       s.position.set(toWorldX(tree.x + 0.5), terrainHeight(this.world.grid, tree.x + 0.5, tree.z + 0.5), toWorldZ(tree.z + 0.5));
       this.scene.add(s); this.stumps.set(tree.id, s); poolFor(this.scene).add(s);
     }
@@ -97,7 +105,8 @@ export class LifeViews {
   grow(id) {
     const o = this.objs.get(id); if (!o) return;
     const tree = this.world.trees.find(t => t.id === id); if (tree) this.showStump(tree, false);
-    o.visible = true; o.rotation.x = 0; o.rotation.z = 0; this.anims.push({ kind: "grow", o, t: 0 });
+    const b = o.userData.base?.scale || 1, from = o.visible ? Math.min(1, o.scale.x / b) : 0.15;   // 묘목(작게 서 있음)은 그 크기에서부터
+    o.visible = true; o.rotation.x = 0; o.rotation.z = 0; this.anims.push({ kind: "grow", o, t: 0, from: Math.max(0.15, from) });
   }
   /** 나무 흔들기: 밑동을 축으로 0.75초 동안 줄어들며 출렁(최대 약 9°), 흔들리는 방향은 매번 조금 다르게 */
   sway(t) { const o = this.objs.get(t.id); if (!o) return; this.anims = this.anims.filter(a => !(a.kind === "sway" && a.o === o)); const a = Math.random() * 6.283;
@@ -167,7 +176,7 @@ export class LifeViews {
         a.t = Math.min(1, a.t + dt * 2.5); o.scale.setScalar(base.scale * (1 - a.t));
         if (a.t >= 1) { o.visible = false; o.scale.setScalar(base.scale); this.anims.splice(i, 1); }
       } else if (a.kind === "grow") {
-        a.t = Math.min(1, a.t + dt * 0.7); o.scale.setScalar(base.scale * (0.15 + 0.85 * a.t));
+        a.t = Math.min(1, a.t + dt * 0.7); const f0 = a.from ?? 0.15; o.scale.setScalar(base.scale * (f0 + (1 - f0) * a.t));
         if (a.t >= 1) { o.scale.setScalar(base.scale); this.anims.splice(i, 1); }
       }
     }
@@ -212,7 +221,8 @@ export class LifeViews {
       if (e._sc !== sc) { e._sc = sc; e.style.setProperty("--s", sc); } if (e._op !== op) { e._op = op; e.style.opacity = op; }
     });
     for (const { z, e } of this.zoneEls) {
-      tmp.set(toWorldX(z.x + 0.5), 2.6, toWorldZ(z.z + 0.5)).project(camera);
+      const zy = z.id === "cave" ? Math.max(0, this.world.grid.get(Math.floor(z.x), Math.floor(z.z))?.elevation ?? 0) : 0;   // 동굴 이름표: 옮긴 자리 높이를 따라감(꾸미기)
+      tmp.set(toWorldX(z.x + 0.5), 2.6 + zy, toWorldZ(z.z + 0.5)).project(camera);
       const on = this.showZones && tmp.z <= 1 && Math.abs(tmp.x) < 1.3 && Math.abs(tmp.y) < 1.3; showEl(e, on);
       if (on) placeEl(e, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h);
     }
