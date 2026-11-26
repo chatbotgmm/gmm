@@ -387,3 +387,17 @@ test("장부 몫 칸: 몫 없이 들어온 돈(주문 장식 자재값 등)은 '
   assert.equal(e.returned, 10); assert.equal(e.tax, 5); assert.equal(BK.LEDGER_PARTS.reduce((s, k) => s + e[k], 0), 0);
   assert.equal(w.bank.vault, 65);
 });
+
+test("금고 돈이 나가는 이벤트(화면 효과용): 설계비 fee{b,fee} · 품삯 wage{u,b,n} · 밀림 wageOwed{u,n,b} · 주문 공사는 금고 이벤트 없음", () => {
+  const { w, boss, mini } = town(100), got = [];
+  for (const ev of ["fee", "wage", "wageOwed", "wagePaid"]) w.on(ev, e => got.push([ev, e]));
+  w.instantBuild = false; const site = place(w, "cottage").building;
+  assert.deepEqual(got.map(g => g[0]), ["fee"]); assert.equal(got[0][1].b, site); assert.ok(got[0][1].fee > 0);
+  got.length = 0; w.payWage(boss, site);
+  assert.deepEqual(got.map(g => g[0]), ["wage"]); assert.equal(got[0][1].b, site); assert.equal(got[0][1].n, E.WAGE); assert.equal(got[0][1].u, boss);
+  got.length = 0; w.bank.vault = 0; w.payWage(boss, site);
+  assert.deepEqual(got.map(g => g[0]), ["wageOwed"]); assert.equal(got[0][1].b, site, "밀림도 어느 공사장인지");
+  got.length = 0; w.bank.vault = 0; boss.wageOwed = 0; w.bank.owed = 0;
+  const h = readyHouse(w); mini.coins = 30; const deco = orderDeco(w, h, seededRandom(1), mini); got.length = 0;
+  w.payWage(boss, deco); assert.deepEqual(got, [], "주문 공사(갈매미 돈)는 금고 효과 없음");
+});
