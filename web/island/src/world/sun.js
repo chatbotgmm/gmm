@@ -11,7 +11,7 @@ export function sunPosition(date = new Date(), lat = LAT, lon = null) {
   if (lon === null) lon = tzHours === 9 ? LON : 15 * tzHours;
   const clock = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
   const solar = clock + (4 * (lon - 15 * tzHours) + eot) / 60;                    // 태양시(시)
-  const H = 15 * (solar - 12);
+  const H = ((15 * (solar - 12)) % 360 + 540) % 360 - 180;                     // 시간각(-180~180°): 자정 지나 태양 자정(서울 약 0시 30분) 전까지 방위가 동서로 뒤집혀 달빛 방향이 툭 튀던 것
   const sinE = Math.sin(lat * RAD) * Math.sin(decl * RAD) + Math.cos(lat * RAD) * Math.cos(decl * RAD) * Math.cos(H * RAD);
   const elev = Math.asin(sinE) / RAD;
   const cosA = (Math.sin(decl * RAD) - Math.sin(elev * RAD) * Math.sin(lat * RAD)) / (Math.cos(elev * RAD) * Math.cos(lat * RAD));

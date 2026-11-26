@@ -3,6 +3,7 @@
 import * as THREE from "three";
 
 import { sunPosition } from "../world/sun.js";
+import { dayLook, moonMix, nightLook } from "./dayKeys.js";
 const DEG = Math.PI / 180;
 const C = (h) => new THREE.Color(h);
 let HALO = null;                                                                  // 가운데가 밝고 가장자리로 사라지는 둥근 빛(한 번만 만듦)
@@ -11,26 +12,13 @@ function haloTex() {
   r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.35, "rgba(255,255,255,.45)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
   return (HALO = new THREE.CanvasTexture(c));
 }
-// 해 높이(도)별 색 표: 밤 · 해질녘 · 낮
-const SKY_KEYS = [
-  { e: -12, top: C(0x0a1430), hor: C(0x1e2c55), sun: C(0x9fb6ff), sunI: 0.35, hemiSky: C(0x3a4f8a), hemiGround: C(0x1b2233), hemiI: 0.35, water: 0.45, exp: 0.95 },
-  { e: -2, top: C(0x2a3f7e), hor: C(0xd99a7a), sun: C(0xff9a5a), sunI: 0.6, hemiSky: C(0x8a8fc4), hemiGround: C(0x4a4038), hemiI: 0.5, water: 0.7, exp: 1.0 },
-  { e: 6, top: C(0x5b8fd6), hor: C(0xffc58a), sun: C(0xffb36b), sunI: 2.2, hemiSky: C(0xcfd8f0), hemiGround: C(0x7a7350), hemiI: 0.7, water: 0.9, exp: 1.08 },
-  { e: 25, top: C(0x7fc4ec), hor: C(0xe4f3f6), sun: C(0xffe2b8), sunI: 3.3, hemiSky: C(0xdcefff), hemiGround: C(0x8a8f5a), hemiI: 0.85, water: 1.0, exp: 1.12 },
-];
-function sample(e) {
-  e = Math.max(SKY_KEYS[0].e, Math.min(SKY_KEYS[SKY_KEYS.length - 1].e - 1e-6, e));   // 끝에서도 표를 복사해서 돌려줌(날씨가 색을 바꿔도 표는 그대로)
-  let i = 0; while (SKY_KEYS[i + 1].e < e) i++;
-  const a = SKY_KEYS[i], b = SKY_KEYS[i + 1], t = (e - a.e) / (b.e - a.e), out = {};
-  for (const k of Object.keys(a)) out[k] = a[k].isColor ? a[k].clone().lerp(b[k], t) : a[k] + (b[k] - a[k]) * t;
-  return out;
-}
-
 export class Daylight {
   /** mode: "real"(기기 시계) | "noon"(낮 고정) | "fast"(1분 = 1시간, 확인용) */
   constructor({ scene, renderer, sun, hemi, water, clouds, skyTex }) {
     Object.assign(this, { scene, renderer, sun, hemi, water, clouds, skyTex }); this.mode = "real"; this.fastT = 0; this.mult = 1; this.vMs = null; this.last = -1; this.dir = new THREE.Vector3(-0.6, 0.55, 0.32);
     this.moonColor = C(0xaebcff); this.wl = 1; this.grey = C(0x9aa3ad);          // wl: 날씨 밝기(흐림·비·폭풍이면 1보다 작음)
+    this.wlShown = 1; this.look = new Float32Array(19); this.white = C(0xffffff);   // 매 계산 새 객체를 안 만들게 다시 씀
+    this.top = new THREE.Color(); this.hor = new THREE.Color(); this.moonDir = new THREE.Vector3();
   }
   now() {
     if (this.mode === "noon") { const d = new Date(); d.setHours(12, 30, 0); return d; }
@@ -44,44 +32,55 @@ export class Daylight {
   update(dt, nowMs) {
     if (this.mode === "fast") this.fastT = (this.fastT + dt / 60) % 24;
     if (this.mult > 1 && this.vMs != null) this.vMs += dt * 1000 * this.mult;
-    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) { this.beam(dt); return; }   // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
+    const wlMoved = Math.abs(this.wl - this.wlShown) > 0.003;                       // 날씨 밝기가 움직이는 동안(1~2초)은 0.5초 간격을 안 기다림: 계단처럼 툭툭 어두워지지 않게
+    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) { if (wlMoved && this.elev != null) this.light(); this.beam(dt); return; }   // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
     this.last = nowMs;
-    const d = this.now(), { elev, azim } = sunPosition(d), k = sample(elev);
-    this.elev = elev; this.time = d;
-    // 해(밤에는 달: 해 반대쪽 높이 40°로 둠)가 비추는 방향. 장면 좌표: +x 동, -z 북
-    const night = elev < -2, e = night ? 40 : Math.max(4, elev), a = (night ? azim + 180 : azim) * DEG;
-    this.dir.set(Math.sin(a) * Math.cos(e * DEG), Math.sin(e * DEG), -Math.cos(a) * Math.cos(e * DEG)).normalize();
-    const wl = this.wl, dim = 1 - wl;                                               // 흐린 만큼 하늘·안개·구름을 회색으로
-    k.top.lerp(this.grey, dim * 0.8); k.hor.lerp(this.grey, dim * 0.7);
-    this.sun.color.copy(night ? this.moonColor : k.sun); this.sun.intensity = k.sunI * wl;
-    this.hemi.color.copy(k.hemiSky); this.hemi.groundColor.copy(k.hemiGround); this.hemi.intensity = k.hemiI * (0.7 + 0.3 * wl);
-    this.renderer.toneMappingExposure = k.exp * (0.55 + 0.45 * this.wl);           // 흐리면 화면 전체를 어둡게
-    // 하늘 그라데이션·안개
-    const cv = this.skyTex.image, g = cv.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, cv.height);
-    grad.addColorStop(0, "#" + k.top.getHexString()); grad.addColorStop(0.75, "#" + k.hor.getHexString()); grad.addColorStop(1, "#" + k.hor.getHexString());
-    g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height); this.skyTex.needsUpdate = true;
-    if (this.scene.fog) this.scene.fog.color.copy(k.hor);
-    this.water.userData.setLight?.(k.water * (0.75 + 0.25 * wl));
-    this.clouds.traverse(o => { if (o.isSprite) o.material.color.copy(k.hor).lerp(C(0xffffff), 0.55); });
-    this.night = Math.max(0, Math.min(1, (2 - elev) / 8));                          // 0 낮 ~ 1 밤(해 높이 2° → -6°)
+    const d = this.now(), { elev, azim } = sunPosition(d);
+    this.elev = elev; this.azim = azim; this.time = d;
+    this.night = Math.max(0, Math.min(1, (2 - elev) / 8));                          // 0 낮 ~ 1 밤(해 높이 2° → -6°). 마을 규칙(world.isNight)이 쓰는 값이라 그대로
+    this.glow = nightLook(this.night);                                              // 보이는 것(등불·창 불빛·그늘)은 이 부드러운 곡선으로 켜지고 꺼짐(약 30분)
+    this.light();
     this.lamp(); this.streetLamps();
     this.beam(dt);
+  }
+  /** 해 높이·방위와 날씨 밝기로 빛·하늘·안개·바다·구름 색을 정함(dayKeys.js 키프레임, 새 객체 없음) */
+  light() {
+    const elev = this.elev, azim = this.azim, k = dayLook(elev, azim, this.look), mk = moonMix(elev), wl = this.wl, dim = 1 - wl;
+    this.wlShown = wl;
+    // 해가 비추는 방향(해가 낮으면 높이 4°로 둠) → 밤에는 달(해 반대쪽 높이 40°). 해 높이 2° → -6° 동안 머리 위로 천천히 넘어감. 장면 좌표: +x 동, -z 북
+    const a = azim * DEG, e = Math.max(4, elev) * DEG, ce = Math.cos(e), cm = Math.cos(40 * DEG);
+    this.dir.set(Math.sin(a) * ce, Math.sin(e), -Math.cos(a) * ce);
+    this.moonDir.set(-Math.sin(a) * cm, Math.sin(40 * DEG), Math.cos(a) * cm);
+    this.dir.lerp(this.moonDir, mk).normalize();
+    this.top.setRGB(k[0], k[1], k[2]).lerp(this.grey, dim * 0.8); this.hor.setRGB(k[3], k[4], k[5]).lerp(this.grey, dim * 0.7);   // 흐린 만큼 하늘·안개·구름을 회색으로
+    this.sun.color.setRGB(k[6], k[7], k[8]).lerp(this.moonColor, mk); this.sun.intensity = k[15] * wl;
+    this.hemi.color.setRGB(k[9], k[10], k[11]); this.hemi.groundColor.setRGB(k[12], k[13], k[14]); this.hemi.intensity = k[16] * (0.7 + 0.3 * wl);
+    this.renderer.toneMappingExposure = k[18] * (0.55 + 0.45 * wl);                // 흐리면 화면 전체를 어둡게
+    // 하늘 그라데이션·안개
+    const cv = this.skyTex.image, g = cv.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, cv.height), th = "#" + this.top.getHexString(), hh = "#" + this.hor.getHexString();
+    if (th !== this.skyKey?.[0] || hh !== this.skyKey[1]) {                         // 8비트 색이 그대로면 하늘 그림을 다시 올리지 않음
+      grad.addColorStop(0, th); grad.addColorStop(0.75, hh); grad.addColorStop(1, hh);
+      g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height); this.skyTex.needsUpdate = true; this.skyKey = [th, hh];
+    }
+    if (this.scene.fog) this.scene.fog.color.copy(this.hor);
+    this.water.userData.setLight?.(k[17] * (0.75 + 0.25 * wl));
+    for (const o of this.clouds.children) if (o.isSprite) o.material.color.copy(this.hor).lerp(this.white, 0.55);
   }
   /** 날씨 밝기(0.45~1). 0.5초마다 하는 다시 계산 때 반영 */
   setWeatherLight(v) { this.wl = v; }
   /** 등대: 램프 발광(밤에 세게), 둘레를 비추는 불빛, 회전하는 빛줄기 */
   lamp() {
     const lamp = this.scene.getObjectByName("lighthouseLamp"); if (!lamp) return;
-    const v = 0.9 + 3.5 * this.night, m = lamp.material; m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
-    if (!this.light) this.light = new THREE.PointLight(0xffd27a, 0, 26, 1.6);
-    if (this.light.parent !== lamp) lamp.add(this.light);                          // 새 섬·불러오기로 등대가 새로 생기면 불빛도 새 램프로 옮김
-    this.light.intensity = 30 * this.night;
+    const n = this.glow ?? 0, v = 0.9 + 3.5 * n, m = lamp.material; m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
+    if (!this.beacon) this.beacon = new THREE.PointLight(0xffd27a, 0, 26, 1.6);
+    if (this.beacon.parent !== lamp) lamp.add(this.beacon);                          // 새 섬·불러오기로 등대가 새로 생기면 불빛도 새 램프로 옮김
+    this.beacon.intensity = 30 * n;
     if (!this.lampHalo) {                                                          // 램프 둘레 빛 번짐(밤에 보임)
       this.lampHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffd98a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
       this.lampHalo.scale.setScalar(4.5); this.lampHalo.renderOrder = 3; this.lampHalo.userData.noToon = true;
     }
     if (this.lampHalo.parent !== lamp) lamp.add(this.lampHalo);
-    this.lampHalo.visible = this.night > 0.05; this.lampHalo.material.opacity = 0.85 * this.night;
+    this.lampHalo.visible = n > 0.005; this.lampHalo.material.opacity = 0.85 * n;   // 보일락 말락 할 때 켜짐(툭 나타나지 않게)
   }
   /** 가로등: 풍차 전기가 닿으면 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
   /** 가로등 실제 빛 개수(그래픽 설정). 빛 개수가 바뀌면 재질을 다시 만들어야 해서 늘 같은 개수를 두고 안 쓰는 빛은 0으로 */
@@ -98,7 +97,7 @@ export class Daylight {
       const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
       h.position.set(x, y, z); h.scale.setScalar(Math.max(0.7, size * ws.x * 5) / ws.x); h.userData.noToon = true; h.raycast = () => {}; o.add(h); return h;
     });
-    for (const h of o.userData.halo) { h.visible = on && n > 0.05; h.material.opacity = 0.55 * n; }
+    for (const h of o.userData.halo) { h.visible = on && n > 0.005; h.material.opacity = 0.55 * n; }
   }
   /** 이 물체가 달린 섬 건물에 전기가 들어오나(world.powered — 다 지은 풍차 둘레, world/power.js). 건물마다 한 번 계산해 두고 건물이 바뀔 때(world.powerRev)만 다시 봄.
    *  섬 건물에 달리지 않은 것(월드를 모를 때 포함)은 켜진 것으로 침. this.world는 main.js가 매 프레임 넣어 줌 */
@@ -110,9 +109,9 @@ export class Daylight {
     return u.powerOn;
   }
   streetLamps() {
-    const n = this.night ?? 0, glow = 0.15 + 2.2 * n, lamps = [];
+    const n = this.glow ?? 0, glow = 0.15 + 2.2 * n, lamps = [];
     this.scene.traverse(o => {
-      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.05 && this.hasPower(o); o.material.opacity = 0.75 * n; return; }   // 전기 들어온 집 창가 불빛(풍차를 철거하면 바로 꺼짐)
+      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.005 && this.hasPower(o); o.material.opacity = 0.75 * n; return; }   // 전기 들어온 집 창가 불빛(풍차를 철거하면 바로 꺼짐)
       if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m;
       if (src.name === "lanternGlow") return this.lantern(o, m, src, n, glow);
       if (src.name !== "lampBody") return;
@@ -126,19 +125,19 @@ export class Daylight {
         pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);
         o.userData.halo = [halo, pool];
       }
-      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = on && n > 0.05; halo.material.opacity = 0.8 * n; pool.material.opacity = 0.2 * n;
+      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = on && n > 0.005; halo.material.opacity = 0.8 * n; pool.material.opacity = 0.2 * n;
       if (on) lamps.push(halo);
     });
     // 실제 빛: 화면 중심(보는 곳)에서 가까운 가로등부터 빛을 하나씩 옮겨 붙임
     const L = this.lampLights || []; if (!L.length) return;
     const c = this.focus || new THREE.Vector3(), p = new THREE.Vector3();
     const near = lamps.map(h => { h.getWorldPosition(p); return [p.clone(), p.distanceToSquared(c)]; }).sort((a, b) => a[1] - b[1]);
-    L.forEach((l, i) => { const it = near[i]; if (it && n > 0.05) { l.position.copy(it[0]).y += 0.6; l.intensity = 1.1 * n; } else l.intensity = 0; });
+    L.forEach((l, i) => { const it = near[i]; if (it && n > 0.005) { l.position.copy(it[0]).y += 0.6; l.intensity = 1.1 * n; } else l.intensity = 0; });
   }
   beam(dt) {
     const b = this.scene.getObjectByName("lighthouseBeam"); if (!b) return;
-    b.rotation.y += dt * 0.9; b.visible = (this.night ?? 0) > 0.05;
-    for (const m of b.children) m.material.uniforms.uOpacity.value = 0.75 * (this.night ?? 0);
+    const n = this.glow ?? 0; b.rotation.y += dt * 0.9; b.visible = n > 0.005;
+    for (const m of b.children) m.material.uniforms.uOpacity.value = 0.75 * n;
   }
   label() {
     const d = this.time || new Date(), hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
