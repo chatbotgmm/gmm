@@ -65,7 +65,11 @@ test("금고가 모자라면 { ok:false, reason } (금고 글), 아무것도 안
   const old = World.create(7, seededRandom(1));
   assert.equal(old.economy, false); assert.equal(old.customCost("place", "ore"), 0); assert.equal(old.customCost("move", "pier"), 0); assert.equal(old.customCost("dig"), 0);
   const v = old.bank.vault, c = find(old, canPlant(old), old.center, 30); assert.ok(old.placeNature("tree", ...c).ok); assert.equal(old.bank.vault, v);
-  const info = w.customInfo(); assert.equal(info.treeMax, 260); assert.equal(info.costs.place.ore, 4); assert.equal(info.costs.move.cave, 15); assert.equal(info.costs.dig, 1);
+  const info = w.customInfo(); assert.equal(info.treeMax, 260); assert.equal(info.costs.place.ore, 4); assert.equal(info.costs.move.cave, 15); assert.equal(info.costs.dig, 0); assert.equal(info.costs.fill, 0);
+  // 파기·메우기는 무료(높이 바꾸기): 금고가 0이어도 막히지 않음
+  assert.equal(w.bank.vault, 0); const [gx, gz] = find(w, openGrass(w, 2), { x: x + 10, z });
+  const g1 = w.digCell(gx, gz); assert.ok(g1.ok, g1.reason); assert.equal(g1.cost, 0); const g2 = w.fillCell(gx, gz); assert.ok(g2.ok, g2.reason); assert.equal(g2.cost, 0); assert.equal(w.bank.vault, 0);
+  assert.equal(old.customCost("fill"), 0);
   assert.deepEqual(info.landmarks, ["cave", "lighthouse"]);
 });
 
@@ -178,28 +182,31 @@ test("부두·방파제(예전 섬): 부두를 옮기면 끝 낚시 자리가 �
   assert.equal(w.modules.filter(m => m.defId === "pier").length, 1);
 });
 
-test("파기·메우기: 물(−0.6)·금고 −1·선 갈매미는 땅으로, 건물·문 앞·밭·낚시터 앞 물·먼 바다·떨어진 물은 거절, 높이 도구는 경계를 넘을 때만 값", () => {
+test("파기·메우기: 물(−0.6)·무료(금고 그대로)·선 갈매미는 땅으로, 건물·문 앞·밭·낚시터 앞 물·먼 바다·떨어진 물은 거절, 높이 도구는 경계를 넘어도 무료", () => {
   const w = wild(), [x, z] = find(w, openGrass(w, 2)), u = w.units[0], v0 = w.bank.vault, log = record(w, ["ground", "customRefused"]);
   u.x = x + 0.5; u.z = z + 0.5;
-  const r = w.digCell(x, z); assert.ok(r.ok, r.reason); assert.equal(w.grid.get(x, z).elevation, CU.POND_DEPTH); assert.ok(w.grid.isWater(x, z)); assert.equal(w.bank.vault, v0 - 1);
+  const r = w.digCell(x, z); assert.ok(r.ok, r.reason); assert.equal(w.grid.get(x, z).elevation, CU.POND_DEPTH); assert.ok(w.grid.isWater(x, z)); assert.equal(r.cost, 0); assert.equal(w.bank.vault, v0, "파기는 무료");
   assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), "선 갈매미는 가까운 땅으로"); assert.ok(log.some(e => e[0] === "ground"));
   assert.equal(w.digCell(x, z).reason, "이미 물이에요");
   const bank = w.bankB(); assert.equal(w.digCell(bank.x, bank.z).reason, "건물·나무가 있는 칸은 팔 수 없어요"); assert.equal(w.digCell(bank.door.x, bank.door.z).reason, "건물 문 앞은 팔 수 없어요");
-  const f = w.fillCell(x, z); assert.ok(f.ok, f.reason); assert.equal(w.grid.get(x, z).elevation, 0); assert.equal(w.grid.get(x, z).groundType, "Sand"); assert.equal(w.bank.vault, v0 - 2);
+  const f = w.fillCell(x, z); assert.ok(f.ok, f.reason); assert.equal(w.grid.get(x, z).elevation, 0); assert.equal(w.grid.get(x, z).groundType, "Sand"); assert.equal(f.cost, 0); assert.equal(w.bank.vault, v0, "메우기도 무료");
   const deep = find(w, (a, b) => w.grid.get(a, b).elevation === -1 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => !w.grid.isWater(a + dx, b + dz)));
   if (deep) assert.equal(w.fillCell(...deep).reason, "먼 바다는 메울 수 없어요");
   const lone = find(w, (a, b) => w.grid.get(a, b).elevation > CU.FILL_MIN && w.grid.isWater(a, b) && [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => w.grid.isWater(a + dx, b + dz)));
   assert.equal(w.fillCell(...lone).reason, "땅에 붙은 물만 메울 수 있어요");
   // 판 칸은 높이 도구로 더 깊게 파도 다시 메울 수 있음(dug)
   const [px, pz] = find(w, openGrass(w, 2), { x: x + 8, z }); w.digCell(px, pz); w.applyHeight(px, pz, -1); assert.ok(w.fillCell(px, pz).ok, "플레이어가 판 칸");
-  // 높이 도구: 경계 안 높낮이는 공짜, 넘으면 1, 금고 0이면 막힘 + customRefused
+  // 높이 도구: 경계 안 높낮이도, 땅↔물 경계를 넘어도 무료, 금고 0이어도 막히지 않음(금고 까닭 customRefused 없음)
   const [hx, hz] = find(w, openGrass(w, 2), { x: x - 8, z }); const v1 = w.bank.vault;
   assert.ok(w.reshape(hx, hz, "raise")); assert.equal(w.bank.vault, v1, "땅 위 높낮이는 공짜");
-  assert.ok(w.reshape(hx, hz, "lower")); assert.ok(w.reshape(hx, hz, "lower")); assert.ok(w.grid.isWater(hx, hz)); assert.equal(w.bank.vault, v1 - 1, "땅→물 한 번만 1");
-  assert.ok(w.reshape(hx, hz, "lower")); assert.equal(w.bank.vault, v1 - 1, "물 안에서 더 파기는 공짜");
+  assert.ok(w.reshape(hx, hz, "lower")); assert.ok(w.reshape(hx, hz, "lower")); assert.ok(w.grid.isWater(hx, hz)); assert.equal(w.bank.vault, v1, "땅→물도 공짜");
+  assert.ok(w.reshape(hx, hz, "lower")); assert.equal(w.bank.vault, v1, "물 안에서 더 파기는 공짜");
   w.bank.vault = 0; const [kx, kz] = find(w, openGrass(w, 2), { x: x, z: z + 8 });
-  assert.equal(w.reshape(kx, kz, "lower"), false, "0 → −0.5는 땅→물"); assert.ok(!w.grid.isWater(kx, kz)); assert.ok(w.reshape(kx, kz, "raise"), "땅 위 높이기는 금고 0이어도 됨");
-  assert.match(log.filter(e => e[0] === "customRefused").at(-1)[1].reason, /금고/);
+  assert.ok(w.reshape(kx, kz, "lower"), "0 → −0.5(땅→물)도 금고 0이어도 됨"); assert.ok(w.grid.isWater(kx, kz)); assert.ok(w.reshape(kx, kz, "raise"), "물→땅도 금고 0이어도 됨"); assert.ok(!w.grid.isWater(kx, kz)); assert.equal(w.bank.vault, 0);
+  assert.ok(!log.some(e => e[0] === "customRefused" && /금고/.test(e[1].reason)), "금고 때문에 막힌 적 없음");
+  // 높이 도구 되돌리기·다시하기(restoreCell)도 땅↔물 경계를 넘을 때 무료: 금고 0, 장부 custom 그대로
+  const c0 = w.bank.custom, r1 = w.restoreCell(kx, kz, null, -0.5); assert.ok(r1.ok, r1.reason); assert.equal(r1.cost, 0); assert.ok(w.grid.isWater(kx, kz));
+  const r2 = w.restoreCell(kx, kz, "Grass", 0); assert.ok(r2.ok, r2.reason); assert.equal(r2.cost, 0); assert.ok(!w.grid.isWater(kx, kz)); assert.equal(w.bank.vault, 0); assert.equal(w.bank.custom, c0);
   // 섬이 만든 먼 바다는 높이 도구로도 높이지 못함
   if (deep) { assert.equal(w.reshape(...deep, "raise"), false); assert.equal(log.at(-1)[1].reason, "먼 바다는 메울 수 없어요"); }
 });
@@ -240,16 +247,18 @@ test("되돌리기: 심기 → 되돌리면 없어지고 환불, 두 번째는 �
   const un = w.applyInverse(rm.inverse); assert.ok(un.ok, un.reason); assert.equal(un.refund, 1);
   assert.equal(JSON.stringify(w.modules.find(o => o.id === t.id)), snap, "같은 id·variant·rot"); assert.ok(w.trees.find(o => o.id === t.id).alive, "다 자란 나무는 다 자란 채로");
   const [dx, dz] = find(w, openGrass(w, 2), { x: x + 6, z }), cells = [[dx, dz], [dx + 1, dz], [dx, dz + 1]], g0 = cells.map(([a, b]) => [w.grid.get(a, b).elevation, w.grid.get(a, b).groundType]);
-  const v1 = w.bank.vault, d = w.digCells(cells); assert.equal(d.done, 3); assert.equal(d.cost, 3); assert.equal(w.bank.vault, v1 - 3);
-  const ud = w.applyInverse(d.inverse); assert.ok(ud.ok, ud.reason); assert.equal(ud.refund, 3); assert.equal(w.bank.vault, v1);
+  const v1 = w.bank.vault, c1 = w.bank.custom, d = w.digCells(cells); assert.equal(d.done, 3); assert.equal(d.cost, 0); assert.equal(w.bank.vault, v1, "파기는 무료"); assert.equal(w.bank.custom, c1, "장부 custom 그대로");
+  const ud = w.applyInverse(d.inverse); assert.ok(ud.ok, ud.reason); assert.equal(ud.refund, 0); assert.equal(w.bank.vault, v1, "되돌려도 돌려받을 것 없음"); assert.equal(w.bank.custom, c1);
   assert.deepEqual(cells.map(([a, b]) => [w.grid.get(a, b).elevation, w.grid.get(a, b).groundType]), g0);
   // 동굴 옮기기 되돌리기 · 덤불
   const cave = w.landmark("cave"), was = cave.cells.map(c => [...c]), [cx, cz] = find(w, openGrass(w, 3), { x: x - 10, z });
   const mv = w.moveLandmark("cave", cx, cz, 0); assert.ok(mv.ok, mv.reason); const umv = w.applyInverse(mv.inverse); assert.ok(umv.ok, umv.reason); assert.deepEqual(cave.cells, was); assert.equal(umv.refund, 15);
   const pd = w.placeDecor("flower", dx, dz); assert.ok(w.applyInverse(pd.inverse).ok); assert.ok(!w.decor.add.has(`${dx},${dz}`));
   const cd = w.clearDecor(dx, dz); assert.ok(w.applyInverse(cd.inverse).ok); assert.ok(!w.decor.off.has(`${dx},${dz}`));
-  // 돈이 떨어지면 거기서 멈춤
-  w.bank.vault = 2; const many = w.digCells([[dx, dz], [dx + 1, dz], [dx, dz + 1]]); assert.equal(many.done, 2); assert.equal(many.skipped.length, 1); assert.match(many.skipped[0].reason, /금고/);
+  // 금고가 0이어도 파기 묶음은 다 됨(무료), 되돌리기도 금고·장부 그대로. 돈이 모자라면 막히는 건 값 있는 일(나무 2)
+  w.bank.vault = 0; const c2 = w.bank.custom, many = w.digCells([[dx, dz], [dx + 1, dz], [dx, dz + 1]]); assert.equal(many.done, 3); assert.equal(many.skipped.length, 0); assert.equal(w.bank.vault, 0);
+  assert.ok(w.applyInverse(many.inverse).ok); assert.equal(w.bank.vault, 0); assert.equal(w.bank.custom, c2);
+  w.bank.vault = 1; assert.match(w.placeNature("tree", ...find(w, canPlant(w))).reason, /금고/);
 });
 
 test("저장·불러오기: 묘목 남은 시간·치운 것·옮긴 동굴·덤불 겹·판 칸·금고 꾸미기 장부가 그대로, 새 칸 없는 예전 저장도 열림, 낚시터 철거 버그 회귀", () => {

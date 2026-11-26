@@ -20,8 +20,8 @@ export const NATURE_TOOLS = [
   { arg: "bush", group: "plant", icon: "🌿", name: "덤불", op: "place", kind: "bush", verb: "놓기", tip: "덤불(길을 막지 않아요)" },
   { arg: "flower", group: "plant", icon: "🌸", name: "꽃", op: "place", kind: "flower", verb: "놓기", tip: "꽃(길을 막지 않아요)" },
   { arg: "clear", group: "clear", icon: "🪓", name: "치우기", op: "remove", kind: "tree", verb: "치우기", tip: "누른 칸의 나무·바위·광석·덤불·꽃을 치워요(나무·돌은 안 나와요)" },
-  { arg: "dig", group: "land", icon: "🕳", name: "파기", op: "dig", kind: "", verb: "파기", tip: "땅을 파서 연못·물길(칸마다 값)" },
-  { arg: "fill", group: "land", icon: "🏖", name: "메우기", op: "fill", kind: "", verb: "메우기", tip: "얕은 물을 모래땅으로(칸마다 값)" },
+  { arg: "dig", group: "land", icon: "🕳", name: "파기", op: "dig", kind: "", verb: "파기", tip: "땅을 파서 연못·물길(무료)" },
+  { arg: "fill", group: "land", icon: "🏖", name: "메우기", op: "fill", kind: "", verb: "메우기", tip: "얕은 물을 모래땅으로(무료)" },
   { arg: "move:cave", group: "move", icon: "🦇", name: "동굴", op: "move", kind: "cave", verb: "옮기기", tip: "동굴을 다른 자리로(↻ 입구 방향)" },
   { arg: "move:lighthouse", group: "move", icon: "🗼", name: "등대", op: "move", kind: "lighthouse", verb: "옮기기", tip: "등대를 바닷가 다른 자리로" },
   { arg: "move:pier", group: "move", icon: "🛶", name: "부두", op: "move", kind: "pier", verb: "옮기기", tip: "부두를 다른 바닷가로", onlyIf: true },
@@ -43,7 +43,7 @@ export const natureToolsFor = info => NATURE_TOOLS.filter(t => !t.onlyIf || info
 /** 카드 아래 글: { meta, off, why }. info = world.customInfo() */
 export function natureCard(t, info) {
   const cost = t.op === "dig" || t.op === "fill" ? info.costs?.[t.op] ?? 0 : info.costs?.[t.op]?.[t.kind] ?? 0;
-  const money = info.economy ? nvCoin(cost) : "";
+  const money = info.economy && cost ? nvCoin(cost) : "";   // 값이 0(파기·메우기)이면 「무료」
   if (t.op === "move" && !info.landmarks?.includes(t.kind)) return { meta: "이 섬에는 없어요", off: true, why: "이 섬에는 없어요", cost };
   const lim = t.op !== "place" ? "" : t.kind === "tree" || t.kind === "palm" ? `${info.trees}/${info.treeMax}` : t.kind === "ore" ? `${info.ores}/${info.oreMax}`
     : t.kind === "beachRock" ? `${info.rocks}/${info.rockMax}` : `${info.decor}/${info.decorMax}`;
@@ -56,7 +56,7 @@ export function natureHover(arg, r, vault, eco = true) {
   const a = natureAction(arg), t = natureTool(arg);
   if (!r) return "";
   if (!r.ok) return `🚫 ${r.reason || "여기에는 못 해요"}`;
-  const money = c => eco ? ` · ${nvCoin(c)} · 금고 ${nvCoin(vault)} → ${nvCoin(vault - c)}` : "";
+  const money = c => eco && c ? ` · ${nvCoin(c)} · 금고 ${nvCoin(vault)} → ${nvCoin(vault - c)}` : "";
   if (a.kind === "place") { const kind = r.kind || a.what, icon = kind === "palm" ? "🌴" : t?.icon ?? "🌳"; return `${icon} ${CU.NAMES[kind] ?? t?.name} ${t?.verb ?? "놓기"}${money(r.cost)}`; }
   if (a.kind === "decor") return `${t.icon} ${t.name} 놓기${money(r.cost)}`;
   if (a.kind === "clear") { const k = r.module?.defId || r.kind || (r.was && r.was !== "seed" ? r.was.k : null); return `🪓 ${k ? CU.NAMES[k] : "덤불·풀"} 치우기${money(r.cost)}`; }
