@@ -403,3 +403,11 @@ test("검토 수정: 스르르 바뀌는 중인 칸을 파거나 메우면 그 �
   const o = World.create(7, seededRandom(1), { empty: true }), cx = Math.floor(o.center.x), cz = Math.floor(o.center.z);
   if (!o.grid.get(cx, cz).occupiedId && !o.grid.isWater(cx, cz)) assert.equal(o.digLinkProblem(cx, cz, CU.POND_DEPTH), "", "가운데 칸을 파도 기준 칸이 이웃으로 옮겨 감");
 });
+
+test("8단계 수정: 섬이 만든 등대(평평하지 않은 자리)를 옮긴 뒤 되돌리기가 됨(\"바닥이 평평하지 않아요\"로 막히던 것)", () => {
+  const w = wild(); w.bank.vault = 100; const m = w.landmark("lighthouse"), from = JSON.stringify(m.cells);
+  assert.ok(m.cells.some(([x, z]) => Math.abs(w.grid.get(x, z).elevation - w.grid.get(...m.cells[0]).elevation) > 1e-6), "원래 자리는 높이가 제각각");
+  const [ax, az] = find(w, (x, z) => w.moveLandmark("lighthouse", x, z, 0, { dry: true }).ok, { x: m.cells[0][0] - 4, z: m.cells[0][1] + 4 }, 25);
+  const q = w.moveLandmark("lighthouse", ax, az, 0); assert.ok(q.ok, q.reason); assert.equal(w.bank.vault, 85);
+  const u = w.applyInverse(q.inverse); assert.ok(u.ok, u.reason); assert.equal(JSON.stringify(m.cells), from); assert.equal(w.bank.vault, 100);
+});

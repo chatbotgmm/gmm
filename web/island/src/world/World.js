@@ -1414,7 +1414,7 @@ export class World {
     }
     for (const [x, z] of cells) { const why = this.landProblem(x, z, null, self); if (why) return why; }
     const e = g.get(cells[0][0], cells[0][1]).elevation;
-    if (cells.some(([x, z]) => Math.abs(g.get(x, z).elevation - e) > 1e-6)) return "바닥이 평평하지 않아요";
+    if (!restore && cells.some(([x, z]) => Math.abs(g.get(x, z).elevation - e) > 1e-6)) return "바닥이 평평하지 않아요";   // 되돌리기는 원래 자리(섬이 만든 등대 자리는 평평하지 않음)
     if (def === "cave") for (const [x, z] of CU.frontCells(cells, rot)) {
       const c = g.get(x, z); if (!c) return "동굴 입구 앞이 막혀 있어요(R로 방향 돌리기)";
       const h = c.occupiedId === self ? (g.isWater(x, z) ? null : c.elevation) : g.walkHeight(x, z);
