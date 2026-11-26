@@ -261,6 +261,19 @@ test("되돌리기: 심기 → 되돌리면 없어지고 환불, 두 번째는 �
   w.bank.vault = 1; assert.match(w.placeNature("tree", ...find(w, canPlant(w))).reason, /금고/);
 });
 
+test("파기·메우기 값이 다시 생겨도(시험으로 1로 바꿔 봄) 금고 부족 장치는 그대로: 묶음은 금고가 떨어진 칸에서 멈춤, 높이 도구·restoreCell 땅↔물은 금고 0이면 막힘", () => {
+  const was = { dig: CU.CUSTOM_COST.dig, fill: CU.CUSTOM_COST.fill };
+  try {
+    CU.CUSTOM_COST.dig = 1; CU.CUSTOM_COST.fill = 1;
+    const w = wild(), [x, z] = find(w, openGrass(w, 2)), log = record(w, ["customRefused"]);
+    w.bank.vault = 2; const many = w.digCells([[x, z], [x + 1, z], [x, z + 1]]); assert.equal(many.done, 2); assert.equal(many.skipped.length, 1); assert.match(many.skipped[0].reason, /금고/); assert.equal(w.bank.vault, 0);
+    const [kx, kz] = find(w, openGrass(w, 2), { x: x - 8, z });
+    assert.equal(w.reshape(kx, kz, "lower"), false, "땅→물은 값 1, 금고 0이면 막힘"); assert.ok(!w.grid.isWater(kx, kz)); assert.match(log.at(-1)[1].reason, /금고/);
+    assert.equal(w.restoreCell(kx, kz, null, -0.5).ok, false, "되돌리기·다시하기 땅→물도 막힘"); assert.ok(w.reshape(kx, kz, "raise"), "땅 위 높이기는 됨");
+  } finally { Object.assign(CU.CUSTOM_COST, was); }
+  assert.equal(CU.CUSTOM_COST.dig, 0); assert.equal(CU.CUSTOM_COST.fill, 0);
+});
+
 test("저장·불러오기: 묘목 남은 시간·치운 것·옮긴 동굴·덤불 겹·판 칸·금고 꾸미기 장부가 그대로, 새 칸 없는 예전 저장도 열림, 낚시터 철거 버그 회귀", () => {
   const w = wild(); w.bank.vault = 500; const [x, z] = find(w, canPlant(w));
   const sap = w.placeNature("tree", x, z).module; w.stepCustom(100);
