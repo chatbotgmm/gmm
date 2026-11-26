@@ -109,8 +109,12 @@ function groundShadeMat() {
   return (GROUND_MAT = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0x1d2b14, transparent: true, opacity: 0.34, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
 }
 
-/** 밑동 그늘 세기(0~1): 밤에는 옅게(가로등 빛 웅덩이를 어둡게 덮지 않게) */
-export function setGroundShade(k) { if (GROUND_MAT) GROUND_MAT.opacity = 0.34 * k; }
+/** 밑동 그늘 세기(0~1): 밤에는 옅게(가로등 빛 웅덩이를 어둡게 덮지 않게). snow(0~1): 눈 덮인 땅에서는 풀빛(어두운 초록)이 아니라 그림자처럼 푸르스름한 회색 */
+const SHADE_GRASS = new THREE.Color(0x1d2b14), SHADE_SNOW = new THREE.Color(0x3a4a66);
+export function setGroundShade(k, snow = 0) {
+  if (!GROUND_MAT) return; GROUND_MAT.opacity = 0.34 * k;
+  const s = Math.round(Math.min(1, Math.max(0, snow)) * 50) / 50; if (GROUND_MAT.userData.snow !== s) { GROUND_MAT.userData.snow = s; GROUND_MAT.color.copy(SHADE_GRASS).lerp(SHADE_SNOW, s); }
+}
 
 /** 계단 모델: 문 쪽(+z)이 입구, -z로 올라감. 디딤판 높이는 World.stairStep과 같은 식. 바닥에서부터 꽉 찬 돌계단. */
 const STONE = new THREE.MeshStandardMaterial({ color: 0xcfc6b6, roughness: 0.9 }), STONE2 = new THREE.MeshStandardMaterial({ color: 0xbdb3a2, roughness: 0.9 });

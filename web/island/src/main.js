@@ -343,7 +343,7 @@ function frameBody() {
   world.winterYear = winterYearOf(daylight.now());                              // 첫눈은 겨울마다 한 번(어느 해 겨울인지는 화면이 알려 줌)
   skyShow.update(dt, world.sky, controls.target, camera);
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);
-  setGroundShade(1 - 0.8 * (daylight.night ?? 0));                               // 건물 밑동 그늘은 밤에 옅게
+  setGroundShade(1 - 0.8 * (daylight.night ?? 0), world.snow ?? 0);          // 건물 밑동 그늘은 밤에 옅게, 눈 위에서는 푸르스름하게
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 보통 갈매미는 집에서 자고, 야행성은 일함
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
