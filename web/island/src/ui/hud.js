@@ -13,25 +13,18 @@ import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
-import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftables, petsLeft, PET_DAILY } from "../world/bond.js";
+import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftDef, petsLeft, PET_DAILY } from "../world/bond.js";
+import { stashTotals } from "../world/belongings.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
-import { STAMP_SHOP, DAILY_COUNT } from "../world/daily.js";
+import { DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
 import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 import { bankHtml } from "./bankView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
+import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
-
-const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
-  [UnitState.Zoomies]: "신나서 뛰는 중", [UnitState.Flee]: "도망치는 중", [UnitState.Avoid]: "혼자 있고 싶어",
-  [UnitState.GoChop]: "숲으로 가는 중", [UnitState.Chop]: "나무 베는 중", [UnitState.GoMine]: "광산으로 가는 중", [UnitState.Mine]: "광석 캐는 중",
-  [UnitState.GoFish]: "낚시터로 가는 중", [UnitState.Fish]: "낚시 중", [UnitState.GoBuild]: "공사장으로 가는 중", [UnitState.Build]: "집 짓는 중",
-  [UnitState.Idle]: "쉬는 중", [UnitState.Wander]: "산책 중", [UnitState.GoToBuilding]: "건물로 가는 중",
-  [UnitState.Sleep]: "자는 중", [UnitState.Curious]: "구경하러 가는 중", [UnitState.GoSwim]: "헤엄치러 가는 중", [UnitState.Swim]: "헤엄치는 중", [UnitState.GoBank]: "은행에 팔러 가는 중", [UnitState.GoMarket]: "시장 가는 중", [UnitState.GoShore]: "바닷가로 먹이 잡으러", [UnitState.GoImprove]: "동네 고치러 가는 중", [UnitState.Improve]: "동네 고치는 중", [UnitState.GoSit]: "벤치로 가는 중", [UnitState.Sit]: "벤치에 앉아 쉬는 중",
-  [UnitState.GoTrade]: "시장으로 가는 중", [UnitState.Trade]: "장사 중", [UnitState.GoFarm]: "밭으로 가는 중", [UnitState.Farm]: "밭일 중",
-  [UnitState.GoFest]: "축제 광장으로 가는 중", [UnitState.Inside]: "건물 안", [UnitState.GoToFurniture]: "가구로 가는 중", [UnitState.Interact]: "가구 쓰는 중", [UnitState.Held]: "들려 있음" };
 
 // 하늘 기록(도감): 드문 하늘마다 언제 볼 수 있는지 한 줄
 const SKY_HINT = { rainbow: "낮에 비가 갠 뒤 가끔 · 물건을 더 잘 찾아요", meteor: "맑은 밤에 아주 가끔 · 별조각이 떨어져요", firstSnow: "겨울마다 처음 내리는 눈" };
@@ -412,11 +405,11 @@ export class Hud {
       const ds = document.getElementById("devStats"); if (ds.textContent !== dev) ds.textContent = dev;
     }
   }
-  /** 배지에 쓰는 값: 할 일(도장으로 지금 받을 수 있는 가구 수) · 새 소식(소식지 마지막 기사 · 도감에 모은 가짓수) */
+  /** 배지에 쓰는 값: 할 일(지금 쓸 수 있는 도장 수 — 가구·귀한 선물 가운데 가장 싼 값 이상일 때) · 새 소식(소식지 마지막 기사 · 도감에 모은 가짓수) */
   badgeNow() {
     const w = this.world, log = w.newsLog || [], last = log[log.length - 1];
     const si = w.summonInfo();
-    return { act: STAMP_SHOP.filter(s => (w.stamps || 0) >= s.stamp).length, summon: si.can ? si.count : 0,
+    return { act: stampBadge(w), summon: si.can ? si.count : 0,
       news: `${log.length}|${last?.t}|${last?.text}`,
       dex: Object.keys(w.collection || {}).length + Object.keys(w.items || {}).filter(k => w.items[k]).length + Object.keys(w.skySeen || {}).length };
   }
@@ -428,7 +421,7 @@ export class Hud {
     const key = `${now.act}|${newNews}|${newDex}|${now.summon}`; if (key === this.badgeKey) return; this.badgeKey = key;
     const cnt = this.phoneBtn.querySelector(".badge-count"), dot = this.phoneBtn.querySelector(".dot");
     cnt.hidden = !now.act; cnt.textContent = now.act || ""; dot.hidden = !!now.act || !(newNews || newDex);
-    this.phoneBtn.setAttribute("aria-label", `갈매폰${now.act ? ` · 받을 수 있는 것 ${now.act}개` : ""}${newNews || newDex ? " · 새 소식" : ""}`);
+    this.phoneBtn.setAttribute("aria-label", `갈매폰${now.act ? ` · 쓸 수 있는 도장 ${now.act}개` : ""}${newNews || newDex ? " · 새 소식" : ""}`);
     const wb = this.appBtns?.wish; if (wb) for (const e of [wb, wb.firstElementChild]) { if (!e) continue; if (now.act) e.dataset.count = now.act; else delete e.dataset.count; }   // 숫자는 아이콘(span)의 ::after가 attr로 읽음
     const sb = this.appBtns?.summon; if (sb) { for (const e of [sb, sb.firstElementChild]) { if (!e) continue; if (now.summon) e.dataset.count = now.summon; else delete e.dataset.count; }   // 🥚 지금 부를 수 있는 마릿수
       sb.setAttribute("aria-label", now.summon ? `소환 · 지금 ${now.summon}마리 부를 수 있어요` : "소환"); }
@@ -437,7 +430,7 @@ export class Hud {
   /** 📱 소원 앱 맨 위 「오늘」: 오늘의 부탁(나아간 만큼 막대) · 모은 도장 · 도장 가게. 바뀐 게 없으면 다시 안 그림(가게 단추가 눌리게) */
   drawDaily() {
     const w = this.world, d = w.daily, body = document.getElementById("dailyBody");
-    const key = `${d?.key}|${d?.reqs.map(r => r.id + r.have).join(",")}|${d?.stamped}|${w.stamps}|${STAMP_SHOP.map(s => w.stampBought[s.id] || 0).join(",")}`;
+    const key = `${d?.key}|${d?.reqs.map(r => r.id + r.have).join(",")}|${d?.stamped}|${w.stamps}|${stampShopKey(w)}`;
     if (key === this.dailyDrawn && body.firstChild) return;
     this.dailyDrawn = key; const open = body.querySelector("details")?.open || w.stamps > 0;   // 가게를 펼쳐 뒀으면 다시 그려도 그대로 · 도장이 있으면 펼쳐서 보여 줌
     body.onclick = e => { const b = e.target.closest?.("[data-stamp]"); if (!b || b.disabled) return; this.onStampBuy?.(b.dataset.stamp); this.drawDaily(); };
@@ -445,10 +438,8 @@ export class Hud {
       : d.reqs.map(r => { const ok = r.have >= r.need; return `<div class="dreq${ok ? " done" : ""}" data-daily="${r.id}"><span class="ico">${ok ? "✅" : r.icon}</span><div><div class="dtx"><span>${escHtml(r.text)}</span><em>${r.have} / ${r.need}</em></div><div class="rbar"><i style="width:${Math.round(r.have / r.need * 100)}%"></i></div></div></div>`; }).join("");
     const note = !d?.reqs.length ? "" : d.stamped ? `<p class="dnote"><b>오늘의 부탁을 모두 들어줬어요!</b> 도장 하나를 받았어요. 내일 새 부탁이 와요.</p>`
       : `<p class="dim">${d.reqs.length >= DAILY_COUNT ? "세 가지" : "오늘의 부탁"}를 모두 들어주면 도장 하나를 받아요. 날짜가 바뀌면 새 부탁으로 바뀌어요.</p>`;
-    const shop = STAMP_SHOP.map(s => { const f = FURNITURE[s.furniture], n = w.stampBought[s.id] || 0;
-      return `<div class="sitem"><i style="background:${hex(f.colors[0])}"></i><div><b>${s.name}</b><span class="dim">가구 · 아늑함 +${f.comfort}${n ? ` · ${n}개 받았어요` : ""}</span></div><button data-stamp="${s.id}"${w.stamps < s.stamp ? " disabled" : ""}>도장 ${s.stamp}개</button></div>`; }).join("");
     body.innerHTML = `<h4 class="dhead">📋 오늘의 부탁<span id="stampCount" title="모은 도장">도장 ${w.stamps}개</span></h4>${reqs}${note}` +
-      `<details class="sshop"${open ? " open" : ""}><summary>🏪 도장 가게 <span class="dim">도장으로만 바꾸는 한정 가구</span></summary>${shop}<p class="dim">받은 가구는 🏠 집 꾸미기에서 아무 집에나 놓아요.</p></details><h4>💭 갈매미의 소원</h4>`;
+      `<details class="sshop"${open ? " open" : ""}><summary>🏪 도장 가게 <span class="dim">귀한 선물 · 한정 가구</span></summary>${stampShopHtml(w)}</details><h4>💭 갈매미의 소원</h4>`;
   }
   /** 📱 소식지: 마을 날짜별(새 날부터) 머릿기사. 하루 = 마을 시간 NEWS_DAY_SECS초, 최근 NEWS_KEEP_DAYS일치. */
   drawNews() {
@@ -648,14 +639,10 @@ export class Hud {
     if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
     if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
   }
-  /** 선물 고르는 판: 마을 가방의 물건(가구 빼고)과 보물 물고기. 조금 친해지면(하트 1개부터) 좋아하는 것을 알려 줌 */
+  /** 선물 고르는 판: 내 주머니(주운 반짝이·도장 선물·답례 물건). 조금 친해지면(하트 1개부터) 좋아하는 것을 ♥로 앞에(gullView.js giftPickHtml) */
   drawGifts() {
-    const u = this.follow, w = this.world; if (!u) { this.giftPick.hidden = true; return; }
-    const list = giftables(w), p = PERSONA[u.name] || {}, names = c => c.map(k => GIFT_CAT_NAME[k]).filter(Boolean).join(", ");
-    const hint = bondStage(u.bond) >= 1 && p.likes?.length ? `${u.name}의 취향: ♥ ${names(p.likes)}${p.dislikes?.length ? ` · 음… ${names(p.dislikes)}` : ""}` : `${u.name}에게 무엇을 줄까요? 건네 보면 좋아하는 걸 알 수 있어요.`;
-    this.giftPick.innerHTML = `<p class="dim">${hint}</p>` + (list.length
-      ? `<div class="gifts">${list.map(g => `<button data-gift="${g.id}">${g.kind === "fish" ? "🐟" : "🎁"} ${g.name} ×${g.n}${w.keep[g.id] ? " 💛" : ""}</button>`).join("")}</div>`
-      : `<p>지금은 줄 수 있는 게 없어요. 낚시나 바닷가에서 얻은 물건·보물 물고기를 선물할 수 있어요(📖 도감 · 가방).</p>`);
+    const u = this.follow; if (!u) { this.giftPick.hidden = true; return; }
+    const html = giftPickHtml(u, this.world); if (html !== this.giftHtml || !this.giftPick.firstChild) { this.giftHtml = html; this.giftPick.innerHTML = html; }
   }
   /** 도감(낚은 물고기)·가방(건진 물건): 이제 갈매폰 안 페이지(‹ 뒤로 = 폰 홈) */
   showDex(on) {
@@ -664,9 +651,7 @@ export class Hud {
   }
   drawDex() {
     const w = this.world, body = document.getElementById("dexBody"); body.innerHTML = "";
-    // 간직하기: 켜 두면 상인이 팔지 않음(그 자리에서 글자만 바꿈 → 스크롤이 튀지 않게)
-    const keepBtn = id => { const b = el("button", "keep"), draw = () => { const on = !!w.keep[id]; b.textContent = on ? "💛 간직 중" : "🤍 간직하기"; b.classList.toggle("on", on); b.dataset.tip = on ? "상인이 팔지 않아요 · 누르면 풀어요" : "켜 두면 상인이 팔지 않아요"; };
-      b.dataset.keep = id; b.onclick = () => { this.onKeep?.(id); draw(); }; draw(); return b; };
+    const held = stashTotals(w);                                                   // 갈매미들이 각자 가진 것(소지품) — 내 것이 아니라 보기만
     const sec = (title, list, count, extra, more) => {
       body.append(el("h3", "", title)); const g = el("div", "dexgrid");
       for (const it of list) { const n = count(it), c = el("div", "dexcell" + (n ? "" : " unknown"));
@@ -678,11 +663,10 @@ export class Hud {
       body.append(g);
     };
     sec(`🐟 물고기 도감 (${FISH.filter(f => w.collection[f.id]).length}/${FISH.length})`, FISH, f => w.collection[f.id] || 0,
-      f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${w.treasures[f.id] ? ` · 보관 ${w.treasures[f.id]}` : ""}`,
+      f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${held[f.id] ? ` · 갈매미들이 ${held[f.id]} 가짐` : ""}`,
       (f, c, n) => {                                                               // 수족관: 크기 기록 · 기증됨
         if (n && w.fishRecord[f.id]) c.append(el("span", "rec", `📏 가장 큰 ${w.fishRecord[f.id]}cm`));
         if (w.donated[f.id]) c.append(el("span", "donated", "🐠 기증됨"));
-        if (w.treasures[f.id] > 0) c.append(keepBtn(f.id));
       });
     {                                                                              // 수족관 기증 현황(물고기 도감 바로 아래)
       const have = donatedCount(w.donated), next = DONATE_GIFTS[w.donateGifts], gift = next && ITEMS.find(i => i.id === next.item);
@@ -690,15 +674,14 @@ export class Hud {
         : `🐠 수족관 기증 ${have}/${DONATE_KINDS.length}종 · ${next ? `다음 기념 선물: ${next.label} 기증하면 ${gift?.name ?? "선물"}` : "기념 선물을 모두 받았어요!"}`));
     }
     sec(`🎁 가방 (${ITEMS.filter(i => w.items[i.id]).length}/${ITEMS.length})`, ITEMS, i => w.items[i.id] || 0,
-      i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : `${i.price}🐚`,
-      (i, c, n) => { if (n && !i.furniture) c.append(keepBtn(i.id)); });
+      i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : i.gift ? `선물 · ${GIFT_CAT_NAME[giftDef(i.id)?.cat] || "선물거리"}` : `${i.price}🐚${held[i.id] ? ` · 갈매미들이 ${held[i.id]} 가짐` : ""}`);
     {                                                                              // 하늘 기록: 드문 하늘을 본 횟수
       body.append(el("h3", "", `🌈 하늘 기록 (${Object.keys(SKY_EVENTS).filter(k => w.skySeen[k]).length}/${Object.keys(SKY_EVENTS).length})`)); const g = el("div", "dexgrid skydex");
       for (const [k, d] of Object.entries(SKY_EVENTS)) { const n = w.skySeen[k] || 0, c = el("div", "dexcell" + (n ? "" : " unknown")); c.dataset.sky = k;
         c.append(el("b", "", n ? `${d.icon} ${d.name}` : "???"), el("span", "", n ? `${n}번 봤어요` : "아직 못 봤어요"), el("span", "dim", SKY_HINT[k])); g.append(c); }
       body.append(g);
     }
-    body.append(el("p", "dim", "💛 간직하기를 켜 둔 물건·보물은 상인이 팔지 않아요. 갈매미를 따라가며 🎁 선물로 건넬 수 있어요."));
+    body.append(el("p", "dim", "🎁 내 주머니(주운 반짝이·도장 선물)는 갈매미를 따라가며 선물로 건네요. 갈매미가 모은 것은 그 갈매미의 소지품이에요."));
     body.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
@@ -768,7 +751,7 @@ export class Hud {
     this.hungry = hungry; this.alertBtn.hidden = !hungry; if (hungry) this.alertBtn.textContent = `😣 ${hungry.name} 배고파요`;
     if (!this.phone.hidden && this.app && this.app !== "gulls" && this.app !== "dex" && this.app !== "menu") this.refreshApp();
     w.units.forEach((u, i) => { if (!this.rows[i]) return; const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
-      this.rows[i].querySelector(".act").textContent = b ? (u.useFurni ? `🏠 ${FURNITURE[u.useFurni.id].useLabel}` : `${BUILDINGS[b.defId].name} 안`) : STATE_LABEL[u.state] || u.state;
+      this.rows[i].querySelector(".act").textContent = b ? (u.useFurni ? `🏠 ${FURNITURE[u.useFurni.id].useLabel}` : `${BUILDINGS[b.defId].name} 안`) : stateLabelOf(u);
       this.rows[i].querySelector(".coins").textContent = w.economy ? `🪙${u.coins || 0}${u.home ? " 🏠" : ""}` : "";
       const f = this.rows[i].querySelector(".full"); f.textContent = "🍗" + Math.round(u.full ?? 0);
       f.className = "full" + ((u.full ?? 80) < J.HUNGRY ? " hungry" : (u.full ?? 0) > J.OVERFULL ? " lazy" : ""); });
@@ -793,10 +776,18 @@ export class Hud {
     k.x = el("button", "ix ghost", "✕"); k.x.type = "button"; k.x.setAttribute("aria-label", "따라가기 그만"); k.x.dataset.tip = "따라가기 그만";
     head.append(meta, k.tog, k.x);
     const doing = el("div", "doing"); k.doing = el("span"); k.note = el("span", "warn"); doing.append(k.doing, k.note);
-    const needs = el("div", "needs"); k.bars = ["만족도", "포만감", "피로도", "친구", "재미"].map(label => {
+    // 체온 칸(막대 줄 맨 앞 — 5개 막대의 빈 칸을 채워 카드가 높아지지 않게): 39° 이하 파랑·굵게 🥶 · 41° 이상 주황 🥵(색만으로 알리지 않게)
+    const temp = k.temp = { row: el("div", "need itemp"), label: el("span", "", "체온"), track: el("i"), fill: el("b"), num: el("em") };
+    temp.track.appendChild(temp.fill); temp.row.append(temp.label, temp.track, temp.num);
+    const needs = el("div", "needs"); needs.appendChild(temp.row); k.bars = ["만족도", "포만감", "피로도", "친구", "재미"].map(label => {
       const row = el("div", "need"), track = el("i"), fill = el("b"), num = el("em"); track.appendChild(fill); row.append(el("span", "", label), track, num); needs.appendChild(row); return { track, fill, num }; });
-    k.parts = el("div", "small dim"); const chips = k.chips = el("div", "ichips"); k.coin = el("span"); k.bag = el("span"); k.home = el("span"); chips.append(k.coin, k.bag, k.home);
-    k.foot = el("div", "dim small"); body.append(doing, needs, k.parts, chips, k.foot);
+    // 칩 줄: 🪙 개인 돈 · 🏠 집/대출 · 💸 밀린 품삯 · 🧣 입은 옷 · 🤧 병 · 📦 짐(빈 칸은 숨김)
+    const chips = k.chips = el("div", "ichips"); k.chip = {}; for (const key of ["coin", "home", "wage", "wear", "sick", "load"]) { const sp = el("span"); sp.dataset.chip = key; k.chip[key] = sp; chips.appendChild(sp); }
+    // [자세히 보기]: 만족도 내역 · 소지품 · 가방 · 가진 옷 · 면역 · 좋아하는 일(처음엔 닫힘, 이번 실행 동안 펼침을 기억). 요약 줄은 한 번만 만들고 안쪽만 바뀔 때 고침
+    const more = k.more = el("details", "more imore"), sum = el("summary"); k.moreN = el("span", "more-n"); sum.append(el("span", "more-t", "자세히 보기"), k.moreN);
+    k.moreB = el("div", "more-b"); more.append(sum, k.moreB); more.open = !!this.infoMoreOpen;
+    more.addEventListener("toggle", () => { this.infoMoreOpen = more.open; this.infoMoreHtml = null; if (more.open) this.syncInfo(); });
+    body.append(doing, needs, chips, more);
     // 행동 줄: 관계 먼저, 그다음 선물 · 쓰다듬기 · 집 보기
     k.rel = el("button", "", "💞 관계"); k.rel.type = "button"; k.rel.dataset.tip = "이 갈매미의 친구 사이를 관계도에서 봐요";
     k.goHome = el("button", "", "🏠 집 보기"); k.goHome.type = "button"; k.goHome.dataset.tip = "이 갈매미의 집으로 화면을 옮겨요";
@@ -814,25 +805,31 @@ export class Hud {
     const editing = document.body.dataset.mode === "edit";                          // 건설 모드(모든 화면): 저절로 한 줄로 접어 건설 판·섬을 가리지 않게, 끝내면 보던 대로
     if (editing !== !!this.infoEdit) { this.infoEdit = editing; if (editing) { this.infoWas = this.infoOpen; this.infoOpen = false; } else if (this.infoWas !== undefined) this.infoOpen = this.infoWas; }
     const open = this.infoOpen, job = JOBS[u.job], full = u.full ?? 80, sat = u.sat ?? 50;
-    const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : STATE_LABEL[u.state] || u.state;
+    const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : stateLabelOf(u);
     if (c.classList.contains("mini") === open) c.classList.toggle("mini", !open);
     cardPut(k.name, u.name); cardPut(k.job, `${job.icon} ${job.name}`); cardPut(k.hearts, bondHearts(u.bond));
     const stage = BOND_STAGES[bondStage(u.bond)].name; if (k.hearts.title !== stage) k.hearts.title = stage;
     const exp = String(open); if (k.tog.getAttribute("aria-expanded") !== exp) { k.tog.setAttribute("aria-expanded", exp); k.tog.setAttribute("aria-label", open ? "카드 접기" : "카드 펼치기"); k.tog.dataset.tip = open ? "접기" : "펼치기"; }   // 카드는 아래에 붙어 있어 위로 펼쳐지고 아래로 접힘
     const homeB = u.home && w.buildings.get(u.home); if (k.goHome.hidden !== !homeB) k.goHome.hidden = !homeB;
-    if (!open) { cardPut(k.sub, `${doing} · 😊${Math.round(sat)} 🍗${Math.round(full)}`); this.showBond(u); return; }
+    const flags = gullFlags(u);                                                     // 🤧 아픔 · 🥶 추움 · 💸 밀린 품삯 — 접혀 있어도 맨 앞에 보이게
+    if (!open) { cardPut(k.sub, `${flags ? flags + " " : ""}${doing} · 😊${Math.round(sat)} 🍗${Math.round(full)}`); this.showBond(u); return; }
     const r = RARITY[u.rarity], n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
     cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}`);
     const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
-    cardPut(k.doing, doing); cardPut(k.note, note ? ` · ${note}` : "");
+    cardPut(k.doing, doing);   /* 펼친 카드는 🤧·💸 칩과 체온 줄이 따로 알림 */ cardPut(k.note, note ? ` · ${note}` : "");
+    const bt = bodyTempOf(u), tp = k.temp; if (tp.row.hidden !== !bt) tp.row.hidden = !bt;
+    if (bt) { const wd = `${bt.pct}%`; if (tp.fill.style.width !== wd) tp.fill.style.width = wd; cardPut(tp.num, bt.text); cardPut(tp.label, `${bt.tone === "cold" ? "🥶" : bt.tone === "hot" ? "🥵" : ""}체온`); tp.row.title = bt.word ? `체온 ${bt.text} · ${bt.word}` : `체온 ${bt.text}`;
+      if ((tp.row.dataset.tone || null) !== bt.tone) { if (bt.tone) tp.row.dataset.tone = bt.tone; else delete tp.row.dataset.tone; } }
     const energy = n.energy ?? 100, vals = [[sat, sat < 35], [Math.min(100, full), full < J.HUNGRY], [100 - energy, energy < 25], [n.social ?? 0, false], [n.fun ?? 0, false]];
     vals.forEach(([v, low], i) => { const b = k.bars[i], wd = `${Math.max(0, Math.min(100, v)).toFixed(0)}%`;
       if (b.fill.style.width !== wd) b.fill.style.width = wd; if (b.track.classList.contains("low") !== low) b.track.classList.toggle("low", low); cardPut(b.num, String(Math.round(v))); });
-    cardPut(k.parts, u.satParts ? `만족도: ${u.satParts.map(([name, v]) => `${name} ${v > 0 ? "+" : ""}${v}`).join(" · ")}` : ""); if (k.parts.hidden !== !u.satParts) k.parts.hidden = !u.satParts;
-    if (k.chips.hidden !== !w.economy) k.chips.hidden = !w.economy;
-    if (w.economy) { const bag = E.ITEMS_ORDER.filter(id => u.inv?.[id]).map(id => `${E.ITEM_ICON[id]}${u.inv[id]}`).join(" ");
-      cardPut(k.coin, `🪙 ${u.coins || 0}`); cardPut(k.bag, bag ? "🎒 " + bag : "🎒 비었음"); cardPut(k.home, homeB ? "🏠 " + (BUILDINGS[homeB.defId]?.name ?? "") : "🏠 집 없음"); }
-    cardPut(k.foot, `좋아하는 일: ${fav ? M.ACTIVITY_NAME[fav] : "아직 몰라"}${bf ? ` · ${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)}`);
+    const ch = gullChips(u, w); let any = false;
+    for (const [key, sp] of Object.entries(k.chip)) { const t = ch[key] || ""; cardPut(sp, t); if (sp.hidden !== !t) sp.hidden = !t; any ||= !!t; }
+    if (k.chips.hidden !== !any) k.chips.hidden = !any;
+    const nStash = Object.values(u.stash || {}).reduce((a, n) => a + Math.max(0, n || 0), 0); cardPut(k.moreN, nStash ? `소지품 ${nStash}` : "");
+    if (k.more.open) {                                                             // 펼쳤을 때만 안쪽을 만들고, 글이 같으면 손대지 않음
+      const html = gullMoreHtml(u, w, { fav: fav ? M.ACTIVITY_NAME[fav] : "", friend: bf ? `${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : "" });
+      if (html !== this.infoMoreHtml) { this.infoMoreHtml = html; k.moreB.innerHTML = html; } }
     this.showBond(u);
   }
 }

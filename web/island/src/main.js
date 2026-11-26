@@ -24,7 +24,8 @@ import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, WISH_REWARD, wishText } from "./world/wishes.js";
 import { RANK_REWARD } from "./world/rank.js";
 import { newsFor, awayLetter, newsPages } from "./world/news.js";
-import { dailyKey, STAMP_SHOP } from "./world/daily.js";
+import { dailyKey } from "./world/daily.js";
+import { stampBuyText } from "./ui/gullView.js";
 import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
@@ -282,12 +283,11 @@ const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls
 // 찌 당기기(같이 낚시하기): 따라가는 갈매미에게 입질(❗)이 왔을 때 🎣 당기기! 버튼이나 스페이스 키
 const tugNow = () => { const u = unitControl.follow; if (!u || !world.tugFloat(u)) return false; hud.showTug(false); hud.status(`영차! ${josa(u.name, "과", "와")} 같이 당겼어요 · 귀한 물고기가 올 가능성이 커져요`); return true; };
 hud.onTug = tugNow;
-// 선물 · 쓰다듬기 · 간직하기(선물 알림은 월드가 알려 줌: gift · bondStage)
+// 선물 · 쓰다듬기(선물 알림은 월드가 알려 줌: gift · bondStage). 간직하기 단추는 없앰(내 주머니는 상인이 팔지 않음 — 옛 섬 규칙 world.toggleKeep은 그대로)
 hud.onGift = (u, id) => world.giveGift(u, id);
-hud.onKeep = id => world.toggleKeep(id);
-// 도장 가게(오늘의 부탁을 모두 들어주고 받은 도장으로 한정 가구 사기)
+// 도장 가게(오늘의 부탁을 모두 들어주고 받은 도장으로 한정 가구나 귀한 선물 사기)
 hud.onStampBuy = id => { const ok = world.buyStamp(id); if (ok) sfx.play("bag", { vol: 0.7 });
-  hud.status(ok ? `🏪 도장 가게에서 ${josa(STAMP_SHOP.find(s => s.id === id).name, "을", "를")} 받아 왔어요 (🏠 집 꾸미기에서 놓아요)` : "도장이 모자라요 · 오늘의 부탁을 모두 들어주면 하나 받아요"); return ok; };
+  hud.status(stampBuyText(id, ok, josa)); return ok; };   // 가구·귀한 선물 둘 다(예전엔 가구 표만 찾아 선물을 사면 TypeError)
 hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
   if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘은 여기까지, 내일 또 만나요`);
   else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요 · 마을 날이 바뀌면 또 할 수 있어요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
