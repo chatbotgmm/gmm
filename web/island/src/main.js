@@ -298,6 +298,7 @@ Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true });
   else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true });
   hud.showLetter(backLetter);
+  hud.coach.start({ fresh: !resumed });           // 처음 안내 3단계(새 섬일 때 · 편지·처음 알림이 지나간 뒤 말풍선이 뜸)
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
 });
 

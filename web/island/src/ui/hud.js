@@ -16,6 +16,7 @@ import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/new
 import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftables, petsLeft, PET_DAILY } from "../world/bond.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { STAMP_SHOP, DAILY_COUNT } from "../world/daily.js";
+import { CoachMarks } from "./coach.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -61,6 +62,7 @@ export class Hud {
     for (const ev of ["pointerup", "pointercancel"]) crossGo.addEventListener(ev, () => tools.crossPress(false));
     const bar = document.getElementById("tools"), sub = document.getElementById("sub");
     this.initUiPrefs();
+    this.coach = new CoachMarks(this);                                               // 처음 안내(3단계 말풍선 · 처음 여는 앱 안내)
     // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]. 건설 모드에서만 보이고, 맨 앞 ✓ 완료(view)를 누르면 평소 화면으로
     const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"]];
     this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn(m === "view" ? "done" : "", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
@@ -115,7 +117,7 @@ export class Hud {
     this.tugBtn = document.getElementById("tugBtn"); this.tugBtn.onclick = () => this.onTug?.();   // 찌 당기기(따라가는 갈매미에게 입질이 왔을 때만 보임)
     // 선물·쓰다듬기: 버튼은 카드의 행동 줄에(뼈대를 한 번만 만드니 누르는 중에 사라지지 않음), 선물 고르는 판만 카드 위에 뜸
     this.bondBar = document.getElementById("bondBar"); this.giftPick = document.getElementById("giftPick"); this.giftBtn = document.getElementById("giftBtn"); this.petBtn = document.getElementById("petBtn");
-    this.giftBtn.onclick = () => { this.giftPick.hidden = !this.giftPick.hidden; if (!this.giftPick.hidden) this.drawGifts(); };
+    this.giftBtn.onclick = () => { this.giftPick.hidden = !this.giftPick.hidden; if (!this.giftPick.hidden) { this.drawGifts(); this.coach?.moment("gift"); } };
     this.petBtn.onclick = () => { if (!this.follow) return; this.onPet?.(this.follow); this.showBond(this.follow); };   // 남은 횟수는 바로 고침(글자판은 1초에 5번만 그림)
     this.buildInfoCard();
     this.giftPick.onclick = e => { const b = e.target.closest?.("[data-gift]"), u = this.follow; if (!b || !u) return; this.onGift?.(u, b.dataset.gift); this.drawGifts(); };
@@ -132,6 +134,7 @@ export class Hud {
     // 알림: 버튼 안내(바로 바꿈) + 차례로 보여 주는 알림(최대 3개 대기) · 지난 알림 30개(이번에 켠 동안만, 저장 안 함)
     this.toastQ = []; this.toastCur = null; this.noteLog = [];
     document.getElementById("logOpen").onclick = () => this.openApp("log", "news");
+    document.getElementById("coachAgain").onclick = () => { this.closePhone(); this.coach.start({ force: true }); };   // 도움말: 처음 안내 다시 보기
     // ---- 갈매폰: 📱 → 홈(맨 아래 독 4개 + 묶음 셋), 같은 시트에 ☰ 메뉴·도감
     this.phone = document.getElementById("phone"); this.phoneBtn = document.getElementById("phoneBtn");
     this.phoneBtn.onclick = () => this.openPhone();
@@ -242,7 +245,7 @@ export class Hud {
     const c = document.getElementById("houseCard"); if (!b) { c.hidden = true; return; }
     const w = this.world, owner = w.units.find(u => u.unitId === b.owner);
     c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
-    c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
+    c.querySelector(".go").onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); }; c.querySelector(".hx").onclick = () => { c.hidden = true; }; c.hidden = false;
   }
   /** 확인창(브라우저 confirm 대신): 취소에 먼저 포커스, Esc·바깥 누르기 = 취소. 결과는 Promise<boolean> */
   confirm({ title, body = "", ok = "확인", cancel = "취소", danger = false } = {}) {
@@ -305,6 +308,9 @@ export class Hud {
     document.getElementById("phoneBack").hidden = app === null || app === "menu";
     if (app === "dex") this.drawDex();                                              // 도감은 열 때 한 번만 그림(읽는 중에 튀지 않게)
     if (app === "settings") { this.showSetTab(this.setTab); this.drawInstant?.(); }
+    if (app === "help") { const touch = document.documentElement.dataset.input === "touch";   // 지금 쓰는 쪽 조작만 펼쳐 둠(터치 ↔ 마우스·키보드)
+      for (const d of document.querySelectorAll("#help details[data-input]")) d.open = d.dataset.input === (touch ? "touch" : "mouse"); }
+    this.coach?.appHint(app, document.getElementById(pages[app]));                 // 처음 여는 앱이면 맨 위에 짧은 안내 한 번
     if (this.seen && (app === "news" || app === "dex")) this.seen[app] = this.badgeNow()[app];   // 열면 점 배지 해제
     this.refreshApp(); this.drawBadges();
   }
@@ -344,7 +350,7 @@ export class Hud {
       if (!houses.length) body.innerHTML += `<p>아직 다 지은 집이 없어요.</p>`;
       for (const b of houses) { const owner = w.units.find(u => u.unitId === b.owner), row = el("div", "row");
         row.append(el("span", "nm", `🏠 ${BUILDINGS[b.defId].name}`), el("span", "act", `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 ${Fu.comfort(b)}`));
-        row.onclick = () => { this.closePhone(); this.onDecorate?.(b); }; body.appendChild(row); }
+        row.onclick = () => { this.closePhone(); this.onDecorate?.(b); this.coach?.moment("room"); }; body.appendChild(row); }
     } else if (this.app === "town") {
       const { score, parts } = rankScore(w), cur = RANKS[w.rank], nxt = RANKS[w.rank + 1];
       const pct = nxt ? Math.min(100, Math.round((score - cur.need) / (nxt.need - cur.need) * 100)) : 100;
@@ -588,7 +594,7 @@ export class Hud {
   showTug(on, secs = 1.5) {
     const b = this.tugBtn; if (b.hidden === !on) return;
     if (on) b.style.setProperty("--tug", `${Math.max(0.1, secs).toFixed(2)}s`);   // 줄어드는 줄은 실제로 남은 시간만큼(자리는 CSS: 카드 바로 위)
-    b.hidden = !on; this.giftBtn.disabled = on; if (on) this.giftPick.hidden = true;   // 당기는 동안 선물 판은 비켜 줌(같은 자리)
+    b.hidden = !on; this.giftBtn.disabled = on; if (on) { this.giftPick.hidden = true; this.coach?.moment("tug"); }   // 당기는 동안 선물 판은 비켜 줌(같은 자리)
   }
   /** 🎁 선물 고르는 판(카드 바로 위, 당기기 버튼과 같은 자리라 그동안은 비켜 줌)과 ♥ 쓰다듬기 남은 횟수. 자주 불러도 바뀔 때만 손댐 */
   showBond(u) {

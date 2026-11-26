@@ -58,8 +58,19 @@ export function installKeys({ hud, tools, roomView }) {
   const watch = new MutationObserver(recs => { for (const r of recs) { const box = r.target, id = box.id; if (id === "ask") continue;
     if (!box.hidden && !openers.has(id)) { const a = document.activeElement; openers.set(id, a && a !== document.body && !box.contains(a) ? a : null); if (!box.contains(document.activeElement)) box.querySelector(".card")?.focus({ preventScroll: true }); }
     else if (box.hidden && openers.has(id)) { const a = openers.get(id); openers.delete(id); hideTip();
-      if (lastKey && a?.isConnected && !a.closest("[hidden]") && (document.activeElement === document.body || box.contains(document.activeElement))) a.focus({ preventScroll: true }); } } });
+      if (lastKey && a?.isConnected && !a.closest("[hidden]") && (document.activeElement === document.body || box.contains(document.activeElement))) a.focus({ preventScroll: true }); } } histSync(); });
   for (const id of KEY_OVERLAYS) { const el = $(id); if (el) watch.observe(el, { attributes: true, attributeFilter: ["hidden"] }); }
+
+  // ---- 기기 「뒤로」(휴대폰 뒤로 버튼·몸짓): 창이 떠 있는 동안 방문 기록 한 칸을 넣어 두고, 뒤로 = Esc 한 단계. 틀(iframe) 안이거나 기록을 못 쓰는 곳은 하지 않음(실패해도 그냥 둠)
+  let histOn = false, histSkip = false;
+  try { histOn = window.top === window && matchMedia("(pointer: coarse)").matches && typeof history.pushState === "function"; } catch { histOn = false; }
+  function histSync() {
+    if (!histOn) return;
+    try { const open = !!topOverlay(), mine = !!history.state?.gmmBack;
+      if (open && !mine) history.pushState({ gmmBack: 1 }, "");
+      else if (!open && mine) { histSkip = true; history.back(); } } catch { histOn = false; }
+  }
+  addEventListener("popstate", () => { if (histSkip) { histSkip = false; return; } const ov = topOverlay(); if (!ov) return; try { escStep(ov); } catch { /* 무시 */ } setTimeout(histSync, 0); });
 
   /** Esc 한 단계. 처리했으면 true(뒤로 안 넘김). 방·도구의 Esc는 원래 코드가 처리(false) */
   const escStep = ov => {
@@ -136,10 +147,10 @@ export function installKeys({ hud, tools, roomView }) {
   // ---- 도움말 표: 단축키(새 키 + 원래 키). 설정의 ⌨️ 버튼은 이 표로 데려감
   const kb = s => s.split(/( · | \/ | \+ |~)/).map(p => /^( · | \/ | \+ |~)$/.test(p) ? p : p.split(" ").map(x => /[가-힣]/.test(x) ? x : `<kbd>${x}</kbd>`).join(" ")).join("");
   const box = $("keyHelp");
-  if (box) box.innerHTML = `<h4>⌨️ 단축키 <span class="dim">키보드가 있을 때</span></h4><table class="tbl keytbl">` +
+  if (box) box.innerHTML = `<p class="dim">키보드가 있을 때 써요.</p><table class="tbl keytbl">` +
     `<tr><td>${kb("2~5")}</td><td>🔨 건설 도구(칠하기 · 높이 · 짓기 · 철거) — 누르면 건설 모드로</td></tr><tr><td>${kb("1")}</td><td>${KEY_LIST[0].what}</td></tr>` +
     KEY_LIST.slice(5).map(k => `<tr><td>${kb(k.key)}${k.code.includes("F1") ? ` · ${kb("F1")}` : ""}</td><td>${k.what}</td></tr>`).join("") +
     KEY_KEEP_LIST.map(([k, v]) => `<tr><td>${kb(k)}</td><td>${v}</td></tr>`).join("") + `</table>` +
     `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰(도감·메뉴 포함)·편지가 열려 있는 동안은 뒤의 화면이 키에 움직이지 않아요.</p>`;
-  const kbtn = $("keysBtn"); if (kbtn) kbtn.onclick = () => { hud.openApp("help"); box?.scrollIntoView({ block: "start" }); };
+  const kbtn = $("keysBtn"); if (kbtn) kbtn.onclick = () => { hud.openApp("help"); const sec = box?.closest("details"); if (sec) sec.open = true; (sec || box)?.scrollIntoView({ block: "start" }); };   // 도움말의 ⌨️ 단축키 칸을 펼쳐서
 }
