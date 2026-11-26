@@ -71,7 +71,8 @@ test("피곤하면 쉬고, 기력이 차면 일어남: 기력 25 → 쉬기 → 
 test("밤잠은 그대로: 잘 시간이면 안 피곤해도 자러 감(야행성은 낮에)", () => {
   const w = village(7, ["그림자"]), u = w.units.find(o => o.name === "기본"), n = w.units.find(o => o.name === "그림자");
   w.isNight = true; let uSleep = 0, nSleep = 0;
-  for (let k = 0; k < 120 * 30; k++) { for (const o of w.units) o.full = 90; w.update(1 / 30); if (u.state === "Sleep") uSleep++; if (n.state === "Sleep") nSleep++; }
+  const asleep = o => o.state === "Sleep" || o.insideAct === "sleep";            // 집이 없는 기본은 주인 없는 첫 집에서 손님으로 잠
+  for (let k = 0; k < 120 * 30; k++) { for (const o of w.units) o.full = 90; w.update(1 / 30); if (asleep(u)) uSleep++; if (asleep(n)) nSleep++; }
   assert.ok(uSleep > 120 * 30 * 0.8, `밤: 보통 갈매미는 잠(${uSleep}/3600)`); assert.ok(nSleep < 120 * 30 * 0.2, `밤: 야행성은 깨어 있음(${nSleep}/3600)`);
 });
 
@@ -118,7 +119,7 @@ test("피곤하면(기력 30 아래) 심부름을 새로 시작하지 않고 먼
     setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null; u.sat = 100;
     u.goods = { wood: 0, stone: 0, iron: 0 }; u.raw = { wood: 0, stone: 0, iron: 0 }; Object.assign(bag === "goods" ? u.goods : u.raw, { wood: 5 });
     for (let k = 0; k < 90 && u.state === "Idle" && u.activity !== "rest"; k++) w.update(1 / 30);
-    return u.activity === "rest" || u.state === "GoSit" ? "rest" : u.state === "Sleep" ? "sleep" : u.state;
+    return u.activity === "rest" || u.state === "GoSit" ? "rest" : u.state === "Sleep" || u.state === "GoToBuilding" && u.sleepy ? "sleep" : u.state;   // 집 없는 상인은 빈 첫 집으로 자러 감
   };
   for (let i = 0; i < 10; i++) {
     assert.equal(trial(90, "goods"), "GoBank", "안 피곤하면 가공품을 은행에");
