@@ -18,6 +18,7 @@ import { SKY_EVENTS } from "../world/skywatch.js";
 import { STAMP_SHOP, DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
 import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
+import { bankHtml } from "./bankView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -339,17 +340,13 @@ export class Hud {
   refreshApp() {
     const w = this.world;
     if (this.app === "bank") {
-      const r = w.res;
-      document.getElementById("bankBody").innerHTML = w.economy ? `<table class="tbl"><tr><td>찍어 낸 돈(발행)</td><td>🪙${w.bank.issued}</td></tr><tr><td>집값으로 돌아온 돈(회수)</td><td>🪙${w.bank.returned}</td></tr>` +
-        `<tr><td><b>갈매미들이 가진 돈</b></td><td><b>🪙${w.moneySupply()}</b></td></tr></table>` +
-        `<h4>은행이 사는 가공품(상인이 가져옴)</h4><table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.PROCESSED_NAME[k]}</td><td>창고 ${r[k] || 0}개 · 🪙${E.BANK_PROCESSED[k]}</td></tr>`).join("")}</table>` +
-        `<p class="dim">돈이 생기는 곳: 🔨 공사 한 바퀴 품삯 🪙${E.WAGE}(건축가·목수) · 🐚 상인이 가공품을 팔 때 · 상인 창업 자금 🪙${E.MERCHANT_START}. 창고의 가공품은 공사 재료로 써요.</p>`
-        : `<p class="dim">이 섬에는 공식은행이 없어요(예전 섬).</p>`;
+      const html = bankHtml(w, (k, t, h, o) => this.more(k, t, h, o)), body = document.getElementById("bankBody");
+      if (this.bankHtmlNow !== html) { this.bankHtmlNow = html; body.innerHTML = html; }   // 그릴 값이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게)
     } else if (this.app === "market") {
       const mk = w.marketB(), sale = w.housesForSale(), m = w.merchantU(), food = w.units.filter(u => E.isProducer(u));
       document.getElementById("marketBody").innerHTML = !mk ? `<p>아직 시장이 없어요. <b>🪚 목수</b>가 있으면 🏠 건설에서 <b>시장</b>을 지을 수 있어요.</p>`
         : `<h4>시세(상인이 사는 값)</h4><p class="dim">상인 창고에 많이 쌓이면 싸지고, 모자라면 비싸져요.</p>${m ? `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>${this.priceCell(k)} · 창고 ${(m.raw[k] || 0) + (m.goods[k] || 0)}</td></tr>`).join("")}<tr><td>상인(${m.name}) 돈</td><td>🪙${m.coins || 0}</td></tr></table>` : `<p class="dim">상인 🐚 갈매미가 없어요(소환하면 와요).</p>`}` +
-          `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${BUILDINGS[b.defId].price}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
+          `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${w.housePrice(b)}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
           `<h4>음식(농부·어부에게서 ${this.priceCell("food")})</h4><p class="dim">농부·어부가 내놓을 음식이 모자라거나 배고픈 갈매미가 많으면 비싸지고, 겨울엔 더 비싸요.</p><table class="tbl">${food.map(u => `<tr><td>${JOBS[u.job].icon} ${u.name}</td><td>🍗${u.inv?.food || 0} 🐟${u.inv?.fish || 0}</td></tr>`).join("") || `<tr><td class="dim">농부·어부가 없어요</td><td></td></tr>`}</table>` +
           `<h4>집 주인</h4><table class="tbl">${w.units.filter(u => u.home).map(u => `<tr><td>${u.name}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
     } else if (this.app === "decor") {
