@@ -91,7 +91,7 @@ export class UnitControl {
     }
     this.lastTap = { t: now, x: e.clientX, y: e.clientY };
     this.setFollow(p.unit && this.follow !== p.unit ? p.unit : null);
-    if (!p.unit) { const c = this.tools.pickPoint(e.clientX, e.clientY); if (c) this.onTapGround?.(c); }   // 땅을 한 번 누름(집이면 꾸미기 카드)
+    if (!p.unit) { const c = this.tools.pickPoint(e.clientX, e.clientY); if (c) this.onTapGround?.(c, e); }   // 땅을 한 번 누름(반짝이면 줍기, 집이면 꾸미기 카드). e: 화면 좌표(반짝이 손가락 판정)
   }
   /** 가까이 보기: 화면 중심을 to로(없으면 따라가는 갈매미), 거리를 줄임(멀면 10 m, 가까우면 0.6배, 최소 거리까지). */
   zoomIn(to) {

@@ -55,6 +55,9 @@ export class Sfx {
     f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur); this.env(g, t, 0.01, peak, dur); s.connect(f).connect(g).connect(this.master); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05); }
   splash(pos, vol = 1) { if (!this.ok("splash")) return; const k = this.gainAt(pos) * vol; if (k < 0.02) return; const t = this.ctx.currentTime; this.noiseBurst(t, 0.35, 0.5 * k, 2400, 500, 0.8); this.noiseBurst(t + 0.05, 0.25, 0.25 * k, 900, 300, 1.2); }
   chime(notes = [784, 988, 1175], gap = 0.09, vol = 0.22) { if (!this.ok("chime" + notes[0])) return; const t = this.ctx.currentTime; notes.forEach((f, i) => { this.tone(f, t + i * gap, 0.5, vol); this.tone(f * 2, t + i * gap, 0.3, vol * 0.25, "triangle"); }); }
+  /** 에취(합성): 짧게 들이쉬는 소리 + 터지는 숨. pos가 멀면 작게 */
+  sneeze(pos, vol = 1) { if (!this.ok("sneeze")) return; const k = this.gainAt(pos) * vol; if (k < 0.02) return; const t = this.ctx.currentTime;
+    this.noiseBurst(t, 0.18, 0.08 * k, 900, 1800, 1.5); this.noiseBurst(t + 0.24, 0.32, 0.45 * k, 4200, 1100, 1.1); this.tone(520, t + 0.24, 0.12, 0.05 * k, "triangle"); }
   fanfare() { this.chime([523, 659, 784, 1047], 0.12, 0.25); }
   summon() { this.chime([659, 880, 1319], 0.07, 0.2); }
   thunder(vol = 1) { if (!this.ok("thunder")) return; const t = this.ctx.currentTime + 0.15 + Math.random() * 0.4; this.noiseBurst(t, 1.8, 0.6 * vol, 180, 40, 0.6); this.noiseBurst(t, 0.25, 0.4 * vol, 900, 200, 0.7); }

@@ -72,6 +72,8 @@ const NEWS_MAKERS = {
   doctor: ({ u, was }) => ({ icon: "🩺", text: u ? `${josa(u.name, "이", "가")} 갈매미 의원 당번 의사가 됐어요` : `${was} 선생님의 의원 당번이 끝났어요`, weight: u ? 2 : 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
+/** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */
+export const NEWS_EVENTS = Object.keys(NEWS_MAKERS);
 /** 이 일의 소식 한 줄(없으면 null) */
 export const newsFor = (ev, arg, world) => NEWS_MAKERS[ev]?.(arg, world) ?? null;
 

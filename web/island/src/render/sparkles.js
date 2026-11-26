@@ -1,31 +1,72 @@
-// ✨ 반짝이 그림(아직 main.js에 연결하지 않음 — 화면 개편을 합친 뒤 연결): world.sparkles를 읽어 칸 위에 작게 반짝이는 빛을 띄움.
-// 반짝이 하나 = 위아래로 살짝 떠다니며 깜빡이는 스프라이트 하나. 줍기는 main.js가 땅을 누른 칸으로 world.sparkleNear → world.pickSparkle.
-// 연결할 때: const sparkleView = new SparkleView(scene); 매 프레임 sparkleView.update(dt, world);
+// ✨ 반짝이 그림: world.sparkles를 읽어 칸 위에 작게 반짝이는 빛을 띄움(main.js mount에서 만들고 매 프레임 update).
+// 반짝이 하나 = 위아래로 살짝 떠다니며 깜빡이는 스프라이트 하나. 화면에서 늘 지름 MIN_PX 이상(멀리서 봐도 보이고, 손가락으로 누르기 쉽게).
+// 줍기: main.js가 땅을 누른 자리로 hit(화면 좌표, 반지름 HIT_PX) → 없으면 world.sparkleNear(1.2칸) → world.pickSparkle.
+// 주운 반짝이는 pop(id)으로 POP_SECS 동안 위로 떠오르며 옅어진 뒤 사라짐.
 import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 
-function glintTex() {                                                            // 네 갈래 반짝임(흰색 + 투명 배경)
-  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
-  const r = g.createRadialGradient(32, 32, 0, 32, 32, 30); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.25, "rgba(255,248,214,0.9)"); r.addColorStop(1, "rgba(255,240,180,0)");
-  g.fillStyle = r; g.beginPath(); g.moveTo(32, 2); g.quadraticCurveTo(36, 28, 62, 32); g.quadraticCurveTo(36, 36, 32, 62); g.quadraticCurveTo(28, 36, 2, 32); g.quadraticCurveTo(28, 28, 32, 2); g.fill();
-  return new THREE.CanvasTexture(c);
+export const MIN_PX = 34;      // 스프라이트가 화면에서 적어도 이 지름(px). 별 끝은 그림 폭의 90% → 별 자체는 약 30px
+export const MAX_SIZE = 8;     // 크기 상한(m): 가장 멀리 뺀 카메라(maxDistance)에서도 MIN_PX가 지켜지는 값
+export const HIT_PX = 26;      // 누름 판정 반지름(px): 지름 52px ≥ 손가락 칸 44px
+export const POP_SECS = 0.6;   // 주운 뒤 떠오르는 시간
+
+function glintTex() {                                                            // 네 갈래 반짝임: 금빛 별 + 진한 테두리(모래·눈 위에서도 보이게) + 하얀 가운데
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  const star = (R, r) => { g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, q = i % 2 ? r : R; g.lineTo(64 + Math.cos(a) * q, 64 + Math.sin(a) * q); } g.closePath(); };
+  const halo = g.createRadialGradient(64, 64, 0, 64, 64, 60); halo.addColorStop(0, "rgba(255,214,90,0.55)"); halo.addColorStop(1, "rgba(255,190,60,0)");
+  g.fillStyle = halo; g.fillRect(0, 0, 128, 128);
+  star(58, 15); g.lineJoin = "round"; g.lineWidth = 7; g.strokeStyle = "rgba(120,60,0,0.85)"; g.stroke();
+  const fill = g.createRadialGradient(64, 64, 0, 64, 64, 58); fill.addColorStop(0, "#ffffff"); fill.addColorStop(0.3, "#fff2a8"); fill.addColorStop(1, "#ffc21a");
+  g.fillStyle = fill; g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+const _v = new THREE.Vector3();
 export class SparkleView {
-  constructor(scene) {
-    this.scene = scene; this.tex = glintTex(); this.mat = new THREE.SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false, color: 0xfff3c4 });
-    this.sprites = new Map(); this.t = 0;                                         // 반짝이 id → 스프라이트
+  constructor(root) {
+    this.root = root; this.tex = glintTex(); this.mat = new THREE.SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false, fog: false, toneMapped: false })   // 톤 매핑을 끄면 금빛이 하얗게 바래지 않음;
+    this.sprites = new Map(); this.pops = []; this.t = 0;                          // 반짝이 id → 스프라이트 · 떠오르는 중인 것
   }
-  update(dt, world) {
+  /** 화면 1px이 이 자리에서 몇 m인가(원근 카메라) */
+  static mPerPx(camera, pos, viewH) { return 2 * camera.position.distanceTo(pos) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.max(1, viewH); }
+  update(dt, world, camera, viewH) {
     this.t += dt; const seen = new Set();
     for (const s of world.sparkles || []) {
       seen.add(s.id); let sp = this.sprites.get(s.id);
-      if (!sp) { sp = new THREE.Sprite(this.mat.clone()); sp.userData.noToon = true; sp.renderOrder = 2; this.scene.add(sp); this.sprites.set(s.id, sp); }
-      const ph = this.t * 3 + s.id * 1.7, y = world.standHeight(s.x + 0.5, s.z + 0.5) + 0.25 + Math.sin(ph) * 0.05;
-      sp.position.set(toWorldX(s.x + 0.5), y, toWorldZ(s.z + 0.5));
-      const k = 0.28 + 0.08 * Math.max(0, Math.sin(ph * 1.9)); sp.scale.set(k, k, 1);
-      sp.material.opacity = Math.min(1, s.t / 20) * (0.75 + 0.25 * Math.sin(ph * 2.3));   // 사라지기 20초 전부터 옅어짐
+      if (!sp) { sp = new THREE.Sprite(this.mat.clone()); sp.userData.noToon = true; sp.userData.sparkleId = s.id; sp.renderOrder = 10; this.root.add(sp); this.sprites.set(s.id, sp); }   // 반투명(물 1·눈비 2)보다 나중에 그림
+      const ph = this.t * 3 + s.id * 1.7, ground = world.standHeight(s.x + 0.5, s.z + 0.5);
+      sp.position.set(toWorldX(s.x + 0.5), ground + 0.3, toWorldZ(s.z + 0.5));
+      const base = camera ? Math.min(MAX_SIZE, Math.max(0.36, MIN_PX * SparkleView.mPerPx(camera, sp.position, viewH))) : 0.36;
+      const k = base * (1 + 0.22 * Math.max(0, Math.sin(ph * 1.9))); sp.scale.set(k, k, 1);   // 깜빡일 때만 커짐(가장 작을 때가 MIN_PX)
+      sp.position.y = ground + 0.15 + k * 0.5 + Math.sin(ph) * 0.05 * k;           // 별 아래 끝이 땅에 묻히지 않게(크게 그려도 반쪽이 땅에 가려지지 않음)
+      sp.material.opacity = Math.min(1, s.t / 20);   // 사라지기 20초 전부터 옅어짐(깜빡임은 크기로만: 투명하면 모래·물빛에 묻힘)
     }
-    for (const [id, sp] of this.sprites) if (!seen.has(id)) { this.scene.remove(sp); sp.material.dispose(); this.sprites.delete(id); }
+    for (const [id, sp] of this.sprites) if (!seen.has(id)) { this.root.remove(sp); sp.material.dispose(); this.sprites.delete(id); }
+    for (let i = this.pops.length - 1; i >= 0; i--) {                             // 주운 것: 위로 떠오르며 옅어짐
+      const p = this.pops[i]; p.t += dt; const f = Math.min(1, p.t / POP_SECS);
+      p.sp.position.y = p.y0 + f * 0.9; p.sp.scale.setScalar(p.k0 * (1 + 0.5 * f)); p.sp.material.opacity = 1 - f;
+      if (f >= 1) { this.root.remove(p.sp); p.sp.material.dispose(); this.pops.splice(i, 1); }
+    }
   }
-  dispose() { for (const sp of this.sprites.values()) { this.scene.remove(sp); sp.material.dispose(); } this.sprites.clear(); this.mat.dispose(); this.tex.dispose(); }
+  /** 주운 반짝이: 그림을 지우지 않고 떠오르는 그림으로 넘김(다음 update가 지우지 않게 목록에서 뺌) */
+  pop(id) {
+    const sp = this.sprites.get(id); if (!sp) return false; this.sprites.delete(id);
+    this.pops.push({ sp, t: 0, y0: sp.position.y, k0: sp.scale.x }); return true;
+  }
+  /** 화면 좌표(clientX/Y)에서 HIT_PX 안에 그려진 가장 가까운 반짝이 { id } (없으면 null). dom = 그리는 캔버스 */
+  hit(cx, cy, camera, dom, rpx = HIT_PX) {
+    const r = dom.getBoundingClientRect(); let best = null, bd = rpx;
+    for (const [id, sp] of this.sprites) {
+      sp.getWorldPosition(_v).project(camera); if (_v.z < -1 || _v.z > 1) continue;   // 카메라 뒤·너무 먼 것
+      const px = r.left + (_v.x + 1) / 2 * r.width, py = r.top + (1 - _v.y) / 2 * r.height, d = Math.hypot(px - cx, py - cy);
+      if (d <= bd) { bd = d; best = { id }; }
+    }
+    return best;
+  }
+  /** 이 반짝이가 화면에서 몇 px 지름으로 그려지나(확인용) */
+  screenPx(id, camera, viewH) { const sp = this.sprites.get(id); return sp ? sp.scale.x / SparkleView.mPerPx(camera, sp.getWorldPosition(_v), viewH) : 0; }
+  dispose() {
+    for (const sp of this.sprites.values()) { this.root.remove(sp); sp.material.dispose(); }
+    for (const p of this.pops) { this.root.remove(p.sp); p.sp.material.dispose(); }
+    this.sprites.clear(); this.pops = []; this.mat.dispose(); this.tex.dispose();
+  }
 }
