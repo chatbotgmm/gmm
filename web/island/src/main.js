@@ -42,6 +42,7 @@ import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
 import { Minimap } from "./ui/minimap.js";
 import { installKeys } from "./ui/keys.js";
+import { createEdition, simSteps } from "./systems/edition.js";
 import { Sfx } from "./audio/sfx.js";
 import { SparkleView } from "./render/sparkles.js";
 import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlerts.js";
@@ -317,6 +318,10 @@ const minimap = new Minimap({ getWorld: () => world, camera, controls });   // �
 // 키보드·포인터 층(Esc 단계 닫기 · 열린 창 뒤로 키 안 새게 · 단축키 · 툴팁) + 새 섬·불러오기 확인창은 hud.confirm
 hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
 installKeys({ hud, tools, roomView });
+// 🎟 판(무료·유료)과 ⏩ 배속(유료판 전용, 마을 진행 ×1·×2·×3). 판은 systems/edition.js 한 곳에서만 읽고 씀(지금은 설정에서 고름, 나중엔 계정 값이 우선)
+const edition = createEdition();
+hud.edition = edition; hud.syncEdition();
+edition.onChange(() => hud.syncEdition());
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
@@ -388,7 +393,8 @@ function frame() {
 function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
-  if (ready) for (let k = 0; k < simSpeed; k++) world.update(dt);                 // 불러오는 동안은 멈춤. 시간 배수(테스트)면 마을도 여러 번 돌림
+  const steps = simSteps(simSpeed, edition.speed);                                // ⏩ 배속(유료판 ×1·×2·×3) × 시간 배수(시험) — 프레임당 최대 12번, 한 번의 dt는 그대로(0.05초 이하)
+  if (ready) for (let k = 0; k < steps; k++) world.update(dt);                    // 불러오는 동안은 멈춤(탭이 숨으면 프레임 자체가 멈춤 + dt 상한 0.05초)
   stepGridLines(dt, gridShown({ mode: tools?.mode, on: hud?.gridOn, room: roomView.isOpen }));   // 건설 모드 격자선(▦, 땅 셰이더 세기만)
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
     roomView.update(dt); quality.frame(dt, performance.now());
@@ -412,7 +418,7 @@ function frameBody() {
   sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).addScaledVector(daylight.dir, 40);   // 해(달) 방향은 시간대에 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);
-  unitViews.sync(dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
+  unitViews.sync(ready ? dt * steps : dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt, controls.target);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
@@ -436,11 +442,16 @@ function frameBody() {
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
 // 시간 배수(테스트용): 시각·날짜·계절이 빨리 감 + 마을 진행(눈 쌓임·갈매미 하루)도 simSpeed배. 실제 시간 모드에서만 날짜가 바뀜
-const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];
+const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];   // [시계 배수, 마을 진행 배수, 라벨] — 게임 ⏩ 배속(edition.js)과 따로, 둘이 겹치면 곱(프레임당 최대 12번)
 let simSpeed = 1;
 hud.onTimeMult = to => { const j = TIME_MULTS.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MULTS.findIndex(m => m[0] === daylight.mult) + 1) % TIME_MULTS.length, [m, sp, l] = TIME_MULTS[i];   // to = 고른 배수(없으면 다음 값)
   if (m > 1 && daylight.mode !== "real") { daylight.mode = "real"; document.getElementById("timeMode").textContent = "시간: 실제 시간"; }
   daylight.setMult(m); simSpeed = sp; return l; };
+// 판·배속 고르기(설정 칸 · 시간 칩 · F 키가 모두 이리로)
+hud.onEdition = v => { const r = edition.setLocal(v); if (!r.ok && r.reason === "account") hud.status("🎟 판은 계정에서 정해져요 · 설정에서는 볼 수만 있어요", { kind: "warn" });
+  else if (r.ok) hud.status(edition.isPaid ? "🎟 유료판 · ⏩ 배속(×2·×3)을 쓸 수 있어요" : "🎟 무료판 · 배속은 ×1로 돌아갔어요", { kind: edition.isPaid ? "good" : "info" }); };
+hud.onSpeed = v => { const r = v === "next" ? edition.cycleSpeed() : edition.setSpeed(+v); if (!r.ok && r.reason === "locked") { hud.speedLocked(); return; }
+  if (r.ok) hud.status(r.speed > 1 ? `⏩ 배속 ×${r.speed} · 마을 진행(걸음·일·공사·밭)이 ${r.speed}배 · 하루 빛은 실제 시각 그대로` : "▶ 배속 ×1(보통 빠르기)"); };
 const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
 hud.onTimeMode = to => { const j = TIME_MODES.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 const STYLES = [["toon", "툰"], ["clay", "클레이"], ["basic", "기본"]];
@@ -455,13 +466,13 @@ const SEASON_PICKS = [null, "spring", "summer", "autumn", "winter"];
 const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(${SEASONS[seasonOf(daylight.now())].name})`;
 hud.onSeasonMode = to => { seasonPick = to !== undefined && SEASON_PICKS.includes(to) ? to : SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };
 hud.setSeasonLabel(seasonText());
-hud.settingNow = () => ({ season: seasonPick || "real", time: daylight.mode, mult: daylight.mult, toon: toon.style });   // 설정 고르기 칸의 ✓
+hud.settingNow = () => ({ season: seasonPick || "real", time: daylight.mode, mult: daylight.mult, toon: toon.style, edition: edition.edition, speed: edition.speed });   // 설정 고르기 칸의 ✓
 hud.onQuality = mode => { quality.set(mode); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
 hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { sfx, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
+window.__island = { sfx, edition, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
   setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
