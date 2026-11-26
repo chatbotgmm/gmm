@@ -57,16 +57,17 @@ export class Daylight {
     this.hemi.color.setRGB(k[9], k[10], k[11]); this.hemi.groundColor.setRGB(k[12], k[13], k[14]); this.hemi.intensity = k[16] * (0.7 + 0.3 * wl);
     this.renderer.toneMappingExposure = k[18] * (0.55 + 0.45 * wl);                // 흐리면 화면 전체를 어둡게
     // 하늘 그라데이션·안개
-    const cv = this.skyTex.image, g = cv.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, cv.height), th = "#" + this.top.getHexString(), hh = "#" + this.hor.getHexString();
-    if (th !== this.skyKey?.[0] || hh !== this.skyKey[1]) {                         // 8비트 색이 그대로면 하늘 그림을 다시 올리지 않음
-      grad.addColorStop(0, th); grad.addColorStop(0.75, hh); grad.addColorStop(1, hh);
-      g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height); this.skyTex.needsUpdate = true; this.skyKey = [th, hh];
+    const th = this.top.getHex(), hh = this.hor.getHex();                           // 8비트 색(수)으로 비교: 그대로면 그라데이션·문자열도 안 만들고 하늘 그림도 다시 올리지 않음
+    if (th !== this.skyTop || hh !== this.skyHor) {
+      const cv = this.skyTex.image, g = cv.getContext("2d"), grad = g.createLinearGradient(0, 0, 0, cv.height), ts = "#" + this.top.getHexString(), hs = "#" + this.hor.getHexString();
+      grad.addColorStop(0, ts); grad.addColorStop(0.75, hs); grad.addColorStop(1, hs);
+      g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height); this.skyTex.needsUpdate = true; this.skyTop = th; this.skyHor = hh;
     }
     if (this.scene.fog) this.scene.fog.color.copy(this.hor);
     this.water.userData.setLight?.(k[17] * (0.75 + 0.25 * wl));
     for (const o of this.clouds.children) if (o.isSprite) o.material.color.copy(this.hor).lerp(this.white, 0.55);
   }
-  /** 날씨 밝기(0.45~1). 0.5초마다 하는 다시 계산 때 반영 */
+  /** 날씨 밝기(0.45~1). 움직이는 동안은 다음 프레임에 바로, 그 밖에는 0.5초마다 하는 다시 계산 때 반영 */
   setWeatherLight(v) { this.wl = v; }
   /** 등대: 램프 발광(밤에 세게), 둘레를 비추는 불빛, 회전하는 빛줄기 */
   lamp() {
