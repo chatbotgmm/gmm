@@ -83,16 +83,16 @@ export class Daylight {
     if (this.lampHalo.parent !== lamp) lamp.add(this.lampHalo);
     this.lampHalo.visible = this.night > 0.05; this.lampHalo.material.opacity = 0.85 * this.night;
   }
-  /** 가로등: 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
+  /** 가로등: 풍차 전기가 닿으면 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
   /** 가로등 실제 빛 개수(그래픽 설정). 빛 개수가 바뀌면 재질을 다시 만들어야 해서 늘 같은 개수를 두고 안 쓰는 빛은 0으로 */
   setLampLights(k) {
     for (const l of this.lampLights || []) l.parent?.remove(l);
     this.lampLights = Array.from({ length: k }, () => { const l = new THREE.PointLight(0xffc27a, 0, 15, 1); l.castShadow = false; this.scene.add(l); return l; });
   }
   /** 건물 등불(집·우체국·카페·잡화점 문 옆 등): 유리(발광 마스크, tools/glow_mask.py)가 가로등과 같은 세기로 밤에 빛나고 등불마다 작은 빛 번짐.
-   *  전기와 상관없이 켜짐(기름 등불). 짓는 중(모델이 아래에서 솟는 동안 — 세로로 눌려 있음)에는 끔. 실제 빛은 안 씀 */
+   *  풍차 전기가 닿는 건물만 켜짐(hasPower). 짓는 중(모델이 아래에서 솟는 동안 — 세로로 눌려 있음)에는 끔. 실제 빛은 안 씀 */
   lantern(o, m, src, n, glow) {
-    const ws = o.getWorldScale(new THREE.Vector3()), on = ws.y > ws.x * 0.97, v = on ? glow : 0;
+    const ws = o.getWorldScale(new THREE.Vector3()), on = ws.y > ws.x * 0.97 && this.hasPower(o), v = on ? glow : 0.15 * (1 - n);
     m.emissiveIntensity = v; src.emissiveIntensity = v;
     if (!o.userData.halo) o.userData.halo = (src.userData.lanterns || []).map(([x, y, z, size]) => {   // 처음 한 번: glb 재질 extras에 적힌 등불 자리
       const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
@@ -100,14 +100,24 @@ export class Daylight {
     });
     for (const h of o.userData.halo) { h.visible = on && n > 0.05; h.material.opacity = 0.55 * n; }
   }
+  /** 이 물체가 달린 섬 건물에 전기가 들어오나(world.powered — 다 지은 풍차 둘레, world/power.js). 건물마다 한 번 계산해 두고 건물이 바뀔 때(world.powerRev)만 다시 봄.
+   *  섬 건물에 달리지 않은 것(월드를 모를 때 포함)은 켜진 것으로 침. this.world는 main.js가 매 프레임 넣어 줌 */
+  hasPower(o) {
+    let h = o.userData.powerHolder;
+    if (h === undefined) { h = o; while (h && h.userData.buildingId == null) h = h.parent; o.userData.powerHolder = h = h || null; }
+    const w = this.world; if (!h || !w) return true;
+    const u = h.userData; if (u.powerRev !== w.powerRev || u.powerWorld !== w) { u.powerRev = w.powerRev; u.powerWorld = w; u.powerOn = !!w.powered(w.buildings.get(u.buildingId)); }
+    return u.powerOn;
+  }
   streetLamps() {
     const n = this.night ?? 0, glow = 0.15 + 2.2 * n, lamps = [];
     this.scene.traverse(o => {
-      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.05; o.material.opacity = 0.75 * n; return; }   // 전기 들어온 집 창가 불빛
+      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.05 && this.hasPower(o); o.material.opacity = 0.75 * n; return; }   // 전기 들어온 집 창가 불빛(풍차를 철거하면 바로 꺼짐)
       if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m;
       if (src.name === "lanternGlow") return this.lantern(o, m, src, n, glow);
       if (src.name !== "lampBody") return;
-      m.emissiveIntensity = glow; src.emissiveIntensity = glow;
+      const on = this.hasPower(o), v = on ? glow : 0.15 * (1 - n);                 // 가로등도 풍차 전기가 닿아야 켜짐: 없으면 밤에 유리가 꺼지고 빛 번짐·빛 웅덩이·실제 빛도 없음(낮 모습은 같음)
+      m.emissiveIntensity = v; src.emissiveIntensity = v;
       if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
         o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffc870, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
@@ -116,8 +126,8 @@ export class Daylight {
         pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);
         o.userData.halo = [halo, pool];
       }
-      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = n > 0.05; halo.material.opacity = 0.8 * n; pool.material.opacity = 0.2 * n;
-      lamps.push(halo);
+      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = on && n > 0.05; halo.material.opacity = 0.8 * n; pool.material.opacity = 0.2 * n;
+      if (on) lamps.push(halo);
     });
     // 실제 빛: 화면 중심(보는 곳)에서 가까운 가로등부터 빛을 하나씩 옮겨 붙임
     const L = this.lampLights || []; if (!L.length) return;

@@ -25,15 +25,15 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {
-    id: "cafe", builtBy: "carpenter", rank: 1, cost: { wood: 2, stone: 1 }, tier: 1, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 3.0, asset: "assets/props/cafe_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4, d: 2.55 },   // 줄무늬 차양·커피잔 카페(사용자 제공, 문 +x → +z). 비율 그대로 — 5×3칸에 꽉 채우면 높이 약 3.5 m로 2층집(3.3 m)보다 높아져서 폭 3.7 m·깊이 2.4 m·높이 약 3.0 m로(양옆 빈자리는 그대로 둠)
+    id: "cafe", builtBy: "carpenter", lit: true, rank: 1, cost: { wood: 2, stone: 1 }, tier: 1, name: "카페", footprint: { w: 5, d: 3 }, work: 6, height: 3.0, asset: "assets/props/cafe_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4, d: 2.55 },   // 줄무늬 차양·커피잔 카페(사용자 제공, 문 +x → +z). 비율 그대로 — 5×3칸에 꽉 채우면 높이 약 3.5 m로 2층집(3.3 m)보다 높아져서 폭 3.7 m·깊이 2.4 m·높이 약 3.0 m로(양옆 빈자리는 그대로 둠)
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "flat", awning: 0xf2a49a }, interior: { w: 8, d: 6 },
   },
   shop: {
-    id: "shop", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 3.0, asset: "assets/props/shop_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4, d: 2.75 },   // 큰 나무 두짝문·날개 지붕 잡화점(사용자 제공, 문 +x → +z). 비율 그대로 — 5×3칸에 꽉 채우면 높이 약 3.3 m로 2층집과 같아져서 폭 3.7 m·깊이 2.6 m·높이 약 3.0 m로(양옆 빈자리는 그대로 둠)
+    id: "shop", builtBy: "carpenter", lit: true, rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "잡화점", footprint: { w: 5, d: 3 }, work: 6, height: 3.0, asset: "assets/props/shop_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 4, d: 2.75 },   // 큰 나무 두짝문·날개 지붕 잡화점(사용자 제공, 문 +x → +z). 비율 그대로 — 5×3칸에 꽉 채우면 높이 약 3.3 m로 2층집과 같아져서 폭 3.7 m·깊이 2.6 m·높이 약 3.0 m로(양옆 빈자리는 그대로 둠)
     placeholder: { wall: 0xf7f2e8, roof: 0xc8643c, roof_shape: "pyramid", awning: 0x9fd3e6 }, interior: { w: 8, d: 6 },
   },
   post: {
-    id: "post", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2, iron: 1 }, tier: 1, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 5.1, asset: "assets/props/post_{T}.glb", modelYaw: -Math.PI / 2,   // 시계탑·날개 편지 우체국(사용자 제공, 문 +x → +z). 5칸에 꽉 차게 맞추면 높이 약 5.1 m
+    id: "post", builtBy: "carpenter", lit: true, rank: 2, cost: { wood: 2, stone: 2, iron: 1 }, tier: 1, name: "우체국", footprint: { w: 5, d: 5 }, work: 9, height: 5.1, asset: "assets/props/post_{T}.glb", modelYaw: -Math.PI / 2,   // 시계탑·날개 편지 우체국(사용자 제공, 문 +x → +z). 5칸에 꽉 차게 맞추면 높이 약 5.1 m
     placeholder: { wall: 0xf3ead8, roof: 0x7fb7d9, roof_shape: "pyramid" }, interior: { w: 8, d: 7 },
   },
   // 자이언트 전용 집: 몸이 커서(키 약 1.4 m) 일반 집에는 못 들어가고 이 집에만 들어감. 다른 갈매미는 못 들어감.
@@ -59,9 +59,9 @@ export const BUILDINGS = {
     id: "dock", builtBy: "carpenter", dock: true, cost: { wood: 1 }, tier: 1, name: "낚시터", footprint: { w: 1, d: 1 }, work: 1, height: 0.3, asset: null,
     placeholder: { wall: 0xb08050, roof: 0xb08050, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
-  // 가로등(장식): 밤에 유리가 빛나고 둘레를 밝힘. 마을 등급 점수(장식)에 들어감
+  // 가로등(장식): 풍차 전기가 닿는 곳(world/power.js)에서만 밤에 유리가 빛나고 둘레를 밝힘 — 전기가 없으면 꺼진 채. 마을 등급 점수(장식)에 들어감
   streetlamp: {
-    id: "streetlamp", builtBy: "builder", deco: true, cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 2.6,
+    id: "streetlamp", builtBy: "builder", deco: true, note: "풍차 전기가 닿는 곳에서만 밤에 켜져요", cost: { wood: 1, stone: 1 }, tier: 1, name: "가로등", footprint: { w: 1, d: 1 }, work: 1, height: 2.6,
     asset: "assets/props/street_lamp_{T}.glb", fit: { w: 0.56, d: 0.56 },   // 가는 가로등(사용자 제공): 폭 0.56 m → 높이 약 2.6 m
     placeholder: { wall: 0x8a6a45, roof: 0x4a4a4a, roof_shape: "flat" }, interior: { w: 1, d: 1 },
   },
@@ -75,8 +75,8 @@ export const BUILDINGS = {
   festLantern: { id: "festLantern", builtBy: "builder", deco: true, festive: true, decoShape: "festLantern", cost: { wood: 1 }, tier: 1, name: "축제 등불", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0x8a6a45, roof: 0xffb35c, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 계절 장식: 지금 계절에 따라 모습이 달라짐(봄 꽃 아치 · 여름 파라솔 · 가을 호박 더미 · 겨울 눈사람)
   seasonDeco:  { id: "seasonDeco", builtBy: "builder", deco: true, festive: true, decoShape: "seasonDeco", cost: { wood: 1 }, tier: 1, name: "계절 장식", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0xf2a49a, roof: 0xf2a49a, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
-  // 풍차 발전소: 둘레 18칸 안의 집에 전기(밤에 창이 밝아지고 만족도 +8)
-  windmill:  { id: "windmill", builtBy: "carpenter", power: true, rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
+  // 풍차 발전소: 둘레 18칸(world/power.js POWER_RANGE) 안에 전기 — 가로등·건물 등불(lit: 카페·잡화점·우체국, 집)·집 창가 불빛이 밤에 켜지고 집 만족도 +8
+  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등·건물 등불·집 창에 전기 · 누르면 범위가 보여요", rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
   bridge: {
     id: "bridge", builtBy: "carpenter", bridge: true, cost: { wood: 1 }, tier: 1, name: "다리", footprint: { w: 1, d: 1 }, work: 1, height: 0.15, asset: null,

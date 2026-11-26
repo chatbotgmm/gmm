@@ -528,7 +528,7 @@ export class Hud {
     }
     b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), el("span", "bmeta", why || cost)); if (locked) b.append(el("span", "block", "🔒"));
     b.setAttribute("aria-label", `${def.name}, ${size}칸, 재료 ${cost}${why ? `, ${locked ? "잠김: " : ""}${why}` : ""}`);
-    b.dataset.tip = `${def.name} ${size}칸 · 재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
+    b.dataset.tip = `${def.name} ${size}칸 · 재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
     b.onclick = () => this.tools.setMode("build", def.id); return b;
   }
   /** 건물 갤러리: 잠금·계절이 바뀔 때만 카드를 다시 만들고, 고르기만 했으면 표시만 바꿈(사진이 깜빡이지 않고 밀어 둔 자리도 그대로) */

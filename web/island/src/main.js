@@ -7,6 +7,8 @@ import { GroundChunks } from "./render/groundChunks.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
 import { Daylight } from "./render/daylight.js";
+import { PowerRange } from "./render/powerRange.js";
+import { NoPowerBadges } from "./render/noPower.js";
 import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, addModuleViews } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
@@ -278,7 +280,9 @@ hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { r
 installKeys({ hud, tools, roomView });
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
-unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); };
+const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
+unitControl.onTapGround = c => { const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b && BUILDINGS[b.defId].house && world.isDone(b) ? b : null); powerRange.tap(b || null, tools.ray.ray, c); noPower.tap(powerRange.sel ? null : b || null); };
+const noPower = new NoPowerBadges({ camera, overlay, getWorld: () => world, getViews: () => buildingViews, card: document.getElementById("houseCard") });   // 전기 범위 밖 가로등·등불 건물 위 「전기 없음」 말풍선
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
@@ -349,7 +353,7 @@ function frameBody() {
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   cullFar(now);
-  daylight.focus = controls.target; daylight.update(dt, now);
+  daylight.focus = controls.target; daylight.world = world; daylight.update(dt, now); powerRange.update(tools);   // world: 가로등·등불이 풍차 전기를 확인
   world.winterYear = winterYearOf(daylight.now());                              // 첫눈은 겨울마다 한 번(어느 해 겨울인지는 화면이 알려 줌)
   skyShow.update(dt, world.sky, controls.target, camera);
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);
@@ -371,7 +375,7 @@ function frameBody() {
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
-  buildingViews.updateBadges(camera, innerWidth, innerHeight);
+  buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight);
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   quality.frame(dt, now);
   buildingThumbs.pump();                             // 기다리는 건물 사진이 있으면 한 장(이어서 그리는 섬이 덮음)
