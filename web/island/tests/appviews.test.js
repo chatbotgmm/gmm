@@ -8,7 +8,7 @@ import { NEWS_DAY_SECS } from "../src/world/news.js";
 import { FRIEND_STAGES } from "../src/units/mind.js";
 import { factRow } from "../src/ui/hudParts.js";
 import { townAppHtml, granaryFact, daysToWinter, marketAppHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml,
-  dexCounts, dexHeadHtml, newsAppHtml, toastParts, toastHtml, TOAST_TAIL_MAX } from "../src/ui/appViews.js";
+  dexCounts, dexHeadHtml, newsAppHtml, toastParts, toastHtml, TOAST_TAIL_MAX, avRo } from "../src/ui/appViews.js";
 
 const fresh = () => World.create(7, seededRandom(3), { wild: true, firstGull: true });
 const details = html => [...html.matchAll(/<details class="more" data-more="([^"]+)"( open)?/g)].map(m => [m[1], !!m[2]]);
@@ -32,6 +32,15 @@ test("마을: 머리(등급·점수/다음 점수·남은 점수·막대)가 맨
   assert.ok(rows.length >= 3);
   for (const [z, v] of rows) assert.equal(z, v === 0, "0점이면 흐리게");
   for (let i = 1; i < rows.length; i++) assert.ok(rows[i - 1][1] >= rows[i][1], "점수 큰 순");
+});
+
+test("마을 머리: 점수가 다음 등급 점수를 넘었는데 아직 등급이 오르기 전(stepRank 2초 주기)이면 「점수 / 더 낮은 문턱」 대신 점수만", () => {
+  const w = fresh(); w.wishDone = 10; w.rank = 0;   // 이룬 소원 10 × 6 = 60점 더 → 어촌 문턱(60)을 넘음
+  const html = townAppHtml(w, { today: new Date(2026, 10, 26) }), nxt = RANKS[1];
+  assert.ok(+html.match(/class="sum-big">(\d+)</)[1] >= nxt.need, "점수만 크게");
+  assert.doesNotMatch(html, /sum-big">\d+ \/ /);
+  assert.match(html, /곧 .+<b>어촌<\/b>으로 올라요/, "어촌 + 으로(받침)");
+  assert.equal(avRo("항구 마을"), "로"); assert.equal(avRo("섬 도시"), "로"); assert.equal(avRo("어촌"), "으로");
 });
 
 test("마을 한눈 칸: 겨울까지 날짜 · 저장고 비면 경고색(🚨) · 4분의 1 밑 얼마 안 남음(⚠️)", () => {

@@ -21,6 +21,8 @@ import { sumHead, moreBox, valueRows, factRow, fmtNum } from "./hudParts.js";
 
 const avEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const avMore = (k, t, h, o) => moreBox(k, t, h, o);
+/** 「(으)로」: 받침이 있으면 「으로」, 받침 없음·ㄹ 받침이면 「로」(어촌으로 · 항구 마을로 · 섬 도시로) */
+export const avRo = word => { const c = String(word).charCodeAt(String(word).length - 1) - 0xac00; return c >= 0 && c <= 11171 && c % 28 !== 0 && c % 28 !== 8 ? "으로" : "로"; };
 
 // ---- 🏅 마을
 /** 겨울(12월 1일, 기상청 겨울 시작)까지 남은 날. 겨울(12~2월이거나 계절이 겨울)이면 0 */
@@ -38,8 +40,8 @@ export function granaryFact(w) {
 export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
   const { score, parts } = rankScore(w), cur = RANKS[w.rank], nxt = RANKS[w.rank + 1], BN = unlockName;
   const frac = nxt ? Math.max(0, Math.min(1, (score - cur.need) / (nxt.need - cur.need))) : 1;
-  const head = sumHead({ icon: cur.icon, big: nxt ? `${fmtNum(score)} / ${fmtNum(nxt.need)}` : fmtNum(score), label: cur.name,
-    lineHtml: !nxt ? "가장 높은 등급이에요 🎉" : score >= nxt.need ? `곧 ${avEsc(nxt.icon)} <b>${avEsc(nxt.name)}</b>로 올라요 🎉` : `다음 ${avEsc(nxt.icon)} ${avEsc(nxt.name)}까지 <b>${fmtNum(nxt.need - score)}점</b>`, bar: frac });
+  const head = sumHead({ icon: cur.icon, big: nxt && score < nxt.need ? `${fmtNum(score)} / ${fmtNum(nxt.need)}` : fmtNum(score), label: cur.name,
+    lineHtml: !nxt ? "가장 높은 등급이에요 🎉" : score >= nxt.need ? `곧 ${avEsc(nxt.icon)} <b>${avEsc(nxt.name)}</b>${avRo(nxt.name)} 올라요 🎉` : `다음 ${avEsc(nxt.icon)} ${avEsc(nxt.name)}까지 <b>${fmtNum(nxt.need - score)}점</b>`, bar: frac });
 
   const toWinter = daysToWinter(today, w.season), gr = granaryFact(w);
   const fNow = festivalOf(w.festKey), fOn = w.festival && festivalOf(w.festival.id), plaza = festivalPlaza(w), fGift = fNow && festivalGift(fNow.key);
