@@ -337,12 +337,12 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 // 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
 Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
-  if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true });
-  else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true });
-  else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요", { queue: true });
-  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 아래 🔨 건설 → 🏠 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)", { queue: true });
-  if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true });
-  else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true });
+  if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true, full: true });
+  else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true, full: true });
+  else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요", { queue: true, full: true });
+  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 아래 🔨 건설 → 🏠 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)", { queue: true, full: true });
+  if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true, full: true });
+  else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true, full: true });
   hud.showLetter(backLetter);
   hud.coach.start({ fresh: !resumed });           // 처음 안내 3단계(새 섬일 때 · 편지·처음 알림이 지나간 뒤 말풍선이 뜸)
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);

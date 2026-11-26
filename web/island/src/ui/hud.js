@@ -6,13 +6,11 @@ import * as M from "../units/mind.js";
 import { TRIBES } from "../data/catalog.js";
 import * as E from "../world/economy.js";
 import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
-import { WISH_BY_ID, WISH_REWARD, wishText } from "../world/wishes.js";
-import { FESTIVAL_RANK, FESTIVAL_NEED, FESTIVAL_RADIUS, festivalOf, festivalGift, festivalPlaza, festivalStamps } from "../world/festival.js";
-import { RANKS, RANK_REWARD, rankScore, unlockName } from "../world/rank.js";
+import { RANKS } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
-import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
+import { newsDay } from "../world/news.js";
 import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftDef, petsLeft, PET_DAILY } from "../world/bond.js";
 import { stashTotals } from "../world/belongings.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
@@ -26,6 +24,7 @@ import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
 import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
+import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
@@ -403,51 +402,24 @@ export class Hud {
       const html = bankHtml(w, (k, t, h, o) => this.more(k, t, h, o)), body = document.getElementById("bankBody");
       if (this.bankHtmlNow !== html) { this.bankHtmlNow = html; body.innerHTML = html; }   // 그릴 값이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게)
     } else if (this.app === "market") {
-      const mk = w.marketB(), sale = w.housesForSale(), m = w.merchantU(), food = w.units.filter(u => E.isProducer(u));
-      document.getElementById("marketBody").innerHTML = !mk ? `<p>아직 시장이 없어요. <b>🪚 목수</b>가 있으면 🏠 건설에서 <b>시장</b>을 지을 수 있어요.</p>`
-        : `<h4>시세(상인이 사는 값)</h4><p class="dim">상인 창고에 많이 쌓이면 싸지고, 모자라면 비싸져요.</p>${m ? `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>${this.priceCell(k)} · 창고 ${(m.raw[k] || 0) + (m.goods[k] || 0)}</td></tr>`).join("")}<tr><td>상인(${m.name}) 돈</td><td>🪙${m.coins || 0}</td></tr></table>` : `<p class="dim">상인 🐚 갈매미가 없어요(소환하면 와요).</p>`}` +
-          `<h4>팔리는 집</h4>${sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${w.housePrice(b)}</td></tr>`).join("")}</table>` : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`}` +
-          `<h4>음식(농부·어부에게서 ${this.priceCell("food")})</h4><p class="dim">농부·어부가 내놓을 음식이 모자라거나 배고픈 갈매미가 많으면 비싸지고, 겨울엔 더 비싸요.</p><table class="tbl">${food.map(u => `<tr><td>${JOBS[u.job].icon} ${u.name}</td><td>🍗${u.inv?.food || 0} 🐟${u.inv?.fish || 0}</td></tr>`).join("") || `<tr><td class="dim">농부·어부가 없어요</td><td></td></tr>`}</table>` +
-          `<h4>집 주인</h4><table class="tbl">${w.units.filter(u => u.home).map(u => `<tr><td>${u.name}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
+      const html = marketAppHtml(w, { more: (k, t, h, o) => this.more(k, t, h, o), price: k => this.priceCell(k) }), body = document.getElementById("marketBody");
+      if (this.marketHtmlNow !== html) { this.marketHtmlNow = html; body.innerHTML = html; }   // 그릴 값이 같으면 안 씀(펼침·누름이 끊기지 않게)
     } else if (this.app === "decor") {
       const houses = [...w.buildings.values()].filter(b => BUILDINGS[b.defId].house && w.isDone(b));
       const body = document.getElementById("decorBody");
       if (this.decorKey === houses.map(b => b.id + ":" + Fu.comfort(b) + ":" + (b.owner || "")).join(",")) return;   // 바뀐 게 없으면 다시 안 그림(버튼이 눌리게)
       this.decorKey = houses.map(b => b.id + ":" + Fu.comfort(b) + ":" + (b.owner || "")).join(",");
-      body.innerHTML = `<p class="dim">집에 들어가 가구를 놓고 바닥·벽지를 바꿔요. 놓은 가구는 그 집 갈매미가 써요(침대에서 낮잠 등). 집주인은 돈이 모이면 잡화점에서 가구를 사 와요.</p>`;
-      if (!houses.length) body.innerHTML += `<p>아직 다 지은 집이 없어요.</p>`;
+      body.innerHTML = decorHeadHtml(houses.map(b => { const o = w.units.find(u => u.unitId === b.owner); return { name: `${BUILDINGS[b.defId].name}${o ? `(${o.name})` : ""}`, comfort: Fu.comfort(b) }; }), { more: (k, t, h, o) => this.more(k, t, h, o) });
       for (const b of houses) { const owner = w.units.find(u => u.unitId === b.owner), row = el("div", "row");
         row.append(el("span", "nm", `🏠 ${BUILDINGS[b.defId].name}`), el("span", "act", `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 ${Fu.comfort(b)}`));
         row.onclick = () => { this.closePhone(); this.onDecorate?.(b); this.coach?.moment("room"); }; body.appendChild(row); }
     } else if (this.app === "town") {
-      const { score, parts } = rankScore(w), cur = RANKS[w.rank], nxt = RANKS[w.rank + 1];
-      const pct = nxt ? Math.min(100, Math.round((score - cur.need) / (nxt.need - cur.need) * 100)) : 100;
-      const d = this.today?.() || new Date(), m = d.getMonth() + 1;
-      const toWinter = w.season === "winter" || m === 12 || m <= 2 ? 0 : Math.ceil((new Date(d.getFullYear(), 11, 1) - d) / 86400000);   // 다음 12월 1일까지(기상청 겨울 시작)
-      const gr = w.granaryB(), BN = unlockName;   // 업그레이드로만 생기는 건물은 "종합병원(일반병원 업그레이드)"
-      // 계절 축제의 날: 이번 계절 축제가 어디까지 왔는지 + 지난 축제 도장
-      const fNow = festivalOf(w.festKey), stamps = festivalStamps(w.festivals), plaza = festivalPlaza(w), fGift = fNow && festivalGift(fNow.key), fOn = w.festival && festivalOf(w.festival.id);
-      const fLine = fOn ? `<b>${fOn.def.icon} ${fOn.def.name}</b>가 열리고 있어요! 남은 시간 <b>${Math.max(0, Math.ceil(w.festival.t))}초</b> · 함께한 갈매미 ${w.festival.who.length}마리`
-        : !fNow ? `<span class="dim">축제 달력을 읽는 중이에요.</span>`
-        : w.festivals[fNow.key] ? `올해 <b>${fNow.def.icon} ${fNow.def.name}</b>는 잘 치렀어요. 다음 계절에 또 만나요!`
-        : w.rank < FESTIVAL_RANK ? `<span class="dim">🔒 마을 등급이 ${RANKS[FESTIVAL_RANK].icon} ${RANKS[FESTIVAL_RANK].name}이 되면 계절마다 축제를 열 수 있어요.</span>`
-        : `<b>${fNow.def.icon} ${fNow.def.name}</b> 준비 중 · 광장 장식 <b>${Math.min(plaza.n, FESTIVAL_NEED)} / ${FESTIVAL_NEED}</b><br><span class="dim">🏠 건설에서 축제 장식(${Object.values(BUILDINGS).filter(d => d.festive).map(d => d.name).join("·")})을 ${FESTIVAL_RADIUS}칸 안에 ${FESTIVAL_NEED}개 모으면 "축제 하자!" 소원이 이루어져요${plaza.ok ? " · 광장은 다 모였어요! 새 장식을 하나만 더 놓으면 열려요" : ""}${fGift ? ` · 끝나면 🎁 ${fGift.name}` : ""}</span>`;
-      const fHtml = `<h4>🎪 계절 축제</h4><p id="festNow">${fLine}</p><div class="stamps" id="festStamps">${stamps.map(x => `<span class="stamp" data-fest="${x.key}">${x.def.icon}<small>${x.year} ${SEASONS[x.season].name}</small></span>`).join("") || `<span class="dim">아직 찍은 축제 도장이 없어요.</span>`}</div>`;
-      document.getElementById("townBody").innerHTML =
-        `<div class="rankhead"><span class="big">${cur.icon}</span><div><b>${cur.name}</b><div class="dim">점수 ${score}${nxt ? ` / 다음 ${nxt.icon} ${nxt.name} ${nxt.need}` : " · 가장 높은 등급"}</div></div></div>` +
-        `<div class="rbar"><i style="width:${pct}%"></i></div>` +
-        (nxt ? `<p class="dim">${nxt.name}이 되면: ${nxt.unlock.map(BN).join(", ")} 건설 · 갈매미마다 축하금 🪙${RANK_REWARD}</p>` : "") +
-        `<table class="tbl">${parts.map(([name, n, per, pts]) => `<tr><td>${name}</td><td>${n} × ${per} = <b>${pts}</b></td></tr>`).join("")}</table>` +
-        fHtml +
-        `<h4>❄️ 겨울 대비</h4><p>${toWinter > 0 ? `겨울(12월 1일)까지 <b>${toWinter}일</b>` : `<b>지금 겨울이에요</b>`} · ${SEASONS.winter.icon} 겨울엔 밭이 절반 속도로 자라고, 배가 1.25배 빨리 고프고, 음식 값이 올라요.</p>` +
-        (gr ? `<p>🏚 저장고 음식 <b>${w.granary}</b> / ${E.GRANARY_MAX} · 농부·어부가 남는 음식을 🪙${E.GRANARY_BUY}에 팔아 쌓고, 배고픈 갈매미는 시세대로 사 가요(돈이 없고 아주 배고프면 나눠 받아요).</p>`
-          : `<p class="dim">저장고가 없어요. 🪚 목수가 있으면 🏠 건설에서 <b>저장고</b>를 지을 수 있어요.</p>`) +
-        `<h4>등급별 건물</h4><table class="tbl">${RANKS.slice(1).map((r, i) => `<tr><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} (${r.need}점)</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
+      const html = townAppHtml(w, { today: this.today?.() || new Date(), more: (k, t, h, o) => this.more(k, t, h, o) }), body = document.getElementById("townBody");
+      if (this.townHtmlNow !== html) { this.townHtmlNow = html; body.innerHTML = html; }   // 핵심 요약 + 접기(appViews.js) · 바뀐 때만
     } else if (this.app === "wish") {
       this.drawDaily();
-      const rows = w.wishes.map(x => { const d = WISH_BY_ID[x.id], u = w.units.find(o => o.unitId === x.unitId); return `<tr><td>${d.icon} <b>${u?.name ?? ""}</b>: ${wishText(d, w, u, x)}</td><td class="dim">${d.hint}</td></tr>`; }).join("");
-      document.getElementById("wishBody").innerHTML = `<p class="dim">갈매미가 가끔 마을에 바라는 것을 말해요. 들어주면 기뻐하고 ${w.economy ? `공식은행이 축하금 🪙${WISH_REWARD}을 줘요` : "배가 조금 불러요"}.</p>` +
-        (rows ? `<table class="tbl">${rows}</table>` : `<p class="dim">지금은 바라는 게 없어요.</p>`) + `<p>이룬 소원: <b>${w.wishDone}</b>개</p>`;
+      const html = wishListHtml(w, { more: (k, t, h, o) => this.more(k, t, h, o) }), body = document.getElementById("wishBody");
+      if (this.wishHtmlNow !== html) { this.wishHtmlNow = html; body.innerHTML = html; }
     } else if (this.app === "rel") {
       this.drawRelations();
     } else if (this.app === "news") {
@@ -489,16 +461,16 @@ export class Hud {
   /** 📱 소원 앱 맨 위 「오늘」: 오늘의 부탁(나아간 만큼 막대) · 모은 도장 · 도장 가게. 바뀐 게 없으면 다시 안 그림(가게 단추가 눌리게) */
   drawDaily() {
     const w = this.world, d = w.daily, body = document.getElementById("dailyBody");
-    const key = `${d?.key}|${d?.reqs.map(r => r.id + r.have).join(",")}|${d?.stamped}|${w.stamps}|${stampShopKey(w)}`;
+    const key = `${d?.key}|${d?.reqs.map(r => r.id + r.have).join(",")}|${d?.stamped}|${w.stamps}|${w.wishes.length}|${stampShopKey(w)}`;
     if (key === this.dailyDrawn && body.firstChild) return;
-    this.dailyDrawn = key; const open = body.querySelector("details")?.open || w.stamps > 0;   // 가게를 펼쳐 뒀으면 다시 그려도 그대로 · 도장이 있으면 펼쳐서 보여 줌
+    this.dailyDrawn = key; const open = !!body.querySelector("details.sshop")?.open, can = stampBadge(w);   // 가게를 펼쳐 뒀으면 다시 그려도 그대로 · 처음엔 접고(10단계: 첫 화면엔 머리+접기 요약만), 바꿀 수 있으면 요약 줄에 굵게
     body.onclick = e => { const b = e.target.closest?.("[data-stamp]"); if (!b || b.disabled) return; this.onStampBuy?.(b.dataset.stamp); this.drawDaily(); };
     const reqs = !d ? `<p class="dim">오늘의 부탁을 읽는 중이에요.</p>` : !d.reqs.length ? `<p class="dim">오늘은 부탁이 없어요. 갈매미를 불러 마을을 시작해 보세요.</p>`
       : d.reqs.map(r => { const ok = r.have >= r.need; return `<div class="dreq${ok ? " done" : ""}" data-daily="${r.id}"><span class="ico">${ok ? "✅" : r.icon}</span><div><div class="dtx"><span>${escHtml(r.text)}</span><em>${r.have} / ${r.need}</em></div><div class="rbar"><i style="width:${Math.round(r.have / r.need * 100)}%"></i></div></div></div>`; }).join("");
-    const note = !d?.reqs.length ? "" : d.stamped ? `<p class="dnote"><b>오늘의 부탁을 모두 들어줬어요!</b> 도장 하나를 받았어요. 내일 새 부탁이 와요.</p>`
-      : `<p class="dim">${d.reqs.length >= DAILY_COUNT ? "세 가지" : "오늘의 부탁"}를 모두 들어주면 도장 하나를 받아요. 날짜가 바뀌면 새 부탁으로 바뀌어요.</p>`;
-    body.innerHTML = `<h4 class="dhead">📋 오늘의 부탁<span id="stampCount" title="모은 도장">도장 ${w.stamps}개</span></h4>${reqs}${note}` +
-      `<details class="sshop"${open ? " open" : ""}><summary>🏪 도장 가게 <span class="dim">귀한 선물 · 한정 가구</span></summary>${stampShopHtml(w)}</details><h4>💭 갈매미의 소원</h4>`;
+    const note = !d?.reqs.length ? "" : d.stamped ? `<p class="dnote"><b>모두 들어줬어요!</b> 도장 하나를 받았어요 · 내일 새 부탁이 와요</p>`
+      : `<p class="dim dsub"><span class="av-nw">${d.reqs.length >= DAILY_COUNT ? "세 가지" : "모두"} 들어주면 🏵 도장 하나 ·</span> <span class="av-nw">날이 바뀌면 새 부탁</span></p>`;
+    body.innerHTML = `${dailyHead(w)}${reqs}${note}` +
+      `<details class="sshop"${open ? " open" : ""}><summary>🏪 도장 가게 ${can ? `<b class="sshop-can">🔔 지금 바꿀 수 있어요</b>` : `<span class="dim">귀한 선물 · 한정 가구</span>`}</summary>${stampShopHtml(w)}</details>`;
   }
   /** 📱 소식지: 마을 날짜별(새 날부터) 머릿기사. 하루 = 마을 시간 NEWS_DAY_SECS초, 최근 NEWS_KEEP_DAYS일치. */
   drawNews() {
@@ -506,11 +478,7 @@ export class Hud {
     const key = `${today}|${log.length}|${last?.t}|${last?.text}`;
     if (key === this.newsKey && body.firstChild) return;                            // 바뀐 게 없으면 다시 안 그림(읽는 중에 화면이 튀지 않게)
     this.newsKey = key;
-    const pages = newsPages(log).map(p => `<section class="newsday"><h4>${p.day === today ? "오늘" : p.day === today - 1 ? "어제" : `${today - p.day}일 전`} <span class="dim">마을 ${p.day}일째</span></h4>` +
-      `<ul>${p.heads.map((e, i) => `<li class="${i ? "" : "top"}"><span class="ico">${e.icon}</span><span>${escHtml(e.text)}</span></li>`).join("")}</ul>` +
-      (p.more ? `<p class="dim">그 밖의 소식 ${p.more}건</p>` : "") + `</section>`).join("");
-    body.innerHTML = `<p class="dim">오늘은 마을 <b>${today}일째</b>예요. 마을에서 일어난 큰일을 하루에 ${NEWS_HEADLINES}건까지 골라 실어요(최근 ${NEWS_KEEP_DAYS}일).</p>` +
-      (pages || `<p class="dim">아직 실을 소식이 없어요. 집을 짓거나, 소원을 들어주거나, 귀한 물고기를 낚으면 여기에 실려요.</p>`);
+    body.innerHTML = newsAppHtml(w, { more: (k, t, h, o) => this.more(k, t, h, o) });   // 오늘 머리기사 크게 · 나머지·지난 날짜는 접기(appViews.js)
   }
   /** 💌 다녀온 사이 편지(없으면 아무것도 안 함) */
   showLetter(letter) {
@@ -539,27 +507,17 @@ export class Hud {
       `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="19" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
       `<text class="ico" x="${n.x.toFixed(1)}" y="${n.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${JOBS[n.u.job]?.icon ?? n.name[0]}</text>` +
       `<text x="${n.x.toFixed(1)}" y="${(n.y + 33).toFixed(1)}" text-anchor="middle">${n.name}</text></g>`).join("");
-    const count = s => g.links.filter(l => l.stage === s).length;
     let text;
     if (us.length === 1) text = `<p class="dim">${us[0].name} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
-    else if (sel < 0) text = `<p>💞 단짝 <b>${count(2)}</b>쌍 · 🧡 친구 <b>${count(1)}</b>쌍</p><p class="dim">갈매미를 누르면 누구와 얼마나 친한지 보여 줘요. 만나서 인사할 때마다 조금씩 친해져요(호감 ${ST[1].min}부터 친구, ${ST[2].min}부터 단짝).</p>`;
+    else if (sel < 0) text = `<p class="dim av-tap">👆 갈매미를 누르면 누구와 친한지 보여 줘요</p>`;
     else { const u = us[sel], rows = us.filter(o => o !== u).map(o => [o, M.affinity(u, o)]).sort((a, b) => b[1] - a[1]).map(([o, v]) => { const d = ST[M.friendStage(v)];
         return `<tr><td>${v ? d.icon : "·"} ${o.name}</td><td>${v ? `<b>${d.name}</b> <span class="dim">호감 ${Math.round(v * 10) / 10}</span>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
       text = `<h4>${JOBS[u.job]?.icon ?? ""} ${u.name}의 사이</h4><table class="tbl">${rows}</table>`; }
-    body.innerHTML = `<svg viewBox="0 0 300 300" role="img" aria-label="갈매미 관계도">${lines}${dots}</svg>` +
-      `<div class="rellegend">${ST.map(d => `<span><i style="height:${d.width}px;background:${d.color}"></i>${d.name}</span>`).join("")}</div>${text}`;
+    body.innerHTML = relHeadHtml(g.links, us.length) + `<svg viewBox="0 0 300 300" role="img" aria-label="갈매미 관계도">${lines}${dots}</svg>` +
+      text + this.more("rel.legend", "🎨 범례 · 읽는 법", relLegendHtml(ST));   // 머리(단짝 수) → 그림 → 고른 갈매미 사이 → 범례는 접기
   }
   /** 시세 칸: 지금 값 + 지난 기록과 비교한 화살표 + 작은 그래프(20초마다 한 점, 최근 16분) */
-  priceCell(k) {
-    const w = this.world, h = w.priceHist.map(p => p[k]), now = w.prices[k], prev = h.length > 1 ? h[h.length - 2] : now;
-    const arrow = now > prev ? `<span style="color:#c0392b">▲</span>` : now < prev ? `<span style="color:#2471a3">▼</span>` : `<span class="dim">–</span>`;
-    let spark = "";
-    if (h.length > 1) {
-      const lo = Math.min(...h), hi = Math.max(...h), W = 64, Hh = 16, pts = h.map((v, i) => `${(i / (h.length - 1) * W).toFixed(1)},${(Hh - 2 - (hi > lo ? (v - lo) / (hi - lo) : 0.5) * (Hh - 4)).toFixed(1)}`).join(" ");
-      spark = ` <svg width="${W}" height="${Hh}" style="vertical-align:middle" aria-label="최근 시세 ${lo}~${hi}"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".7"/></svg>`;
-    }
-    return `🪙<b>${now}</b> ${arrow}${spark}`;
-  }
+  priceCell(k) { return priceCellHtml(this.world, k); }
   setWorld(world) {
     this.world = world; this.list.innerHTML = "";
     // 줄마다: 직업 아이콘 · 이름(희귀도 색) · 하는 일 · 포만감
@@ -744,19 +702,23 @@ export class Hud {
     else if (this.app === "dex") this.openApp(null);
   }
   drawDex() {
-    const w = this.world, body = document.getElementById("dexBody"); body.innerHTML = "";
+    const w = this.world, body = document.getElementById("dexBody"), cnt = dexCounts(w);
+    body.innerHTML = dexHeadHtml(cnt);                                             // 머리: 물고기 n/N(막대) · 기증 · 하늘 · 가방 — 묶음은 저마다 접기(펼침은 기억)
     const held = stashTotals(w);                                                   // 갈매미들이 각자 가진 것(소지품) — 내 것이 아니라 보기만
+    const fold = (key, title, note) => { const t = el("div"); t.innerHTML = this.more(key, title, "", { note }); const d = t.firstElementChild; body.append(d); return d.querySelector(".more-b"); };
+    let box = body;
     const sec = (title, list, count, extra, more) => {
-      body.append(el("h3", "", title)); const g = el("div", "dexgrid");
+      const g = el("div", "dexgrid");
       for (const it of list) { const n = count(it), c = el("div", "dexcell" + (n ? "" : " unknown"));
         c.style.borderColor = RARITY[it.rarity].color;
         const ss = it.season ? SEASONS[it.season] : null, now = it.season && it.season === w.season;
         c.append(el("b", "", n ? it.name : "???"), el("span", "", `${RARITY[it.rarity].name}${n ? ` · ${n}개` : ""}`), el("span", "dim", n ? extra(it) : ""));
         if (ss) { const t = el("span", "season" + (now ? " now" : ""), `${ss.icon} ${ss.name}에만${now ? " · 지금!" : ""}`); c.append(t); }
         more?.(it, c, n); g.append(c); }
-      body.append(g);
+      box.append(g);
     };
-    sec(`🐟 물고기 도감 (${FISH.filter(f => w.collection[f.id]).length}/${FISH.length})`, FISH, f => w.collection[f.id] || 0,
+    box = fold("dex.fish", "🐟 물고기 도감", `${cnt.fish}/${cnt.fishAll}`);
+    sec("", FISH, f => w.collection[f.id] || 0,
       f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${held[f.id] ? ` · 갈매미들이 ${held[f.id]} 가짐` : ""}`,
       (f, c, n) => {                                                               // 수족관: 크기 기록 · 기증됨
         if (n && w.fishRecord[f.id]) c.append(el("span", "rec", `📏 가장 큰 ${w.fishRecord[f.id]}cm`));
@@ -764,44 +726,47 @@ export class Hud {
       });
     {                                                                              // 수족관 기증 현황(물고기 도감 바로 아래)
       const have = donatedCount(w.donated), next = DONATE_GIFTS[w.donateGifts], gift = next && ITEMS.find(i => i.id === next.item);
-      body.append(el("p", "dim aqua", !w.aquariumB() && !have ? "🐠 수족관(마을 등급 ⚓ 항구 마을부터)을 지으면 처음 낚은 희귀 이상 물고기를 한 마리씩 기증해요."
+      box.append(el("p", "dim aqua", !w.aquariumB() && !have ? "🐠 수족관(마을 등급 ⚓ 항구 마을부터)을 지으면 처음 낚은 희귀 이상 물고기를 한 마리씩 기증해요."
         : `🐠 수족관 기증 ${have}/${DONATE_KINDS.length}종 · ${next ? `다음 기념 선물: ${next.label} 기증하면 ${gift?.name ?? "선물"}` : "기념 선물을 모두 받았어요!"}`));
     }
-    sec(`🎁 가방 (${ITEMS.filter(i => w.items[i.id]).length}/${ITEMS.length})`, ITEMS, i => w.items[i.id] || 0,
+    box = fold("dex.bag", "🎁 가방", `${cnt.bag}/${cnt.bagAll}`);
+    sec("", ITEMS, i => w.items[i.id] || 0,
       i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : i.gift ? `선물 · ${GIFT_CAT_NAME[giftDef(i.id)?.cat] || "선물거리"}` : `${i.price}🐚${held[i.id] ? ` · 갈매미들이 ${held[i.id]} 가짐` : ""}`);
     {                                                                              // 하늘 기록: 드문 하늘을 본 횟수
-      body.append(el("h3", "", `🌈 하늘 기록 (${Object.keys(SKY_EVENTS).filter(k => w.skySeen[k]).length}/${Object.keys(SKY_EVENTS).length})`)); const g = el("div", "dexgrid skydex");
+      box = fold("dex.sky", "🌈 하늘 기록", `${cnt.sky}/${cnt.skyAll}`); const g = el("div", "dexgrid skydex");
       for (const [k, d] of Object.entries(SKY_EVENTS)) { const n = w.skySeen[k] || 0, c = el("div", "dexcell" + (n ? "" : " unknown")); c.dataset.sky = k;
         c.append(el("b", "", n ? `${d.icon} ${d.name}` : "???"), el("span", "", n ? `${n}번 봤어요` : "아직 못 봤어요"), el("span", "dim", SKY_HINT[k])); g.append(c); }
-      body.append(g);
+      box.append(g);
     }
-    body.append(el("p", "dim", "🎁 내 주머니(주운 반짝이·도장 선물)는 갈매미를 따라가며 선물로 건네요. 갈매미가 모은 것은 그 갈매미의 소지품이에요."));
-    body.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
+    box = fold("dex.note", "ℹ️ 도감 읽는 법", "");
+    box.append(el("p", "dim", "🎁 내 주머니(주운 반짝이·도장 선물)는 갈매미를 따라가며 선물로 건네요. 갈매미가 모은 것은 그 갈매미의 소지품이에요."));
+    box.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
   /** 알림 한 줄. status(글) = 버튼·도구 안내: 바로 바꿔 보여 줌(빈 글이면 안내만 지움 — 도구를 바꿀 때 낡은 안내가 남지 않게).
    *  status(글, { kind, queue: true }) = 마을 소식: 보이는 것을 덮지 않고 차례로(대기 최대 3개, 같은 글이 이어지면 ×2로 묶음), 지난 알림에 남김.
+   *  full: true = 차례를 기다리는 소식이라도 꼬리말까지 다 보임(처음 켤 때 안내처럼 할 일이 꼬리에 있는 글)
    *  kind: info(파랑) · good(초록) · warn(주황) · error(빨강) — 왼쪽 색 띠(색만으로 알리지 않게 글 앞에 이모지가 붙어 옴) */
   status(text, opt) {
     const kind = opt?.kind || "info";
-    if (opt?.queue) return this.notify(text, kind);
+    if (opt?.queue) return this.notify(text, kind, !!opt.full);
     if (!text) { if (this.toastCur && !this.toastCur.q) this.toastEnd(); return; }
     if (opt?.kind === "warn" || opt?.kind === "error") this.logNote(text, kind);
     if (this.toastCur?.q) this.toastQ.unshift(this.toastCur);                     // 보이던 소식은 맨 앞으로 되돌려 안내 다음에 다시
     while (this.toastQ.length > 3) this.toastQ.pop();
     this.toastShow({ text, kind, q: false, n: 1 }, document.body.dataset.mode === "edit" ? 4000 : 6000);   // 건설 중 안내는 4초(화면을 덜 가리게)
   }
-  notify(text, kind = "info") {
+  notify(text, kind = "info", full = false) {
     if (!text) return; this.logNote(text, kind);
     const same = [this.toastCur, this.toastQ[this.toastQ.length - 1]].find(x => x?.q && x.text === text);
     if (same) { same.n++; if (same === this.toastCur) this.toastShow(same, this.toastMs(same)); return; }   // 같은 소식이 이어지면 ×2, ×3
-    this.toastQ.push({ text, kind, q: true, n: 1 }); while (this.toastQ.length > 3) this.toastQ.shift();   // 너무 밀리면 오래된 것부터 버림(지난 알림엔 남음)
+    this.toastQ.push({ text, kind, q: true, n: 1, full }); while (this.toastQ.length > 3) this.toastQ.shift();   // 너무 밀리면 오래된 것부터 버림(지난 알림엔 남음)
     if (!this.toastCur) this.toastNext();
   }
-  toastMs(it) { return it.text.length > 40 ? 6500 : 4500; }
+  toastMs(it) { return toastHtml(it.text, { keepTail: !it.q || it.full }).len > 40 ? 6500 : 4500; }
   toastShow(it, ms) {
-    this.toastCur = it; const t = it.text + (it.n > 1 ? ` ×${it.n}` : "");
-    if (this.msg.textContent !== t) this.msg.textContent = t; this.msg.dataset.kind = it.kind; this.msg.hidden = false;
+    this.toastCur = it; const t = toastHtml(it.text, { keepTail: !it.q || it.full, count: it.n });   // 아이콘 + 핵심 낱말 굵게 · 마을 소식의 긴 꼬리말은 지난 알림에서만
+    if (this.msgHtml !== t.html) { this.msgHtml = t.html; this.msg.innerHTML = t.html; } this.msg.dataset.kind = it.kind; this.msg.hidden = false;
     clearTimeout(this.msgT); this.msgT = setTimeout(() => this.toastEnd(), ms);
   }
   toastEnd() { clearTimeout(this.msgT); this.toastCur = null; this.msg.hidden = true; if (this.toastQ.length) this.msgT = setTimeout(() => this.toastNext(), 220); }   // 잠깐 비웠다가 다음 것

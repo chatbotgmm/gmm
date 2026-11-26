@@ -613,7 +613,7 @@
   .fhint { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: 0 0 var(--s-2); padding: calc(8*var(--u)) calc(10*var(--u)); background: var(--c-warm); border-radius: var(--r-md); }
   .fhint p { flex: 1 1 calc(180*var(--u)); margin: 0; font-size: var(--fs-sm); line-height: var(--lh-body); overflow-wrap: anywhere; }
   .fhint button { flex: none; min-height: var(--hit-sm); margin-left: auto; }
-  /* 도움말: 접는 갈래(둘러보기만 펼친 채로) — 문구는 예전 그대로 자리만 나눔 */
+  /* 도움말: 접는 갈래(10단계부터 처음엔 모두 접힘 — 첫 화면에 절 이름만) — 문구는 예전 그대로 자리만 나눔 */
   #coachAgain { margin: 0 0 var(--s-2); min-height: var(--hit-sm); }
   #help .hsec { border-top: 1px dashed var(--c-line); } #help .hsec:last-child { border-bottom: 1px dashed var(--c-line); }
   #help summary { cursor: pointer; min-height: var(--hit-sm); display: flex; align-items: center; gap: var(--s-1); font-weight: 700; font-size: var(--fs-body); list-style: none; }
@@ -698,6 +698,27 @@
   @keyframes vaultBump { 0%, 100% { transform: none; } 25% { transform: translateX(calc(-3*var(--u))); } 75% { transform: translateX(calc(3*var(--u))); } }
   #chipVault.bump { animation: vaultBump .35s var(--ease) 2; }   /* 금고 얼마 안 남음·바닥·다시 참: 한 번 흔들기 */
   html[data-motion="reduce"] #chipVault.bump { animation: none; } @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) #chipVault.bump { animation: none; } }
+  /* ===== 화면 연결 10단계: 가독성 마무리(appViews.js) — 한눈 칸 줄 · 짧은 목록 · 알림 머리 굵게 ===== */
+  .facts { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); margin: 0 0 var(--s-2); }
+  .fact { display: inline-flex; align-items: center; min-height: calc(28*var(--u)); padding: calc(2*var(--u)) var(--s-2); border-radius: var(--r-pill); background: var(--c-surface-2); font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fact[data-tone="ok"] { background: var(--c-ok-bg); color: var(--c-ok-ink); }
+  .fact:is([data-tone="low"], [data-tone="warn"]) { background: var(--c-low-bg); color: var(--c-low-ink); }
+  .fact[data-tone="empty"] { background: var(--c-empty-bg); color: var(--c-empty-ink); }
+  .av-list { margin: 0 0 var(--s-2); padding-left: 1.2em; } .av-list li { margin: calc(2*var(--u)) 0; }
+  .av-sub { margin: 0 0 var(--s-2); font-size: var(--fs-sm); color: var(--c-ink-2); }
+  .av-h { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; } .av-h .dim { font-size: var(--fs-cap); font-weight: 400; }
+  .av-wish { list-style: none; margin: 0 0 var(--s-1); padding: 0; } .av-wish li { display: flex; gap: var(--s-2); align-items: flex-start; padding: calc(4*var(--u)) 0; font-size: var(--fs-body); line-height: 1.4; border-top: 1px dashed var(--c-line); }
+  .av-wish li:first-child { border-top: 0; } .av-wish .ico { flex: none; width: 1.5em; text-align: center; }
+  .av-up { color: var(--c-danger-ink); } .av-down { color: var(--c-info); }
+  .sshop summary .sshop-can { font-size: var(--fs-sm); color: var(--c-low-ink); }
+  .av-nw { white-space: nowrap; }
+  #pageWish .dsub { margin: var(--s-1) 0; font-size: var(--fs-sm); } #pageWish .sum #stampCount { font-size: var(--fs-sm); }
+  .newsday details.more { margin-top: var(--s-1); } .av-olds details.more { padding: 0 calc(2*var(--u)); }
+  .newsday .more-b ul, .av-news { list-style: none; margin: 0; padding: 0; } .av-news li { display: flex; gap: var(--s-2); align-items: flex-start; padding: calc(5*var(--u)) 0; font-size: var(--fs-body); line-height: 1.4; border-top: 1px dashed var(--c-line); }
+  .av-news li:first-child { border-top: 0; font-weight: 700; } .av-news li .ico { flex: none; width: 1.5em; text-align: center; }
+  #relBody .av-tap { margin: 0 0 var(--s-1); text-align: center; font-size: var(--fs-sm); }
+  #dexBody details.more .more-b > .dexgrid { margin-top: var(--s-1); } #dexBody .more-b > p { margin: var(--s-2) 0 0; }
+  #msg .t-ico { font-size: 1.15em; } #msg .t-head { font-weight: 700; } #msg .t-tail { font-weight: 400; color: var(--c-ink-2); } #msg .t-n { margin-left: .3em; }
 </style>
 </head>
 <body>
@@ -760,7 +781,7 @@
     <div id="pageNews" class="page" hidden><button id="logOpen" class="ghost">🔔 지난 알림 보기</button><div id="newsBody"></div></div>
     <div id="pageLog" class="page" hidden><p class="dim">이번에 켠 뒤로 지나간 알림을 최근 30개까지 모아 둬요(껐다 켜면 비워져요).</p><ul id="logBody" class="nlog"></ul></div>
     <div id="pageHelp" class="page" hidden><button id="coachAgain" class="ghost">🧭 처음 안내 다시 보기</button><div id="help">
-      <details class="hsec" open><summary>👀 둘러보기</summary><details class="hsub" data-input="mouse"><summary>🖱 마우스·키보드</summary><p>화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 카메라 높이(Q 올리기·E 내리기) · W·A·S·D(방향키) 옮기기, Shift = 빠르게</p></details><details class="hsub" data-input="touch"><summary>👆 휴대폰·터치</summary><p>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 두 손가락 위아래로 끌기 = 기울이기 · 벌리기 = 확대(건설 모드에서는 돌리기·기울이기 대신 ⟲ ⟳)</p></details><p>🗺 미니맵: 오른쪽 위 🗺 지도 버튼으로 켜고 끔. 누르거나 끌면 그곳으로 화면이 가요(흰 점 = 갈매미, 노란 점 = 배 타는 중, 주황 네모 = 지금 보는 곳).</p></details>
+      <details class="hsec"><summary>👀 둘러보기</summary><details class="hsub" data-input="mouse"><summary>🖱 마우스·키보드</summary><p>화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 카메라 높이(Q 올리기·E 내리기) · W·A·S·D(방향키) 옮기기, Shift = 빠르게</p></details><details class="hsub" data-input="touch"><summary>👆 휴대폰·터치</summary><p>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 두 손가락 위아래로 끌기 = 기울이기 · 벌리기 = 확대(건설 모드에서는 돌리기·기울이기 대신 ⟲ ⟳)</p></details><p>🗺 미니맵: 오른쪽 위 🗺 지도 버튼으로 켜고 끔. 누르거나 끌면 그곳으로 화면이 가요(흰 점 = 갈매미, 노란 점 = 배 타는 중, 주황 네모 = 지금 보는 곳).</p></details>
       <details class="hsec"><summary>🔨 건설</summary><p>🔨 건설 모드: 아래 왼쪽 🔨 건설을 누르면 칠하기·높이·짓기·철거 도구가 나와요(숫자 2~5로도). 건설 중엔 내려다보는 각도가 고정이고, ⟲ ⟳(Z · X)로 화면을 90°씩 돌려요. 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 옮기기 · ✋ 화면 이동(휴대폰은 두 손가락 끌기도) · R 건물 돌리기 · [ ] 붓 크기 · ✓ 완료(1)나 Esc = 끝내기</p><p>✏️ 땅 고치기(휴대폰): 🖌 바닥 칠하기·⛰ 높이에서 모양 붓 / 〰 길(두 칸을 누르면 걸어가는 길을 따라) / ▭ 네모(두 모서리), 🎯 십자선(화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함), ↶ 되돌리기 ↷ 다시하기(Ctrl+Z), 🎚 단 맞추기(문지른 곳을 정한 높이로).</p><p>🛣 포장도로: 🖌 바닥 칠하기로 돌길·나무 데크를 깔아 집과 🐚 시장·🏦 은행을 이으면 그 집 갈매미 만족도가 올라요(각 +15). 포장도로 위에선 20% 빨리 걷고, 만족도가 높으면 일도 조금 빨라요. 흙길은 포장이 아니에요.</p></details>
       <details class="hsec"><summary>🐦 갈매미</summary><p>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)</p><p>💭 소원: 갈매미가 바라는 걸 들어주면 기뻐하고 축하금을 받아요.</p><p>📋 오늘의 부탁: 📱 소원 맨 위에 날마다(기기 날짜) 부탁 3개가 와요. 모두 들어주면 도장 하나를 받고, 도장은 같은 화면의 🏪 도장 가게에서 귀한 선물(손뜨개 목도리 포함)이나 한정 가구로 바꿔요. 날짜가 바뀌면 새 부탁으로 바뀌어요.</p><p>🌙 하루: 해가 지면 갈매미들은 집(없으면 그 자리)에 가서 자고, 야행성(그림자·불씨)은 밤에 일하고 낮에 자요. 일하면 피로도가 쌓이고 벤치·침대에서 쉬거나 자면 풀려요.</p><p>🔧 스스로 고치기: 만족도가 75 아래인 갈매미는 스스로 집 앞 마당을 문 높이로 고르고(땅 높이·낮추기, 고른 마당 +5), 시장·은행까지 돌길을 깔고(돌 1개로 3칸), 벤치·화단 공사를 주문해요.</p><p>🛋 집 꾸미기: 집을 누르거나 📱 → 🛋 꾸미기에서 들어가 가구를 놓아요(누르기 = 고르기·놓기, 끌기 = 방 돌리기, R = 돌리기). 집주인은 돈이 모이면 잡화점에서 가구를 사 와요.</p></details>
       <details class="hsec"><summary>🏘 마을 살림</summary><p>경제: 🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼·광부는 원자재를 🐚 시장의 상인에게 팔고, 상인은 가공(목재·석재·철괴)해서 은행에 팔아 돈을 벌어요. 번 돈으로 농부·어부에게서 음식을 사고, 시장에서 집을 사요. 돈이 없으면 물물교환해요. 값은 쌓인 양에 따라 오르내려요.</p><p>🏅 마을 등급: 갈매미·집·시설·소원이 늘면 등급이 올라 새 건물(카페·잡화점·우체국·큰 집)이 열려요.</p><p>🌷 장식·⚡ 전기: 벤치·화단·분수·눈사람(겨울)이 집 근처 6칸 안에 있으면 만족도 +2씩(최대 +10). 풍차 발전소(다 지은 것) 둘레 18칸에만 전기가 들어와요: 가로등과 건물 등불·집 창은 전기가 닿아야 밤에 켜지고(없으면 꺼진 채), 그 안의 집은 만족도 +8. 풍차를 누르면 전기 범위가 보여요. ☕ 카페가 가까우면 +5, 카페에 가면 재미·친구가 차올라요. ✉ 우체국이 있으면 소원이 더 자주 오고 축하금이 두 배.</p><p>🗺 넓은 지도: 본섬 둘레에 숲섬·바위섬·들판섬(가까움, 🪚 목수가 다리를 놓으면 걸어감)과 야자섬·조개섬(멀어서 선착장 두 곳을 지으면 배를 타고 감)이 있어요. 다리는 물 칸을 두 번 눌러 줄로 정해요.</p></details>

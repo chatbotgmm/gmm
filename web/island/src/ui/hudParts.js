@@ -71,3 +71,10 @@ export function tempNote(air, indoor, units = []) {
   const feel = air < COMFORT_LO ? `🥶 쌀쌀해요${bare ? ` · 옷 없는 갈매미 ${bare}마리` : ""}` : air > COMFORT_HI ? "🥵 더워요" : "😊 지내기 좋아요";
   return `🌡 바깥 ${s(air)}° · 집 안 ${s(indoor)}° · ${feel}`;
 }
+/** 한눈 칸 줄(요약 머리 바로 밑): items = [{ icon, text, tone }](null은 건너뜀). tone low|empty|warn이면 경고색 + 글 앞 ⚠️/🚨(색만으로 알리지 않게), ok는 초록 */
+export function factRow(items) {
+  const list = items.filter(Boolean);
+  if (!list.length) return "";
+  return `<div class="facts">${list.map(f => { const t = f.tone && TONE_ICON[f.tone] ? f.tone : null, mark = t && t !== "ok" ? `${TONE_ICON[t]} ` : "";
+    return `<span class="fact"${t ? ` data-tone="${t}"` : ""}>${mark}${f.icon ? `${partEsc(f.icon)} ` : ""}${partEsc(f.text)}</span>`; }).join("")}</div>`;
+}
