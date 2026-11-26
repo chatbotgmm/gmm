@@ -349,3 +349,17 @@ test("검토 수정: 헤엄치는 갈매미가 올라올 땅 칸에는 나무·�
   for (let i = 0; i < 100 && u.swimming; i++) w.update(0.1);
   assert.ok(!u.swimming); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z)), "헤엄을 마치고 걸을 수 있는 칸에 섬");
 });
+
+test("검토 수정: 낚시 자리 칸에는 나무·바위·지형지물을 못 놓고(덤불·꽃은 됨), 방파제·부두는 낚시 자리 앞 물에 못 놓음", () => {
+  const o = World.create(7, seededRandom(1)), s = o.spots.find(p => !p.dock && !o.grid.get(p.x, p.z).occupiedId && o.grid.isWalkable(p.x, p.z));
+  assert.ok(s); const n = o.spots.length;
+  assert.equal(o.placeNature("beachRock", s.x, s.z).reason, "낚시 자리예요"); assert.equal(o.placeNature("ore", s.x, s.z).reason, "낚시 자리예요");
+  assert.equal(o.spots.length, n);
+  const fx = s.x + s.dir[0], fz = s.z + s.dir[1], bw = o.landmark("breakwater"); let seen = 0;
+  for (let rot = 0; rot < 4; rot++) for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
+    const cells = o.landmarkCells("breakwater", fx + dx, fz + dz, rot); if (!cells.some(([a, b]) => a === fx && b === fz)) continue;
+    const r = o.moveLandmark("breakwater", fx + dx, fz + dz, rot, { dry: true }); assert.equal(r.ok, false, "낚시 자리 앞 물을 덮는 방파제");
+    if (r.reason === "낚시 자리 앞 물이에요") seen++;
+  }
+  assert.ok(seen > 0); assert.ok(bw);
+});

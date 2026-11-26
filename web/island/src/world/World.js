@@ -1025,6 +1025,7 @@ export class World {
     const c = g.get(x, z); if (c.occupiedId && c.occupiedId !== self) return "다른 것과 겹쳐요";
     if (this.isPlot(x, z)) return "밭에는 놓을 수 없어요";
     if (g.doorOwner(x, z)) return "건물 문 앞이에요";
+    if (!CU.DECOR.includes(kind) && this.spots.some(s => s.x === x && s.z === z)) return "낚시 자리예요";   // 걷기를 막는 것(나무·바위·지형지물)은 낚시 자리에 못 놓음(덤불·꽃은 됨)
     return kind ? CU.groundReason(kind, c.groundType) : "";
   }
   /** 걸어서 이어진 덩어리 번호(캐시·grid.version을 건드리지 않고 지금 칸 상태로 새로 셈). comps()와 같은 규칙 */
@@ -1192,6 +1193,7 @@ export class World {
         if (!g.isWater(x, z)) return def === "pier" ? "부두는 물 위에 놓아요" : "방파제는 바다에만 놓아요";
         if (other(x, z)) return "다른 것과 겹쳐요";
         const b = this.berthOwner(x, z); if (b) return `${BUILDINGS[b.defId].name} 앞 물이에요`;
+        if (this.spots.some(s => s.x + s.dir[0] === x && s.z + s.dir[1] === z && !(def === "pier" && !s.dock && m.cells.some(([a, c]) => a === s.x && c === s.z)))) return "낚시 자리 앞 물이에요";   // 부두 위 자리는 부두와 같이 옮겨지므로 뺌
       }
       if (def === "pier") for (const [x, z] of CU.backCells(cells, rot)) {
         const c = g.get(x, z), occ = c && c.occupiedId && c.occupiedId !== self ? g.occupants.get(c.occupiedId) : null;
