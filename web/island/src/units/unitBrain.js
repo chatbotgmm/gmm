@@ -5,7 +5,7 @@
 //   쉬기(피곤할 때만: 기력 50 아래) · 산책 · 씨앗 먹기 · 친구에게 가서 인사 · 신나서 뛰기 · 벌목 · 채광 · 낚시 · 집 짓기(공사장) · 건물 들어가기
 // 반사 행동: 겁 많은 갈매미(미니)는 큰 갈매미가 다가오면 도망, 혼자 있고 싶은 갈매미(그림자)는 쉬다가 붐비면 자리를 피함.
 import { UnitState as US } from "../data/types.js";
-import { UNIT_SPEED, WATER_Y } from "../config.js";
+import { UNIT_SPEED, WATER_Y, MAX_STEP } from "../config.js";
 import { PERSONA, BUILDINGS } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import { findPath, nearestWalkable } from "../world/pathfinding.js";
@@ -119,10 +119,16 @@ function startPath(u, world, gx, gz, run = null) {
   u.giveUp = Math.max(GIVE_UP, raw.length / speed * 1.6 + 5);    // 먼 길·느린 갈매미(미니)는 그만큼 오래 기다림
   return true;
 }
-/** (tx,tz) 칸 바로 옆의 걸을 수 있는 칸으로 가는 길. 가까운 칸부터 시도. */
-function pathBeside(u, world, tx, tz) {
-  const g = world.grid, around = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]]
-    .map(([dx, dz]) => [tx + dx, tz + dz]).filter(([x, z]) => g.isWalkable(x, z) && !g.doorOwner(x, z))
+const AROUND8 = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+/** 나무·광석(대상 칸)을 캘 때 설 수 있는 이웃 칸: 걸을 수 있고 문 앞이 아니며, 서는 높이가 대상 칸 땅 높이와 걸어서 오르내리는 한 단(MAX_STEP) 안.
+ *  절벽 위(2층)에서 아래(1층) 광석을 캐거나 그 반대가 되지 않게(길찾기 canStep과 같은 기준). 없으면 빈 목록 → 그 대상은 못 캠 */
+export function workCells(grid, tx, tz) {
+  const c = grid.get(tx, tz); if (!c) return [];
+  return AROUND8.map(([dx, dz]) => [tx + dx, tz + dz]).filter(([x, z]) => { const h = grid.walkHeight(x, z); return h !== null && !grid.doorOwner(x, z) && Math.abs(h - c.elevation) <= MAX_STEP + 1e-6; });
+}
+/** (tx,tz) 칸 바로 옆의 걸을 수 있는 칸으로 가는 길. 가까운 칸부터 시도. sameLevel: 대상과 같은 높이(한 단 안)의 칸만(나무·광석, workCells) */
+function pathBeside(u, world, tx, tz, sameLevel = false) {
+  const g = world.grid, around = (sameLevel ? workCells(g, tx, tz) : AROUND8.map(([dx, dz]) => [tx + dx, tz + dz]).filter(([x, z]) => g.isWalkable(x, z) && !g.doorOwner(x, z)))
     .sort((a, b) => Math.hypot(a[0] + 0.5 - u.x, a[1] + 0.5 - u.z) - Math.hypot(b[0] + 0.5 - u.x, b[1] + 0.5 - u.z));
   for (const [x, z] of around.slice(0, 4)) if (startPath(u, world, x, z)) return true;
   return false;
@@ -260,9 +266,10 @@ function startActivityInner(u, kind, world, rnd) {
       u.focus = f; u.state = US.Visit; emote(u, "?"); return true;
     }
     case "chop": case "mine": {
-      const list = kind === "chop" ? world.trees : world.ores;
-      const t = nearest(u, list.filter(t => t.alive && !t.claimed), t => [t.x, t.z]);
-      if (!t || !pathBeside(u, world, t.x, t.z)) return false;
+      // 같은 높이에서 설 칸(workCells)이 있는 것 중 가까운 것부터 3개까지: 길이 없으면(절벽 너머 등) 다음 것
+      const list = kind === "chop" ? world.trees : world.ores, d = t => Math.hypot(t.x + 0.5 - u.x, t.z + 0.5 - u.z);
+      const t = list.filter(t => t.alive && !t.claimed && workCells(g, t.x, t.z).length).sort((a, b) => d(a) - d(b)).slice(0, 3).find(t => pathBeside(u, world, t.x, t.z, true));
+      if (!t) return false;
       t.claimed = u.unitId; u.focus = t; u.state = kind === "chop" ? US.GoChop : US.GoMine; return true;
     }
     case "fish": {
@@ -397,7 +404,7 @@ export function interactNear(u, world, rnd = Math.random, R = 2.6, prefer = null
     const o = c.obj; let ok = false;
     switch (c.kind) {
       case "chop": case "mine":
-        if (pathBeside(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = c.kind === "chop" ? US.GoChop : US.GoMine; ok = true; } break;
+        if (pathBeside(u, world, o.x, o.z, true)) { o.claimed = u.unitId; u.focus = o; u.state = c.kind === "chop" ? US.GoChop : US.GoMine; ok = true; } break;
       case "fish": if (startPath(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = US.GoFish; ok = true; } break;
       case "farm": if (startPath(u, world, o.x, o.z)) { o.claimed = u.unitId; u.focus = o; u.state = US.GoFarm; ok = true; } break;
       case "trade": ok = startActivityInner(u, "trade", world, rnd); break;
