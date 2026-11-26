@@ -22,7 +22,7 @@ export const FEE_UNKNOWN = 5;        // 표에 없는 건물의 설계비
 export const FEE = {
   stairs: 2, bench: 2, flowerbed: 2, bunting: 2, festLantern: 2, seasonDeco: 2, streetlamp: 3, snowman: 0,
   bridge: 1, dock: 3, pier: 4, field: 5, fountain: 8, storehouse: 12, market: 15, windmill: 15,
-  cafe: 20, shop: 25, post: 30, aquarium: 30,
+  cafe: 20, clinic: 20, shop: 25, post: 30, aquarium: 30,
   house: 10, cottage: 15, giantHouse: 15, manor: 30, bank: 0,
 };
 export const feeOf = defId => FEE[defId] ?? FEE_UNKNOWN;
@@ -74,7 +74,7 @@ export const newBank = (time = 0) => ({
   short: 0,                              // 1 = 금고 바닥 사태 진행 중(소식지는 사태마다 한 번)
   need: 0,                               // 거절한 대출이 요구한 금고(대출금 + 여유). 이만큼 차면 거절 표시(u.loanRefused)를 풂(사태 끝남과는 따로)
   low: 0,                                // 1 = "얼마 안 남음"을 이미 알림
-  ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds, custom }] (custom: 그날 꾸미기에 쓴 돈) (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
+  ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds, custom, clinic }] (custom: 그날 꾸미기에 쓴 돈) (clinic: 그날 의원 진료비·약값, returned 안에 든 몫) (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
 });
 const num = v => Number.isFinite(+v) ? +v : 0;
 /** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_LEGACY(100) + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
@@ -86,7 +86,7 @@ export function bankFromSave(j, time = 0) {
   if (Number.isFinite(j.day) && j.day >= 1) b.day = Math.floor(j.day);
   b.short = j.short ? 1 : 0; b.low = j.low ? 1 : 0;
   b.ledger = (Array.isArray(j.ledger) ? j.ledger : []).filter(e => e && e.day >= 1).slice(-LEDGER_DAYS)
-    .map(e => ({ day: e.day | 0, tax: num(e.tax), returned: num(e.returned), fees: num(e.fees), wages: num(e.wages), lent: num(e.lent), refunds: num(e.refunds), custom: num(e.custom) }));
+    .map(e => ({ day: e.day | 0, tax: num(e.tax), returned: num(e.returned), fees: num(e.fees), wages: num(e.wages), lent: num(e.lent), refunds: num(e.refunds), custom: num(e.custom), clinic: num(e.clinic) }));
   return b;
 }
 /** 저장에서 읽은 갈매미 대출(없으면 null) */

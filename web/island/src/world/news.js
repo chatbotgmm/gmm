@@ -65,6 +65,11 @@ const NEWS_MAKERS = {
   // 옷(clothes.js): 갈아입기(알림 줄에만) · 잡화점에서 삼 · 선물로 받아 바로 두름
   dress: ({ u, put, gift }) => put?.length ? { icon: CLOTHES[put[0]]?.icon || "🧣", text: `${josa(u.name, "이", "가")} ${gift ? "선물 받은 " : ""}${josa(CLOTHES[put[0]]?.name || "옷", "을", "를")} ${CLOTHES[put[0]]?.slot === "neck" ? "둘렀어요" : "입었어요"}`, weight: 0 } : null,
   buyClothes: ({ u, id, price }) => CLOTHES[id] ? { icon: CLOTHES[id].icon, text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(CLOTHES[id].name, "을", "를")} 샀어요 🪙${price}`, weight: 1 } : null,
+  // 병·의원(health.js): 걸림(마을 첫 병은 더 크게) · 나음 · 접수(알림 줄에만) · 당번 의사
+  sick: ({ u, from, first }) => ({ icon: "🤧", text: first ? `${josa(u.name, "이", "가")} 감기에 걸렸어요. 따뜻한 데서 푹 쉬면 나아요` : `${josa(u.name, "이", "가")} ${from ? `${from.name}에게서 ` : ""}감기${from ? "가 옮았어요" : "에 걸렸어요"}`, weight: first ? 3 : 2 }),
+  healed: ({ u, doctor }) => ({ icon: "😊", text: `${josa(u.name, "이", "가")} 감기가 다 나았어요${doctor ? ` (당번 ${doctor} 선생님 덕분)` : ""}`, weight: 1 }),
+  clinicVisit: ({ u, fee, medicine }) => ({ icon: "🏥", text: `${josa(u.name, "이", "가")} 의원에 누웠어요 · 진료비 🪙${fee}${medicine >= 0 ? ` · 약 🪙${medicine}` : ""}`, weight: 0 }),
+  doctor: ({ u, was }) => ({ icon: "🩺", text: u ? `${josa(u.name, "이", "가")} 갈매미 의원 당번 의사가 됐어요` : `${was} 선생님의 의원 당번이 끝났어요`, weight: u ? 2 : 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 이 일의 소식 한 줄(없으면 null) */

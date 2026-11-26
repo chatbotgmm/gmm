@@ -10,6 +10,7 @@ import { comfort } from "./furniture.js";
 import { yardFlat } from "./improve.js";
 import { FESTIVAL_SAT } from "./festival.js";
 import { isCold, COLD_SAT } from "./climate.js";
+import { SICK } from "./health.js";
 
 export const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 export function isPaved(world, x, z) {
@@ -53,13 +54,15 @@ export function satisfaction(world, u, net = world.roads?.net) {
     const deco = [...world.buildings.values()].filter(b => BUILDINGS[b.defId].deco && world.isDone(b) && near(b, 6)).length;
     if (deco) parts.push(["🌷 집 근처 장식", Math.min(10, deco * 2)]);
     if ([...world.buildings.values()].some(b => b.defId === "cafe" && world.isDone(b) && near(b, 30))) parts.push(["☕ 가까운 카페", 5]);
+    if ([...world.buildings.values()].some(b => BUILDINGS[b.defId].clinic && world.isDone(b) && near(b, 30))) parts.push(["🏥 가까운 의원", 3]);
     if (world.powered?.(home)) parts.push(["⚡ 전기", 8]);
     if (yardFlat(world, home)) parts.push(["🏡 고른 마당", 5]);
   }
   if (!home && u.loanRefused) parts.push(["🏦 집 대출을 못 받음", -10]);          // 금고가 비어 집을 못 삼(bank.js)
   if ((u.wageOwed || 0) > 0) parts.push(["💸 밀린 품삯", -10]);
   if ((u.cheer || 0) > 0) parts.push(["🎉 축제의 여운", FESTIVAL_SAT]);
-  if (isCold(u.bodyT)) parts.push(["🥶 추움", COLD_SAT]);                       // 체온 39.0 이하(climate.js). 집·카페에서 몸을 녹이면 사라짐
+  if (isCold(u.bodyT)) parts.push(["🥶 추움", COLD_SAT]);
+  if (u.sick) { const d = SICK[u.sick.kind] || SICK.cold; parts.push([`${d.icon} ${d.name}`, d.sat]); }   // 아픈 동안(health.js)                       // 체온 39.0 이하(climate.js). 집·카페에서 몸을 녹이면 사라짐
   return { value: Math.max(0, Math.min(100, parts.reduce((s, p) => s + p[1], 0))), parts };
 }
 /** 포장도로로 시장이나 은행과 이어진 집 수 */

@@ -31,6 +31,7 @@ import * as FM from "./farming.js";
 import * as CU from "./customize.js";
 import * as CLIM from "./climate.js";
 import * as CLO from "./clothes.js";
+import * as HL from "./health.js";
 import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
 
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
@@ -89,6 +90,9 @@ export class World {
     this.decor = CU.newDecor(); this.dug = CU.dugFromSave(extra.dug); this.undo = new Map(); this.undoSeq = 0;
     // 기온(climate.js): 지금 바깥 공기 °C(update마다 셈, 저장 안 함) · 기기 시각(화면이 넣어 주면 하루 변화를 시각으로, 없으면 낮밤만)
     this.air = CLIM.NEUTRAL_AIR; this.hour = null;
+    // 병(health.js): 병만 쓰는 난수(다른 일의 순서를 바꾸지 않음, 저장 안 함) · 30초 굴림 시계 · 기록 { sick: 마을에서 걸린 병 수 }
+    this.hrnd = seededRandom(((extra.seed ?? 7) * 104729 + 31 + Math.floor(extra.time || 0)) >>> 0); this.healthClock = 0;
+    this.healthStats = { sick: Math.max(0, extra.healthStats?.sick | 0) };
     for (const m of modules) {
       const def = MODULES[m.defId];
       grid.occupy(m.cells, m.id, { kind: "module", walkable: def.walkable, surface: def.surface ?? 0 });
@@ -100,6 +104,7 @@ export class World {
   static create(seed = 7, rnd = Math.random, { empty = false, wild = false, firstGull = false } = {}) {
     const g = wild ? generateWildIsland(seed) : generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
     w.seed = seed; w.wild = wild; w.sparkRnd = seededRandom(sparkleSeed(seed, 0));   // 반짝이 난수는 섬 씨앗으로(생성 결과 g에는 seed가 없음)
+    w.hrnd = seededRandom((seed * 104729 + 31) >>> 0);                            // 병 난수도 섬 씨앗으로
     if (wild) {
       Object.assign(w.res, { wood: 0, stone: 0, iron: 0, food: 0, fish: 0 });     // 은행 창고는 비어서 시작
       w.hungerScale = 0.48; w.seedFood = 20;                                       // 넓은 지도: 오가는 길이 멀어 배고픔을 늦춤(본섬 지름 1.3배 → 0.6 × 0.8)
@@ -345,7 +350,7 @@ export class World {
   /** 오늘 장부 칸에 더함(최근 LEDGER_DAYS일) */
   led(key, n) {
     const d = newsDay(this.time), L = this.bank.ledger; let e = L[L.length - 1];
-    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0, refunds: 0, custom: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
+    if (!e || e.day !== d) { e = { day: d, tax: 0, returned: 0, fees: 0, wages: 0, lent: 0, refunds: 0, custom: 0, clinic: 0 }; L.push(e); while (L.length > BK.LEDGER_DAYS) L.shift(); }
     e[key] = (e[key] || 0) + n;
   }
   /** 금고에 돈이 들어옴: kind "returned"(갈매미가 낸 돈) | "tax". 들어올 때마다 밀린 품삯부터 갚음 */
@@ -514,6 +519,77 @@ export class World {
     const def = CLOTHES[id]; if (!def) return false;
     const fresh = !(u.clothes ||= []).includes(id); if (fresh) u.clothes.push(id);
     u.wear ||= CLO.emptyWear(); u.wear[def.slot] = id; u.dressT = CLO.DRESS_EVERY; this.emit("dress", { u, put: [id], gift: true }); return fresh;
+  }
+  // ---- 병과 갈매미 의원(health.js)
+  clinics() { return [...this.buildings.values()].filter(b => BUILDINGS[b.defId].clinic && this.isDone(b)); }
+  /** 의원에 누워 있는 환자 수 */
+  patientsIn(b) { return this.units.filter(o => o.insideBuildingId === b.id && o.sick).length; }
+  /** 빈 침대: 침대 수 − (누운 환자 + 가는 중인 환자) */
+  bedsFree(b, except = null) { return (BUILDINGS[b.defId].beds || 0) - this.units.filter(o => o !== except && o.sick && (o.insideBuildingId === b.id || (o.targetBuildingId === b.id && o.goFor === "sick"))).length; }
+  /** 이 갈매미가 갈 의원: 빈 침대가 있는 것 중 가장 가까운 것(없으면 null) */
+  clinicFor(u) {
+    const d = b => Math.hypot(b.door.x + 0.5 - u.x, b.door.z + 0.5 - u.z);
+    return this.clinics().filter(b => this.bedsFree(b, u) > 0).sort((a, b) => d(a) - d(b))[0] || null;
+  }
+  /** 당번 의사 갈매미(없으면 null) */
+  doctorOf(b) { return b?.doctor ? this.units.find(o => o.name === b.doctor) || null : null; }
+  /** 당번 의사가 지금 의원 안에 있나(있으면 그 갈매미) */
+  doctorIn(b) { const d = this.doctorOf(b); return d && d.insideBuildingId === b.id && !d.sick ? d : null; }
+  /** 이 갈매미가 당번인 의원(다 지은 것, 없으면 null) */
+  dutyClinic(u) { return this.clinics().find(b => b.doctor === u.name) || null; }
+  /** 당번 의사 정하기(플레이어가 의원 카드에서): unitId가 null이면 당번을 비움. 한 갈매미는 한 의원만(다른 의원 당번은 풀림).
+   *  돌려주는 값: { ok, reason } */
+  setDoctor(clinicId, unitId) {
+    const b = this.buildings.get(clinicId); if (!b || !BUILDINGS[b.defId].clinic) return { ok: false, reason: "의원이 아니에요" };
+    if (unitId == null) { const was = b.doctor; b.doctor = null; if (was) this.emit("doctor", { b, u: null, was }); return { ok: true, reason: "" }; }
+    const u = this.units.find(o => o.unitId === unitId || o.name === unitId); if (!u) return { ok: false, reason: "그런 갈매미가 없어요" };
+    for (const o of this.buildings.values()) if (o !== b && o.doctor === u.name) o.doctor = null;
+    b.doctor = u.name; emote(u, "🩺 오늘은 내가 당번!", 2.4); this.emit("doctor", { b, u }); return { ok: true, reason: "" };
+  }
+  /** 병에 걸림(한 번에 하나). from: 옮긴 갈매미(전염) */
+  makeSick(u, kind = "cold", from = null) {
+    if (!HL.canCatch(u)) return false;
+    u.sick = HL.newSick(kind); this.healthStats.sick++;
+    if (!u.insideBuildingId) emote(u, "🤧 에취!", 2.4);
+    this.emit("sick", { u, kind, from, first: this.healthStats.sick === 1 }); return true;
+  }
+  /** 다 나음: 면역(IMMUNE_SECS) · 의원에서 당번 의사가 돌봤으면 의사 품삯(금고에서, 모자라면 밀림) */
+  heal(u, where = "out") {
+    const s = u.sick; if (!s) return false; u.sick = null; u.immune = HL.IMMUNE_SECS;
+    const b = u.insideBuildingId && this.buildings.get(u.insideBuildingId), doc = b && BUILDINGS[b.defId].clinic ? this.doctorIn(b) : null;
+    if (doc) this.payWage(doc);                                                    // 공사 품삯과 같은 규칙(E.WAGE = 2🪙)
+    if (!u.insideBuildingId) emote(u, "다 나았다! ♪", 2.4);
+    this.emit("healed", { u, kind: s.kind, where, doctor: doc?.name || null }); return true;
+  }
+  /** 의원 접수: 진료비(가진 만큼, 없으면 무료) → 금고, 당번 의사가 있으면 약 */
+  clinicCheckIn(u, b) {
+    if (!u.sick || !b) return;
+    const fee = Math.min(HL.CLINIC_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee); this.led("clinic", fee); }
+    const med = this.doctorIn(b) ? this.giveMedicine(u) : 0;
+    this.emit("clinicVisit", { u, fee, medicine: med });
+  }
+  /** 약(당번 의사가 있을 때, 한 번 앓을 때 한 번): 값은 가진 만큼(없으면 무료) → 금고. 낸 값을 돌려줌(못 먹였으면 −1) */
+  giveMedicine(u) {
+    if (!u.sick || u.sick.med) return -1;
+    const price = Math.min(HL.MEDICINE_PRICE, Math.max(0, Math.floor(u.coins || 0))); if (price) { u.coins -= price; this.deposit(price); this.led("clinic", price); }
+    HL.takeMedicine(u.sick); return price;
+  }
+  /** 당번 의사가 의원에 들어옴: 누운 환자 중 약을 안 먹은 갈매미에게 약 */
+  doctorArrived(doc, b) { for (const o of this.units) if (o.insideBuildingId === b.id && o.sick && !o.sick.med) this.giveMedicine(o); emote(doc, "🩺", 2); }
+  /** 30초마다(hrnd만 씀): 꽁꽁인 갈매미 감기 굴림 → 밖에 있는 감기 갈매미 둘레 전염 굴림. 동시 환자는 sickCap까지 */
+  stepHealth(dt) {
+    if ((this.healthClock += dt) < HL.HEALTH_EVERY) return; this.healthClock = 0;
+    const cap = HL.sickCap(this.units.length); let n = this.units.filter(u => u.sick).length;
+    for (const u of this.units) {
+      if (n >= cap) return;
+      if (!u.insideBuildingId && u.state !== UnitState.Held && (u.bodyT ?? CLIM.BODY_NORMAL) <= CLIM.FREEZE_AT && HL.canCatch(u) && this.hrnd() < HL.FREEZE_CHANCE && this.makeSick(u, "cold")) n++;
+    }
+    const out = u => !u.insideBuildingId && !u.sailing && u.state !== UnitState.Held;
+    for (const src of this.units.filter(u => u.sick && out(u))) for (const o of this.units) {
+      if (n >= cap) return;
+      if (o === src || !out(o) || !HL.canCatch(o) || Math.hypot(o.x - src.x, o.z - src.z) > HL.CONTAGION_R) continue;
+      if (this.hrnd() < HL.CONTAGION_P * (o.wear?.neck ? HL.SCARF_GUARD : 1) && this.makeSick(o, src.sick.kind, src)) n++;
+    }
   }
   setSeason(s) { if (s === this.season) return; if (s !== "winter") this.firstSnowYear = null; this.season = s; this.emit("season", s); }   // 겨울이 지나가면 다음 겨울의 눈이 다시 첫눈
   setWeather(kind) {
@@ -1516,6 +1592,7 @@ export class World {
   /** 이 갈매미가 이 건물에 들어갈 수 있나: 전용 집(forUnit)은 그 갈매미만, 전용 집이 있는 갈매미(자이언트)는 그 집에만 */
   canEnter(u, b) {
     if ((b.defId === "cafe" || b.defId === "aquarium") && this.isDone(b)) return true;   // 카페·수족관은 누구나(카페: 재미·친구, 수족관: 재미가 차오름)
+    if (BUILDINGS[b.defId].clinic) return this.isDone(b) && (!!u.sick || b.doctor === u.name);   // 의원: 아픈 갈매미와 당번 의사만
     if (!this.isHouse(b) || !this.isDone(b)) return false;
     if (this.economy) return b.owner === u.unitId;                                  // 경제가 있으면 산 집(주인)만
     return this.canFit(u, b);
@@ -1583,6 +1660,7 @@ export class World {
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     this.air = this.airNow();
     for (const u of this.units) updateUnit(u, dt, this, this.rnd);
+    this.stepHealth(dt);
     this.separate();
   }
   // 겹친 갈매미를 살짝 밀어냄. 밀린 자리가 걸을 수 없는 칸이면 밀지 않는다.
@@ -1666,12 +1744,12 @@ export class World {
       decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear() })), keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0) })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
       sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
-      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null })) };
+      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}) })) };
   }
   static fromJSON(j, rnd = Math.random) {
     if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
@@ -1680,7 +1758,7 @@ export class World {
     if (j.firstSnowYear === undefined && w.snow > 0.02) w.firstSnowYear = "?";    // 예전 저장(첫눈 기록 없음)인데 눈이 쌓여 있으면 이번 겨울 첫눈은 지난 일
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
-    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; } }
+    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; r.building.doctor = BUILDINGS[s.defId]?.clinic && typeof s.doctor === "string" ? s.doctor : null; } }
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     w.decor = CU.decorFromSave(j.decor, (x, z, k) => !w.landProblem(x, z, k));      // 덤불·꽃 겹(예전 저장엔 없음 → 빈 겹). 건물을 다시 놓은 뒤에(그사이 못 쓰게 된 칸은 버림)
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
@@ -1689,9 +1767,11 @@ export class World {
       u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
       u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused;   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
       u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0);   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
-      u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes); }   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)
+      u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes);   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)
+      u.sick = HL.sickFromSave(s.sick); u.immune = Math.max(0, Math.min(HL.IMMUNE_SECS, +s.immune || 0)); }   // 병·면역(예전 저장엔 없음 → 건강)
     w.bank = BK.bankFromSave(j.bank, w.time);                                     // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게). 금고가 없는 예전 저장은 100 + 돌아온 돈
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);
+    for (const b of w.buildings.values()) if (b.doctor && !w.units.some(u => u.name === b.doctor)) b.doctor = null;   // 마을에 없는 당번 의사는 비움
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)
     // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김). 시계가 없으면(예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
     w.sparkles = sparklesFromSave(j.sparkles).filter(s => sparkleCellFree(w, s.x, s.z)).map(s => ({ id: w.sparkId++, ...s }));

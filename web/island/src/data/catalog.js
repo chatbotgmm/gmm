@@ -97,6 +97,12 @@ export const BUILDINGS = {
     id: "aquarium", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "수족관", footprint: { w: 4, d: 3 }, work: 7, height: 2.4, asset: null,
     placeholder: { wall: 0xe6f4f7, roof: 0x4fa3c7, roof_shape: "flat", awning: 0x7fd0e0, tank: 0x3f9fd0 }, interior: { w: 7, d: 5 },
   },
+  // 갈매미 의원(health.js): 아픈 갈매미가 침대에서 쉼(침대 beds개 = 동시에 환자 수). 의사는 처음엔 없고, 플레이어가 마을 갈매미 하나를 당번으로 정하면(world.setDoctor) 더 빨리 나음.
+  // 병원 모델이 아직 없어 카페 건물 모델(Kenney)을 빨간 지붕으로 물들여 씀(사용자에게 병원 GLB를 받으면 asset만 바꿈)
+  clinic: {
+    id: "clinic", builtBy: "carpenter", clinic: true, beds: 3, rank: 1, cost: { wood: 2, stone: 2 }, tier: 1, name: "갈매미 의원", footprint: { w: 4, d: 3 }, work: 7, height: 2.55, asset: "assets/suburban/building-type-d.glb", roof: { hue: 0.0, sat: 1.25 }, modelYaw: KENNEY_YAW,
+    placeholder: { wall: 0xffffff, roof: 0xe05a5a, roof_shape: "flat", awning: 0xe05a5a }, interior: { w: 7, d: 5 },
+  },
   manor: {
     id: "manor", builtBy: "builder", house: true, price: 80, rank: 3, cost: { wood: 3, stone: 2 }, tier: 1, name: "큰 집", footprint: { w: 6, d: 5 }, work: 12, height: 3.3, asset: "assets/suburban/building-type-n.glb", roof: TERRACOTTA, modelYaw: KENNEY_YAW,
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 9, d: 7 },
