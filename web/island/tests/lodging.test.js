@@ -80,4 +80,6 @@ test("하루 합계 소식: 날이 바뀔 때 지난 하루 숙박비 한 줄(�
   nextDay(w); assert.deepEqual(got, [{ total: 2, n: 2, free: 1 }]);
   assert.match(newsFor("lodging", got[0]).text, /숙박비 🪙2.*2마리 · 공짜 1/);
   nextDay(w); assert.equal(got.length, 1, "손님 없는 날은 조용");
+  w.lodge(o, h); nextDay(w); assert.equal(got.length, 1, "모두 공짜(들어온 돈 0)인 날도 조용 — 매일 🪙0 줄이 뜨지 않게");
+  assert.equal(newsFor("lodging", { total: 0, n: 1, free: 1 }), null);
 });

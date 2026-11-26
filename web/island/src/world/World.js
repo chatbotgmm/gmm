@@ -468,8 +468,8 @@ export class World {
   stepBank() {
     const bk = this.bank, d = newsDay(this.time); if (d === bk.day) return;
     const prev = bk.day; bk.day = d; if (!this.economy) return;
-    const lt = this.lodgeTally?.day === prev ? this.lodgeTally : null, le = bk.ledger.find(e => e.day === prev), lc = le?.lodging || 0;   // 지난 하루 숙박비 합(장부) · 손님 수(불러온 뒤면 모를 수 있음)
-    if (lc > 0 || lt?.n) this.emit("lodging", { total: lc, n: lt?.n || 0, free: lt?.free || 0 });
+    const lt = this.lodgeTally?.day === prev ? this.lodgeTally : null, le = bk.ledger.find(e => e.day === prev), lc = le?.lodging || 0;   // 지난 하루 숙박비 합(장부) · 손님 수(불러온 뒤면 모를 수 있음). 들어온 돈이 0(모두 공짜)이면 알리지 않음 — 조개 없는 첫 갈매미가 손님이면 매일 "🪙0" 줄이 뜸
+    if (lc > 0) this.emit("lodging", { total: lc, n: lt?.n || 0, free: lt?.free || 0 });
     for (const b of this.buildings.values()) if (b.order && this.isDone(b)) this.settleOrder(b);   // 다 지었는데 마지막 품삯 전에 일이 끊긴 주문 공사: 남은 돈 돌려줌
     let total = 0, n = 0;
     for (const u of this.units) {
