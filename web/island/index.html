@@ -228,6 +228,15 @@
   #loading .track { width: min(calc(320*var(--u)), 70vw); height: calc(10*var(--u)); border-radius: var(--r-pill); background: rgba(43,74,90,.15); overflow: hidden; }
   #loadBar { width: 0; height: 100%; background: #3d8fb5; border-radius: var(--r-pill); transition: width .25s; }
   #loadText { font-size: var(--fs-body); }
+  /* 갈매미 모델을 끝내 못 받았을 때: 까닭 한 줄 + 다시 시도(누르는 칸 44px 이상) */
+  #loadErr { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: min(calc(360*var(--u)), 86vw); text-align: center; } #loadErr[hidden] { display: none; }
+  #loadWhy { margin: 0; font-size: var(--fs-sm); line-height: 1.5; word-break: keep-all; text-wrap: balance; }   /* 낱말 가운데서 줄이 안 끊기게 */
+  #loadRetry { min-height: max(44px, var(--hit)); min-width: max(44px, calc(150*var(--u))); font-size: var(--fs-body); touch-action: manipulation; }
+  /* 방 화면: 그 갈매미 모델이 아직 없을 때 방 가운데에 작은 「불러오는 중」(불러오는 중 화면과 같은 색) */
+  .roomWait { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: var(--s-2); padding: calc(10*var(--u)) calc(16*var(--u));
+    border-radius: var(--r-pill); background: linear-gradient(#bfe6f5, #e9f6ee 70%, #f3e7c9); color: #2b4a5a; box-shadow: var(--e-2); font-size: var(--fs-body); font-weight: 600; white-space: nowrap; }
+  .roomWait[hidden] { display: none; } .roomWait .gull { font-size: var(--fs-icon); animation: bob 1.2s ease-in-out infinite; }
+  html:not([data-form="portrait"]) .roomWait { left: calc((100% - 320*var(--u) - var(--safe-r)) / 2); } html[data-form="landscape"] .roomWait { left: calc((100% - 260*var(--u) - var(--safe-r)) / 2); }   /* 오른쪽 방 판을 뺀 방 그림 가운데 */
   @keyframes bob { 50% { transform: translateY(calc(-8*var(--u))); } }
   /* ===== 화면 모양(html[data-form]): hud.js가 창 크기로 정함 — portrait 세로 폰(폭 600 미만) · landscape 가로 폰(높이 480 미만) · medium · wide.
      CSS와 JS가 같은 판정을 쓰도록 미디어 쿼리 대신 속성으로. :where()로 감싸 원래 규칙의 우선순위를 그대로 둠 ===== */
@@ -559,7 +568,7 @@
   /* ===== 7단계: 화면 맞춤 설정(이 기기에만 기억) — html[data-motion|data-hand|data-keyhint]는 hud.js가 붙임 ===== */
   html[data-motion="full"] { --t-fast: 120ms; --t-med: 200ms; }   /* 설정에서 일부러 켠 움직임은 기기 설정보다 앞섬 */
   html[data-motion="reduce"] { --t-fast: 0ms; --t-med: 0ms; }
-  html[data-motion="reduce"] :is(#tugBtn, .emote.pop, #loading .gull, .bcard .bimg, #msg) { animation: none; }   /* 당기기 남은 시간 줄(::after)은 정보라서 그대로 */
+  html[data-motion="reduce"] :is(#tugBtn, .emote.pop, #loading .gull, .roomWait .gull, .bcard .bimg, #msg) { animation: none; }   /* 당기기 남은 시간 줄(::after)은 정보라서 그대로 */
   html[data-motion="reduce"] button { transition: none; }
   /* 왼손 배치: 아래 두 버튼(🔨 건설 ↔ 📱 갈매폰)의 자리를 바꿈 */
   html[data-hand="left"] #editBtn { left: auto; right: var(--safe-r); }
@@ -805,7 +814,7 @@
 <div id="houseCard" hidden role="group" aria-label="집"><b></b><span class="dim"></span><div class="hcx" hidden></div><button class="go">🛋 들어가 꾸미기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
 <div id="letter" hidden role="dialog" aria-modal="true" aria-labelledby="letterTitle"><div class="card"><div class="head"><b id="letterTitle">💌 다녀온 사이에</b></div><div id="letterBody"></div><div class="lbtns"><button id="letterNews">📰 소식지 보기</button><button id="letterClose" class="go">고마워요!</button></div></div></div>
 <div id="ask" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle"><div class="card"><b id="askTitle"></b><p id="askBody"></p><div class="lbtns"><button id="askNo" class="ghost">취소</button><button id="askYes" class="go">확인</button></div></div></div>
-<div id="loading"><div class="gull" aria-hidden="true">🐦</div><div class="title">갈매미맨 마을</div><div class="track"><div id="loadBar"></div></div><div id="loadText" role="status">불러오는 중…</div></div>
+<div id="loading"><div class="gull" aria-hidden="true">🐦</div><div class="title">갈매미맨 마을</div><div class="track"><div id="loadBar"></div></div><div id="loadText" role="status">불러오는 중…</div><div id="loadErr" hidden><p id="loadWhy" role="alert"></p><button id="loadRetry" class="go" type="button">↻ 다시 시도</button></div></div>
 
 <script type="importmap">
 { "imports": {

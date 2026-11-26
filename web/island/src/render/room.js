@@ -12,7 +12,6 @@ import * as F from "../world/furniture.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
-import { unitPlaceholder } from "./placeholders.js";
 
 // 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
 const roomFurniSource = itemId => { const it = ITEMS.find(i => i.id === itemId); if (!it) return "마을 가방의 가구";
@@ -50,9 +49,9 @@ function measureLying(v) {
 function measureAt(v, ws) {
   const r = v.root, keep = { p: r.position.clone(), q: r.quaternion.clone(), parent: r.parent };
   keep.parent?.remove(r); r.position.set(0, 0.52, 0); r.rotation.set(-Math.PI / 2, 0, 0, "YXZ");
-  for (const w of v.wings) w.scale.setScalar(ws); v.mixer?.update(0); r.updateMatrixWorld(true);
+  for (const w of v.wings) w.scale.setScalar(ws); v.mixer.update(0); r.updateMatrixWorld(true);
   const t = new THREE.Vector3(), pts = []; let zMin = 9, zMax = -9, headY = -9;
-  r.traverse(o => { if (!(o.isSkinnedMesh || (v.cap && o.isMesh))) return; const n = o.geometry.attributes.position.count;   // 캡슐(모델을 못 받은 갈매미)은 뼈대가 없어 보통 메쉬로 잼
+  r.traverse(o => { if (!o.isSkinnedMesh) return; const n = o.geometry.attributes.position.count;
     for (let k = 0; k < n; k += 2) { o.getVertexPosition(k, t); t.applyMatrix4(o.matrixWorld); pts.push(t.x, t.y, t.z); zMin = Math.min(zMin, t.z); zMax = Math.max(zMax, t.z); } });
   const wingZ = Math.min(9, ...v.wings.map(w => w.getWorldPosition(t).z));          // 날개 뿌리(어깨) 위치(누운 자세 그대로일 때 잼)
   r.position.copy(keep.p); r.quaternion.copy(keep.q); keep.parent?.add(r);
@@ -81,7 +80,10 @@ export class RoomView {
     this.root = new THREE.Group(); s.add(this.root); this.gulls = new Map(); this.chars = null;   // chars: 갈매미 모델(main이 넣어 줌)
     this.toon = new Toon(s, { snow: false });                                   // 방 안 가구엔 눈이 안 쌓임
     this.touch = document.getElementById("roomTouch"); this.ui = document.getElementById("room");
-    this.bubbleBox = document.createElement("div"); this.bubbleBox.className = "roomBubbles"; this.bubbleBox.hidden = true; document.body.appendChild(this.bubbleBox); this.bubbles = new Map();   // 방 안 갈매미 말풍선(섬과 같은 모양)
+    this.bubbleBox = document.createElement("div"); this.bubbleBox.className = "roomBubbles"; this.bubbleBox.hidden = true; document.body.appendChild(this.bubbleBox); this.bubbles = new Map();
+    // 방 안 갈매미 모델이 아직 메모리에 없을 때(이론상 불러오는 중 화면 뒤엔 없음) 방 가운데 작은 「불러오는 중」 — 모델이 오면 지우고 갈매미를 그림
+    this.waitEl = rel("div", "roomWait"); this.waitEl.setAttribute("role", "status"); this.waitEl.hidden = true;
+    const ico = rel("span", "gull", "🐦"); ico.setAttribute("aria-hidden", "true"); this.waitEl.append(ico, rel("span", "", "갈매미 불러오는 중…")); this.bubbleBox.appendChild(this.waitEl);   // 방 안 갈매미 말풍선(섬과 같은 모양)
     const c = this.controls = new OrbitControls(this.camera, this.touch);
     Object.assign(c, { enablePan: false, enableDamping: true, minPolarAngle: 0.45, maxPolarAngle: 1.2, minDistance: 4, maxDistance: 16 });
     this.ray = new THREE.Raycaster(); this.ndc = new THREE.Vector2(); this.floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -116,7 +118,7 @@ export class RoomView {
   }
   close() {
     if (!this.isOpen) return; this.isOpen = false; this.onSound?.("doorOut"); this.touch.hidden = true; this.ui.hidden = true; this.bubbleBox.hidden = true; document.body.classList.remove("inroom");
-    this.root.clear(); this.onExit?.();
+    this.root.clear(); this.waitEl.hidden = true; this.onExit?.();
   }
   status(t) { this.ui.querySelector(".rmsg").textContent = t; }
   // ---- 방 만들기
@@ -284,32 +286,32 @@ export class RoomView {
     else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("↔ 옮기기", () => this.startMove(), "go"); }
   }
   // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)
-  /** 방 안 갈매미 모습. 모델(charPool)을 아직 못 받았거나 못 받은 갈매미(폰에서 받기 실패·90초 넘게 걸림)도 섬 화면처럼 캡슐로 보여 줌
-   *  (예전: 모델이 없으면 root 없이 굳어 방에 아무것도 안 그림 — 섬엔 캡슐이 보이는데 방엔 갈매미가 없었음). 모델이 나중에 오면 바꿔 끼움 */
+  /** 방 안 갈매미 모습: 처음에 받아 둔 메모리 캐시(this.chars = GullPool)의 모델을 복제(다시 받지 않음).
+   *  아직 없으면 root 없이 두고(캡슐 없음) syncGulls가 다시 볼 때마다 캐시를 확인 — 오면 바꿔 끼움(누운 몸 크기·날개·옷·이불은 그때 잼).
+   *  (예전 버그: 없으면 root 없이 굳어 다시 보지 않아 방에 갈매미가 안 나왔음) */
   gullModel(u) {
-    let v = this.gulls.get(u.unitId); if (v) return v;
-    v = { root: null }; this.gulls.set(u.unitId, v);
-    const cap = unitPlaceholder(u.scale || 1); cap.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    Object.assign(v, { root: cap, cap: true, mixer: null, acts: null, cur: null });
-    Promise.resolve(this.chars).then(pool => { const ch = pool?.get?.(u.name); if (ch) this.useModel(v, ch); }).catch(() => { /* 캡슐 그대로 */ });
+    let v = this.gulls.get(u.unitId);
+    if (!v) { v = { root: null }; this.gulls.set(u.unitId, v); }
+    if (!v.root) { const ch = this.chars?.get?.(u.name); if (ch) this.useModel(v, ch); }
     return v;
   }
   useModel(v, ch) {
     const root = SkeletonUtils.clone(ch.root), mixer = new THREE.AnimationMixer(root), acts = {};
     for (const [k, a] of Object.entries(ch.acts)) acts[k] = mixer.clipAction(a.getClip());
     root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    v.root?.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket);              // 캡슐을 빼고 다음 syncGulls가 모델을 그 자리에 놓음(누운 몸 크기·날개·옷·이불도 다시 잼)
-    Object.assign(v, { root, mixer, acts, cur: null, cap: false, wear: null, wings: null, lying: null, blanket: null, blanketFor: null });
+    v.root?.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket);              // 다음 syncGulls가 모델을 그 자리에 놓음(누운 몸 크기·날개·옷·이불도 그때 잼)
+    Object.assign(v, { root, mixer, acts, cur: null, wear: null, wings: null, lying: null, blanket: null, blanketFor: null });
     this.gullT = 0;
   }
   play(v, key, speed = 1) { if (!v.acts?.[key] || v.cur === key) return; v.acts[v.cur]?.fadeOut(0.25); v.acts[key].reset().fadeIn(0.25).play(); v.acts[key].timeScale = speed; v.cur = key; }
   syncGulls() {
     const w = this.world, b = this.b, levels = F.levels(b), inside = w.units.filter(u => u.insideBuildingId === b.id);
     for (const [id, v] of this.gulls) if (!inside.some(u => u.unitId === id)) { v.root?.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket); }
-    let free = 0;
+    let free = 0, waiting = 0;
     for (const u of inside) {
-      const v = this.gullModel(u); if (!v.root || !this.isOpen) continue;
-      const o = u.useFurni, li = o ? levels.findIndex(L => L.furniture.includes(o)) : 0;
+      const v = this.gullModel(u), o = u.useFurni, li = o ? levels.findIndex(L => L.furniture.includes(o)) : 0;
+      if (!v.root) { if (li === this.li) waiting++; continue; }                       // 이 층에 있어야 할 갈매미의 모델이 아직 없음 → 「불러오는 중」
+      if (!this.isOpen) continue;
       if (li !== this.li) { if (v.root.parent) v.root.parent.remove(v.root); v.blanket?.parent?.remove(v.blanket); continue; }
       if (!v.root.parent) { this.root.add(v.root); this.toon.sweep(v.root); }
       const r = v.root; r.rotation.set(0, 0, 0);
@@ -338,6 +340,7 @@ export class RoomView {
         r.position.set(c.x, 0, c.z); r.rotation.y = Math.PI * 0.25; this.play(v, "Idle");
       }
     }
+    this.waiting = waiting; this.waitEl.hidden = !(waiting && this.isOpen);
   }
   /** 방 안 갈매미 말풍선: 이 방에 보이는 갈매미의 말(u.emoteText)을 머리 위에. 누워 자면 머리(베개) 쪽 위 */
   drawBubbles() {
@@ -364,7 +367,7 @@ export class RoomView {
     for (const v of this.gulls.values()) { if (v.root?.parent) v.mixer?.update(dt); if (v.blanket?.parent) v.blanket.scale.y = 1 + 0.04 * Math.sin(this.breath * 1.6);   // 이불이 숨 쉬듯 오르내림
       for (const w of v.wings || []) w.scale.setScalar(v.asleep ? v.lying?.wingScale ?? 0.55 : 1); }          // 자는 동안 날개를 몸 쪽으로 접어 이불 밖으로 안 나오게(기본 갈매미: 날개 끝 x 0.43 → 0.34 m)
     this.drawBubbles();
-    if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = 1; this.syncGulls(); }
+    if ((this.gullT = (this.gullT ?? 0) - dt) <= 0) { this.gullT = this.waiting ? 0.25 : 1; this.syncGulls(); }   // 모델을 기다리는 동안은 자주 확인(오면 0.25초 안에 그림)
     if (Math.abs(innerWidth / innerHeight - (this.lastAspect || 0)) > 0.01) this.fit();   // 화면을 돌리면 다시 맞춤
     if (this.whoT === undefined || (this.whoT -= dt) <= 0) { this.whoT = 1; const inside = this.world.units.filter(u => u.insideBuildingId === this.b.id); this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : ""; }
   }
