@@ -6,7 +6,7 @@ import { seededRandom } from "../src/util.js";
 import { BUILDINGS } from "../src/data/catalog.js";
 import { RANKS, unlockName } from "../src/world/rank.js";
 import * as BK from "../src/world/bank.js";
-import { upgradeButtonInfo, upgradeAsk, canShowUpgrade } from "../src/ui/upgradeView.js";
+import { upgradeButtonInfo, upgradeAsk, canShowUpgrade, mountUpgrade, hideUpgrade } from "../src/ui/upgradeView.js";
 
 /** 넓은 섬 + 기본 갈매미 + 목수 · 항구 마을 · 바로 완공 끔 */
 function town(seed = 21) {
@@ -121,4 +121,21 @@ test("화면 단추(ui/upgradeView.js): 글·꺼짐·사유 · 확인창 글", (
   w.rank = 1; const off = upgradeButtonInfo(w, cl); assert.equal(off.disabled, true); assert.match(off.why, /항구 마을이 되면/); w.rank = 2;
   const ask = upgradeAsk(w, cl); assert.equal(ask.title, "🏥 종합병원으로 업그레이드할까요?");
   assert.match(ask.body, /5×4칸으로 넓혀/); assert.match(ask.body, /침대 3 → 6개/); assert.match(ask.body, new RegExp(`설계비 🪙${fee}을 금고에서`));
+});
+
+test("카드 공유(#houseCard): 업그레이드 단추는 .go가 아님(꾸미기 단추를 querySelector(\".go\")로 찾는 hud·powerRange·noPower가 잘못 잡지 않게) · 다른 건물 카드로 쓰면 숨김", () => {
+  const { w } = town(27); const cl = clinicWithRoom(w); w.bank.vault = 300;
+  // 아주 작은 가짜 DOM: 카드 = [span, .go(꾸미기), .hx]
+  const mk = cls => ({ className: cls, hidden: false, textContent: "", disabled: false, setAttribute() {}, nextSibling: null });
+  const span = mk("dim"), go = mk("go"), hx = mk("hx ghost"), kids = [span, go, hx];
+  const has = (e, c) => e.className.split(" ").includes(c);
+  const card = { hidden: false, querySelector: s => kids.find(e => has(e, s.slice(1))) || null, querySelectorAll: s => kids.filter(e => s.split(",").some(q => has(e, q.trim().slice(1)))),
+    insertBefore: (e, ref) => { kids.splice(ref ? kids.indexOf(ref) : kids.length, 0, e); } };
+  const g0 = globalThis.document; globalThis.document = { createElement: () => mk("") };
+  try {
+    span.nextSibling = go; mountUpgrade(card, {}, w, cl, span);
+    const up = card.querySelector(".upg"); assert.ok(up && !up.hidden, "병원 카드에 단추");
+    assert.equal(card.querySelector(".go"), go, ".go는 여전히 꾸미기 단추"); assert.equal(has(up, "go"), false);
+    hideUpgrade(card); assert.equal(up.hidden, true, "닫거나 다른 건물 카드로 쓰면 숨김"); assert.equal(card.querySelector(".upgWhy").hidden, true);
+  } finally { globalThis.document = g0; }
 });

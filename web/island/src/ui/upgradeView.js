@@ -40,13 +40,16 @@ export async function runUpgrade(hud, w, b) {
   return res;
 }
 
+/** 카드를 다른 건물(풍차·가로등·집 등)에 쓰거나 닫을 때: 업그레이드 단추·사유를 숨김(남아 있으면 그 카드에서 예전 병원을 업그레이드하게 됨) */
+export function hideUpgrade(card) { for (const e of card.querySelectorAll(".upg, .upgWhy")) e.hidden = true; }
+
 /** 카드 안에 업그레이드 단추(.upg)와 사유 글(.upgWhy)을 붙이거나 숨김. after: 이 요소 뒤에(없으면 카드 끝, 닫기 단추 앞) */
 export function mountUpgrade(card, hud, w, b, after = null) {
   let btn = card.querySelector(".upg"), why = card.querySelector(".upgWhy");
   const info = upgradeButtonInfo(w, b);
   if (!info.show) { if (btn) btn.hidden = true; if (why) why.hidden = true; return info; }
   if (!btn) {
-    btn = document.createElement("button"); btn.className = "upg go";
+    btn = document.createElement("button"); btn.className = "upg";   // .go를 붙이지 않음: 카드의 querySelector(".go")(꾸미기 단추 — hud·powerRange·noPower)가 이 단추를 잡지 않게(색은 index.html #houseCard .upg)
     why = document.createElement("span"); why.className = "upgWhy dim";
     const ref = after?.nextSibling || card.querySelector(".hx"); card.insertBefore(btn, ref); card.insertBefore(why, ref);
   }

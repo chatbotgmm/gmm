@@ -21,7 +21,7 @@ import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 import { bankHtml } from "./bankView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
-import { mountUpgrade } from "./upgradeView.js";
+import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
@@ -263,7 +263,7 @@ export class Hud {
   }
   /** 섬에서 집을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기) */
   houseCard(b) {
-    const c = document.getElementById("houseCard"); if (!b) { c.hidden = true; return; }
+    const c = document.getElementById("houseCard"); if (!b) { c.hidden = true; hideUpgrade(c); return; }   // 다음에 풍차·가로등 카드로 쓰일 때 병원 단추가 남지 않게
     const w = this.world, owner = w.units.find(u => u.unitId === b.owner), def = BUILDINGS[b.defId];
     c.querySelector(".go").hidden = !def.house; mountUpgrade(c, this, w, b, c.querySelector("span"));   // 병원(clinic): 꾸미기 대신 업그레이드 단추(ui/upgradeView.js — 건물 카드를 새로 짤 때 이 줄만 옮김)
     if (def.clinic) { const doc = w.doctorOf(b); c.querySelector("b").textContent = `🏥 ${def.name}`; c.querySelector("span").textContent = `🛏 환자 ${w.patientsIn(b)}/${def.beds || 0} · 🩺 ${doc ? `당번 ${doc.name}` : "당번 없음"}`; c.hidden = false; c.querySelector(".hx").onclick = () => { c.hidden = true; }; return; }
