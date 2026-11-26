@@ -106,7 +106,7 @@ export class BuildingViews {
       const near = building && camera.position.distanceTo(_badgeQ.set(v.holder.position.x, v.holder.position.y + v.height, v.holder.position.z)) < SITE_NEAR;
       if (near) textEl(v.badge.b2, siteStepOf(b, this.world).text); showEl(v.badge.b2, near);   // 공사장 둘째 줄: 🪵 3/5 · 🪨 0/5 모으는 중 · 🏦 재료 가지러 가는 중 · 🔨 짓는 중 · 2바퀴 남음 · ⏳ 일꾼을 기다려요
       showEl(v.badge, true);
-      const key = v.badge.b1._txt + "|" + (near ? v.badge.b2._txt : ""); if (v.badge._key !== key) { v.badge._key = key; v.badge._w = v.badge.offsetWidth; }   // 폭은 글이 바뀔 때만 잼
+      const key = v.badge.b1._txt + "|" + (near ? v.badge.b2._txt : ""); if (v.badge._key !== key || !v.badge._w) { v.badge._key = key; v.badge._w = v.badge.offsetWidth; }   // 폭은 글이 바뀔 때만 잼(방 안이라 겹이 숨어 0으로 쟀으면 다음에 다시)
       const half = v.badge._w / 2 + 4, x = Math.min(Math.max((tmp.x * 0.5 + 0.5) * w, half), Math.max(half, w - half));   // 화면 가장자리에서 잘리지 않게 안쪽으로(두 줄 배지는 폭이 넓음)
       placeEl(v.badge, x, (-tmp.y * 0.5 + 0.5) * h);                               // 글자·자리는 바뀔 때만 씀(util.js)
     }
@@ -308,9 +308,11 @@ export async function addModuleViews(scene, world) {
 
 const WEAR_SLOT = [["neck", "scarf"], ["body", "coat"]];                     // 입은 옷 자리 → 장신구(characters.js fitWear)
 const SICK_GLOW = new THREE.Color(0x4a1208), NO_GLOW = new THREE.Color(0x000000);
-/** 아픈 갈매미: 몸 재질의 발광 색을 살짝 붉게(툰으로 바꾼 재질과 원래 재질 둘 다 — 그림체를 바꿔도 그대로). 장신구·도구 재질은 건드리지 않음 */
+/** 아픈 갈매미: 몸 재질의 발광 색을 살짝 붉게(툰으로 바꾼 재질과 원래 재질 둘 다 — 그림체를 바꿔도 그대로). 장신구·도구 재질은 건드리지 않음.
+ *  원래 발광 색은 원래 재질(std)에만 적어 둠: 아픈 동안 그림체를 바꾸면 새 툰 재질이 붉은 색을 베껴 가므로, 툰 재질에서 재면 나은 뒤에도 붉게 남음 */
 function sickTint(ch, on) {
-  ch.root.traverse(o => { if (!o.isSkinnedMesh) return; for (const m of [].concat(o.material)) for (const x of [m, m.userData.src]) if (x?.emissive) { x.userData.glow0 ??= x.emissive.getHex(); x.emissive.copy(on ? SICK_GLOW : NO_GLOW.setHex(x.userData.glow0)); } });
+  ch.root.traverse(o => { if (!o.isSkinnedMesh) return; for (const m of [].concat(o.material)) { const std = m.userData.src || m; if (!std.emissive) continue;
+    std.userData.glow0 ??= std.emissive.getHex(); const c = on ? SICK_GLOW : NO_GLOW.setHex(std.userData.glow0); for (const x of [m, std]) x.emissive?.copy(c); } });
 }
 const BLOB_GEO = new THREE.CircleGeometry(1, 20);
 const WAKE_GEO = new THREE.RingGeometry(0.86, 1, 28);

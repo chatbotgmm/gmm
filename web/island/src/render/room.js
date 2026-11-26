@@ -303,6 +303,8 @@ export class RoomView {
       if (li !== this.li) { if (v.root.parent) v.root.parent.remove(v.root); v.blanket?.parent?.remove(v.blanket); continue; }
       if (!v.root.parent) { this.root.add(v.root); this.toon.sweep(v.root); }
       const r = v.root; r.rotation.set(0, 0, 0);
+      v.wear ||= ["scarf", "coat"].map(k => [k, r.getObjectByName("wear_" + k)]).filter(([, m]) => m);   // 복제는 복제할 때의 보이기를 굳혀 둠 → 입은 옷(u.wear)대로 다시
+      for (const [k, m] of v.wear) m.visible = u.wear?.neck === k || u.wear?.body === k;
       v.asleep = !!(o && FURNITURE[o.id].use === "sleep");
       if (v.blanket?.parent && !v.asleep) v.blanket.parent.remove(v.blanket);
       if (o) {
