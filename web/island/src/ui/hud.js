@@ -1,8 +1,9 @@
 // 화면 UI: 도구 막대, 갈매미 목록·통계 판, 알림 줄. DOM만 다루고 월드는 콜백으로 바꾼다.
 import { GROUND_TYPES, UnitState } from "../data/types.js";
-import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS, UNITS, FURNITURE, PERSONA } from "../data/catalog.js";
+import { GROUND_STYLE, BUILDINGS, JOBS, RARITY, FISH, ITEMS, UNITS, FURNITURE } from "../data/catalog.js";
 import * as J from "../world/jobs.js";
 import * as M from "../units/mind.js";
+import { chronoLabel, chronoNote } from "../units/chrono.js";
 import { TRIBES } from "../data/catalog.js";
 import * as E from "../world/economy.js";
 import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
@@ -943,8 +944,8 @@ export class Hud {
     const flags = gullFlags(u);                                                     // 🤧 아픔 · 🥶 추움 · 💸 밀린 품삯 — 접혀 있어도 맨 앞에 보이게
     if (!open) { cardPut(k.sub, `${flags ? flags + " " : ""}${doing} · 😊${Math.round(sat)} 🍗${Math.round(full)}`); this.showBond(u); return; }
     const r = RARITY[u.rarity], n = u.needs || {}, fav = M.favorite(u), bf = M.bestFriend(u, w.units), tr = TRIBES[u.tribe];
-    cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name}${(PERSONA[u.name] || {}).nocturnal ? " · 🌙 야행성" : ""}`);
-    const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : "";
+    cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} · ${chronoLabel(u)}`);   // 체질: 🌅 아침형(밤에 더 빨리 지침) · 🌙 야행성(낮에)
+    const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : chronoNote(u, w);   // 급한 것(게으름·배고픔)이 없으면 체질 영향("밤이라 더 빨리 지쳐요")
     cardPut(k.doing, doing);   /* 펼친 카드는 🤧·💸 칩과 체온 줄이 따로 알림 */ cardPut(k.note, note ? ` · ${note}` : "");
     const bt = bodyTempOf(u), tp = k.temp; if (tp.row.hidden !== !bt) tp.row.hidden = !bt;
     if (bt) { const wd = `${bt.pct}%`; if (tp.fill.style.width !== wd) tp.fill.style.width = wd; cardPut(tp.num, bt.text); cardPut(tp.label, `${bt.tone === "cold" ? "🥶" : bt.tone === "hot" ? "🥵" : ""}체온`); tp.row.title = bt.word ? `체온 ${bt.text} · ${bt.word}` : `체온 ${bt.text}`;

@@ -222,7 +222,7 @@ export const PERSONA = {
   "황금":    { rest: 3, wander: 3, forage: 2, visit: 2, zoomies: 1, chop: 2, mine: 3, fish: 1, build: 5, enter: 2, swim: 1, likes: ["shiny"], dislikes: ["plant"] },
   "물방울":  { rest: 1, wander: 3, forage: 2, visit: 2, zoomies: 4, chop: 1, mine: 0, fish: 5, build: 1, enter: 2, swim: 4, likes: ["sea", "fish"], dislikes: ["plant"] },
   "불씨":    { rest: 2, wander: 2, forage: 2, visit: 2, zoomies: 3, chop: 2, mine: 4, fish: 0, build: 2, enter: 2, swim: 0.5, nocturnal: true, likes: ["shiny"], dislikes: ["ice", "sea"] },
-  "그림자":  { rest: 4, wander: 4, forage: 2, visit: 0, zoomies: 0, chop: 2, mine: 4, fish: 2, build: 0, enter: 1, swim: 2, loner: true, nocturnal: true, likes: ["letter", "ice"], dislikes: ["shiny"] },   // 야행성: 밤에 일하고 낮에 잠
+  "그림자":  { rest: 4, wander: 4, forage: 2, visit: 0, zoomies: 0, chop: 2, mine: 4, fish: 2, build: 0, enter: 1, swim: 2, loner: true, nocturnal: true, likes: ["letter", "ice"], dislikes: ["shiny"] },   // 야행성: 낮에 일하면 피로가 1.5배로 쌓임(chrono.js) → 주로 밤에 깨어 있음
 };
 
 // ---------------------------------------------------------------- 종족(직업)·희귀도

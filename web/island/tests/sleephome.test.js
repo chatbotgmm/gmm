@@ -20,11 +20,11 @@ function farHome(seed = 3) {
   return { w, u, h, cafe };
 }
 
-test("집 있는 갈매미: 밤잠은 멀어도(14칸 넘게) 내 집에서, 곁의 카페·남의 집에는 안 들어감", () => {
+test("집 있는 갈매미: 밤에 지쳐 자는 잠도 멀어도(14칸 넘게) 내 집에서, 곁의 카페·남의 집에는 안 들어감", () => {
   const { w, u, h, cafe } = farHome(); assert.ok(dist(u, h) > 14, `집이 멂(${dist(u, h).toFixed(1)}칸)`); assert.ok(dist(u, cafe) < 14, "카페는 가까움");
-  w.isNight = true; u.state = "Idle"; u.timer = 0; const went = new Set(); let outSleep = 0;
-  for (let t = 0; t < 240; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (u.insideBuildingId) went.add(u.insideBuildingId); if (u.state === "Sleep") outSleep += 0.1; }
-  assert.deepEqual([...went], [h.id], "들어간 건물은 내 집뿐"); assert.equal(u.insideBuildingId, h.id); assert.equal(u.insideAct, "sleep");
+  w.isNight = true; u.state = "Idle"; u.timer = 0; u.needs.energy = 25; const went = new Set(); let outSleep = 0, slept = false;   // 아침형의 밤: 기력 30 아래면 잠
+  for (let t = 0; t < 240 && !slept; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (u.insideBuildingId) went.add(u.insideBuildingId); if (u.state === "Sleep") outSleep += 0.1; if (u.insideBuildingId === h.id && u.insideAct === "sleep") slept = true; }
+  assert.ok(slept, "내 집에서 잠"); assert.deepEqual([...went], [h.id], "들어간 건물은 내 집뿐");
   assert.equal(outSleep, 0, "밖에서 자지 않음");
 });
 
@@ -37,7 +37,7 @@ test("집 있는 갈매미: 낮에 지쳐도(기력 20 아래) 가까운 카페�
 
 test("집 없는 갈매미: 주인 없는 다 지은 빈 집에서 손님으로 잠(주인은 안 됨)", () => {
   const w = World.create(7, seededRandom(4), { wild: true, firstGull: true }); w.instantBuild = true; w.isNight = true;
-  const u = w.units[0], spare = [...w.buildings.values()].find(b => BUILDINGS[b.defId].house);
+  const u = w.units[0], spare = [...w.buildings.values()].find(b => BUILDINGS[b.defId].house); u.needs.energy = 10;
   assert.equal(u.home, null); assert.equal(spare.owner ?? null, null, "첫 집은 주인 없음");
   let guest = false, outSleep = 0;
   for (let t = 0; t < 120 && !guest; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sleep") outSleep += 0.1; if (u.insideBuildingId === spare.id && u.insideAct === "sleep") guest = true; }
@@ -47,7 +47,7 @@ test("집 없는 갈매미: 주인 없는 다 지은 빈 집에서 손님으로 
 test("집 없고 빈 집도 없으면 밖에서 잠: 말풍선 + 만족도 −5(ROUGH_SECS 동안), 집이 있으면 깎이지 않음", () => {
   const w = World.create(7, seededRandom(4), { wild: true, firstGull: true }); w.instantBuild = true; w.isNight = true;
   const u = w.units[0]; for (const b of w.buildings.values()) if (BUILDINGS[b.defId].house) b.owner = 999;   // 빈 집 없음
-  w.updateRoads(); const sat0 = u.sat; u.state = "Idle"; u.timer = 0; let said = false;
+  w.updateRoads(); const sat0 = u.sat; u.state = "Idle"; u.timer = 0; u.needs.energy = 10; let said = false;
   for (let t = 0; t < 3 && u.state !== "Sleep"; t += 0.1) { u.full = 90; w.update(0.1); if (/밖에서 자요/.test(u.emoteText || "")) said = true; }
   assert.equal(u.state, "Sleep"); assert.ok(said, "집이 없어 밖에서 잔다는 말풍선"); assert.equal(u.insideBuildingId ?? null, null);
   w.updateRoads(); assert.ok(u.satParts.some(([k, v]) => /밖에서 잠/.test(k) && v === ROUGH_SAT), JSON.stringify(u.satParts)); assert.equal(u.sat, Math.max(0, sat0 + ROUGH_SAT));
@@ -59,7 +59,7 @@ test("집 길이 막히면: 다른 건물·빈 집으로 가지 않고 그 자�
   w.grid.setElevation(h.door.x, h.door.z, -1); w.recomputeComps?.();           // 집 문 칸을 물로: 걸어갈 수 없음
   w.isNight = true; u.state = "Idle"; u.timer = 0; let flips = 0, last = u.state, slept = 0, naps = 0; const went = new Set();
   for (let t = 0; t < 120; t += 0.1) {
-    for (const o of w.units) o.full = 90; w.update(0.1);
+    for (const o of w.units) o.full = 90; u.needs.energy = Math.min(u.needs.energy, 10); w.update(0.1);   // 지친 채로 묶음(기력이 가득 차 아예 깨 버리지 않게)
     if (u.state !== last) { if (u.state === "Sleep") naps++; flips++; last = u.state; }
     if (u.state === "Sleep") slept += 0.1; if (u.insideBuildingId) went.add(u.insideBuildingId);
   }
@@ -71,18 +71,18 @@ test("집 길이 막히면: 다른 건물·빈 집으로 가지 않고 그 자�
 
 test("손님으로 자던 빈 집을 다른 갈매미가 사면: 손님은 깨서 나와 다시 잠자리를 고름(남의 집에서 계속 자지 않음)", () => {
   const w = World.create(7, seededRandom(4), { wild: true, firstGull: true }); w.instantBuild = true; w.isNight = true;
-  const u = w.units[0], spare = [...w.buildings.values()].find(b => BUILDINGS[b.defId].house);
+  const u = w.units[0], spare = [...w.buildings.values()].find(b => BUILDINGS[b.defId].house); u.needs.energy = 10;
   for (let t = 0; t < 120 && u.insideBuildingId !== spare.id; t += 0.1) { u.full = 90; w.update(0.1); }
   assert.equal(u.insideBuildingId, spare.id, "빈 집에서 손님으로 잠");
   spare.owner = 999; let left = -1;
-  for (let t = 0; t < 40 && left < 0; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId !== spare.id) left = t; }
+  for (let t = 0; t < 40 && left < 0; t += 0.1) { u.full = 90; u.needs.energy = Math.min(u.needs.energy, 10); w.update(0.1); if (u.insideBuildingId !== spare.id) left = t; }   // 기력이 차서 깨는 게 아니라 집이 팔려서 깸
   assert.ok(left >= 0 && left <= 30, `깨서 나옴(${left.toFixed(1)}초)`);
 });
 
 test("경제 없는 예전 섬: 집 없는 갈매미의 손님 잠자리는 '집'만 — 의원(아픈 갈매미 전용)·시장·카페에서 자지 않음", () => {
   const w = World.create(3, seededRandom(3), {}); w.instantBuild = true; assert.equal(w.economy, false);
   const c = w.center; for (const id of ["clinic", "market", "cafe", "house"]) assert.ok(placeAt(w, id, c.x, c.z, 4), id);
-  w.finishAll(); w.isNight = true; const slept = {};
+  w.finishAll(); w.isNight = true; const slept = {}; for (const u of w.units) u.needs.energy = 10;   // 모두 지쳐서 잠
   for (let t = 0; t < 200; t += 0.1) { w.update(0.1); for (const u of w.units) { const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId); if (b && u.insideAct === "sleep" && !u.sick) slept[b.defId] = (slept[b.defId] || 0) + 0.1; } }
   assert.ok((slept.house || 0) > 0, "빈 집에서 손님으로 잠: " + JSON.stringify(slept));
   assert.deepEqual(Object.keys(slept), ["house"], "집 말고는 안 잠: " + JSON.stringify(slept));

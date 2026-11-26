@@ -10,9 +10,10 @@ import * as BK from "../src/world/bank.js";
 import { dayFlow, IN_NAMES } from "../src/ui/bankView.js";
 
 const spare = w => [...w.buildings.values()].find(b => BUILDINGS[b.defId].house && !b.owner);
-/** 넓은 섬(경제) + 첫 갈매미(집 없음) · 첫 집은 주인 없음. 밤 */
+/** 넓은 섬(경제) + 첫 갈매미(집 없음, 지쳐서 기력 10 → 밤낮과 상관없이 자러 감) · 첫 집은 주인 없음. 밤 */
 function isle(seed = 4) {
   const w = World.create(7, seededRandom(seed), { wild: true, firstGull: true }); w.instantBuild = true; w.isNight = true;
+  w.units[0].needs.energy = 10;
   return { w, u: w.units[0], h: spare(w) };
 }
 /** 빈 집에 들어가 잘 때까지 돌림 → 들어간 시각(초) 또는 −1 */
@@ -36,9 +37,9 @@ test("같은 마을 하루에 깼다 다시 자도 한 번만 · 다음 날 다�
   nextDay(w); assert.equal(w.lodge(u, h), 2, "다음 날은 또"); assert.equal(u.coins, 16);
   // 실제 걸음으로: 들어가 자다 나와서 같은 날 다시 들어가도 한 번
   const g = isle(6); g.u.coins = 20; assert.ok(sleepIn(g.w, g.u, g.h) >= 0);
-  g.w.isNight = false; for (let t = 0; t < 60 && g.u.insideBuildingId; t += 0.1) { g.u.full = 90; g.w.update(0.1); }
-  assert.equal(g.u.insideBuildingId ?? null, null, "아침이 되어 나옴"); assert.equal(g.u.emoteText, "🏠 숙박비 🪙2", "나올 때 숙박비 말풍선");
-  g.w.isNight = true; g.u.state = "Idle"; g.u.timer = 0; assert.ok(sleepIn(g.w, g.u, g.h) >= 0, "다시 들어가 잠");
+  for (let t = 0; t < 60 && g.u.insideBuildingId; t += 0.1) { g.u.full = 90; g.w.update(0.1); }
+  assert.equal(g.u.insideBuildingId ?? null, null, "기력이 가득 차 밤인데도 나옴"); assert.equal(g.u.emoteText, "🏠 숙박비 🪙2", "나올 때 숙박비 말풍선");
+  g.u.needs.energy = 10; g.u.state = "Idle"; g.u.timer = 0; assert.ok(sleepIn(g.w, g.u, g.h) >= 0, "다시 지쳐 들어가 잠");
   assert.equal(newsDay(g.w.time), 1); assert.equal(g.u.coins, 18, "같은 날이라 한 번만");
 });
 
