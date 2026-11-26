@@ -4,7 +4,7 @@ import { toWorldX, toWorldZ, WATER_Y } from "../config.js";
 import { BUILDINGS, MODULES } from "../data/catalog.js";
 import { stairCount } from "../world/World.js";
 import { modelFor, rawModel } from "./assets.js";
-import { buildingPlaceholder, modulePlaceholder, unitPlaceholder } from "./placeholders.js";
+import { buildingPlaceholder, modulePlaceholder } from "./placeholders.js";
 import { tintRoofs } from "./roofTint.js";
 import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
@@ -367,7 +367,7 @@ const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x1d2b14, transparent: tru
 const frustum = new THREE.Frustum(), projView = new THREE.Matrix4(), sphere = new THREE.Sphere();
 
 export class UnitViews {
-  /** pool: 이름 → 갈매미 모델(불러오는 중 화면에서 미리 받아 둔 것, Promise<Map>). 없으면 캡슐. */
+  /** pool: 갈매미 모델(불러오는 중 화면에서 한 번 받아 둔 메모리 캐시, gullLoad.js GullPool — get(이름)). 모델이 없는 갈매미는 그리지 않음(캡슐 없음 · 규칙은 그대로 돎) */
   constructor(scene, world, pool = null) {
     this.world = world; this.chars = []; this.scene = scene; this.pool = pool; this.views = [];
     for (const u of world.units) this.add(u);
@@ -375,23 +375,25 @@ export class UnitViews {
   }
   add(u) {
     const scene = this.scene;
-      const g = new THREE.Group(), cap = unitPlaceholder(u.scale || 1); g.add(cap); g.userData.unitId = u.unitId; scene.add(g);
+      const g = new THREE.Group(); g.userData.unitId = u.unitId; g.visible = false; scene.add(g);
       // 누르기용 보이지 않는 원기둥(작은 갈매미도 누르기 쉽게 최소 크기를 둠). 크기는 sync에서 몸에 맞춤.
       const pick = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ visible: false }));
       pick.userData.unitId = u.unitId; g.add(pick);
-      cap.traverse(o => { if (o.isMesh) o.castShadow = false; });
       // 발밑 둥근 그림자(가벼움)
       const blob = new THREE.Mesh(BLOB_GEO, BLOB_MAT); blob.rotation.x = -Math.PI / 2; blob.position.y = 0.02; blob.renderOrder = 1;
       blob.scale.setScalar(0.32 * (u.scale || 1) + 0.08); g.add(blob);
-      const v = { g, cap, ch: null, pick, blob }; this.views.push(v);
-    this.pool?.then(map => {                                                       // 모델을 붙임(새 섬에서도 같은 모델을 다시 씀)
-      const ch = map.get(u.name); if (!ch || !this.views.includes(v)) return;
-      ch.root.parent?.remove(ch.root); v.g.remove(v.cap); v.g.add(ch.root); v.ch = ch;
-      ch.anim = ""; ch.onceRef = null; for (const t of Object.values(ch.inHand)) t.visible = false;
-      ch.root.rotation.set(0, 0, 0); ch.root.position.set(0, 0, 0);
-      v.castOn = undefined;                                                         // 그림자는 거리 보고 sync에서 정함
-    });
+      const v = { g, ch: null, pick, blob }; this.views.push(v);
+    this.attach(v, u);
     return v;
+  }
+  /** 메모리 캐시에 그 갈매미 모델이 있으면 붙임(새 섬에서도 같은 모델을 다시 씀 · 다시 받지 않음). 없으면 sync가 매 프레임 다시 봄 */
+  attach(v, u) {
+    const ch = this.pool?.get?.(u.name); if (!ch) return false;
+    ch.root.parent?.remove(ch.root); v.g.add(ch.root); v.ch = ch;
+    ch.anim = ""; ch.onceRef = null; for (const t of Object.values(ch.inHand)) t.visible = false;
+    ch.root.rotation.set(0, 0, 0); ch.root.position.set(0, 0, 0);
+    v.castOn = undefined;                                                         // 그림자는 거리 보고 sync에서 정함
+    return true;
   }
   /** 이 갈매미 손의 물뿌리개 끝(월드 좌표, 보일 때만) — life.js 물방울이 여기서 나옴. 없으면 null */
   canTip(u) {
@@ -402,7 +404,7 @@ export class UnitViews {
   setShadowDist(d) { this.shadowDist = d; for (const v of this.views) v.castOn = undefined; }
   /** 헤엄: 몸이 물 위에서 출렁이고 좌우로 살짝 기울며 앞으로 숙임, 발밑 그림자 대신 물결 고리 두 개가 퍼짐. */
   swimLook(v, u, i, dt, time) {
-    const sw = !!u.swimming && !u.insideBuildingId, body = v.ch ? v.ch.root : v.cap, s = u.scale || 1;
+    const sw = !!u.swimming && !u.insideBuildingId, body = v.ch?.root, s = u.scale || 1;
     v.swimK = THREE.MathUtils.clamp((v.swimK || 0) + (sw ? dt : -dt) * 2.5, 0, 1);       // 들어가고 나올 때 부드럽게
     const k = v.swimK;
     v.blob.visible = !v.castOn && k < 0.5;                                           // 실제 그림자를 안 드리우는 갈매미(멀거나 설정)는 발밑 원판
@@ -437,7 +439,8 @@ export class UnitViews {
     this.frameNo = (this.frameNo || 0) + 1; this.casting = 0;                       // casting: 실제 그림자를 드리우는(밖에 나와 있는) 갈매미 수
     this.world.units.forEach((u, i) => {
       const v = this.views[i]; if (!v) return;                                     // 막 소환돼 아직 모습이 안 만들어진 갈매미
-      const { g, cap, ch, pick } = v; g.visible = !u.insideBuildingId;
+      if (!v.ch) this.attach(v, u);                                                 // 모델이 아직 없으면(이론상 불러오는 중 화면 뒤엔 없음) 올 때까지 안 그림
+      const { g, ch, pick } = v; g.visible = !u.insideBuildingId && !!ch;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));
       if (v.ch && camera && (v.castOn === undefined || (this.frameNo + i) % 15 === 0)) {   // 가까운 갈매미만 실제 그림자(15프레임마다 확인)
@@ -472,8 +475,6 @@ export class UnitViews {
         v.animDt = (v.animDt || 0) + dt;
         if (g.visible && onScreen && (!far || (this.frameNo + i) % 2 === 0)) { ch.mixer.update(v.animDt); v.animDt = 0; }
         else if (v.animDt > 0.5) v.animDt = 0.5;
-      } else {
-        cap.position.y = walking ? Math.abs(Math.sin(performance.now() / 110 + i)) * 0.05 : 0;   // 캡슐: 걸을 때 콩콩
       }
       // 낚싯줄: 낚싯대 끝 → 찌
       if (!v.line) {

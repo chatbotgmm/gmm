@@ -49,7 +49,8 @@ import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlert
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { stepGridLines } from "./render/gridLines.js";
 import { gridShown } from "./ui/gridView.js";
-import { findCharacterSet, preloadCharacters, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
+import { loadCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
+import { GullPool, loadingView, failReason } from "./render/gullLoad.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -187,7 +188,8 @@ function mount(w) {
   mv.onAdd = (m, o) => { lv.attachModule(m.id, o); if (mw.season) seasonLook.applyTree(m, o, mw.season); };   // 흔들기·쓰러지기 기준 + 지금 계절 잎 색
   mv.onRemove = id => lv.detachModule(id);                                        // 그루터기·움직임도 같이
   const waits = [buildingViews.ready, mv.ready.then(() => tintGround())];
-  if (charSet) { world.applyCharacterProfiles(charSet.chars, WALK_SCALE, RUN_SCALE); waits.push(charPool); }
+  { const w = world, apply = s => { if (world === w) w.applyCharacterProfiles(s.chars, WALK_SCALE, RUN_SCALE); };   // 갈매미 몸 크기·걸음(목록을 받은 뒤 · 마을 시간은 갈매미를 다 받은 뒤에야 흐름)
+    if (charPool.set) apply(charPool.set); else charPool.setReady.then(apply); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
     hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true }); });
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
@@ -239,19 +241,31 @@ function mount(w) {
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
-  return Promise.allSettled(waits);                 // 모델·건물·나무를 다 그린 때
+  return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
 }
 let tools = null, hud = null;
 // 첫 화면: 모델을 다 받을 때까지 「불러오는 중」 화면(진행 막대)을 보여 주고, 그동안 마을 시간은 멈춤
+//  · 갈매미(목록 chars.json + 9종)는 다 받을 때까지 기다림(90초에 포기하지 않음). 실패하면 1.5·4·10초 뒤 자동으로 다시 받고(gullLoad.js),
+//    그래도 안 되면 까닭 한 줄 + [다시 시도](못 받은 것만 다시 받음, 새로고침 없이 이어서 시작)
+//  · 건물·나무 등 다른 모델은 예전처럼 늦어도 90초면 넘어감(못 받은 것은 임시 모양)
 const loadingEl = document.getElementById("loading"), loadBar = document.getElementById("loadBar"), loadText = document.getElementById("loadText");
-let ready = false;
-loadProgress.onChange = () => {
-  const { total, done } = loadProgress; if (!total) return;
-  loadBar.style.width = `${Math.round(done / total * 100)}%`; loadText.textContent = `모델 불러오는 중 ${done} / ${total}`;
-};
-const charSet = await findCharacterSet();          // web/village의 갈매미 모델(없으면 캡슐)
-// 갈매미 8종 모델은 처음에 모두 받아 둠(소환하면 바로 나타나게)
-const charPool = charSet ? preloadCharacters(charSet, loadTools(PROPS), charSet.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model) : null;
+const loadErr = document.getElementById("loadErr"), loadWhy = document.getElementById("loadWhy"), loadRetry = document.getElementById("loadRetry");
+let ready = false, assetsOver = false;
+// 갈매미 모델은 여기서 한 번만 받아 메모리(charPool.map)에 둠 — 섬(views.js)·방(room.js)은 이것만 씀(다시 받지 않음)
+const propTools = loadTools(PROPS);
+const charPool = new GullPool({ loadSet: loadCharacterSet,
+  loadChar: (set, c) => loadCharacter(set.dir, c, propTools, set.dir.includes("gulls") ? quality.cfg.liteModel : quality.cfg.model) });
+function drawLoading() {
+  if (ready) return;
+  const g = charPool.progress(), v = loadingView(g, loadProgress, assetsOver);
+  loadBar.style.width = `${Math.round(v.frac * 100)}%`; loadText.textContent = v.text;
+  if (v.failed) loadWhy.textContent = failReason(g, navigator.onLine);
+  if (loadErr.hidden === v.failed) { loadErr.hidden = !v.failed; if (v.failed) loadRetry.focus({ preventScroll: true }); }   // 단추가 나오면 바로 Enter로 누를 수 있게
+}
+loadProgress.onChange = drawLoading; charPool.onChange(drawLoading);
+loadRetry.onclick = () => charPool.retry();
+addEventListener("keydown", e => { if ((e.key === "Enter" || e.code === "NumpadEnter") && !ready && !loadErr.hidden) { e.preventDefault(); e.stopPropagation(); charPool.retry(); } }, true);   // Enter = 다시 시도(초점이 어디든 · keys.js보다 먼저 받음 — keys.js는 키보드로 옮기지 않은 초점의 Enter를 막음)
+charPool.start(); drawLoading();
 // 저장: 이 브라우저에 1분마다·화면을 떠날 때 자동 저장, 다시 열면 이어서(저장이 없거나 망가졌으면 새 섬)
 let lastSaved = 0, resumed = false;
 function saveNow(quiet = true) {
@@ -319,7 +333,7 @@ const minimap = new Minimap({ getWorld: () => world, camera, controls });   // �
 // 키보드·포인터 층(Esc 단계 닫기 · 열린 창 뒤로 키 안 새게 · 단축키 · 툴팁) + 새 섬·불러오기 확인창은 hud.confirm
 hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
 installKeys({ hud, tools, roomView });
-roomView.chars = charPool;                                                      // 방 안 갈매미 모델
+roomView.chars = charPool;                                                      // 방 안 갈매미 모델(같은 메모리 캐시를 복제해 씀)
 hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
 // 땅을 한 번 누름: ✨ 반짝이가 있으면 먼저 줍고(손가락 판정 지름 48px 이상 또는 1.2칸 안) 카드는 안 엶. 갈매미를 누른 것은 unitControl이 먼저 받음
@@ -338,8 +352,9 @@ hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo();
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };
 hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.status(on ? "이제 건물이 바로 완공돼요" : "이제 갈매미가 나무·돌로 건물을 지어요"); };
-// 다 받으면(늦어도 90초) 보여 줌. 못 받은 모델은 임시 모양으로 남음
-Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => {
+// 건물·나무는 다 받으면(늦어도 90초), 갈매미는 9종을 다 받으면 보여 줌. 못 받은 건물·나무 모델은 임시 모양으로 남음
+const assetsLoad = Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => { assetsOver = true; drawLoading(); });
+Promise.all([assetsLoad, charPool.ready]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
   if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true, full: true });
   else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true, full: true });

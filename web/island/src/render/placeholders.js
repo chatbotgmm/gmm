@@ -114,15 +114,3 @@ export function modulePlaceholder(defId, cellsWorld, rot = 0) {
   }
   return g;
 }
-
-/** 갈매미 임시 모양: 흰 캡슐 + 노란 볏 + 주황 부리 + 빨간 스카프 + 갈색 가방. 앞쪽은 +z. 키 약 0.8 m. */
-export function unitPlaceholder(scale = 1) {
-  const g = new THREE.Group(), body = new THREE.Group(); body.scale.setScalar(scale); g.add(body);
-  const cap = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.32, 6, 14), mat(0xfbfbf8)); cap.position.y = 0.38; cap.castShadow = true; body.add(cap);
-  const crest = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.18, 8), mat(0xe8c24a)); crest.position.set(0, 0.84, 0.02); crest.castShadow = true; body.add(crest);
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.13, 8), mat(0xf0a23a)); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.6, 0.25); body.add(beak);
-  for (const sx of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), mat(0x2b2b2b)); eye.position.set(sx * 0.08, 0.66, 0.2); body.add(eye); }
-  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.045, 8, 20), mat(0xe0402b)); scarf.rotation.x = Math.PI / 2; scarf.position.y = 0.47; body.add(scarf);
-  const bag = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.06), mat(0x8a5a32)); bag.position.set(0.2, 0.27, 0.06); bag.rotation.y = 0.5; body.add(bag);
-  return g;
-}

@@ -1,6 +1,6 @@
 // 기존 갈매미 모델(web/village/models: gmm_char1~8.glb, 애니메이션 Idle·Walk·Run 등)을 불러 유닛에 입힌다.
 // 모델 폴더는 MODEL_DIRS를 차례로 찾는다. 파일은 .glb 그대로이거나, claude.ai 아티팩트처럼 .glb.json(base64)일 수 있다.
-// 못 찾으면 null을 돌려주고, 그러면 임시 캡슐을 그대로 쓴다.
+// 처음에 한 번 받아 메모리(gullLoad.js GullPool)에 두고 섬·방이 같이 씀. 다 받을 때까지 불러오는 중 화면(캡슐 대신 모습은 없음).
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
@@ -12,16 +12,19 @@ const loader = new GLTFLoader();
 /** .glb를 받아 파싱. 없으면 같은 이름 + ".json"(base64를 담은 {glb}) 도 시도. */
 // 불러오기 진행(첫 화면 진행 막대용): 시작한 모델 수·끝난 수·실패한 수
 export const loadProgress = { total: 0, done: 0, failed: 0, onChange: null };
-export async function loadGLB(url) {
+// count = false: 진행 막대에 안 셈(갈매미는 GullPool이 따로 셈 · 다시 받기가 막대 수를 늘리지 않게)
+export async function loadGLB(url, count = true) {
+  if (!count) return fetchGLB(url);
   loadProgress.total++; loadProgress.onChange?.();
   try { return await fetchGLB(url); } catch (e) { loadProgress.failed++; throw e; }
   finally { loadProgress.done++; loadProgress.onChange?.(); }
 }
+/** 못 받으면 오류에 kind: "network"(두 주소 모두 연결 실패) · "missing"(서버가 없다고 함) — 불러오는 중 화면의 까닭 한 줄 */
 async function fetchGLB(url) {
-  let res = await fetch(url).catch(() => null);
+  let net = 0, res = await fetch(url).catch(() => { net++; return null; });
   if (res && res.ok) return loader.parseAsync(await res.arrayBuffer(), url.slice(0, url.lastIndexOf("/") + 1));
-  res = await fetch(url + ".json").catch(() => null);
-  if (!res || !res.ok) throw new Error("모델을 찾지 못함: " + url);
+  res = await fetch(url + ".json").catch(() => { net++; return null; });
+  if (!res || !res.ok) throw Object.assign(new Error("모델을 찾지 못함: " + url), { kind: net === 2 ? "network" : "missing" });
   const bin = Uint8Array.from(atob((await res.json()).glb), c => c.charCodeAt(0)).buffer;
   return loader.parseAsync(bin, url.slice(0, url.lastIndexOf("/") + 1));
 }
@@ -32,6 +35,15 @@ export async function findCharacterSet() {
     try { const r = await fetch(dir + "chars.json"); if (r.ok) return { dir, chars: await r.json() }; } catch { /* 다음 폴더 */ }
   }
   return null;
+}
+/** findCharacterSet과 같지만 못 찾으면 오류(kind 붙음)를 던짐 — GullPool이 다시 받음 */
+export async function loadCharacterSet() {
+  let net = 0;
+  for (const dir of MODEL_DIRS) {
+    const r = await fetch(dir + "chars.json").catch(() => { net++; return null; });
+    if (r?.ok) { try { return { dir, chars: await r.json() }; } catch { /* 다음 폴더 */ } }
+  }
+  throw Object.assign(new Error("갈매미 목록(chars.json)을 찾지 못함"), { kind: net === MODEL_DIRS.length ? "network" : "missing" });
 }
 
 // ---- 갈매미 모델 가볍게: 마리당 약 3만 삼각형이라 불러올 때 meshoptimizer로 줄인다(뼈대 가중치는 꼭짓점에 그대로 있어 애니메이션 유지).
@@ -312,17 +324,9 @@ function fitWear(root) {
   return out;
 }
 
-/** 갈매미 8종 모델을 모두 미리 받아 이름 → 캐릭터 Map으로(못 받은 것은 빠짐 → 캡슐). */
-export async function preloadCharacters(set, tools = null, simplifyRatio = 1) {
-  const res = await Promise.allSettled(set.chars.map(c => loadCharacter(set.dir, c, tools, simplifyRatio)));
-  const map = new Map();
-  res.forEach((r, i) => { if (r.status === "fulfilled") map.set(set.chars[i].name, r.value); else console.warn("갈매미 모델을 못 불러와 캡슐을 씁니다", set.chars[i].name, r.reason); });
-  return map;
-}
-
 /** 캐릭터 하나: 장면 오브젝트, 애니메이션 믹서, 동작들, 손에 붙인 도구, 동작 길이(clip: AI가 타격 시점 계산에 씀). */
 export async function loadCharacter(dir, cfg, tools = null, simplifyRatio = 1) {
-  const g = await loadGLB(dir + cfg.file.split("/").pop()), root = g.scene;
+  const g = await loadGLB(dir + cfg.file.split("/").pop(), false), root = g.scene;
   if (simplifyRatio < 0.99) { const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); }); for (const m of meshes) await simplifyMesh(m, simplifyRatio); }
   // 화면 밖이면 그리지 않게, 움직여도 잘리지 않을 만큼 넉넉한 범위.
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = true;   // 갈매미도 실제 그림자를 드리움(화질 낮음이면 views.js가 끄고 발밑 원판)
