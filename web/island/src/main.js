@@ -230,6 +230,7 @@ function mount(w) {
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
   // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
   world.on("custom", e => hud?.customSpent(e));
+  world.on("monPrint", e => hud?.vaultSpent(e.n, { count: true }));   // 🖨 찍어내기: 금고 칩 옆 +n(초록) + 숫자가 늘어남
   // 건축에서 금고 돈이 나감: 설계비(놓는 순간)·공사 한 바퀴 품삯 → 금고 칩 −n(합침)·숫자 줄어듦·빨간 글 + 공사장 위 표시. 밀리면 공사장 위 「💸 품삯 밀림」. 주문 공사(갈매미 돈)는 이벤트가 없어 안 뜸
   world.on("fee", e => { hud?.vaultSpent(-e.fee, { count: true }); queueMicrotask(() => spendFx.push(e.b, "fee", e.fee)); });   // 설계비는 공사장 모습(buildingAdded)보다 먼저 옴 → 다 놓은 뒤에
   world.on("buildUndo", e => hud?.vaultSpent(e.refund));                          // 짓기 되돌리기: 돌려받은 설계비 +n(편의성 점검 8번)

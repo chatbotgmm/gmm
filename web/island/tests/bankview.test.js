@@ -13,6 +13,7 @@ function town() {
   for (const n of ["목수", "미니", "황금"]) w.addUnitByName(n);
   w.bank.vault = 1e6; const s = spotFor(w, "market"); assert.ok(w.placeBuilding("market", s[0], s[1], 0).ok); w.instantBuild = false;
   Object.assign(w.bank, { vault: 100, fees: 0, wages: 0, taxed: 0, returned: 0, ledger: [] });
+  w.setRate(0);                                                                     // 중앙은행 금리 0%: 계약금 비율 40%(예전 값)
   return w;
 }
 const details = html => [...html.matchAll(/<details class="more" data-more="([^"]+)"( open)?/g)].map(m => [m[1], !!m[2]]);
@@ -57,5 +58,5 @@ test("은행 앱: 최근 7일 — 날 끝 금고를 지금 금고에서 거꾸�
   const html = bankHtml(w);
   assert.ok(html.indexOf(`<td>${a.name}</td><td>🪙50`) < html.indexOf(`<td>${b.name}</td><td>🪙7`), "많은 순");
   assert.ok(html.includes(`마을에 도는 돈 <b>${w.moneySupply()}</b>`));
-  assert.equal(BK.LEDGER_PARTS.length, 6);
+  assert.equal(BK.LEDGER_PARTS.length, 7);
 });

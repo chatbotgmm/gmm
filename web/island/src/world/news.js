@@ -9,6 +9,9 @@ import { josa } from "../util.js";
 import { BOND_STAGES, GIFT_TIERS } from "./bond.js";
 import { MEDALS } from "./medals.js";
 import { askNotice } from "./roadAsk.js";
+import { STEPS, STEP_NAME } from "./monetary.js";
+
+const stepName = v => STEP_NAME[STEPS.indexOf(v)] ?? `${v}`;
 
 export const NEWS_DAY_SECS = 600;       // 마을 하루 = 마을 시간(world.time) 600초
 export const NEWS_KEEP_DAYS = 7;        // 소식지는 최근 7일치만
@@ -85,6 +88,17 @@ const NEWS_MAKERS = {
   upgraded: ({ b, from }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏥", text: `${josa(f.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!${d.beds ? ` 침대 ${d.beds}개` : ""}`, weight: 6 } : null; },
   // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄에만 · 같은 갈매미 하루 한 번은 ALERTS가 거름)
   roadAsk: ({ u, label }) => ({ icon: "🛣", text: askNotice(u.name, label), weight: 0 }),
+  // 중앙은행(monetary.js): 손잡이(찍어내기·매입 예산·금리·축하) · 물가 사태(사태마다 한 번) · 예산 참·자동(알림 줄에만)
+  monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 하루 가공품 매입 예산을 '${stepName(from)}' → '${stepName(to)}'${to > from ? "으로 늘렸어요" : to < from ? "으로 줄였어요" : "으로 정했어요"}`, weight: 3 }),
+  monRate: ({ from, to }) => ({ icon: "🏦", text: `금리를 ${from}% → ${to}%로 ${to > from ? "올렸어요. 갈매미들이 저금을 늘려요" : "내렸어요. 갈매미들이 저금을 덜 해요"}`, weight: 4 }),
+  monGift: ({ per }) => ({ icon: "🎁", text: `은행이 금고에서 모두에게 🪙${per}씩 축하금을 나눠 줬어요`, weight: 3 }),
+  inflation: ({ pi, P }) => ({ icon: "📈", text: `값이 하루에 ${Math.round(pi * 1000) / 10}% 올랐어요 — 물가 ${Math.round(P * 100)}`, weight: 6 }),
+  deflation: () => ({ icon: "🧊", text: "값이 계속 내려가요 — 재료를 못 파는 갈매미가 있을 수 있어요", weight: 5 }),
+  priceStable: () => ({ icon: "📊", text: "사흘째 물가 안정! 마을 점수 +10", weight: 5 }),
+  capFull: () => ({ icon: "🏦", text: "오늘 가공품 매입 예산(또는 금고 여윳돈)이 다 됐어요 — 상인은 내일 팔아요", weight: 0 }),
+  monAuto: ({ from, to, up }) => ({ icon: "🤖", text: `자동: 매입 예산 ${stepName(from)} → ${stepName(to)}(${up ? "값이 내려서" : "값이 올라서"})`, weight: 0 }),
+  monPrint: ({ n, left }) => ({ icon: "🖨", text: `은행이 새 돈 🪙${n}을 찍어 금고에 넣었어요 — 마을에 돈이 늘면 값이 올라요(오늘 더 찍을 수 있는 돈 🪙${left})`, weight: 3 }),
+  monStart: () => ({ icon: "🏛", text: "은행에 중앙은행 판이 생겼어요 — 처음엔 자동이 맡아요", weight: 5 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */

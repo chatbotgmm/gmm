@@ -72,7 +72,7 @@ function useMaterials(world, b, u = null) {
     const carried = Math.min(left, u?.load?.[k] || 0); if (carried) { u.load[k] -= carried; left -= carried; }   // 은행 창고에서 꺼내 온 짐(창고 몫으로 셈)
     world.res[k] -= left; fromBag[k] = mine; fromWare[k] = left + carried;
   }
-  b.used = true;                                                                  // 재료를 썼음 → 짓기 되돌리기(↶)는 안 됨(world/buildUndo.js)
+  b.used = true; world.releaseFee?.(b);                                                                // 재료를 썼음 → 짓기 되돌리기(↶)는 안 됨(world/buildUndo.js)
   if (b.order) world.orderMaterials(b, u, fromBag, fromWare);                     // 갈매미 주문 공사: 주문한 갈매미가 자재값을 냄(창고 것은 금고로, 가방 것은 짓는 갈매미에게)
   if (u && b.supply) markSupply(world, b, u, "build");
 }
@@ -727,13 +727,13 @@ function chooseNext(u, world, rnd) {
   // 피곤하면(기력 TIRED 아래) 심부름(가공·은행·시장·저장고·장보기)을 새로 시작하지 않고 아래에서 먼저 쉼: 상인이 가공 → 은행을 쉬지 않고 이어 가다 기력이 바닥나지 않게
   if (world.economy && (u.needs?.energy ?? 100) >= M.TIRED) {
     if (u.job === "merchant") {                                                  // 상인: 가공품은 은행에, 원자재는 가공
-      if (E.total(u.goods) > 0 && startActivity(u, "deposit", world, rnd)) return;
+      if (E.total(u.goods) > 0 && (world.bankCanBuy?.(u) ?? true) && startActivity(u, "deposit", world, rnd)) return;   // 오늘 한도로 못 파는 가공품만 있으면 은행에 가지 않음(헛걸음 없음, 다음 날 팖)
       if (E.total(u.raw) >= 3 && startActivity(u, "process", world, rnd)) return;
     }
-    if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
+    if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && (world.granaryCanBuy?.() ?? true) && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에(은행이 못 사는 날은 안 감)
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
-    if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀)
+    if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && (world.stashCanSell?.(u) ?? true) && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀). 은행이 못 사는 날은 안 감(헛걸음 되풀이 방지)
     if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝과 같은 집·옆집이 있으면 그 집부터, 다음은 싼 집)
       const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => b === palHome ? 2 : areNeighbors(b, palHome) ? 1 : 0;
       const deals = world.housesForSale(u).map(b => [b, world.houseDeal(u, b)]);   // 집값을 다 가졌거나, 계약금이 있고 금고가 빌려줄 수 있으면(bank.js)
