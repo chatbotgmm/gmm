@@ -14,6 +14,15 @@ export const SLEEP_BELOW_OFF = 30;
 export const WAKE_AT = 99.5;
 /** 체질과 어긋난 시간(아침형의 밤·야행성의 낮)에 피로가 쌓이는 배율 */
 export const OFF_FATIGUE = 1.5;
+/** 자는 중엔 포만감이 이 아래로 떨어져야 배고파서 깸(깨어 있을 땐 jobs.js HUNGRY 35에서 먹으러 감).
+ *  35에서 깨면 느린 잠 회복(mind.js SLEEP_GAIN 0.08~0.16/초) 때문에 거의 모든 잠이 기력이 차기 전에 끝났음.
+ *  20 = 능률이 반(0.5)으로 떨어지는 선(jobs.js efficiency)이자 저장고 나눔(economy.js RATION_FULL 25) 아래: 깨자마자 돈이 없어도 먹을 수 있고,
+ *  일을 멈추고 먹으러 가는 12보다 위라 굶주림 쪽으로 넘어가지 않음 */
+export const SLEEP_HUNGRY = 20;
+/** 자는 동안 배고파지는 배율(깨어 있을 때 jobs.js HUNGER_PER_SEC 0.25에 곱함 → 0.05/초).
+ *  잠든 몸은 덜 씀. 55에서 잠들면 20까지 (55 − 20) / 0.05 = 700초: 침대(기력 30 → 99.5에 69.5 / 0.16 ≈ 434초)·건물 안(≈ 579초)은
+ *  배고프기 전에 다 차고, 밖(≈ 869초)은 대개 조금 덜 차서 깸 */
+export const SLEEP_HUNGER = 0.2;
 
 export const isNocturnal = u => !!(PERSONA[u?.name] || {}).nocturnal;
 /** 체질과 어긋난 시간인가(아침형의 밤 · 야행성의 낮). 밤낮을 모르면 false */

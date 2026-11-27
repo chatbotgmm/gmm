@@ -559,8 +559,10 @@ function standUp(u, world) {
   u.sitOn = null; u.sitY = null;
 }
 // 체질(chrono.js: 아침형·야행성). 잠은 밤낮이 아니라 기력으로(CH.sleepBelow 아래면 자고 CH.WAKE_AT이면 깸)
-/** 더 잘까: 기력이 아직 가득(피로 0)이 아니고, 배고프지 않고, 축제에 갈 만큼 깨어 있지 않음 */
-const keepSleeping = (u, world) => (u.needs?.energy ?? 100) < CH.WAKE_AT && (u.full ?? 80) >= J.HUNGRY && !festAwake(u, world);
+/** 더 잘까: 기력이 아직 가득(피로 0)이 아니고, 아주 배고프지 않고(CH.SLEEP_HUNGRY — 깨어 있을 때 문턱 J.HUNGRY보다 낮음), 축제에 갈 만큼 깨어 있지 않음 */
+const keepSleeping = (u, world) => (u.needs?.energy ?? 100) < CH.WAKE_AT && (u.full ?? 80) >= CH.SLEEP_HUNGRY && !festAwake(u, world);
+/** 자는 중인가(밖 잠·조는 중·건물 안 잠) */
+const asleep = u => u.state === US.Sleep || (!!u.insideBuildingId && u.insideAct === "sleep");
 /** 집에 가는 길이 막혔을 때 그 자리에서 졸며 집 길을 다시 보는 간격(초): 아직 막혔으면 계속 졸고, 뚫렸으면 깨서 집으로(매 프레임 길찾기·상태 떨림 없게) */
 export const BLOCKED_NAP = 20;
 /** 잠자리(밤잠·지쳐서 자는 잠 모두):
@@ -774,7 +776,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   moodBubble(u, dt, world);
   if (u.clothes?.length && !u.insideBuildingId && (u.dressT = (u.dressT ?? 0) - dt) <= 0) { u.dressT = CLO.DRESS_EVERY; world.dressUnit?.(u); }   // 옷 갈아입기(나설 때·30초마다)
   bodyTick(u, dt, world); const cold = CLIM.isCold(u.bodyT);                     // 체온(추우면 배고픔 ×1.1 · 능률 ×0.85. 더위는 말풍선만 — 효과는 2단계)
-  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * (world.fx?.hunger ?? 1) * dt * (cold ? CLIM.COLD_HUNGER : 1)); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
+  u.full = Math.max(0, (u.full ?? 80) - J.HUNGER_PER_SEC * (world.hungerScale ?? 1) * (world.fx?.hunger ?? 1) * dt * (cold ? CLIM.COLD_HUNGER : 1) * (asleep(u) ? CH.SLEEP_HUNGER : 1)); u.eff = J.efficiency(u.full);   // 배고파짐 → 능률
   const e0 = u.needs?.energy; M.tickNeeds(u, dt, u.state, !!u.insideBuildingId);
   if (u.needs && u.needs.energy < e0) {                                          // 기력이 닳을 때만: 아프면 ×1.5(health.js) · 체질과 어긋난 시간이면 ×CH.OFF_FATIGUE(아침형의 밤·야행성의 낮). 회복은 그대로
     const k = (u.sick ? HL.sickDef(u).energy : 1) * CH.fatigueMult(u, world);

@@ -8,6 +8,8 @@ import { BUILDINGS } from "../src/data/catalog.js";
 import * as CH from "../src/units/chrono.js";
 import * as M from "../src/units/mind.js";
 import * as F from "../src/world/furniture.js";
+import * as J from "../src/world/jobs.js";
+import * as E from "../src/world/economy.js";
 
 /** 넓은 섬 + 기본(아침형) + 그림자(야행성). 첫 집은 주인 없음(빈 집 손님) */
 function isle(seed = 4) {
@@ -119,4 +121,33 @@ test("카드 글: 체질 이름과 지금 피로 영향(어긋난 시간일 때�
   assert.equal(CH.chronoNote({ name: "기본" }, { isNight: true }), "밤이라 더 빨리 지쳐요"); assert.equal(CH.chronoNote({ name: "기본" }, { isNight: false }), "");
   assert.equal(CH.chronoNote({ name: "그림자" }, { isNight: false }), "낮이라 더 빨리 지쳐요"); assert.equal(CH.chronoNote({ name: "그림자" }, { isNight: true }), "");
   assert.equal(CH.chronoNote({ name: "기본" }, {}), "", "밤낮을 모르면 없음");
+});
+
+test("자는 중엔 더 배고파야 깸: 문턱 SLEEP_HUNGRY 20(깨어 있을 땐 J.HUNGRY 35) · 12(일 멈추고 먹으러)보다 위 · 저장고 나눔(25) 아래", () => {
+  assert.equal(CH.SLEEP_HUNGRY, 20); assert.ok(CH.SLEEP_HUNGRY < J.HUNGRY && CH.SLEEP_HUNGRY > 12 && CH.SLEEP_HUNGRY < E.RATION_FULL);
+  // 밖에서 자는 갈매미(잘 곳 없음): 포만감 25(35 아래, 20 위)면 계속 잠 · 19면 다음 확인(8초 안)에 깸
+  for (const [full, wake] of [[25, false], [19, true]]) {
+    const g = isle(5); for (const b of g.w.buildings.values()) if (BUILDINGS[b.defId].house) b.owner = 999;
+    g.w.isNight = true; g.u.state = "Sleep"; g.u.timer = 0; g.u.nap = false; g.u.needs.energy = 40; let woke = -1;
+    for (let t = 0; t < 30 && woke < 0; t += 0.1) { g.u.full = full; g.u.needs.energy = Math.min(g.u.needs.energy, 40); g.w.update(0.1); if (g.u.state !== "Sleep") woke = t; }
+    if (wake) assert.ok(woke >= 0 && woke < 9, `포만감 ${full}: 깸(${woke.toFixed(1)}초)`); else assert.equal(woke, -1, `포만감 ${full}: 30초 동안 계속 잠`);
+  }
+  // 빈 집 손님으로 자는 갈매미도 같음
+  for (const [full, wake] of [[25, false], [19, true]]) {
+    const { w, u, h } = isle(); w.isNight = true; u.needs.energy = 15; u.state = "Idle"; u.timer = 0;
+    let slept = false; for (let t = 0; t < 120 && !slept; t += 0.1) { u.full = 90; u.needs.energy = Math.min(u.needs.energy, 15); w.update(0.1); slept = u.insideBuildingId === h.id && u.insideAct === "sleep"; }
+    assert.ok(slept, "빈 집에서 잠듦"); u.timer = 0;   // 들어갈 때 잡힌 첫 타이머를 건너뛰고 바로 깸 조건을 봄
+    let out = -1; for (let t = 0; t < 30 && out < 0; t += 0.1) { u.full = full; u.needs.energy = Math.min(u.needs.energy, 40); w.update(0.1); if (u.insideBuildingId !== h.id) out = t; }
+    if (wake) assert.ok(out >= 0 && out < 9, `건물 안 포만감 ${full}: 나옴(${out.toFixed(1)}초)`); else assert.equal(out, -1, `건물 안 포만감 ${full}: 계속 잠`);
+  }
+});
+
+test("자는 동안 배고픔 ×SLEEP_HUNGER 0.2(초당 0.25 → 0.05): 같은 갈매미를 깨어 있게·자게 해서 한 걸음 비교", () => {
+  assert.equal(CH.SLEEP_HUNGER, 0.2);
+  const { w, u } = isle(); w.isNight = true; w.update(0.01);
+  const drop = st => { u.state = st; u.timer = 999; u.nap = false; u.once = null; u.bodyT = 40; u.full = 80; w.update(1); return 80 - u.full; };
+  const awake = drop("Held"), sleep = drop("Sleep");
+  assert.ok(awake > 0 && Math.abs(sleep / awake - CH.SLEEP_HUNGER) < 1e-6, `잠 ${sleep.toFixed(4)} / 깸 ${awake.toFixed(4)} = 0.2`);
+  // 55에서 잠들어 20에서 깨기까지 (55 − 20) / (0.25 × 0.2) = 700초 > 침대에서 기력 30 → 99.5(69.5 / 0.16 ≈ 434초)
+  assert.ok((55 - CH.SLEEP_HUNGRY) / (J.HUNGER_PER_SEC * CH.SLEEP_HUNGER) > (CH.WAKE_AT - 30) / M.SLEEP_GAIN.bed);
 });
