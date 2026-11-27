@@ -561,10 +561,10 @@ function standUp(u, world) {
 // 체질(chrono.js: 아침형·야행성). 잠은 밤낮이 아니라 기력으로(CH.sleepBelow 아래면 자고 CH.WAKE_AT이면 깸)
 /** 더 잘까: 기력이 아직 가득(피로 0)이 아니고, 배고프지 않고, 축제에 갈 만큼 깨어 있지 않음 */
 const keepSleeping = (u, world) => (u.needs?.energy ?? 100) < CH.WAKE_AT && (u.full ?? 80) >= J.HUNGRY && !festAwake(u, world);
-/** 집에 가는 길이 막혔을 때 그 자리에서 조는 시간(초): 이만큼 자고 일어나 다시 집 길을 찾음(매 프레임 길찾기·상태 떨림 없게) */
+/** 집에 가는 길이 막혔을 때 그 자리에서 졸며 집 길을 다시 보는 간격(초): 아직 막혔으면 계속 졸고, 뚫렸으면 깨서 집으로(매 프레임 길찾기·상태 떨림 없게) */
 export const BLOCKED_NAP = 20;
 /** 잠자리(밤잠·지쳐서 자는 잠 모두):
- *  · 다 지은 내 집이 있으면 늘 내 집(멀어도). 길이 막혀 못 가면 그 자리에서 BLOCKED_NAP초만 졸고(u.nap) 다시 집 길을 찾음
+ *  · 다 지은 내 집이 있으면 늘 내 집(멀어도). 길이 막혀 못 가면 그 자리에서 졸며(u.nap) BLOCKED_NAP초마다 집 길을 다시 봄(뚫리면 깨서 집으로)
  *  · 집이 없으면(아직 못 삼) 주인 없는 다 지은 빈 집에서 손님으로(가까운 3채 중 갈 수 있는 곳, 주인은 안 됨)
  *  · 그것도 없으면 밖에서 잠: 말풍선 + 만족도 하락(u.sleptOutAt → roads.js ROUGH_SAT, ROUGH_SECS 동안)
  *  남의 집·카페 같은 다른 건물에서는 자지 않음. 늘 true */
@@ -859,7 +859,11 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     case US.Sleep:
       if ((u.emoteT ?? 0) <= 0) emote(u, "💤", 2.5);
-      if (u.timer <= 0 && !u.nap && keepSleeping(u, world)) { u.timer = 8; break; }   // 집이 없으면 밖에서 기력이 가득 찰 때까지 잠(집 길이 막혀 조는 중이면 깨서 다시 집 길을 찾음)
+      if (u.timer <= 0 && !u.nap && keepSleeping(u, world)) { u.timer = 8; break; }   // 집이 없으면 밖에서 기력이 가득 찰 때까지 잠
+      if (u.timer <= 0 && u.nap && keepSleeping(u, world)) {                        // 집 길이 막혀 조는 중: BLOCKED_NAP초마다 자면서 집 길을 다시 봄 — 아직 막혔으면 깨지 않고 계속 졺, 뚫렸으면 깨서 집으로
+        const home = u.home && world.buildings.get(u.home);                       // (잠 회복이 느려 한 번 졸아선 안 차므로, 깨고 다시 졸면 20초마다 일어났다 눕고 '막혔어' 말풍선이 되풀이됨)
+        if (home && world.isDone(home) && !startPath(u, world, home.door.x, home.door.z)) { u.timer = BLOCKED_NAP; break; }
+      }
       if (u.timer <= 0 || (u.needs?.energy ?? 100) >= CH.WAKE_AT) { const nap = u.nap; u.nap = false; u.activity = "sleep"; done(u, 1, rnd, world); if (!nap) emote(u, "잘 잤다!"); }   // 피로 0이면 밤이어도 깸
       break;
     case US.GoFest:                                                                 // 축제 광장으로 가는 중(그사이 축제가 끝나면 그만둠)

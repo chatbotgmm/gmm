@@ -54,19 +54,26 @@ test("집 없고 빈 집도 없으면 밖에서 잠: 말풍선 + 만족도 −5(
   w.time += ROUGH_SECS + 1; w.updateRoads(); assert.equal(u.sat, sat0, "시간이 지나면 돌아옴");
 });
 
-test("집 길이 막히면: 다른 건물·빈 집으로 가지 않고 그 자리에서 잠깐(BLOCKED_NAP초) 졸고 다시 시도 — 상태가 떨리지 않음", () => {
+test("집 길이 막히면: 다른 건물·빈 집으로 가지 않고 그 자리에서 졸며 BLOCKED_NAP초마다 집 길을 다시 봄 — 막힌 동안 깨지 않고, 뚫리면 집에 가서 잠", () => {
   const { w, u, h } = farHome(8); for (const b of w.buildings.values()) if (BUILDINGS[b.defId].house && b !== h) b.owner = null;   // 빈 집이 있어도 손님으로 가지 않음
+  const el = w.grid.get(h.door.x, h.door.z).elevation;
   w.grid.setElevation(h.door.x, h.door.z, -1); w.recomputeComps?.();           // 집 문 칸을 물로: 걸어갈 수 없음
-  w.isNight = true; u.state = "Idle"; u.timer = 0; let flips = 0, last = u.state, slept = 0, naps = 0; const went = new Set();
+  w.isNight = true; u.state = "Idle"; u.timer = 0; let flips = 0, last = u.state, slept = 0, naps = 0, blockedSays = 0; const went = new Set();
   for (let t = 0; t < 120; t += 0.1) {
     for (const o of w.units) o.full = 90; u.needs.energy = Math.min(u.needs.energy, 10); w.update(0.1);   // 지친 채로 묶음(기력이 가득 차 아예 깨 버리지 않게)
     if (u.state !== last) { if (u.state === "Sleep") naps++; flips++; last = u.state; }
+    if (/길이 막혔어/.test(u.emoteText || "") && u.emoteT > 2.5) blockedSays++;
     if (u.state === "Sleep") slept += 0.1; if (u.insideBuildingId) went.add(u.insideBuildingId);
   }
   assert.deepEqual([...went], [], "다른 건물에 안 들어감");
-  assert.ok(naps >= 2 && naps <= Math.ceil(120 / BLOCKED_NAP) + 1, `졸았다 다시 시도한 횟수 ${naps}`);
-  assert.ok(flips <= 4 * Math.ceil(120 / BLOCKED_NAP), `상태 바뀐 횟수 ${flips}`); assert.ok(slept > 80, `대부분 졸며 쉼(${slept.toFixed(1)}초)`);
+  assert.equal(naps, 1, `막힌 동안 한 번 누워 계속 졺(누운 횟수 ${naps})`); assert.ok(flips <= 3, `상태 바뀐 횟수 ${flips}`);
+  assert.ok(blockedSays <= 1, `'막혔어' 말풍선은 처음 한 번(${blockedSays})`); assert.ok(slept > 110, `거의 내내 졺(${slept.toFixed(1)}초)`);
   w.updateRoads(); assert.ok(!u.satParts.some(([k]) => /밖에서 잠/.test(k)), "집이 있으니 만족도는 안 깎임");
+  {                                                                              // 길이 뚫리면 다음 확인(BLOCKED_NAP초 안)에 깨서 집으로 가 잠
+    w.grid.setElevation(h.door.x, h.door.z, el); w.recomputeComps?.(); let home = false;
+    for (let t = 0; t < BLOCKED_NAP + 200 && !home; t += 0.1) { for (const o of w.units) o.full = 90; u.needs.energy = Math.min(u.needs.energy, 10); w.update(0.1); home = u.insideBuildingId === h.id && u.insideAct === "sleep"; }
+    assert.ok(home, "길이 뚫리면 내 집에 가서 잠");
+  }
 });
 
 test("손님으로 자던 빈 집을 다른 갈매미가 사면: 손님은 깨서 나와 다시 잠자리를 고름(남의 집에서 계속 자지 않음)", () => {
