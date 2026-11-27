@@ -90,8 +90,11 @@ export function monHtml(w, { more = (k, t, h, o) => moreBox(k, t, h, o), pstep =
     (mi.buyLeft < mi.left ? `<p class="mon-note">⚠️ 금고 여윳돈이 모자라 오늘은 🪙${fmtNum(mi.buyLeft)}까지만 사요(품삯 몫 🪙${fmtNum(Math.ceil(MON.BUY_KEEP * mi.P))}은 남김)</p>` : "") + `</section>`;
 
   // 🎁 축하 나눠주기
-  const per = MON.scaleP(MON.GIFT_PER, mi.P), giftAll = per * w.units.length, giftOk = !mi.giftDone && w.units.length > 0 && vault >= giftAll;
-  const giftBtn = `<button class="mon-gift" data-mon="gift" data-v="1"${giftOk ? "" : " disabled"}>${mi.giftDone ? "🎁 오늘은 나눠 줬어요" : `🎁 모두에게 🪙${per}씩 축하금(금고 🪙${fmtNum(giftAll)})`}</button>`;
+  //  금고에 품삯 몫(BUY_KEEP × P)이 남을 때만 켬: 매입·이자처럼 축하금도 품삯·설계비 몫까지 헐지 않게(World.giftAll은 금고 ≥ 합계만 봄 — 이 단추가 유일한 호출)
+  const per = MON.scaleP(MON.GIFT_PER, mi.P), giftAll = per * w.units.length, keep = Math.ceil(MON.BUY_KEEP * mi.P), giftShort = vault - giftAll < keep;
+  const giftOk = !mi.giftDone && w.units.length > 0 && !giftShort;
+  const giftBtn = `<button class="mon-gift" data-mon="gift" data-v="1"${giftOk ? "" : " disabled"}>${mi.giftDone ? "🎁 오늘은 나눠 줬어요" : `🎁 모두에게 🪙${per}씩 축하금(금고 🪙${fmtNum(giftAll)})`}</button>` +
+    (!mi.giftDone && w.units.length > 0 && giftShort ? `<p class="mon-note mon-gnote">🎁 금고가 모자라 축하금은 못 줘요(🪙${fmtNum(giftAll)} + 품삯 몫 🪙${fmtNum(keep)} 필요)</p>` : "");
 
   // 자세히: 최근 며칠 막대
   const H = (bk.mon?.hist || []).slice(-MON.HIST_DAYS), vEnd = new Map();
@@ -110,7 +113,7 @@ export function monHtml(w, { more = (k, t, h, o) => moreBox(k, t, h, o), pstep =
   const helpH = `<ul class="mon-help"><li>🖨 새 돈은 찍어내기 단추로만 생겨요. 하루에 🪙${MON.PRINT_DAY_MAX}까지.</li>` +
     `<li>찍은 돈은 금고 → 설계비·품삯·매입으로 마을에 풀려요. 마을 돈이 만든 물건보다 많아지면 물가가 올라요(하루 최대 +3%).</li>` +
     `<li>세금·저녁 장보기·집값·숙박·진료·옷·가게로 마을 돈이 금고로 돌아와요.</li>` +
-    `<li>은행이 갈매미에게 주는 돈(매입·이자·축하금)은 모두 금고에서 나가요. 금고가 모자라면 덜 줘요.</li>` +
+    `<li>은행이 갈매미에게 주는 돈(매입·이자·축하금)은 모두 금고에서 나가요. 품삯 몫 🪙${fmtNum(Math.ceil(MON.BUY_KEEP * mi.P))}은 남기고, 모자라면 매입·이자는 덜 주고 축하금은 안 줘요.</li>` +
     `<li>사흘 내리 물가가 안정하면 마을 점수 +${MON.STABLE_SCORE}.</li></ul>`;
 
   return `<div class="mon">` + kpis + printBox + rateBox + buyBox + giftBtn +

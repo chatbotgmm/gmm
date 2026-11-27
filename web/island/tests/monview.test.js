@@ -67,3 +67,11 @@ test("돈 흐름 표: 찍은 돈은 새 돈, 품삯은 금고 → 마을, 탭은
   assert.match(bankAppHtml(w, undefined, { tab: "mon" }), /data-banktab="mon" aria-selected="true"[\s\S]*mon-kpis/);
   const old = World.create(7, seededRandom(3)); assert.ok(!/data-banktab/.test(bankAppHtml(old)), "예전 섬은 탭 없음");
 });
+
+test("🎁 축하 단추: 금고에 품삯 몫(BUY_KEEP × P)이 남을 때만 켜짐, 모자라면 까닭 한 줄", () => {
+  const w = town(), n = w.units.length, per = MON.scaleP(MON.GIFT_PER, w.bank.mon.P), keep = Math.ceil(MON.BUY_KEEP * w.bank.mon.P);
+  const btn = h => h.match(/<button class="mon-gift"[^>]*>/)[0];
+  w.bank.vault = per * n + keep; assert.ok(!/disabled/.test(btn(monHtml(w))), "합계 + 품삯 몫이면 켜짐");
+  w.bank.vault = per * n + keep - 1; const h = monHtml(w);
+  assert.match(btn(h), /disabled/, "품삯 몫을 헐게 되면 꺼짐"); assert.match(h, /축하금은 못 줘요/);
+});
