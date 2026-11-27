@@ -14,6 +14,7 @@ import { areNeighbors } from "../world/wishes.js";
 import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
 import * as IM from "../world/improve.js";
+import * as RA from "../world/roadAsk.js";
 import * as FM from "../world/farming.js";
 import { FURNITURE, CLOTHES } from "../data/catalog.js";
 import * as CLO from "../world/clothes.js";
@@ -523,28 +524,40 @@ function arriveWater(u, world, rnd) {
     u.tool = null; done(u, 0.7, rnd, world);
   });
 }
+/** 길 부탁(roadAsk.js): 바라는 길이 있고 차례가 됐으면 멈춰 서서 말풍선으로 부탁하고, 깔기 좋은 길을 world.roadAsks에 둠("roadAsk" 알림).
+ *  길이 이어졌거나 바랄 게 없어지면 부탁을 지움. 처음 바라게 되면 0~ASK_FIRST_MAX초 뒤로 차례를 잡음(난수는 바랄 때만 씀) */
+function askRoad(u, world, rnd) {
+  const want = RA.roadWant(world, u);
+  if (!want) { if (u.roadAskAt != null) { u.roadAskAt = null; world.roadAsks?.delete(u.unitId); } return false; }
+  const t = world.time || 0;
+  if (u.roadAskAt == null) { u.roadAskAt = t + rnd() * RA.ASK_FIRST_MAX; return false; }
+  if (!RA.canAsk(u, t, world.roadAskLast ?? -Infinity)) return false;
+  u.roadAskAt = t + RA.nextGap(rnd); world.roadAskLast = t;
+  const route = RA.routeFor(world, want.home, want.target);
+  const ask = { u, target: want.target, label: want.label, cells: route?.cells || [], regular: !!route?.regular, todo: route?.todo ?? 0, t };
+  (world.roadAsks ||= new Map()).set(u.unitId, ask);
+  emote(u, RA.askBubble(want.label, rnd), RA.ASK_SECS); world.emit("roadAsk", ask);
+  setIdle(u, rnd, world, RA.ASK_SECS * 0.7); return true;                      // 잠깐 멈춰 서서 말함
+}
 /** 동네 고치기 시작: 계획을 세우고 첫 칸으로 감 */
 function startImprove(u, world, rnd) {
   const plan = IM.planImprovement(world, u); if (!plan) return false;
   const home = world.buildings.get(u.home);
   if (plan.kind === "deco") { const b = IM.orderDeco(world, home, rnd, u); if (!b) return false; emote(u, `🌷 ${BUILDINGS[b.defId].name} 주문!${b.order ? ` 🪙${b.order.left}` : ""}`, 2.5); world.emit("improve", { u, kind: "deco", b }); done(u, 0.6, rnd, world); return true; }
   world.improveClaims ||= new Set(); for (const [x, z] of plan.cells) world.improveClaims.add(`${x},${z}`);
-  u.improve = { ...plan, i: 0, paved: 0 };
+  u.improve = { ...plan, i: 0 };
   if (!improveNext(u, world)) { endImprove(u, world); return false; }
-  emote(u, plan.kind === "pave" ? "🛣 길 깔러!" : "🏡 마당 고르기!", 2.2); u.activity = "build"; return true;
+  emote(u, "🏡 마당 고르기!", 2.2); u.activity = "build"; return true;
 }
 function improveNext(u, world) {
   const im = u.improve; while (im && im.i < im.cells.length) { const [x, z] = im.cells[im.i]; if (pathBeside(u, world, x, z) || startPath(u, world, x, z)) { u.state = US.GoImprove; return true; } im.i++; }
   return false;
 }
 function endImprove(u, world) { const im = u.improve; if (im) for (const [x, z] of im.cells) world.improveClaims?.delete(`${x},${z}`); u.improve = null; u.tool = null; }
-/** 한 칸 고치기: 길은 돌길로 칠하고(돌: 가방 → 은행 창고), 마당은 문 높이로 높이거나 낮춤 */
+/** 한 칸 고치기: 마당을 문 높이로 높이거나 낮춤(높이만 — 땅 종류는 바꾸지 않음. 길은 플레이어가 칠하고 갈매미는 부탁만: roadAsk.js) */
 function improveCell(u, world) {
-  const im = u.improve, [x, z] = im.cells[im.i];
-  if (im.kind === "pave" && world.canPaint(x, z)) {
-    if (im.paved % IM.STONE_PER === 0) { if ((u.inv?.stone || 0) > 0) u.inv.stone--; else if ((world.res.stone || 0) > 0) world.res.stone--; else return false; }
-    world.paint(x, z, "Cobble"); im.paved++;
-  } else if (im.kind === "yard" && world.canReshape(x, z)) { world.reshape(x, z, "flatten", im.target, 1); }
+  const im = u.improve, [x, z] = im.cells[im.i]; if (im.kind !== "yard") return false;
+  if (world.canReshape(x, z)) world.reshape(x, z, "flatten", im.target, 1);
   world.emit("improve", { u, kind: im.kind, x, z }); return true;
 }
 /** 쉴 때 가까운(16칸 안) 빈 벤치에 가서 앉음. 몸이 너무 큰 갈매미(자이언트)는 안 앉음 */
@@ -708,7 +721,8 @@ function chooseNext(u, world, rnd) {
       if (want && (u.coins || 0) >= price + 2 * world.foodPrice() && startPath(u, world, shop.door.x, shop.door.z)) { u.state = US.GoMarket; u.shop = { kind: "furnish", id: want }; emote(u, `${FURNITURE[want].name} 사러!`); return; }
     }
   }
-  // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 시장/은행까지 돌길 · 장식 주문. 낮을수록 더 자주
+  // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 장식 주문. 낮을수록 더 자주(길은 깔지 않고 부탁만 — 아래 askRoad)
+  if (askRoad(u, world, rnd)) return;                                         // 집이 시장·은행과 길로 안 이어졌으면 가끔 멈춰 서서 길을 부탁(말풍선)
   if (world.economy && (u.sat ?? 100) < 75 && !u.committed && (u.needs?.energy ?? 100) >= M.TIRED && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy < CH.sleepBelow(u, world) && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠(밤낮 상관없이 기력 20 아래, 아침형의 밤·야행성의 낮엔 30 아래)
@@ -1084,13 +1098,13 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     case US.GoImprove:
       if (!u.improve) { setIdle(u, rnd, world); break; }
-      if (followPath(u, dt, world, rnd)) { const [x, z] = u.improve.cells[u.improve.i]; face(u, x + 0.5, z + 0.5); u.state = US.Improve; u.tool = u.improve.kind === "pave" ? "hammer" : "hoe"; }
+      if (followPath(u, dt, world, rnd)) { const [x, z] = u.improve.cells[u.improve.i]; face(u, x + 0.5, z + 0.5); u.state = US.Improve; u.tool = "hoe"; }
       break;
     case US.Improve:
       if (!u.improve) { setIdle(u, rnd, world); break; }
-      workLoop(u, dt, u.improve.kind === "pave" ? "Pave" : "Hoe", 2, () => {}, () => {   // 길 = 쪼그려 톡톡, 마당 = 괭이질
+      workLoop(u, dt, "Hoe", 2, () => {}, () => {   // 마당 = 괭이질
         const ok = improveCell(u, world); u.improve.i++;
-        if (!ok || u.improve.i >= u.improve.cells.length || !improveNext(u, world)) { const kind = u.improve.kind; endImprove(u, world); emote(u, kind === "pave" ? "🛣 길 완성!" : "🏡 마당 끝!", 2.2); M.learn(u, "build", 0.8); done(u, 1.4, rnd, world); }
+        if (!ok || u.improve.i >= u.improve.cells.length || !improveNext(u, world)) { endImprove(u, world); emote(u, "🏡 마당 끝!", 2.2); M.learn(u, "build", 0.8); done(u, 1.4, rnd, world); }
       });
       break;
     case US.Greet: case US.Eat: case US.Farm: case US.Water: break;          // doOnce가 끝나면 풀림

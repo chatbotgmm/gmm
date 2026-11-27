@@ -9,6 +9,8 @@ import { josa } from "../util.js";
 import { terrainHeight } from "../world/terrain.js";
 import { findPath } from "../world/pathfinding.js";
 import { frontCells } from "../world/customize.js";
+import { isPaved } from "../world/roads.js";
+import { roadWant } from "../world/roadAsk.js";
 import { pressKind, tapTool } from "./pressKind.js";
 import { natureAction, natureHover, strokeText, undoText, redoText } from "../ui/natureView.js";
 const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
@@ -32,6 +34,10 @@ export class Tools {
     this.doorMark = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
     this.doorMark.rotation.x = Math.PI;               // 아래를 가리키는 문 앞 표시
     scene.add(this.doorMark); this.doorMark.visible = false;
+    // 갈매미가 부탁한 길(world.roadAsks, roadAsk.js): 바닥 칠하기 중에만 아직 안 깐 칸을 옅은 노란 판으로 보여 줌(칸 하나 = 인스턴스 하나)
+    this.askMax = 512; this.askMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(CELL * 0.86, CELL * 0.86).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.42, depthWrite: false }), this.askMax);
+    this.askMesh.count = 0; this.askMesh.visible = false; this.askMesh.frustumCulled = false; this.askMesh.renderOrder = 1; scene.add(this.askMesh); this.askT = 0;
     this.hand = false; this.spaceHeld = false; this.touchIds = new Set();
     // 모바일 편집: 모양(붓·길·네모), 십자선 모드, 되돌리기·다시하기, 단 높이 맞추기
     this.shape = "brush"; this.shapeStart = null; this.cross = false; this.history = []; this.redoStack = []; this.diff = null; this.levelH = 0.5;
@@ -62,6 +68,23 @@ export class Tools {
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
     this.onStatus(""); this.refresh(); this.onMode?.(mode, arg);
+    this.askT = 0; this.tickAsks();
+    if (mode === "paint" && this.askMesh.count) this.onStatus("🛣 노란 칸 = 갈매미가 부탁한 길(돌길·데크로 칠하면 집과 이어져요)");
+  }
+  /** 부탁받은 길 칸 다시 그리기(바닥 칠하기 중 0.5초마다): 이어졌거나 바라지 않게 된 부탁은 지우고, 이미 포장된 칸은 뺌 */
+  tickAsks() {
+    const m = this.askMesh, w = this.world;
+    if (this.mode !== "paint" || !w.roadAsks?.size) { m.visible = false; m.count = 0; return; }
+    const t = performance.now(); if (t - this.askT < 500) return; this.askT = t;
+    const seen = new Set(), mat = new THREE.Matrix4(), g = w.grid; let n = 0;
+    for (const [id, a] of w.roadAsks) {
+      if (!w.units.includes(a.u) || !roadWant(w, a.u)) { w.roadAsks.delete(id); continue; }
+      for (const [x, z] of a.cells) {
+        const k = z * g.w + x; if (n >= this.askMax || seen.has(k) || !g.inBounds(x, z) || isPaved(w, x, z)) continue; seen.add(k);
+        mat.makeTranslation(toWorldX(x + 0.5), Math.max(terrainHeight(g, x + 0.5, z + 0.5), g.walkHeight(x, z) ?? -9) + 0.03, toWorldZ(z + 0.5)); m.setMatrixAt(n++, mat);
+      }
+    }
+    m.count = n; m.visible = n > 0; m.instanceMatrix.needsUpdate = true;
   }
   /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
   get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld && !this.cross; }   // 십자선 모드: 한 손가락은 화면 옮기기, 칠하기는 버튼으로
@@ -197,6 +220,7 @@ export class Tools {
   // ---- 십자선 모드: 화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함
   setCross(on) { this.cross = on; this.cancelStroke(); this.applyControls(); this.onCross?.(on); this.refresh(); }
   tick() {
+    this.tickAsks();
     if (!this.cross || (this.mode !== "paint" && this.mode !== "height")) return;
     const r = this.dom.getBoundingClientRect(), h = this.pick(r.left + r.width / 2, r.top + r.height / 2);
     if (h?.x !== this.hover?.x || h?.z !== this.hover?.z) { this.hover = h; this.refresh(); if (this.crossHeld) this.apply(); }
