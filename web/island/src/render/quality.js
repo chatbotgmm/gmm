@@ -11,6 +11,7 @@
 //  · 소품 모델 단계 lod(0~3, 원본 → 50% → 30% → 18%)와 그리기 거리 drawDist(m, 그 밖의 나무·건물·소품·갈매미는 안 그림, 안개로 가림)
 //  · 발자국 개수(눈·모래 위, 성능 우선은 0)
 //  · 가로등 실제 빛(가까운 것 N개만 주변 갈매미·건물·땅을 밝힘, 성능 우선은 0)
+//  · 물(waterLite: 낮음·성능 우선은 물빛 무늬·각진 반짝임·빗방울을 뺀 가벼운 물, 파도는 그대로)
 //  · 갈매미 모델 정밀도(liteModel: 남길 삼각형 비율, 다음에 열 때부터). 나중에 단계별 모델 파일을 만들면 여기서 고르게 연결
 import * as THREE from "three";
 
@@ -27,9 +28,9 @@ export const QUALITY = {
   medium: { name: "보통", maxPR: pr(1.75, 1.5), minPR: pr(1, 1), dynamic: true, shadows: true, shadow: IS_TOUCH ? 1024 : 2048, soft: !IS_TOUCH, shadowEvery: 2,
     terrainSub: IS_TOUCH ? 2 : 4, lodScale: 1, farDrop: true, gullShadowDist: 28, decor: { density: 0.8, simple: true, bushShadow: true }, lampLights: 4, footprints: 200, lod: 1, drawDist: 120, fpsCap: 0, model: 0.4, liteModel: 1 },
   low:   { name: "낮음", maxPR: pr(1, 1.25), minPR: pr(0.85, 1), dynamic: true, shadows: true, shadow: 1024, soft: false, shadowEvery: 3,
-    terrainSub: 2, lodScale: 0.7, farDrop: true, gullShadowDist: 0, decor: { density: 0.5, simple: true, bushShadow: false }, lampLights: 2, footprints: 80, lod: 2, drawDist: 90, fpsCap: 0, model: 0.25, liteModel: 0.6 },
+    terrainSub: 2, lodScale: 0.7, farDrop: true, gullShadowDist: 0, decor: { density: 0.5, simple: true, bushShadow: false }, lampLights: 2, footprints: 80, lod: 2, drawDist: 90, fpsCap: 0, model: 0.25, liteModel: 0.6, waterLite: true },
   perf:  { name: "성능 우선", maxPR: pr(0.7, 0.6), minPR: pr(0.7, 0.6), dynamic: false, shadows: false, shadow: 512, soft: false, shadowEvery: 4,
-    terrainSub: 1, lodScale: 0.5, farDrop: true, gullShadowDist: 0, decor: { density: 0.25, simple: true, bushShadow: false }, lampLights: 0, footprints: 0, lod: 3, drawDist: 70, fpsCap: 30, model: 0.2, liteModel: 0.4 },
+    terrainSub: 1, lodScale: 0.5, farDrop: true, gullShadowDist: 0, decor: { density: 0.25, simple: true, bushShadow: false }, lampLights: 0, footprints: 0, lod: 3, drawDist: 70, fpsCap: 30, model: 0.2, liteModel: 0.4, waterLite: true },
 };
 export const ORDER = ["ultra", "high", "medium", "low", "perf"];
 export const QUALITY_NOTE = {
