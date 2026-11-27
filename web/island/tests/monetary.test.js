@@ -59,6 +59,9 @@ test("가공품 매입: 금고 돈으로(새로 찍지 않음) · 오늘 예산(
   assert.equal(w.setIssue(15), true); assert.equal(mon.auto, false, "칩을 누르면 자동 꺼짐"); assert.equal(w.setIssue(130), false, "없는 단계");
   nextDay(w); assert.equal(mon.cap, 15 * n);
   assert.equal(w.setIssue(0), true); nextDay(w); m.goods.wood = 5; assert.equal(w.bankCanBuy(m), false, "멈춤이면 은행에 안 감");
+  // 창고에 적은 것부터 삼(나무가 가득한데 예산이 작은 날 나무만 사서 돌이 안 들어오는 일 없게)
+  w.setIssue(15); nextDay(w); w.bank.vault = 1e4; w.res.wood = 400; w.res.stone = 0; w.res.iron = 400; m.goods = { wood: 100, stone: 100, iron: 0 };
+  const b3 = w.sellProcessed(m); assert.ok(b3.items.stone > 0, "돌부터"); assert.equal(b3.items.wood, 0, "예산이 돌에서 다 쓰임(나무는 창고에 400)");
 });
 
 test("🖨 찍어내기: 유일한 새 돈 · 50·100·200 · 하루 합 300까지 · 금고로 · 다음 마을 날 다시 · 저장됨", () => {

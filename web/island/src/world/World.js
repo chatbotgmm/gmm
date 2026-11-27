@@ -362,7 +362,7 @@ export class World {
   /** 중앙은행 판 가공품 매입(금고에서 냄, 새로 찍지 않음): 오늘 남은 예산과 금고 여윳돈(금고 − BUY_KEEP × P) 안에서만. 못 사는 가공품은 상인 가방에 남아 다음 날 팖 */
   sellProcessedMon(m) {
     const mon = this.bank.mon, items = { wood: 0, stone: 0, iron: 0 }, left0 = this.monLeft(); let left = this.buyLeft(), coins = 0;
-    for (const k of E.RAW) {
+    for (const k of [...E.RAW].sort((a, b) => (this.res[a] || 0) - (this.res[b] || 0))) {   // 창고에 적은 것부터(늘 나무부터 사면 예산이 작은 날 돌이 안 들어와 공사가 멈춤: 검토 시뮬 2일마다 100 찍기 씨앗 17, 25일째 상인 가방 석재 2,765개·창고 돌 0)
       const n = m.goods[k] || 0, price = this.procPrice(k), can = Math.min(n, Math.floor(left / price)); if (!(can > 0)) continue;
       items[k] = can; coins += can * price; left -= can * price; this.res[k] = (this.res[k] || 0) + can; m.goods[k] -= can;
     }
