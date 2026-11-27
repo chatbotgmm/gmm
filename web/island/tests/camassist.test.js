@@ -1,7 +1,7 @@
 // 시점 편의(편의성 점검 1·3·9번): 따라가기 가까이 붙기 거리 · 갈매미 누르기 판정 반지름 · 마을 전체 보기 목표. node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HOME_OFF, HOME_TARGET, FOLLOW_NEAR, PICK_PX, followZoomLen, followBackLen, nearestOnScreen, ndcToScreen, overviewGoal, showOverviewBtn } from "../src/systems/camAssist.js";
+import { HOME_OFF, HOME_TARGET, FOLLOW_NEAR, PICK_PX, followZoomLen, followBackLen, nearestOnScreen, ndcToScreen, overviewGoal, showOverviewBtn, OVERVIEW_AWAY } from "../src/systems/camAssist.js";
 
 test("따라가기 가까이: 멀면(83.8 m·72.2 m) 10 m로, 이미 가까우면 그대로", () => {
   assert.equal(followZoomLen(83.8), FOLLOW_NEAR); assert.equal(followZoomLen(72.2), 10);
@@ -48,4 +48,11 @@ test("🏝 전체 보기 단추: 따라가거나 가까이 볼 때만 · 건설 
   assert.equal(showOverviewBtn({ len: 83.8, following: true, portrait: true, mode: "view" }), true);
   assert.equal(showOverviewBtn({ len: 10, following: true, portrait: true, mode: "build" }), false);
   assert.equal(showOverviewBtn({ len: 10, following: true, portrait: true, mode: "view", inRoom: true }), false);
+});
+
+test("🏝 전체 보기 단추: 열린 세계에서 섬 밖 멀리(보통 높이) 나가도 보임 · 섬 안이면 그대로 숨김 · 건설 모드는 숨김", () => {
+  assert.equal(showOverviewBtn({ len: 83.8, following: false, portrait: true, mode: "view", away: 1140 }), true);
+  assert.equal(showOverviewBtn({ len: 72.2, following: false, portrait: false, mode: "view", away: OVERVIEW_AWAY + 1 }), true);
+  assert.equal(showOverviewBtn({ len: 83.8, following: false, portrait: true, mode: "view", away: 40 }), false);
+  assert.equal(showOverviewBtn({ len: 83.8, following: false, portrait: true, mode: "paint", away: 1140 }), false);
 });

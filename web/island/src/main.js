@@ -555,7 +555,7 @@ function frameBody() {
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight); spendFx.update(innerWidth, innerHeight);
-  if (now - lastHud > 200) { const hb = showOverviewBtn({ len: camera.position.distanceTo(controls.target), following: !!unitControl.follow, portrait: portrait(), mode: tools.mode, inRoom: roomView.isOpen }); if (homeBtn.hidden === hb) homeBtn.hidden = !hb; }
+  if (now - lastHud > 200) { const hb = showOverviewBtn({ len: camera.position.distanceTo(controls.target), following: !!unitControl.follow, portrait: portrait(), mode: tools.mode, inRoom: roomView.isOpen, away: Math.hypot(controls.target.x - HOME_TARGET.x, controls.target.z - HOME_TARGET.z) }); if (homeBtn.hidden === hb) homeBtn.hidden = !hb; }
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
   if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }
