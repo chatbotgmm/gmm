@@ -154,3 +154,25 @@ test("보기 격자 + 시뮬 격자: 올라온 시뮬 칸은 같은 객체(바�
   const c = w.center; w.paint(Math.floor(c.x) + 7, Math.floor(c.z) + 9, "Dirt"); assert.ok(v.takeDirty().length > 0, "시작 섬 조각은 GroundChunks로");
   assert.equal(v.innerPiece(0, 0), true); assert.equal(v.innerPiece(-1, 0), false); assert.equal(v.innerPiece(11, 11), true); assert.equal(v.innerPiece(12, 3), false);
 });
+
+test("LRU가 꽉 찬 뒤 처음 만진 청크에 지어도(차지·칠하기) 사라지지 않음 — 막 만든 청크가 바로 내려가던 것", () => {
+  const g = new ChunkGrid(7, { lruMax: 4 });
+  for (let i = 0; i < 6; i++) g.get(1000 + i * 32, 1000);                          // LRU를 채움(먼 바다)
+  g.occupy([[2001, 2000]], "B", { kind: "building" });                             // 처음 만지는 청크에 차지
+  assert.ok(g.loadedChunk(2001 >> 5, 2000 >> 5), "올라온 청크 목록에 있음"); assert.ok(g.isResidentChunk(2001 >> 5, 2000 >> 5), "상주");
+  g.get(0, 0); for (let i = 0; i < 6; i++) g.get(-1000 - i * 32, -1000);
+  assert.equal(g.get(2001, 2000).occupiedId, "B", "다른 곳을 오가도 차지가 남음");
+  for (let i = 0; i < 6; i++) g.get(1000 + i * 32, 3000);
+  g.setGround(2500, 2500, "Rock"); for (let i = 0; i < 6; i++) g.get(-3000 - i * 32, 0);
+  assert.equal(g.get(2500, 2500).groundType, "Rock", "칠한 칸도 남음");
+});
+
+test("반짝이 후보: 바깥 섬을 칠했다 되돌리거나 지었다 헐어도, 저장해서 다시 불러온 섬과 같은 후보", async () => {
+  const { sparkleCells } = await import("../src/world/sparkles.js");
+  const w = wild(); w.bank.vault = 10000; w.res.wood = 999;
+  const s = outerSpot(w, 6), sand = []; for (let dz = -40; dz <= 40 && sand.length < 1; dz++) for (let dx = -40; dx <= 40; dx++) { const c = w.grid.get(s[0] + dx, s[1] + dz); if (c.groundType === "Sand" && c.elevation >= 0 && !c.occupiedId) { sand.push([s[0] + dx, s[1] + dz]); break; } }
+  assert.ok(sand.length, "바깥 섬 모래");
+  const [x, z] = sand[0]; assert.ok(w.grid.setGround(x, z, "Grass")); assert.ok(w.grid.setGround(x, z, "Sand"));   // 칠했다 되돌림
+  const before = sparkleCells(w), b = World.fromJSON(JSON.parse(JSON.stringify(w.serialize(1))), seededRandom(2)), after = sparkleCells(b);
+  assert.deepEqual(after, before);
+});

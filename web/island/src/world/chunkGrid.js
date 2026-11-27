@@ -44,14 +44,15 @@ export class ChunkGrid {
   }
   load(cx, cz, k) {
     const d = genChunk(this.seed, cx, cz), ch = this.makeChunk(cx, cz, d.elev, d.ground); this.loads++;
+    ch.used = ++this.clock;                                                        // 막 만든 청크가 가장 오래된 것으로 보여 바로 내려가지 않게(내려가면 돌려준 칸에 쓴 것이 사라짐)
     this.lru.set(k, ch); this.all.set(k, ch);
-    if (this.lru.size > this.lruMax) this.evict();
+    if (this.lru.size > this.lruMax) this.evict(ch);
     return ch;
   }
   /** 가장 오래 안 쓴 청크 하나를 내림. 다르게 바뀐 칸·차지·문이 있으면 내리지 않고 상주로 돌림 */
-  evict() {
+  evict(keep = null) {
     for (let guard = 0; this.lru.size > this.lruMax && guard < 8; guard++) {
-      let old = null; for (const ch of this.lru.values()) if (ch !== this._lc && (!old || ch.used < old.used)) old = ch;
+      let old = null; for (const ch of this.lru.values()) if (ch !== this._lc && ch !== keep && (!old || ch.used < old.used)) old = ch;
       if (!old) return;
       this.lru.delete(old.key);
       if (this.resident(old)) { this.pinned.set(old.key, old); continue; }
@@ -117,6 +118,13 @@ export class ChunkGrid {
       const x0 = ch.cx * WCH, z0 = ch.cz * WCH;
       for (let i = 0; i < NC; i++) fn(ch.cells[i], x0 + (i & WCH_MASK), z0 + (i >> WCH_SHIFT));
     }
+  }
+  /** 상주였다가 되돌아간 청크(칠했다 되돌림·건물 철거)를 LRU로 돌림. 그래서 상주 집합 = 지금 칸 상태만의 함수
+   *  → 저장해서 다시 불러온 섬(델타·건물·문 청크만 상주)과 같은 칸을 훑는다(반짝이 후보가 저장 전후로 같음) */
+  unpinStale() {
+    let moved = false;
+    for (const [k, ch] of this.pinned) if (!this.resident(ch)) { this.pinned.delete(k); this.lru.set(k, ch); moved = true; }
+    if (moved && this.lru.size > this.lruMax) this.evict();
   }
   /** 상주 청크 목록(저장용, 고정 순서: 열쇠 오름차순) */
   residentChunks() { return [...this.fixed.values(), ...this.pinned.values()].sort((a, b) => a.key - b.key); }

@@ -57,7 +57,10 @@ export function sparkleCells(world) {
     for (const [bx, bz] of b.cells) for (let z = bz - SPARKLE_NEAR; z <= bz + SPARKLE_NEAR; z++) for (let x = bx - SPARKLE_NEAR; x <= bx + SPARKLE_NEAR; x++) if (g.inBounds(x, z)) near.add(g.index(x, z));
   }
   // 후보 칸: 상주 칸(시작 섬 + 바뀐·지은 청크)을 칸 번호 순서로(같은 섬 → 같은 순서 → 같은 씨앗이면 같은 자리)
-  const cand = []; g.eachCell((c, x, z) => { if (c.groundType === GroundType.Sand) cand.push(g.index(x, z)); else if (near.size || lit.size) { const i = g.index(x, z); if (near.has(i) || lit.has(i)) cand.push(i); } });
+  //  마을·가로등 둘레 칸은 상주 청크 밖으로 삐져나와도 넣는다(상주 여부와 상관없이 같은 후보)
+  g.unpinStale?.();                                                               // 되돌아간 청크는 상주에서 뺌 → 바닷가 후보 = 지금 칸 상태만의 함수(저장 전후 같음)
+  const cand = [], seen = new Set(); g.eachCell((c, x, z) => { if (c.groundType === GroundType.Sand) { const i = g.index(x, z); cand.push(i); seen.add(i); } });
+  for (const s of [near, lit]) for (const i of s) if (!seen.has(i)) { seen.add(i); cand.push(i); }
   cand.sort((p, q) => g.zOf(p) - g.zOf(q) || g.xOf(p) - g.xOf(q));
   for (const i of cand) {
     const x = g.xOf(i), z = g.zOf(i), c = g.get(x, z), sand = c.groundType === GroundType.Sand, nr = near.has(i), lt = lit.has(i);
