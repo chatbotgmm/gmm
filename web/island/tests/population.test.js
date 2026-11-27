@@ -62,12 +62,12 @@ test("소환: 갈매미 수 < 다 지은 집 수일 때만 · 첫 갈매미는 �
   assert.ok(w.addUnitByName("미니")); assert.equal(w.units.length, 3); assert.equal(w.summonInfo().gulls, 3);
 });
 
-test("오는 순서: 건축가 → 목수 → 상인, 그다음은 무작위 · 자이언트는 다 지은 빈 자이언트의 집이 있어야 오고 보통 집 자리와 따로 셈", () => {
+test("오는 순서: 건축가 → 목수 → 야행성(불씨) → 상인, 그다음은 무작위 · 자이언트는 다 지은 빈 자이언트의 집이 있어야 오고 보통 집 자리와 따로 셈", () => {
   const w = fresh(5); const order = [];
   for (let k = 0; k < 7; k++) ready(w);                                        // 보통 집 8채
   assert.equal(w.summonInfo().houses, 8);
   for (let u; (u = w.summon());) order.push(u.name);
-  assert.deepEqual(order.slice(0, 3), ["기본", "목수", "황금"]);
+  assert.deepEqual(order.slice(0, 4), ["기본", "목수", "불씨", "황금"]);
   assert.equal(order.length, 8); assert.ok(!order.includes("자이언트"), "자이언트는 보통 집으로는 안 옴");
   assert.equal(new Set(order).size, 8);
   let info = w.summonInfo(); assert.deepEqual([info.can, info.left, info.needHouse, info.needGiantHouse], [false, 1, false, true]);

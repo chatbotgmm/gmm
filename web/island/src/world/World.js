@@ -16,6 +16,7 @@ import { seededRandom, josa } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
 import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
+import { dreamWishId } from "./dreams.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
 import * as RD from "./roads.js";
@@ -34,7 +35,7 @@ import * as CU from "./customize.js";
 import * as CLIM from "./climate.js";
 import * as CLO from "./clothes.js";
 import * as HL from "./health.js";
-import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
+import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk } from "./sparkles.js";
 
 /**
  * 새 넓은 섬에 공식은행을 놓음(예전 저장을 불러올 땐 쓰지 않음). 난수를 쓰지 않아 같은 섬 → 같은 자리.
@@ -956,10 +957,10 @@ export class World {
     if (this.wishes.filter(x => x.id !== "festival").length >= 2 || !this.units.length) return null;   // 축제 소원은 2개 제한에 세지 않음
     const free = this.units.filter(u => !this.wishOf(u));
     for (let k = 0; k < 6 && free.length; k++) {
-      const u = free[Math.floor(this.wrnd() * free.length)];
+      const ru = free[Math.floor(this.wrnd() * free.length)], u = (k === 0 && free.find(o => dreamWishId(o, this.time))) || ru;   // 꿈속 소원(dreams.js)을 본 갈매미가 먼저 · 난수 쓰는 순서는 그대로
       const cands = WISHES.filter(d => !this.wishes.some(x => x.id === d.id) && d.ok(this, u));
       if (!cands.length) continue;
-      const d = cands[Math.floor(this.wrnd() * cands.length)];
+      const rd = cands[Math.floor(this.wrnd() * cands.length)], d = cands.find(c => c.id === dreamWishId(u, this.time)) || rd; u.dreamWish = null;
       const wish = { id: d.id, unitId: u.unitId, base: d.base ? d.base(this, u) : this.units.length, age: 0 };
       this.wishes.push(wish); emote(u, `💭 ${d.icon}`, 3); this.emit("wish", { wish, u }); return wish;
     }
@@ -1817,6 +1818,7 @@ export class World {
   // ---- ✨ 반짝이(sparkles.js): 하루 몇 번 생기고, 플레이어가 주우면 내 주머니로
   /** 수명이 다했거나 그 칸을 이제 못 쓰면(그사이 건물·물) 지우고, SPARKLE_EVERY초마다 한 회차 */
   stepSparkles(dt) {
+    sparkleDusk(this);   // 🌙 해 뜨면 밤 반짝이 옅어짐 · 해 지면 첫 밤 반짝이를 곧
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
       const s = this.sparkles[i]; if ((s.t -= dt) > 0 && sparkleCellFree(this, s.x, s.z)) continue;
       this.sparkles.splice(i, 1); this.emit("sparkleGone", s);
@@ -1825,8 +1827,8 @@ export class World {
   }
   /** 한 회차: 바닷가 1 + 마을 1(sparkRnd만 씀). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
   spawnSparkles() {
-    if (this.sparkles.length >= SPARKLE_MAX) return [];
-    const made = rollSparkles(sparkleCells(this), this.sparkles, this.season, this.sparkRnd).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: SPARKLE_LIFE }));
+    const night = this.isNight === true; if (sparkleRoom(this.sparkles, night) <= 0) return [];
+    const made = rollSparkles(sparkleCells(this), this.sparkles, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k) }));
     for (const s of made) { this.sparkles.push(s); this.emit("sparkleSpawn", s); }
     return made;
   }

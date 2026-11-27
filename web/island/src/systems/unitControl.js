@@ -1,5 +1,5 @@
 // 둘러보기 모드에서 갈매미 다루기.
-// - 갈매미를 눌렀다 떼면(거의 안 움직이고): 카메라가 그 갈매미를 따라감. 빈 땅을 누르면 따라가기 끔.
+// - 갈매미를 눌렀다 떼면(거의 안 움직이고): 카메라가 그 갈매미를 따라가며 톡 반응(onPoke). 이미 따라가는 갈매미를 누르면 톡만. 빈 땅을 누르면 따라가기 끔.
 // - 갈매미를 누른 채 끌면: 들어 올려 옮기고, 떼면 그 칸에 내려놓음(건물 칸이면 건물로 들어감, 바다면 제자리).
 // 갈매미를 누르지 않은 드래그는 OrbitControls(시야 돌리기)가 그대로 받는다.
 import * as THREE from "three";
@@ -80,17 +80,21 @@ export class UnitControl {
       return;
     }
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_PX) return;   // 시야를 돌린 드래그
+    if (this.onTapFirst?.(e)) { this.lastTap = null; return; }            // 첫 탭 규칙: 꿈방울·반짝이를 누르면 그쪽 먼저(갈매미 따라가기·땅 누르기보다 앞, main.js)
     // 두 번 누르기(더블클릭·더블탭, 0.35초 안·30픽셀 안): 그곳을 가까이 보기. 갈매미면 따라가며 가까이.
-    const now = performance.now(), last = this.lastTap;
-    if (last && now - last.t < 350 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 30) {
+    const now = performance.now(), last = this.lastTap, dbl = last && now - last.t < 350 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 30;
+    // 첫 탭 규칙: 이미 따라가는 갈매미를 누르면 톡(units/poke.js, 따라가기는 그대로). 따라가기를 막 시작한 탭 바로 다음 탭만 두 번 누르기(가까이 보기)
+    if (p.unit && this.follow === p.unit && !(dbl && last.started)) { this.lastTap = { t: now, x: e.clientX, y: e.clientY }; this.onPoke?.(p.unit, false); return; }
+    if (dbl) {
       this.lastTap = null;
       if (p.unit) { this.setFollow(p.unit); this.zoomIn(null); return; }
       const c = this.tools.pickPoint(e.clientX, e.clientY);
       this.setFollow(null); if (c) this.zoomIn(new THREE.Vector3(toWorldX(c.gx), Math.max(w.standHeight(c.gx, c.gz), -0.18), toWorldZ(c.gz)));
       return;
     }
-    this.lastTap = { t: now, x: e.clientX, y: e.clientY };
-    this.setFollow(p.unit && this.follow !== p.unit ? p.unit : null);
+    this.lastTap = { t: now, x: e.clientX, y: e.clientY, started: !!p.unit };
+    this.setFollow(p.unit || null);
+    if (p.unit) this.onPoke?.(p.unit, true);                                        // 따라가지 않던 갈매미 = 따라가기 + 반응
     if (!p.unit) { const c = this.tools.pickPoint(e.clientX, e.clientY); if (c) this.onTapGround?.(c, e); }   // 땅을 한 번 누름(반짝이면 줍기, 집이면 꾸미기 카드). e: 화면 좌표(반짝이 손가락 판정)
   }
   /** 가까이 보기: 화면 중심을 to로(없으면 따라가는 갈매미), 거리를 줄임(멀면 10 m, 가까우면 0.6배, 최소 거리까지). */

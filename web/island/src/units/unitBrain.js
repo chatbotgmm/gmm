@@ -1147,3 +1147,4 @@ function settle(u, dt, world) {
   if (h !== null) u.y += (h - u.y) * Math.min(1, dt * 12);              // 경사면·계단을 따라 부드럽게
 }
 export const _startPathForTest = (...a) => startPath(...a), _followPathForTest = (...a) => followPath(...a);   // 시험용
+export const _pokeApi = { doOnce, startActivity };   // 톡톡 콕 찌르기(units/poke.js)의 폴짝·뛰어놀기

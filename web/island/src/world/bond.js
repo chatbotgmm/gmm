@@ -21,6 +21,8 @@ export const GIFT_CAT_NAME = { letter: "편지·책갈피", shiny: "반짝이는
 const GIFT_CATS = { bottle: "letter", pearl: "shiny", petal: "plant", conch: "sea", maple: "plant", iceshell: "ice", stardust: "shiny",
   // ✨ 반짝이(내 주머니): 갈매미마다 계절마다 좋아하는 반짝이가 하나 이상 있게 고름
   shell: "sea", seaglass: "shiny", goby: "fish", postcard: "letter", blossom: "plant", clover: "plant", acorn: "plant", pinecone: "plant", icicle: "ice",
+  // 🌙 밤 반짝이: 반딧불 병 = 반짝이는 것(불씨·황금), 별빛 쪽지 = 편지(그림자·기본), 달빛 조개 = 바다 조개(물방울), 야광 해초 = 꽃과 잎(꽃·미니·목수)
+  fireflyJar: "shiny", starNote: "letter", moonShell: "sea", glowWeed: "plant",
   // 도장 선물(갈래마다 하나 + 누구나 좋아하는 왕관 쿠키)
   goldLetter: "letter", starBrooch: "shiny", bouquet: "plant", rainbowShell: "sea", snowGlobe: "ice", fishTin: "fish", crownCookie: "best",
   // 손뜨개 목도리(옷 선물): 누구에게나 보통(고마워), 받으면 그 갈매미 옷이 됨

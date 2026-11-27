@@ -38,6 +38,10 @@ export const DAILY_POOL = [
     ok: canFish, hit: ev => ev === "fish" ? 1 : 0 },
   { id: "tug", icon: "❗", need: 2, group: "fish", text: () => "낚시하는 갈매미와 찌 2번 같이 당기기",
     ok: canFish, hit: ev => ev === "tug" ? 1 : 0 },
+  // 🌙 밤 부탁: 부탁을 고르는 때가 저녁 밤(기기 시계, 해가 진 뒤 ~ 자정)일 때만 고름 → 저녁에 켠 사람에게만(그날 밤이 자정까지 남아 있음).
+  //  자정~새벽은 고르지 않음: 자정에 날짜가 바뀌며 고른 부탁이 그날 낮까지 남아, 낮에만 하는 사람의 도장을 막지 않게(hour를 모르면 밤만 봄)
+  { id: "nightSparkle", icon: "🌙", need: 2, text: () => "밤에 반짝이 2개 줍기(가로등 둘레를 찾아봐요)",
+    ok: w => w.isNight === true && !(Number.isFinite(w.hour) && w.hour < 12), hit: (ev, e) => ev === "sparkle" && e?.item?.sparkleTime === "night" ? 1 : 0 },
 ];
 const DAILY_BY_ID = Object.fromEntries(DAILY_POOL.map(d => [d.id, d]));
 
