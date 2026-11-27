@@ -187,8 +187,9 @@ const quality = new Quality(renderer, sun, c => {
   unitViews?.setShadowDist(c.shadows ? c.gullShadowDist : 0);
   if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); seasonLook?.applyDecor(decor, world.season); }
   weatherViews?.setAmount(c.decor.density); leaves?.setAmount(c.decor.density); festaView?.setAmount(c.decor.density); footprints?.setCapacity(c.footprints);
+  water.userData.setLite(c.waterLite);                                           // 낮음·성능 우선: 가벼운 물
 });
-weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); festaView.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
+water.userData.setLite(quality.cfg.waterLite); weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); festaView.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); stream.dispose(); poolFor(worldRoot).dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
@@ -508,8 +509,8 @@ function frameBody() {
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
   dreams.step(); poke.stepReal(performance.now()); dreamView.update(dt, world, dreams, camera, innerWidth, innerHeight);
-  water.userData.tick(simT); clouds.userData.tick(dt); clouds.position.set(controls.target.x, 0, controls.target.z);   // 구름은 보는 곳을 따라감
-  if (waterDirty && now - lastWater > 300) { waterWin.dirty = true; waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
+  water.userData.tick(simT); water.userData.setRain(world.weather.kind === "rain" || world.weather.kind === "storm", dt); clouds.userData.tick(dt); clouds.position.set(controls.target.x, 0, controls.target.z);   // 구름은 보는 곳을 따라감
+  if (waterDirty && now - lastWater > 300) { waterWin.dirty = true; waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물가 자료(깊이·파도·쓸려 오는 물)도 다시
   waterWin.update(controls.target);                                              // 보는 곳이 32칸 넘게 옮겨지면 창을 옮김
   unitControl.update(dt);                           // 따라가기
   { const ms = performance.now(); fuss.step(ready ? dt * steps : 0, fussMs == null ? dt : Math.min(0.25, (ms - fussMs) / 1000)); fussMs = ms; }   // 🆘 깜짝 소동(마을 시간)·흔들기·어질어질(실제 초)·착지 — 들고 있는 위치가 정해진 뒤

@@ -1,35 +1,44 @@
-// 물 깊이 창(오픈월드 1-A): 보는 곳을 따라가는 W×W칸 창의 물 깊이 텍스처 값을 보기 격자에서 계산한다(water.js는 받아서 그리기만).
-//  · 깊이(m) = 물 표면 − 바닥 높이 + 가장 가까운 얕은 곳(높이 ≥ −0.6)까지 칸 수 × 0.07. 예전(water.js setGrid)과 같은 식.
-//  · 물가 거리는 DIST_CAP칸까지만 센다: 그 너머는 깊이가 1.66 m 이상이라 물빛(1.6 m에서 다 진해짐)·반짝임·불투명도가 이미 끝값이라 모습이 같다.
+// 물 깊이 창(오픈월드 1-A): 보는 곳을 따라가는 W×W칸 창의 물가 자료(RGBA, world/shore.js와 같은 뜻)를 보기 격자에서 계산한다(water.js는 받아서 그리기만).
+//  · R 깊이(m) = 물 표면 − 바닥 높이 + 가장 가까운 얕은 곳(높이 ≥ −0.6)까지 칸 수 × 0.07.
+//    거리는 DIST_CAP칸까지만 센다: 그 너머는 깊이가 1.66 m 이상이라 물빛(1.6 m에서 다 진해짐)·반짝임·불투명도가 이미 끝값이라 모습이 같다.
+//  · G 해안선까지 거리(±8칸) · B 가장 가까운 땅이 모래사장인가 · A 파도 세기: 시작 섬 안이든 바깥 생성 섬이든 같은 규칙(바깥 섬 해변에도 파도).
+//  · 바다 비트: 시작 섬 안은 시작 섬 격자 가장자리에서 퍼진 물(섬 안에 판 연못은 빠짐, 창이 어디 있든 같음),
+//    바깥은 창 가장자리의 물·시작 섬 바다에서 창 안으로 퍼진 물. 창 끝(보는 곳에서 112칸 넘게 떨어짐)은 둘레를 못 봐서 조금 다를 수 있음.
 //  · 창 가운데는 32칸 단위로만 옮긴다(옮길 때만 다시 계산). 땅을 바꾸면 dirty로 다시.
-//  · 나중에 바다 세부(sea-detail)의 바다/연못 비트가 합쳐지면, 여기서 sea 비트를 곱해 한 채널을 더 넘기면 된다.
-import { WATER_Y, toGridX, toGridZ, toWorldX, toWorldZ } from "../config.js";
+import { toGridX, toGridZ, toWorldX, toWorldZ } from "../config.js";
 import { WCH, WCH_SHIFT, WCH_MASK } from "../world/worldGen.js";
+import { GROUND_TYPES } from "../data/types.js";
+import { shoreCore, waterMask, floodSea } from "../world/shore.js";
 
 export const DIST_CAP = 12, STEP = 32;
-/** 창 하나 계산: 왼위 칸 (x0, z0), 크기 W → Uint8Array(W*W) (깊이 0~3 m를 0~255로) */
-export function waterDepths(view, x0, z0, W) {
-  const N = W * W, el = new Float64Array(N), dist = new Int16Array(N).fill(-1), q = new Int32Array(N);
-  let qt = 0;
+const SAND = GROUND_TYPES.indexOf("Sand");
+
+/** 창 하나 물가 자료: 왼위 칸 (x0, z0), 크기 W → { data: RGBA Uint8Array(W*W*4), sd: 해안선 거리 } */
+export function shoreWindow(view, x0, z0, W) {
+  const N = W * W, el = new Float64Array(N), sand = new Uint8Array(N), inner = new Uint8Array(N), g = view.inner;
   for (let tz = z0 >> WCH_SHIFT; tz <= (z0 + W - 1) >> WCH_SHIFT; tz++) for (let tx = x0 >> WCH_SHIFT; tx <= (x0 + W - 1) >> WCH_SHIFT; tx++) {   // 32칸 타일마다 데이터를 한 번만 꺼냄
     const ax = Math.max(x0, tx * WCH), bx = Math.min(x0 + W, tx * WCH + WCH), az = Math.max(z0, tz * WCH), bz = Math.min(z0 + W, tz * WCH + WCH);
-    const inner = !(bx <= 0 || bz <= 0 || ax >= view.inner.w || az >= view.inner.h), d = inner ? null : view.chunkData(tx, tz);
+    const hit = !(bx <= 0 || bz <= 0 || ax >= g.w || az >= g.h), d = view.chunkData(tx, tz);   // hit: 시작 섬 상자에 걸친 타일
     for (let z = az; z < bz; z++) for (let x = ax; x < bx; x++) {
-      const e = inner ? view.elev(x, z) : d.elev[(z & WCH_MASK) * WCH + (x & WCH_MASK)] / 1000, i = (z - z0) * W + (x - x0);
-      el[i] = e; if (e >= -0.6) { dist[i] = 0; q[qt++] = i; }
+      const i = (z - z0) * W + (x - x0);
+      if (hit && g.inBounds(x, z)) { const c = g.cells[g.index(x, z)]; el[i] = c.elevation; sand[i] = c.groundType === "Sand" && c.elevation <= 0.02 ? 1 : 0; inner[i] = 1; }
+      else { const j = (z & WCH_MASK) * WCH + (x & WCH_MASK); el[i] = d.elev[j] / 1000; sand[i] = d.ground[j] === SAND && d.elev[j] <= 20 ? 1 : 0; }
     }
   }
-  for (let h = 0; h < qt; h++) {
-    const i = q[h], d = dist[i]; if (d >= DIST_CAP) continue;
-    const x = i % W, z = (i - x) / W;
-    if (x > 0 && dist[i - 1] < 0) { dist[i - 1] = d + 1; q[qt++] = i - 1; }
-    if (x < W - 1 && dist[i + 1] < 0) { dist[i + 1] = d + 1; q[qt++] = i + 1; }
-    if (z > 0 && dist[i - W] < 0) { dist[i - W] = d + 1; q[qt++] = i - W; }
-    if (z < W - 1 && dist[i + W] < 0) { dist[i + W] = d + 1; q[qt++] = i + W; }
+  const water = waterMask(el), wet = new Uint8Array(N), seeds = [];
+  const isea = floodSea(g.w, g.h, waterMask(g.cells.map(c => c.elevation)), null);   // 시작 섬 격자 가장자리에서 퍼진 바다(연못 빠짐)
+  for (let z = 0; z < W; z++) for (let x = 0; x < W; x++) {
+    const i = z * W + x; if (!water[i]) continue;
+    if (inner[i]) { if (isea[g.index(x + x0, z + z0)]) { wet[i] = 1; seeds.push(i); } }                    // 시작 섬 안: 시작 섬 바다만(연못은 막음)
+    else { wet[i] = 1; if (x === 0 || z === 0 || x === W - 1 || z === W - 1) seeds.push(i); }
   }
-  const data = new Uint8Array(N);
-  for (let i = 0; i < N; i++) { const dd = dist[i] < 0 ? DIST_CAP : dist[i], d = Math.max(0, Math.min(3, WATER_Y - el[i] + dd * 0.07)); data[i] = Math.round(d / 3 * 255); }
-  return data;
+  return shoreCore(W, W, el, sand, water, floodSea(W, W, wet, seeds), DIST_CAP);
+}
+/** 창 하나 깊이만: Uint8Array(W*W) (깊이 0~3 m를 0~255로) */
+export function waterDepths(view, x0, z0, W) {
+  const { data } = shoreWindow(view, x0, z0, W), out = new Uint8Array(W * W);
+  for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
+  return out;
 }
 
 export class WaterWindow {
@@ -40,8 +49,8 @@ export class WaterWindow {
     const cx = Math.round(toGridX(focus.x) / STEP) * STEP, cz = Math.round(toGridZ(focus.z) / STEP) * STEP;
     if (!force && !this.dirty && cx === this.cx && cz === this.cz) return false;
     const W = this.size, x0 = cx - W / 2, z0 = cz - W / 2, t = performance.now();
-    const data = waterDepths(this.view, x0, z0, W);
-    this.water.userData.setWindow(data, W, toWorldX(x0), toWorldZ(z0));
+    const { data, sd } = shoreWindow(this.view, x0, z0, W);
+    this.water.userData.setWindow(data, W, toWorldX(x0), toWorldZ(z0), { view: this.view, x0, z0, sd });
     this.cx = cx; this.cz = cz; this.dirty = false; this.ms = performance.now() - t;
     return true;
   }

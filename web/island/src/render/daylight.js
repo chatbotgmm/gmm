@@ -65,6 +65,7 @@ export class Daylight {
     }
     if (this.scene.fog) this.scene.fog.color.copy(this.hor);
     this.water.userData.setLight?.(k[17] * (0.75 + 0.25 * wl));
+    this.water.userData.setSky?.(this.dir, this.sun.color, this.hor, this.glow ?? 0);   // 해·달 빛길·지평선 밝기·밤 남색(water.js)
     for (const o of this.clouds.children) if (o.isSprite) o.material.color.copy(this.hor).lerp(this.white, 0.55);
   }
   /** 날씨 밝기(0.45~1). 움직이는 동안은 다음 프레임에 바로, 그 밖에는 0.5초마다 하는 다시 계산 때 반영 */
