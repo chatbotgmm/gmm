@@ -28,13 +28,13 @@ test("건물 칸도 칠할 수 있고, 칠한 건물 칸은 길 연결에 들지
   // 건물 양쪽에 돌길 한 칸씩: 건물 밑이 돌길이어도 두 칸은 다른 도로망(건물은 지나갈 수 없음)
   const xs = b.cells.map(c => c[0]), zs = b.cells.map(c => c[1]), x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, zm = Math.min(...zs);
   assert.ok(w.paint(x0, zm, GroundType.Cobble) && w.paint(x1, zm, GroundType.Cobble));
-  const net = roadNet(w), W = w.grid.w;
-  assert.ok(net[zm * W + x0] >= 0 && net[zm * W + x1] >= 0);
-  assert.notEqual(net[zm * W + x0], net[zm * W + x1], "건물 밑 돌길이 양쪽을 잇지 않음");
+  const net = roadNet(w), at = (n, x, z) => n.get(w.grid.index(x, z)) ?? -1;
+  assert.ok(at(net, x0, zm) >= 0 && at(net, x1, zm) >= 0);
+  assert.notEqual(at(net, x0, zm), at(net, x1, zm), "건물 밑 돌길이 양쪽을 잇지 않음");
   // 철거하면 칠한 바닥이 그대로 남고, 그때부터는 길로 이어짐
   w.removeBuilding(b.id);
   assert.equal(w.grid.get(b.cells[0][0], b.cells[0][1]).groundType, GroundType.Cobble);
-  const net2 = roadNet(w); assert.equal(net2[zm * W + x0], net2[zm * W + x1]);
+  const net2 = roadNet(w); assert.equal(at(net2, x0, zm), at(net2, x1, zm));
 });
 
 test("밭·계단·나무 칸, 물 칸은 지금처럼 칠할 수 없음", () => {

@@ -2,7 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { genChunk, cellAt, neighborArchipelago, islandsAround, WCH } from "../src/world/worldGen.js";
-import { ViewGrid, SOFT } from "../src/render/viewGrid.js";
+import { ViewGrid } from "../src/render/viewGrid.js";
+import { SOFT } from "../src/world/chunkGrid.js";
 import { generateWildIsland } from "../src/world/islandGen.js";
 import { Grid } from "../src/world/Grid.js";
 import { SEA_LEVEL } from "../src/config.js";

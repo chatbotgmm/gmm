@@ -26,7 +26,7 @@ export function findPath(grid, sx, sz, gx, gz, maxNodes = 6000) {
     const cur = open.pop();
     if (cur.i === goal) {
       const path = []; let i = goal;
-      while (i !== start) { path.push([i % grid.w, Math.floor(i / grid.w)]); i = from.get(i); }
+      while (i !== start) { path.push([grid.xOf(i), grid.zOf(i)]); i = from.get(i); }
       return path.reverse();
     }
     if (++seen > maxNodes) return null;

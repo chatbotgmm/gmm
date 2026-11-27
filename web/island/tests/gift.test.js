@@ -212,7 +212,7 @@ test("저장·불러오기: 소지품·반짝이·시계가 남고, 예전 저�
   const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); for (const n of ["물방울", "불씨", "황금"]) w.addUnitByName(n);
   const fisher = w.units.find(u => u.name === "물방울"), fire = w.units.find(u => u.name === "불씨");
   fisher.stash = { tuna: 2, chair: 1 }; w.spawnSparkles(); w.sparkClock = 77.5; w.sparkles[0].t = 123.25;
-  const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.ownership, 1); assert.equal(j.version, 2);
+  const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.ownership, 1); assert.equal(j.version, 3);   // 넓은 섬 = 판 3(바뀐 칸만)
   const back = World.fromJSON(j, seededRandom(2));
   assert.deepEqual(back.units.find(u => u.name === "물방울").stash, { tuna: 2, chair: 1 }); assert.deepEqual(back.units.find(u => u.name === "기본").stash, {});
   assert.deepEqual(back.sparkles.map(({ k, x, z, t }) => [k, x, z, t]), w.sparkles.map(({ k, x, z, t }) => [k, x, z, t])); assert.equal(back.sparkClock, 77.5);
