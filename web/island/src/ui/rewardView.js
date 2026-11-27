@@ -49,7 +49,7 @@ export class RewardView {
     const { show, end } = this.queue.step(now, { hold });
     if (end) end.tier === "big" ? this.endBig(end) : this.hideBan();
     if (show) show.tier === "big" ? this.showBig(show) : this.showBan(show);
-    const c = this.queue.cur; if (c?.tier === "big") this.bar.style.transform = `scaleX(${Math.max(0, 1 - (now - c.t0) / RF_BIG_MS).toFixed(3)})`;
+    const c = this.queue.cur; if (c?.tier === "big") this.bar.style.transform = `scaleX(${Math.max(0, 1 - (now - c.t0) / ((c.until - c.t0) || RF_BIG_MS)).toFixed(3)})`;
   }
   sound(r, big) {
     const s = this.sfx; if (!s) return;
@@ -64,7 +64,8 @@ export class RewardView {
   }
   hideBan() { if (this.ban.hidden) return; this.ban.classList.remove("on"); this.ban.classList.add("off"); clearTimeout(this.banT); this.banT = setTimeout(() => { if (this.ban.classList.contains("off")) this.ban.hidden = true; }, 260); }
   showBig(r) {
-    this.kick.textContent = r.key?.startsWith("rank") ? "🎊 축하해요! 🎊" : "✨ 보상 획득 ✨";
+    this.kick.textContent = r.kick || (r.key?.startsWith("rank") ? "🎊 축하해요! 🎊" : "✨ 보상 획득 ✨");
+    this.card.classList.toggle("story", !!r.story);                                // 🗝 이야기 카드: 밤하늘 색 + 긴 글
     this.ico.textContent = r.icon; this.title.textContent = r.title + (r.count > 1 ? ` ×${r.count}` : ""); this.line.textContent = r.line || "";
     this.conf.textContent = ""; if (!this.calm) for (const p of confetti(28, ++this.seed, Math.min(260, innerWidth * 0.42))) { const i = rwEl("i"); i.style.cssText = `--dx:${p.dx}px;--dy:${p.dy}px;--r:${p.rot}deg;--d:${p.delay}ms;--h:${p.hue}`; this.conf.appendChild(i); }
     this.box.style.transform = ""; this.box.style.opacity = ""; this.card.classList.remove("on", "out"); this.card.hidden = false; void this.card.offsetWidth; this.card.classList.add("on");

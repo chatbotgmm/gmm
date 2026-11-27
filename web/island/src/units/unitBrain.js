@@ -636,6 +636,21 @@ function partyAt(u, world, rnd) {
   if (!(pal && world.befriend(u, pal, FESTIVAL_PAL))) emote(u, pick(["♪", "🎉", "✨", "♪♪", "축제다!"], rnd), 2);   // 사이가 한 단계 올랐으면 그 말풍선을 그대로 둠
   doOnce(u, "Jump", null, () => { setIdle(u, rnd, world, 0.6 + rnd() * 1.8); if (rnd() < 0.3) startActivity(u, "zoomies", world, rnd); });
 }
+/** 🗝 이야기 모임(world.gather: 엔딩 연출·엔딩 뒤 노을 모임): 등대 앞 둘레 자리로 걸어감. 난수를 쓰지 않음(갈매미 차례로 자리를 나눔). 갈 수 있으면 true */
+function startStoryGather(u, world) {
+  const g = world.gather, i = Math.max(0, world.units.indexOf(u)), n = Math.max(1, world.units.length); u.gathered = g.id;
+  for (let k = 0; k < 4; k++) {
+    const a = Math.atan2(g.lz - g.z, g.lx - g.x) + Math.PI + ((i + 0.5) / n - 0.5) * Math.PI * 1.2 + k * 0.4, d = 2 + (i % 3) * 0.8 + k * 0.5;   // 등대 앞(바다를 등지지 않게 뒤쪽 반원)
+    const spot = nearestWalkable(world.grid, Math.floor(g.x + Math.cos(a) * d), Math.floor(g.z + Math.sin(a) * d), 2);
+    if (spot && !world.grid.doorOwner(spot[0], spot[1]) && startPath(u, world, spot[0], spot[1])) { u.state = US.GoGather; return true; }
+  }
+  return false;
+}
+/** 모임 자리에 닿음: 수평선을 보며 "매앰!" 하고 모임이 끝날 때까지 서 있음 */
+function gatherAt(u, world, rnd) {
+  const g = world.gather; u.path = null; face(u, g.lx, g.lz);
+  setIdle(u, rnd, world, Math.max(2, Math.min(25, g.t))); face(u, g.lx, g.lz); emote(u, g.kind === "ending" ? "매앰!" : u.unitId.length % 2 ? "매앰~" : "🌅", 3);
+}
 // ---------------------------------------------------------------- 추위(climate.js)
 /** 들어가 몸을 녹일 수 있는 공공건물(다 지은 것): 은행·시장·저장고·카페·잡화점·우체국·수족관·병원 */
 const SHELTER = new Set(["bank", "market", "storehouse", "cafe", "shop", "post", "aquarium", "clinic", "hospital"]);
@@ -721,6 +736,8 @@ function chooseNext(u, world, rnd) {
   if (CLIM.isCold(u.bodyT) && startWarm(u, world)) return;
   // 축제의 날: 맡은 공사가 없고 너무 지치지 않았으면 광장에 모여 놂
   if (festAwake(u, world) && !u.committed && rnd() < FESTIVAL_JOIN_CHANCE && startGather(u, world, rnd)) return;
+  // 🗝 이야기 모임(엔딩·노을): 맡은 공사가 없고 지치지 않았으면 등대 앞으로(한 모임에 한 번, 난수 안 씀)
+  if (world.gather && u.gathered !== world.gather.id && !u.committed && (u.needs?.energy ?? 100) > CH.SLEEP_BELOW && startStoryGather(u, world)) return;
   // (예전 '밤이면 무조건 잠'은 없음: 밤에도 기력이 남아 있으면 일함. 잠은 아래 '지치면 잠'(기력 CH.SLEEP_BELOW 이하) 하나)
   if (startDoctor(u, world)) return;                                               // 당번 의사: 맡은 의원에 환자가 있으면 진료하러(난수 안 씀)
   if (u.committed && !(u.needs && u.needs.energy <= CH.SLEEP_BELOW) && startActivity(u, "build", world, rnd)) return;   // 맡은 공사가 먼저(지쳤으면 아래에서 잠부터 — 공사는 맡은 채)
@@ -936,6 +953,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoFest:                                                                 // 축제 광장으로 가는 중(그사이 축제가 끝나면 그만둠)
       if (!world.festival) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) partyAt(u, world, rnd);
+      break;
+    case US.GoGather:                                                               // 🗝 등대 앞 모임으로 가는 중(그사이 모임이 끝나면 그만둠)
+      if (!world.gather) { setIdle(u, rnd, world); break; }
+      if (followPath(u, dt, world, rnd)) gatherAt(u, world, rnd);
       break;
     case US.Zoomies:
       if (followPath(u, dt, world, rnd)) {

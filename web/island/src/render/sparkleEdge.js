@@ -27,7 +27,7 @@ export class SparkleEdge {
     const arrows = edgeList(items, W, H, edges(W, H)), keep = new Set();
     for (const a of arrows) {
       keep.add(a.id); let b = this.btns.get(a.id);
-      if (!b) { b = document.createElement("button"); b.dataset.sid = a.id; b.setAttribute("aria-label", "화면 밖 반짝이 쪽으로 가기"); b.dataset.tip = "화면 밖 반짝이 · 누르면 그쪽으로"; b.innerHTML = "✨<i></i>"; this.box.appendChild(b); this.btns.set(a.id, b); }
+      if (!b) { b = document.createElement("button"); b.dataset.sid = a.id; const story = list.find(o => o.id === a.id)?.story; b.setAttribute("aria-label", story ? "화면 밖 이야기 반짝이 쪽으로 가기" : "화면 밖 반짝이 쪽으로 가기"); b.dataset.tip = story ? "🗝 이야기 반짝이 · 누르면 그쪽으로" : "화면 밖 반짝이 · 누르면 그쪽으로"; b.innerHTML = story ? "🗝<i></i>" : "✨<i></i>"; this.box.appendChild(b); this.btns.set(a.id, b); }
       b.style.left = `${a.x.toFixed(0)}px`; b.style.top = `${a.y.toFixed(0)}px`; b.style.setProperty("--deg", `${a.deg.toFixed(0)}deg`);
     }
     for (const [id, b] of this.btns) if (!keep.has(id)) { b.remove(); this.btns.delete(id); }

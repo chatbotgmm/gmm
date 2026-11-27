@@ -99,6 +99,14 @@ const NEWS_MAKERS = {
   monAuto: ({ from, to, up }) => ({ icon: "🤖", text: `자동: 매입 예산 ${stepName(from)} → ${stepName(to)}(${up ? "값이 내려서" : "값이 올라서"})`, weight: 0 }),
   monPrint: ({ n, left }) => ({ icon: "🖨", text: `은행이 새 돈 🪙${n}을 찍어 금고에 넣었어요 — 마을에 돈이 늘면 값이 올라요(오늘 더 찍을 수 있는 돈 🪙${left})`, weight: 3 }),
   monStart: () => ({ icon: "🏛", text: "은행에 중앙은행 판이 생겼어요 — 처음엔 자동이 맡아요", weight: 5 }),
+  // 🗝 메인 스토리(story.js): 조각 · 별씨(알림 줄에만) · 고칠 곳 · 깜빡이는 대답(머릿기사) · 엔딩 · 엽서 · 이야기 반짝이(알림 줄에만)
+  storyPiece: ({ piece, who }) => ({ icon: "🗝", text: `비밀 수첩에 새 쪽: ${piece.title}${who ? ` (${who}에게 들음)` : ""}`, weight: 4 }),
+  storySeed: ({ n }) => ({ icon: "🌟", text: `별씨를 주웠어요 (${n}/3)`, weight: 0 }),
+  storyRestore: ({ restore }) => ({ icon: restore.icon, text: `${josa(restore.title, "을", "를")} 고쳤어요! ${restore.done}`, weight: 7 }),
+  storyBlink: ({ scene, first }) => first ? { icon: "💫", text: scene ? "수평선 끝에서 작은 불빛이 세 번 깜빡였어요" : "어젯밤 수평선에서 불빛이 깜빡였대요", weight: 8 } : { icon: "💫", text: "오늘 밤도 수평선 불빛이 세 번 깜빡였어요", weight: 1 },
+  storyEnd: () => ({ icon: "💌", text: "바다 건너 보름 할머니의 답장이 왔어요! 이제 이 섬의 등불지기예요", weight: 9 }),
+  storyPostcard: () => ({ icon: "📮", text: "반딧불 우체통에 보름 할머니의 엽서가 왔어요", weight: 5 }),
+  storySpark: ({ key, at, moved }) => ({ icon: "🗝", text: moved ? "조개섬의 말뚝 조각이 본섬 바닷가로 떠밀려 왔어요" : key.startsWith("seed:") ? "등대 둘레에 따뜻한 별빛이 떨어졌어요" : at === "cave" ? "동굴 입구에서 무언가 반짝여요" : at === "islet" ? "🐚 조개섬에서 무언가 반짝여요" : "등대 근처에서 무언가 반짝여요", weight: 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */
@@ -149,6 +157,7 @@ export function awayLetter(report, { post = false, news = [], wishes = [] } = {}
   if (ripened) lines.push(`🌾 밭 ${ripened}칸이 다 익어서 거두기만 기다려요.`);
   if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
   if (!ripened && !catches.length) lines.push("별일 없이 조용한 시간이었어요.");
+  for (const l of report.story || []) lines.push(l);                            // 🗝 이야기: 우체통에 낀 엽서 · 수평선 깜빡임 소식
   if (post) {
     for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? ` (${RARITY[c.fish.rarity]?.name ?? ""}!)` : ""}${c.item ? ` + ${c.item.name}` : ""}${c.donated ? " · 🐠 수족관에 기증" : ""}`);
     if (news.length) { lines.push("📰 떠나기 전 마을 소식"); for (const n of news) lines.push(`· ${n.icon} ${n.text}`); }

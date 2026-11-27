@@ -40,6 +40,8 @@ import * as CU from "./customize.js";
 import * as CLIM from "./climate.js";
 import * as CLO from "./clothes.js";
 import * as HL from "./health.js";
+import * as ST from "./story.js";
+import { STORY_PIECES, STORY_CHAPTERS, STORY_CHAIR } from "../data/story.js";
 import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk } from "./sparkles.js";
 
 /**
@@ -89,6 +91,8 @@ export function placeTownBank(w, R = 16) {
   return null;
 }
 
+/** 이야기(story.js)가 듣는 월드 알림: 반짝이 줍기 · 하트 단계 · 쓰다듬기 · 기증 · 축제 끝 · 첫눈 · 무지개·유성우 */
+const STORY_EVENTS = new Set(["sparkle", "bondStage", "pet", "donate", "festivalEnd", "firstSnow", "sky"]);
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
 
@@ -142,6 +146,8 @@ export class World {
     // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
     this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
     this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
+    // 🗝 메인 스토리(story.js): 기록(예전 저장엔 없음 → 0장부터) · 1초 시계 · 이야기 모임(엔딩 연출·노을 모임 { id, x, z, lx, lz, t }, 저장 안 함) · storyOff: 이야기를 끔(시험 비교용)
+    this.story = ST.storyFromSave(extra.story); this.storyClock = 0; this.storyBlinkClock = 0; this.gather = null; this.gatherSeq = 0; this.storyOff = false;
     // 섬 꾸미기(customize.js): 놓은 덤불·꽃과 치운 소품 자리(불러오기는 fromJSON이 건물을 다시 놓은 뒤 채움) · 플레이어가 판 물 칸 · 되돌리기 표(저장 안 함)
     this.decor = CU.newDecor(); this.dug = CU.dugFromSave(extra.dug); this.undo = new Map(); this.undoSeq = 0;
     // 기온(climate.js): 지금 바깥 공기 °C(update마다 셈, 저장 안 함) · 기기 시각(화면이 넣어 주면 하루 변화를 시각으로, 없으면 낮밤만)
@@ -201,7 +207,7 @@ export class World {
     this.migrateLate(); this.emit("unitAdded", u); return u;
   }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
-  emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); }
+  emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); if (STORY_EVENTS.has(ev)) this.storyEvent(ev, arg); }
   // ---- 오늘의 부탁(daily.js)
   /** 실제 날짜 열쇠(YYYY-MM-DD)를 받음: 날짜가 바뀌었으면(처음이면) 새 부탁을 고름 → 나아간 것은 처음부터, 못 끝낸 부탁은 사라짐. 새로 골랐으면 true */
   setDay(key) { if (!key || this.daily?.key === key) return false; this.daily = rollDaily(key, this); return true; }
@@ -1145,7 +1151,7 @@ export class World {
     const joined = this.units.filter(u => fest.who.includes(u.unitId));
     for (const u of joined) { u.cheer = FESTIVAL_CHEER_SECS; if (!u.insideBuildingId && u.state !== UnitState.Sleep) emote(u, "♥ 즐거웠어!", 3); }
     const item = festivalGift(fest.id); if (item) this.items[item.id] = (this.items[item.id] || 0) + 1;
-    this.emit("festivalEnd", { key: fest.id, def: f.def, item, n: joined.length }); return true;
+    this.emit("festivalEnd", { key: fest.id, def: f.def, item, n: joined.length, who: joined.map(u => u.name) }); return true;
   }
   stepFestival(dt) {
     if (this.festival && (this.festival.t -= dt) <= 0) this.endFestival();
@@ -1269,7 +1275,8 @@ export class World {
     const fished = catches.length ? `물고기 ${catches.length}마리를 낚았어요` : "", did = ripened ? `밭 ${ripened}칸이 ${fished ? `익고 ${fished}` : "익었어요"}` : fished;
     if (did) addNews(this.newsLog, this.time, { icon: "💌", text: `다녀온 사이에 ${did}`, weight: 3 });
     if (this.bank.mon) this.bank.mon.made = made;
-    return { ms, hours, ripened, catches };
+    this.storyLines = []; this.storyEvent("away"); const story = this.storyLines; this.storyLines = null;   // 🗝 엽서·깜빡임 소식(편지에 한 줄씩)
+    return { ms, hours, ripened, catches, story };
   }
 
   // ---- 시장(상인만): 남는 자재·음식·보물·물건을 팔고, 공사에 모자란 나무·돌·철을 사 온다. 상인 희귀도만큼 비싸게 팔고 싸게 산다.
@@ -2029,7 +2036,7 @@ export class World {
     this.time += dt;
     if (this.shaping.size) this.stepShaping(dt);
     this.stepCustom(dt);
-    this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt); this.stepSparkles(dt);
+    this.stepWeather(dt); this.stepSnow(dt); this.stepSky(dt); this.stepSparkles(dt); this.stepStory(dt);
     const grow = this.fx.grow;                                                   // 계절·비에 따라 밭이 빨리/늦게 자람 × 촉촉함(마른 밭은 1/4 빠르기까지 느려짐, farming.js)
     for (const p of this.plots) { FM.stepMoisture(p, dt, this.season, this.weather.kind); if (p.stage === "growing" && (p.t -= dt * grow * FM.waterFactor(p.moisture)) <= 0) { p.stage = "ripe"; this.emit("plot", p); } }
     if ((this.priceClock += dt) >= 5) { this.priceClock = 0; this.updatePrices(); this.tallyJobless(5); }
@@ -2062,15 +2069,17 @@ export class World {
   stepSparkles(dt) {
     sparkleDusk(this);   // 🌙 해 뜨면 밤 반짝이 옅어짐 · 해 지면 첫 밤 반짝이를 곧
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
-      const s = this.sparkles[i]; if ((s.t -= dt) > 0 && sparkleCellFree(this, s.x, s.z)) continue;
+      const s = this.sparkles[i];
+      if (s.story) { if (!sparkleCellFree(this, s.x, s.z)) this.storyRelocate(s); continue; }   // 🗝 이야기 반짝이는 줍기 전까지 안 사라짐(칸이 막히면 옆 칸으로)
+      if ((s.t -= dt) > 0 && sparkleCellFree(this, s.x, s.z)) continue;
       this.sparkles.splice(i, 1); this.emit("sparkleGone", s);
     }
-    if ((this.sparkClock += dt) >= SPARKLE_EVERY) { this.sparkClock = 0; this.spawnSparkles(); }
+    if ((this.sparkClock += dt) >= SPARKLE_EVERY) { this.sparkClock = 0; this.spawnSparkles(); this.storyEvent("wave"); }
   }
   /** 한 회차: 바닷가 1 + 마을 1(sparkRnd만 씀). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
   spawnSparkles() {
-    const night = this.isNight === true; if (sparkleRoom(this.sparkles, night) <= 0) return [];
-    const made = rollSparkles(sparkleCells(this), this.sparkles, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k) }));
+    const night = this.isNight === true, plain = this.sparkles.filter(s => !s.story); if (sparkleRoom(plain, night) <= 0) return [];   // 이야기 반짝이는 세지 않음(보통 반짝이가 이야기와 상관없이 똑같이 생김)
+    const made = rollSparkles(sparkleCells(this), plain, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k) }));
     for (const s of made) { this.sparkles.push(s); this.emit("sparkleSpawn", s); }
     return made;
   }
@@ -2078,7 +2087,8 @@ export class World {
    *  알림: sparkleGone({ ...s, picked: true }) → sparkle({ item, s }) */
   pickSparkle(id) {
     const i = this.sparkles.findIndex(s => s.id === id); if (i < 0) return null;
-    const s = this.sparkles[i], item = ITEMS.find(it => it.id === s.k); this.sparkles.splice(i, 1);
+    const s = this.sparkles[i]; if (s.story) return this.pickStory(i, s);
+    const item = ITEMS.find(it => it.id === s.k); this.sparkles.splice(i, 1);
     if (!item) return null;
     this.items[item.id] = (this.items[item.id] || 0) + 1;
     this.emit("sparkleGone", { ...s, picked: true }); this.emit("sparkle", { item, s }); return item;
@@ -2088,6 +2098,126 @@ export class World {
     let best = null, bd = r;
     for (const s of this.sparkles) { const d = Math.hypot(s.x + 0.5 - x, s.z + 0.5 - z); if (d <= bd) { bd = d; best = s; } }
     return best;
+  }
+
+  // ---- 🗝 메인 스토리 「갈매미섬의 비밀」(story.js가 정하고, 여기서는 이야기 반짝이를 놓고·알림을 냄). 난수를 쓰지 않음
+  /** 월드 알림 하나를 이야기에 넘기고 행동을 함 */
+  storyEvent(ev, arg) { if (this.storyOff || !this.story) return; this.storyApply(ST.storyOnEvent(this.story, ev, arg, this, newsDay(this.time))); }
+  storyApply(acts) {
+    for (const a of acts || []) {
+      if (a.grant) this.storyGrant(a.grant, a.who);
+      else if (a.spark) this.storySpark(a.spark, a.at);
+      else if (a.move) this.storyMove(a.move, a.at);
+      else if (a.blink != null) { this.story.blinks++; this.emit("storyBlink", { scene: a.blink, first: true, go: this.landmarkFront("lighthouse") }); if (a.blink) this.storySeeBlink(); }
+      else if (a.line && this.storyLines) this.storyLines.push(a.line);
+    }
+  }
+  /** 조각 하나를 얻음 → 수첩에 적고 storyPiece 알림(보상 카드·소식지). 얻었으면 true */
+  storyGrant(id, who = null) {
+    const s = this.story, p = STORY_PIECES[id]; if (!p || s.found[id]) return false;
+    ST.notePiece(s, id, who, newsDay(this.time));
+    this.emit("storyPiece", { id, piece: p, who, text: ST.pieceText(id, who), n: ST.foundCount(s), chapter: STORY_CHAPTERS[p.ch - 1] });
+    return true;
+  }
+  /** 이야기 반짝이를 놓을 칸: at = lighthouse(등대 발치) · cave(동굴 입구) · islet(조개섬) · beach(등대에서 가까운 본섬 모래) · ring(등대 둘레, 차례로 자리를 바꿈). 없으면 null */
+  storyCell(at) {
+    const g = this.grid, lh = this.landmarkFront("lighthouse"), c = this.center, base = lh || { x: Math.floor(c.x), z: Math.floor(c.z) };
+    let want = base, R = 8;
+    if (at === "cave") want = this.landmarkFront("cave") || base;
+    else if (at === "islet") { const z = this.zones.find(o => o.id === "islet-shell"); if (z) { want = { x: Math.round(z.x), z: Math.round(z.z) }; R = 7; } else at = "beach"; }
+    if (at === "ring") { const O = [[3, 1], [-2, 3], [-3, -1], [1, -3], [4, -2], [-4, 2]], o = O[(this.story.blinks + this.story.seeds + ST.foundCount(this.story) + this.story.sparks.length) % O.length]; want = { x: base.x + o[0], z: base.z + o[1] }; }
+    if (at === "beach") { R = 24; const sand = (x, z) => g.get(x, z)?.groundType === "Sand"; const cell = this.storyNear(base.x, base.z, R, sand); if (cell) return cell; }
+    return this.storyNear(want.x, want.z, R) || this.storyNear(base.x, base.z, 16);
+  }
+  /** (x, z)에서 가까운 반짝이를 둘 수 있는 빈 칸(다른 반짝이가 없는 칸, 거리·z·x 차례 → 늘 같은 칸) */
+  storyNear(x, z, R, ok = null) {
+    const cand = [];
+    for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) { const cx = x + dx, cz = z + dz; if (dx * dx + dz * dz <= R * R && this.grid.inBounds(cx, cz)) cand.push([dx * dx + dz * dz, cz, cx]); }
+    cand.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    for (const [, cz, cx] of cand) if (sparkleCellFree(this, cx, cz) && (!ok || ok(cx, cz)) && !this.sparkles.some(s => s.x === cx && s.z === cz)) return { x: cx, z: cz };
+    return null;
+  }
+  /** 이야기 반짝이를 놓음(줍기 전까지 사라지지 않음) → storySpark 알림(누르면 그곳으로) */
+  storySpark(key, at) {
+    const s = this.story; if (s.sparks.some(p => p.p === key)) return null;
+    const cell = this.storyCell(at); if (!cell) { if (STORY_PIECES[key]?.how === "spark" && key !== "c1_sign" && !s.queue.includes(key)) s.queue.push(key); return null; }   // 자리가 없으면 다음 차례에 다시
+    const day = newsDay(this.time), rec = { p: key, x: cell.x, z: cell.z, day, at }; s.sparks.push(rec);
+    if (key === "c4_pole") s.poleDay = day;
+    const sp = { id: this.sparkId++, k: "story", story: key, x: cell.x, z: cell.z, t: Infinity }; this.sparkles.push(sp);
+    this.emit("storySpark", { key, at, x: cell.x, z: cell.z, s: sp, piece: STORY_PIECES[key] || null }); return sp;
+  }
+  /** 이야기 반짝이를 다른 곳으로(조개섬 말뚝이 본섬 바닷가로 떠밀려 옴) */
+  storyMove(key, at) {
+    const rec = this.story.sparks.find(p => p.p === key), sp = this.sparkles.find(o => o.story === key); if (!rec || !sp) return;
+    const i = this.sparkles.indexOf(sp); this.sparkles.splice(i, 1);
+    const cell = this.storyCell(at); if (cell) { rec.x = sp.x = cell.x; rec.z = sp.z = cell.z; } rec.at = at; this.sparkles.push(sp);
+    this.emit("storySpark", { key, at, x: sp.x, z: sp.z, s: sp, piece: STORY_PIECES[key] || null, moved: true });
+  }
+  /** 칸이 막힌 이야기 반짝이를 가까운 빈 칸으로 */
+  storyRelocate(sp) {
+    const rec = this.story.sparks.find(p => p.p === sp.story), cell = this.storyNear(sp.x, sp.z, 10) || this.storyCell(rec?.at || "lighthouse"); if (!cell) return;
+    sp.x = cell.x; sp.z = cell.z; if (rec) { rec.x = cell.x; rec.z = cell.z; }
+  }
+  /** 불러온 뒤: 기록의 이야기 반짝이를 지도에 다시 놓음 */
+  storyRestoreSparks() {
+    for (const rec of this.story.sparks) { const sp = { id: this.sparkId++, k: "story", story: rec.p, x: rec.x, z: rec.z, t: Infinity };
+      if (!sparkleCellFree(this, sp.x, sp.z)) { const c = this.storyNear(sp.x, sp.z, 10); if (c) { sp.x = rec.x = c.x; sp.z = rec.z = c.z; } }
+      this.sparkles.push(sp); }
+  }
+  /** 이야기 반짝이를 주움: 조각(또는 별씨)이 수첩으로 바로(주머니를 거치지 않음). 돌려주는 값: { story: 열쇠 } */
+  pickStory(i, sp) {
+    const s = this.story, key = sp.story, day = newsDay(this.time); this.sparkles.splice(i, 1);
+    s.sparks = s.sparks.filter(p => p.p !== key);
+    this.emit("sparkleGone", { ...sp, picked: true });
+    if (key.startsWith("seed:")) { if (ST.noteSeed(s)) this.storyGrant("c3_seed"); else this.emit("storySeed", { n: s.seeds, route: key === "seed:A" ? "meteor" : "morning" }); }
+    else if (key === "c1_sign") { ST.openChapter(s, 1, this, day); this.storyGrant("c1_sign"); this.storyApply(ST.retroActs(s, this)); }   // 이야기 시작: 비밀 수첩이 생김
+    else if (key === "c4_reply") { if (this.storyGrant("c4_reply")) this.storyEnd(); }
+    else this.storyGrant(key);
+    return { story: key };
+  }
+  /** 고칠 곳 고치기(수첩의 [고치기]): 체크리스트가 다 차면 재료를 내고 고침 → 다음 장. 3장 등불이면 켜진 등대 조각. 돌려주는 값: { ok, reason? } */
+  storyRestore(n) {
+    const s = this.story, ch = STORY_CHAPTERS[n - 1]; if (!ch || !ST.chapterOpen(s, n)) return { ok: false, reason: "아직 안개 속이에요" };
+    const chk = ST.restoreCheck(s, this, n), r = ch.restore; if (chk.done) return { ok: false, reason: "이미 고쳤어요" };
+    if (!chk.ok) return { ok: false, reason: chk.locked ? "이야기를 끝까지 읽으면 고칠 수 있어요" : "아직 모자란 게 있어요" };
+    const day = newsDay(this.time);
+    for (const [k, v] of Object.entries(r.cost || {})) this.res[k] -= v;
+    if (r.seeds) s.seeds -= r.seeds;
+    s.restored[r.id] = day; this.emit("storyRestore", { n, restore: r, chapter: ch, go: this.landmarkFront(r.at === "cave" ? "cave" : "lighthouse") });
+    if (n === 3) s.litDay = day;
+    if (n < STORY_CHAPTERS.length) this.storyApply(ST.openChapter(s, n + 1, this, day));
+    if (n === 3) this.storyGrant("c4_lit", null);
+    return { ok: true };
+  }
+  /** 엔딩: 보름의 답장 → 등불지기 도장 · 흔들의자 · 갈매미들이 등대 앞에 모여 수평선을 봄 */
+  storyEnd() {
+    const s = this.story; if (s.ended) return false;
+    s.ended = newsDay(this.time); this.items[STORY_CHAIR] = (this.items[STORY_CHAIR] || 0) + 1;
+    this.emit("storyEnd", { item: ITEMS.find(i => i.id === STORY_CHAIR) || null });
+    this.startGather("ending", 120); return true;
+  }
+  /** 이야기 모임: 깨어 있는 갈매미들이 등대 앞으로 걸어가 수평선을 보며 "매앰!"(unitBrain.js startStoryGather, 난수 안 씀) */
+  startGather(kind = "dusk", secs = 90) {
+    const f = this.landmarkFront("lighthouse"), m = this.landmark("lighthouse"); if (!f) return null;
+    const c = this.center, mx = m ? m.cells[0][0] : f.x, mz = m ? m.cells[0][1] : f.z, d = Math.hypot(mx - c.x, mz - c.z) || 1;   // 수평선 = 섬 가운데에서 등대를 지나 바다 쪽
+    this.gather = { id: ++this.gatherSeq, kind, x: f.x, z: f.z, lx: mx + (mx - c.x) / d * 40, lz: mz + (mz - c.z) / d * 40, t: secs };
+    this.emit("storyGather", this.gather); return this.gather;
+  }
+  /** 수평선 깜빡임을 본 갈매미(밖에서 깨어 있는 첫 갈매미)가 ✨ */
+  storySeeBlink() { const u = this.units.find(o => !o.insideBuildingId && ![UnitState.Sleep, UnitState.Held].includes(o.state)); if (u) emote(u, "✨", 2.5); }
+  stepStory(dt) {
+    if (this.gather && (this.gather.t -= dt) <= 0) this.gather = null;
+    if (this.storyOff || !this.story || (this.storyClock += dt) < 1) return;
+    const step = this.storyClock; this.storyClock = 0; const s = this.story;
+    this.storyEvent("tick");
+    if (!s.ended) return;
+    const card = ST.postcardDue(s, this.festKey);                                   // 반딧불 우체통: 실제 계절마다 할머니 엽서
+    if (card) { s.postcards[card.key] = newsDay(this.time); this.emit("storyPostcard", card); }
+    const key = this.daily?.key;                                                   // 노을 모임: 엔딩 뒤 해 질 녘(기기 시각 17:30~19:30)에 하루 한 번
+    if (key && Number.isFinite(this.hour) && this.hour >= 17.5 && this.hour < 19.5 && s.duskKey !== key && !this.gather) { s.duskKey = key; this.startGather("dusk", 120); }
+    if (this.isNight === true && this.weather.kind === "clear") {                   // 맑은 밤엔 가끔 수평선 불빛이 세 번 깜빡임
+      if ((this.storyBlinkClock += step) >= 300) { this.storyBlinkClock = 0; s.blinks++; this.emit("storyBlink", { scene: true, first: false, go: this.landmarkFront("lighthouse") }); this.storySeeBlink(); }
+    } else this.storyBlinkClock = 0;
   }
 
   // ---- 예전 저장 옮기기(소지품 개편 전: 갈매미가 잡은 것이 마을 가방 world.treasures·items에 쌓였음). 난수를 쓰지 않음
@@ -2128,7 +2258,7 @@ export class World {
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
-      sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
+      sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock, story: ST.storyToSave(this.story),
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, ...(b.mates?.length ? { mates: b.mates } : {}), fee: b.fee || 0, ...(b.feeHeld ? { feeHeld: 1 } : {}), ...(b.feeTo ? { feeTo: b.feeTo } : {}), order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
   static fromJSON(j, rnd = Math.random) {
@@ -2159,6 +2289,7 @@ export class World {
     // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김). 시계가 없으면(예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
     w.sparkles = sparklesFromSave(j.sparkles).filter(s => sparkleCellFree(w, s.x, s.z)).map(s => ({ id: w.sparkId++, ...s }));
     if (Number.isFinite(j.sparkClock)) w.sparkClock = Math.min(SPARKLE_EVERY, Math.max(0, j.sparkClock));
+    w.storyRestoreSparks();                                                       // 🗝 줍지 않은 이야기 반짝이를 다시 놓음(그사이 막힌 칸이면 옆 칸)
     if (!j.ownership) { w.migrateOwnership(); if (!w.ownershipPending && w.aquariumB()) w.donateStashes(); }   // 소지품 개편 전 저장: 한 번만(다시 저장하면 ownership 표시가 붙음). 수족관이 있으면 옮겨 받은 물고기를 바로 기증
     w.nextId = j.nextId; return w;
   }

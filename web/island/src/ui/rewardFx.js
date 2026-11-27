@@ -18,6 +18,7 @@ export const RF_GAP_MS = 180;       // 띠·카드 사이 잠깐 빈 틈
 export const RF_SUM_MS = 1200;      // small: 같은 곳으로 가는 +N은 이 안에 들어오면 합쳐서 하나로 날림
 export const RF_FLY_MS = 1500;      // small: 떠올랐다 금고 칩까지 날아가는 시간
 export const RF_MAX_Q = 6;          // 기다리는 띠·카드 상한
+export const RF_STORY_MS = 9000;    // 🗝 이야기 카드(조각 글을 읽을 시간)
 export const TIER_RANK = { small: 0, medium: 1, big: 2 };
 
 /** 물건 아이콘(ITEMS에는 아이콘이 없어 여기서). 모르는 것은 🎁 */
@@ -27,7 +28,7 @@ export const REWARD_ITEM_ICON = {
   shell: "🐚", seaglass: "💎", goby: "🐟", postcard: "📮", blossom: "🌸", clover: "🍀", acorn: "🌰", pinecone: "🌲", icicle: "🧊",
   fireflyJar: "✨", starNote: "⭐", moonShell: "🌙", glowWeed: "🌿",
   goldLetter: "💌", starBrooch: "⭐", bouquet: "💐", rainbowShell: "🌈", snowGlobe: "❄️", fishTin: "🥫", crownCookie: "👑", knitScarf: "🧣",
-  medalRug: "🏅", medalLamp: "🎣", medalShelf: "🏆", plant: "🪴",
+  medalRug: "🏅", medalLamp: "🎣", medalShelf: "🏆", plant: "🪴", bormChair: "🪑",
 };
 export const itemIcon = it => REWARD_ITEM_ICON[typeof it === "string" ? it : it?.id] || "🎁";
 const isFurni = it => !!(it && (it.furniture || it.kind === "furniture"));
@@ -67,13 +68,22 @@ export function rewardOf(ev, a, world) {
       return { tier: "medium", icon: "🐠", title: `${f.name} 기증!`, line: "📖 수족관 도감에 새로 올랐어요", to: null, snd: "chime", key: `donate:${f.id}` }; }
     case "fishRecord": { if (!a.up || !(a.medal >= 2) || !a.fish) return null; const m = MEDALS[a.medal];   // 은·금메달로 오를 때만(흔한 첫 기록은 조용히)
       return { tier: "medium", icon: m?.icon || "🏅", title: `${a.fish.name} ${m?.name ?? "메달"}!`, line: a.size ? `📏 ${a.size}cm 새 기록` : "📏 새 기록", to: null, snd: "chime", key: `medal:${a.fish.id}` }; }
+    // 🗝 메인 스토리: 조각·고칠 곳·엔딩은 큰 카드(내 갈매폰 비밀 수첩으로 쏙), 별씨·엽서는 띠
+    case "storyPiece": { const p = a.piece; if (!p) return null;
+      return { tier: "big", icon: p.icon, kick: p.bonus ? "🗝 덤 조각 발견! 🗝" : "🗝 비밀 조각 발견! 🗝", title: p.title, line: a.text || p.text, to: "bag", snd: "fanfare", key: `story:${a.id}`, story: true, ms: RF_STORY_MS }; }
+    case "storyRestore": { const r = a.restore; if (!r) return null;
+      return { tier: "big", icon: r.icon, kick: "🔧 고쳤어요! 🔧", title: `${r.title} 완성!`, line: r.outro, to: null, snd: "fanfare", key: `storyFix:${r.id}`, story: true, ms: RF_STORY_MS }; }
+    case "storyEnd":
+      return { tier: "big", icon: "💌", kick: "🌟 이야기 완결 🌟", title: "보름의 답장", line: `🏮 등불지기 도장 · 🪑 ${a.item?.name ?? "보름의 흔들의자"} 획득 (🏠 집 꾸미기에서 놓아요)`, to: "bag", snd: "fanfare", key: "storyEnd", story: true, ms: RF_STORY_MS };
+    case "storySeed": return { tier: "medium", icon: "🌟", title: `별씨 ${a.n ?? 1}/3`, line: "🗝 비밀 수첩에 모아 둬요", to: "bag", snd: "glint", key: "storySeed" };
+    case "storyPostcard": return { tier: "medium", icon: "📮", title: "할머니 엽서가 왔어요", line: "🗝 비밀 수첩 → 엽서함", to: "bag", snd: "chime", key: `postcard:${a.key ?? ""}` };
     case "tax": case "lodging": { const n = Math.floor(a.total || 0); if (!(n > 0) || !world?.economy) return null;   // 금고로 들어오는 돈: 작게(마을 하루에 한 번씩이라 잦지 않지만 늘 들어오는 돈)
       return { tier: "small", icon: "🪙", n, title: `+${n}`, line: ev === "tax" ? "세금" : "숙박비", to: "vault", snd: "coins", key: "vault" }; }
     default: return null;
   }
 }
 /** 이 이벤트들은 보상 화면이 알림을 맡음(알림 줄에는 안 띄우고 지난 알림에만 남김). small(세금·숙박비)은 알림 줄 한 줄도 그대로 */
-export const REWARD_EVENTS = ["sparkle", "stampBuy", "medalGift", "donateGift", "festivalEnd", "rank", "dailyDone", "bondStage", "wishDone", "fussSolved", "donate", "fishRecord", "tax", "lodging"];
+export const REWARD_EVENTS = ["storyPiece", "storyRestore", "storyEnd", "storySeed", "storyPostcard", "sparkle", "stampBuy", "medalGift", "donateGift", "festivalEnd", "rank", "dailyDone", "bondStage", "wishDone", "fussSolved", "donate", "fishRecord", "tax", "lodging"];
 
 /** small 합치기: add(r, now) → 새로 띄울 것인지 합친 것인지. due(now) → 합치기가 끝나 날릴 것들 [{ to, n, icon, line }] */
 export function makeSmallSum(win = RF_SUM_MS) {
@@ -111,7 +121,7 @@ export function makeRewardQueue({ mediumMs = RF_MEDIUM_MS, bigMs = RF_BIG_MS, bi
       if (cur && now >= cur.until) { end = cur; cur = null; freeAt = now + gap + (end.tier === "big" ? 380 : 0); }   // 큰 카드는 날아가는 동안 조금 더 비움
       if (!cur && now >= freeAt && q.length) {
         const i = hold ? q.findIndex(x => x.tier !== "big") : 0;                  // 기다리는 동안 큰 카드는 건너뛰고 띠만
-        if (i >= 0) { cur = q.splice(i, 1)[0]; cur.t0 = now; cur.until = now + (cur.tier === "big" ? bigMs : mediumMs); return { show: cur, end }; }
+        if (i >= 0) { cur = q.splice(i, 1)[0]; cur.t0 = now; cur.until = now + (cur.ms || (cur.tier === "big" ? bigMs : mediumMs)); return { show: cur, end }; }   // ms: 읽을 글이 긴 카드(이야기)는 더 오래
       }
       return { show: null, end };
     },

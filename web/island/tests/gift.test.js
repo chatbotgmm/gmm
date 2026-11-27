@@ -41,7 +41,7 @@ function econ() {
 test("카탈로그: 반짝이 9 + 밤 반짝이 4 + 도장 선물 8은 플레이어 몫 선물거리, 기존 줄·도장 가구는 그대로, 갈매미마다 계절마다 좋아하는 반짝이가 있음", () => {
   const gifts = ITEMS.filter(i => i.gift);
   assert.equal(gifts.length, 21); assert.deepEqual(ITEMS.slice(0, OLD_ITEM_IDS.length).map(i => i.id), OLD_ITEM_IDS, "앞부분 순서 그대로");
-  assert.ok(ITEMS.slice(OLD_ITEM_IDS.length).every(i => i.gift || i.medal), "새 줄은 모두 맨 뒤(선물거리·금메달 기념 가구)");
+  assert.ok(ITEMS.slice(OLD_ITEM_IDS.length).every(i => i.gift || i.medal || i.story), "새 줄은 모두 맨 뒤(선물거리·금메달 기념 가구·이야기 엔딩 가구)");
   for (const i of gifts) {
     assert.ok(!i.furniture && !i.price && !("season" in i) && !("stamp" in i) && !i.sky && !i.fest, i.id);
     const d = B.giftDef(i.id); assert.equal(d.kind, "item"); assert.ok(B.GIFT_CAT_NAME[d.cat], `${i.name} 갈래`);
@@ -172,8 +172,9 @@ test("반짝이: 20초 뒤 바닷가 1·마을 1, 칸 조건·간격, 하루에 
   const first = w.sparkles[0]; first.t = 1; w.stepSparkles(1.5); assert.ok(!w.sparkles.includes(first)); assert.ok(gone.some(s => s.id === first.id));
   // 하루를 돌려도 많아야 6개, 다 사라지고 새로 생김
   const v = World.create(9, seededRandom(2), { wild: true, firstGull: true }); let most = 0, made = 0; v.on("sparkleSpawn", () => made++);
-  for (let i = 0; i < 1500; i++) { v.update(1); most = Math.max(most, v.sparkles.length); }
-  assert.ok(most <= S.SPARKLE_MAX); assert.ok(made >= 14, `생긴 수 ${made}`); assert.ok(v.sparkles.every(s => s.t <= S.SPARKLE_LIFE));
+  const plain = () => v.sparkles.filter(s => !s.story);   // 🗝 이야기 반짝이(둘째 날 등대 문패)는 따로 셈(줍기 전까지 안 사라짐 · tests/story.test.js)
+  for (let i = 0; i < 1500; i++) { v.update(1); most = Math.max(most, plain().length); }
+  assert.ok(most <= S.SPARKLE_MAX); assert.ok(made >= 14, `생긴 수 ${made}`); assert.ok(plain().every(s => s.t <= S.SPARKLE_LIFE));
   // 같은 씨앗이면 같은 자리·종류
   const a = World.create(7, seededRandom(1), { wild: true, firstGull: true }), b = World.create(7, seededRandom(5), { wild: true, firstGull: true });
   const pick = x => [x.spawnSparkles(), x.spawnSparkles()].flat().map(s => [s.k, s.x, s.z]);
