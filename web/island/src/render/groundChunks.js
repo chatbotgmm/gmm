@@ -10,7 +10,7 @@ import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
 import { corners as cornersRaw, heightIn, joined } from "../world/terrain.js";
-import { cellSub, snowClear, hardPair, hardCell, isPathType } from "../world/groundLook.js";
+import { cellSub, snowClear, hardPair, hardCell, isPathType, pathIn } from "../world/groundLook.js";
 
 let SUB = 4;                                   // 가까운 땅의 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
 // 거리별 상세도(오픈월드 지형의 LOD와 같은 생각): 보는 곳(화면 중심)에서 가까운 청크만 촘촘히, 멀수록 성기게.
@@ -46,8 +46,9 @@ function typeColor(type, gx, gz, out) {
 }
 
 /** 격자 좌표 (gx, gz)에서의 바닥 색: 근처 칸들의 종류를 경계에서 둥글게 섞는다(위치만의 함수라 칸 사이 이음매가 없음).
- *  hard: 이 꼭짓점이 속한 칸(hx, hz)이 길과 맞닿아 있으면(hardCell) 비틀기 없이, 길과 맞닿은 쪽 이웃은 섞지 않음 → 칸 선에서 색이 딱 끊김
- *  (꼭짓점은 칸마다 따로라 경계 위 꼭짓점이 양쪽 칸에서 각자 제 색을 가짐). 자연 땅끼리는 예전처럼 섞음. */
+ *  hard: 이 꼭짓점 가까이(1칸 안)에 길이 있으면(hardAt) 비틀기 없이, 제 칸(own)과 또렷하게 끊을 이웃(hardPair)은 섞지 않음 → 칸 선에서 색이 딱 끊김
+ *  (꼭짓점은 칸마다 따로라 경계 위 꼭짓점이 양쪽 칸에서 각자 제 색을 가짐). 자연 땅끼리는 예전처럼 섞음.
+ *  hard는 꼭 위치만으로 정함(칸마다 정하면 길 옆 잔디와 모래가 맞닿은 꼭짓점이 한쪽 칸은 비틀고 한쪽은 안 비틀어 색 이음매가 생겼음). */
 let lastClear = 0;                               // groundColor가 같이 셈: 이 점의 눈 덜 쌓임(길은 쓸어서 덜, seasons.js aSnowClear)
 const lastPath = [0, 0, 0];                      // 같이 셈: 돌길·데크·흙길 비율 → 꼭짓점 하나에 수 하나로(packPath, 셰이더 무늬 세기 groundPattern.js aPath)
 const PATH_SLOT = { [GroundType.Cobble]: 0, [GroundType.WoodDeck]: 1, [GroundType.Dirt]: 2 };
@@ -176,15 +177,17 @@ function deepSea(grid, x, z) {
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const c = grid.get(x + dx, z + dz); if (c && c.elevation > -0.6) return false; }
   return true;
 }
+/** 꼭짓점 (gx, gz)가 길 가까이인지(위치만의 함수: 이 점에 닿은 칸들과 그 바로 옆 칸 중 길이 있으면). 아니면 길에서 1칸 넘게 떨어져 비틀기(≤0.28)+섞기(BLEND_R)로도 길 색이 닿지 않음 */
+const hardAt = (grid, gx, gz) => pathIn(grid, Math.ceil(gx) - 2, Math.floor(gx) + 1, Math.ceil(gz) - 2, Math.floor(gz) + 1);
 function cellSurface(b, grid, x, z, c, sub) {
   const e = grid.get(x, z).elevation, S = deepSea(grid, x, z) ? 1 : cellSub(grid, x, z, sub);   // 좁게 칠한 곳·길 테두리는 멀리서도 촘촘히(칠한 곳이 이웃 색에 묻히지 않게, groundLook.js)
-  const step = 1 / S, flat = flatAround(grid, x, z), hard = hardCell(grid, x, z), t = grid.get(x, z).groundType, rim = hard && isPathType(t);
+  const step = 1 / S, flat = flatAround(grid, x, z), t = grid.get(x, z).groundType, rim = isPathType(t) && hardCell(grid, x, z), near = pathIn(grid, x - 2, x + 2, z - 2, z + 2);   // near: 칸 둘레 5×5에 길이 없으면 꼭짓점마다 따질 것 없음(대부분의 칸)
   for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
       const u = a * step, v = d * step, gx = x + u, gz = z + v, k = ((z * S + d) * 4096 + (x * S + a)) * 16384 + z * grid.w + x;
       let pc = pointCache.get(k);                                           // 색·법선(칸마다: 절벽 위·아래가 다름)
       if (!pc) {
-        const n = flat ? FLAT_N : normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color(), t, hard), w = packPath(), s = lastClear;
+        const n = flat ? FLAT_N : normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color(), t, near && hardAt(grid, gx, gz)), w = packPath(), s = lastClear;
         if (rim && onHardRim(grid, x, z, t, u, v)) col.multiplyScalar(PATH_RIM);
         if (flat) { pc = { n, c: col, s, w }; pointCache.set(k, pc); return { p: toW(gx, heightIn(c, e, u, v), gz), n, c: col, s, w }; }
         const steep = Math.min(1, Math.max(0, (0.86 - n[1]) / 0.2));             // 가파를수록 흙·바위 빛

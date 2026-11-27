@@ -42,6 +42,11 @@ export function hardCell(grid, x, z) {
   return false;
 }
 export const isPathType = t => LOOK_PATHS.has(t);
+/** 칸 범위 [x0..x1]×[z0..z1] 안에 길 칸(물 아닌)이 있는지. 바닥 색에서 꼭짓점마다 '길 가까이(비틀기 없이 또렷하게)'를 위치만으로 정할 때 씀 */
+export function pathIn(grid, x0, x1, z0, z1) {
+  for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (LOOK_PATHS.has(kind(grid, x, z))) return true;
+  return false;
+}
 export function pathEdge(grid, x, z) {
   const t = kind(grid, x, z); if (!t) return false;
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const u = kind(grid, x + dx, z + dz); if (u && u !== t && (LOOK_PATHS.has(u) || LOOK_PATHS.has(t))) return true; }

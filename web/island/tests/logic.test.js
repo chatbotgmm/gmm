@@ -1611,6 +1611,9 @@ test("바닥 그림: 길(돌길·데크·흙길) 경계는 또렷하게 끊고 �
   g.get(2, 9).groundType = G.Sand;
   assert.ok(hardCell(g, 4, 5) && hardCell(g, 4, 4) && hardCell(g, 9, 6));          // 길 칸·바로 옆·대각선 옆 잔디
   assert.ok(!hardCell(g, 4, 7) && !hardCell(g, 2, 9) && !hardCell(g, 3, 9));       // 길에서 먼 잔디·모래와 그 옆
+  // 꼭짓점이 '길 가까이'인지는 위치만으로(칸 범위 검사 pathIn): 칸마다 정하면 길 옆 잔디-모래 경계 꼭짓점이 양쪽 칸에서 다르게 비틀려 이음매가 생김
+  const { pathIn } = await import("../src/world/groundLook.js");
+  assert.ok(pathIn(g, 2, 2, 5, 5) && pathIn(g, 0, 3, 3, 6) && !pathIn(g, 0, 11, 7, 11) && !pathIn(g, 9, 11, 0, 11));
   // 밝기(L*): 잔디와 길 셋은 15 넘게, 길끼리는 7 넘게 차이(색맹도 밝기로 구분; 돌길·흙길은 푸른빛·노란빛으로도 갈림)
   const L = hex => { const f = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
     const Y = 0.2126 * f((hex >> 16) & 255) + 0.7152 * f((hex >> 8) & 255) + 0.0722 * f(hex & 255); return 116 * (Y > 0.008856 ? Math.cbrt(Y) : 7.787 * Y + 16 / 116) - 16; };
