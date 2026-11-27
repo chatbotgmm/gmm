@@ -62,6 +62,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 export class Hud {
   constructor({ tools, world, onSave, onLoad, onReset }) {
     this.tools = tools; this.world = world;
+    tools.onConfirm = o => this.confirm({ ...o, danger: true });                      // 철거 확인(편의성 점검 8번)
     tools.onHistory = () => { if (this.undoBtns) { this.undoBtns[0].disabled = !tools.history.length; this.undoBtns[1].disabled = !tools.redoStack.length; } };
     const crossUI = document.getElementById("cross"), crossGo = document.getElementById("crossGo");
     tools.onCross = on => { crossUI.hidden = !on; crossGo.hidden = !on; };
@@ -87,7 +88,7 @@ export class Hud {
     const auxBtn = (id, icon, label, tip) => { const b = el("button", "abtn", icon); if (id) b.id = id; b.setAttribute("aria-label", label); b.dataset.tip = tip; aux.appendChild(b); return b; };
     this.buildCat = "all"; this.ecats = el("div", "ecats"); this.ecats.setAttribute("role", "group"); this.ecats.setAttribute("aria-label", "건물 분류");
     this.catBtns = BUILD_CATS.map(([id, label]) => { const b = el("button", "", label); b.dataset.cat = id; b.onclick = () => { this.buildCat = id; this.sub.scrollLeft = this.sub.scrollTop = 0; this.filterBuild(); }; this.ecats.appendChild(b); return b; });
-    this.ehint = el("span", "ehint", "🧹 누른 건물이 바로 사라져요 · 되돌릴 수 없어요");
+    this.ehint = el("span", "ehint", "🧹 건물을 누르면 철거할지 한 번 더 물어요");
     // ✋ 화면 이동: 끌어서 칠하는 도구(칠하기·높이·자연)를 쓰는 중에 켜면 드래그로 화면만 옮김(도구는 잠시 멈춤).
     // 짓기·철거·지형지물 옮기기는 끌기가 원래 화면 옮기기(톡 = 고르기)라 ✋를 숨김(showMode)
     this.handBtn = auxBtn("", "✋", "화면 이동", "켜면 드래그로 화면을 옮겨요(칠하기는 잠시 멈춤). PC는 스페이스를 누른 채 끌거나 오른쪽 버튼으로, 휴대폰은 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
@@ -161,7 +162,7 @@ export class Hud {
     this.toastQ = []; this.toastCur = null; this.noteLog = [];
     document.getElementById("logOpen").onclick = () => this.openApp("log", "news");
     // 알림 눌러 그곳으로(편의성 점검 5번): 토스트 · 지난 알림 줄 → 그 갈매미 따라가기 / 그 건물로 + 카드
-    this.msg.addEventListener("click", () => { const it = this.toastCur; if (!it?.at || this.msg.dataset.go == null) return; this.toastEnd(); this.gotoAt(it.at); });
+    this.msg.addEventListener("click", () => { const it = this.toastCur; if (!(it?.at || it?.act) || this.msg.dataset.go == null) return; this.toastEnd(); if (it.act) it.act.run(); else this.gotoAt(it.at); });   // act: 누르면 할 일(짓기 「↶ 되돌리기」 · 편의성 점검 8번)
     { const lb = document.getElementById("logBody"), go = e => { const li = e.target.closest?.("li[data-at]"); if (!li) return false; this.closePhone(); this.gotoAt(atParse(li.dataset.at)); return true; };
       lb.addEventListener("click", go); lb.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && go(e)) e.preventDefault(); }); }
     // 소원 줄 → 그 갈매미 따라가기 · 「🔨 지으러 가기」 → 그 건물을 고른 채 건설 모드(편의성 점검 6번)
@@ -689,7 +690,7 @@ export class Hud {
     const tap = tapTool(mode, nature ? natureAction(arg).kind : null);             // 톡 = 고르기 · 끌기 = 화면 옮기기 도구: ✋가 필요 없음(켜 둔 채 오면 끔 — 켜져 있으면 톡이 안 먹음)
     if (tap && this.tools.hand) this.tools.setHand(false);
     this.handBtn.hidden = mode === "view" || tap;
-    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
+    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
     for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
     this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
     this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만
@@ -717,7 +718,7 @@ export class Hud {
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
       this.drawBuildTray(arg);                                                      // ↻ 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
     }
-    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 바로 사라져요 · 끌면 화면 이동 · 되돌릴 수 없으니 천천히 골라요");
+    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 철거할지 한 번 더 물어요 · 끌면 화면 이동 · 다 지은 건물은 되돌릴 수 없어요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
     else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
     if (!keep && nature) { const c = this.natCards?.find(x => x.dataset.nat === arg); if (c && (c.offsetLeft + c.offsetWidth > sub.clientWidth || c.offsetTop + c.offsetHeight > sub.clientHeight)) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 도구가 보이게
@@ -861,13 +862,13 @@ export class Hud {
    *  full: true = 차례를 기다리는 소식이라도 꼬리말까지 다 보임(처음 켤 때 안내처럼 할 일이 꼬리에 있는 글)
    *  kind: info(파랑) · good(초록) · warn(주황) · error(빨강) — 왼쪽 색 띠(색만으로 알리지 않게 글 앞에 이모지가 붙어 옴) */
   status(text, opt) {
-    const kind = opt?.kind || "info", at = opt?.at || null;                      // at = 누르면 갈 곳 { u: 갈매미 id } | { b: 건물 id }(qolViews.noteTarget · 편의성 점검 5번)
+    const kind = opt?.kind || "info", at = opt?.at || null, act = opt?.act || null;                      // at = 누르면 갈 곳 { u: 갈매미 id } | { b: 건물 id }(qolViews.noteTarget · 편의성 점검 5번)
     if (opt?.queue) return this.notify(text, kind, !!opt.full, at);
     if (!text) { if (this.toastCur && !this.toastCur.q) this.toastEnd(); return; }
     if (opt?.kind === "warn" || opt?.kind === "error") this.logNote(text, kind, at);
     if (this.toastCur?.q) this.toastQ.unshift(this.toastCur);                     // 보이던 소식은 맨 앞으로 되돌려 안내 다음에 다시
     while (this.toastQ.length > 3) this.toastQ.pop();
-    this.toastShow({ text, kind, q: false, n: 1, at }, document.body.dataset.mode === "edit" ? 4000 : 6000);   // 건설 중 안내는 4초(화면을 덜 가리게)
+    this.toastShow({ text, kind, q: false, n: 1, at, act }, document.body.dataset.mode === "edit" ? 4000 : 6000);   // 건설 중 안내는 4초(화면을 덜 가리게)
   }
   notify(text, kind = "info", full = false, at = null) {
     if (!text) return; this.logNote(text, kind, at);
@@ -880,7 +881,7 @@ export class Hud {
   toastShow(it, ms) {
     this.toastCur = it; const t = toastHtml(it.text, { keepTail: !it.q || it.full, count: it.n });   // 아이콘 + 핵심 낱말 굵게 · 마을 소식의 긴 꼬리말은 지난 알림에서만
     if (this.msgHtml !== t.html) { this.msgHtml = t.html; this.msg.innerHTML = t.html; } this.msg.dataset.kind = it.kind; this.msg.hidden = false;
-    const go = it.at && atLabel(this.world, it.at);                               // 누르면 그곳으로(따라가기 · 건물): 그때만 손가락을 받음(CSS #msg[data-go])
+    const go = it.act?.label || it.at && atLabel(this.world, it.at);                               // 누르면 그곳으로(따라가기 · 건물): 그때만 손가락을 받음(CSS #msg[data-go])
     if (go) { this.msg.dataset.go = go; this.msg.title = `누르면 ${go}`; this.msg.setAttribute("role", "button"); } else if (this.msg.dataset.go != null) { delete this.msg.dataset.go; this.msg.removeAttribute("title"); this.msg.removeAttribute("role"); }
     clearTimeout(this.msgT); this.msgT = setTimeout(() => this.toastEnd(), ms);
   }

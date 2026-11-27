@@ -12,6 +12,7 @@ import { frontCells } from "../world/customize.js";
 import { pressKind, tapTool } from "./pressKind.js";
 import { nearestSpot, PREPLACE_R, SNAP_R } from "./buildSpot.js";
 import { natureAction, natureHover, strokeText, undoText, redoText } from "../ui/natureView.js";
+import { buildUndoText, demolishAsk } from "../ui/buildUndoView.js";
 const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
 const OK = 0x4fcf78, BAD = 0xe0574f;
@@ -171,8 +172,20 @@ export class Tools {
   }
   undo() {
     this.commitStroke(); this.commitNature(); const s = this.history.pop(); if (!s) return this.onStatus("되돌릴 게 없어요");
+    this.runUndo(s);
+  }
+  /** 알림의 「↶ 되돌리기」: 그 짓기만 콕 집어 되돌림(그사이 다른 일을 했어도 그것은 그대로) */
+  undoEntry(s) {
+    const i = this.history.indexOf(s); if (i < 0) return this.onStatus("이미 되돌렸어요");
+    this.history.splice(i, 1); this.runUndo(s);
+  }
+  runUndo(s) {
     let text;
-    if (s.kind === "custom") {                                                   // 꾸미기: 월드가 만든 반대 일(낸 값 돌려받음, 그사이 바뀌었으면 못 함)
+    if (s.kind === "build") {                                                    // 짓기(편의성 점검 8번): 아직 아무것도 안 쓴 공사장만 철거 + 설계비 그대로 환불(World.undoBuild). 다시하기는 없음(다시 놓으면 됨)
+      const fails = []; let n = 0, refund = 0;
+      for (const id of s.ids) { const r = this.world.undoBuild(id); if (r.ok) { n++; refund += r.refund; } else fails.push(r.reason); }
+      text = buildUndoText({ name: s.name, n, total: s.ids.length, refund, fails });
+    } else if (s.kind === "custom") {                                                   // 꾸미기: 월드가 만든 반대 일(낸 값 돌려받음, 그사이 바뀌었으면 못 함)
       const ok = [], fails = []; let refund = 0;
       for (const it of [...s.items].reverse()) { const r = this.world.applyInverse(it.inverse); if (r.ok) { ok.unshift(it); refund += r.refund || 0; } else fails.push(r.reason); }
       if (ok.length) this.redoStack.push({ ...s, items: ok }); text = undoText({ n: ok.length, refund, fails });
@@ -348,11 +361,27 @@ export class Tools {
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
       if (b && BUILDINGS[b.defId].fixed) { this.onStatus(`${BUILDINGS[b.defId].name}은 철거할 수 없어요`); return; }
-      if (b) { this.world.removeBuilding(b.id); this.refresh(); this.onStatus(`${josa(BUILDINGS[b.defId].name, "을", "를")} 철거했어요`); return; }
+      if (b) { this.askDemolish(b); return; }
     }
     this.refresh();
   }
 
+  /** 철거: 바로 부수지 않고 확인창(onConfirm)을 거침(편의성 점검 8번 — 한 번 톡에 되돌릴 수 없이 사라지던 것). 방금 놓아 아직 안 쓴 공사장은 ↶처럼 장부까지 되돌림 */
+  async askDemolish(b) {
+    const w = this.world, def = BUILDINGS[b.defId], done = w.isDone(b), owner = def.house && b.owner != null ? w.units.find(u => u.unitId === b.owner) : null;
+    this.buildingViews.setHighlight(b.id);
+    const ok = this.onConfirm ? await this.onConfirm(demolishAsk({ name: def.name, done, fee: done ? 0 : b.fee || 0, owner: owner?.name || "", loan: owner?.loan?.left || 0 })) : true;
+    if (!ok || w !== this.world || w.buildings.get(b.id) !== b) { this.refresh(); return; }
+    const fee = done ? 0 : b.fee || 0;
+    if (!w.undoBuild(b.id).ok) w.removeBuilding(b.id);                            // 되돌릴 수 있는 공사장이면 undoBuild(같은 날 장부는 설계비 칸에서 뺌), 아니면 보통 철거(공사 중이면 환불 칸에)
+    this.history = this.history.filter(h => !(h.kind === "build" && h.ids.includes(b.id))); this.onHistory?.();
+    this.refresh(); this.onStatus(`🧹 ${josa(def.name, "을", "를")} 철거했어요${fee ? ` · 설계비 🪙${fee} 돌려받음` : ""}`);
+  }
+  /** 짓기를 되돌리기 목록에 넣음(놓은 것 중 ↶로 무를 수 있는 것만). 넣었으면 그 항목 */
+  pushBuild(name, list) {
+    const ids = list.filter(b => b.undoable && !this.world.isDone(b)).map(b => b.id); if (!ids.length) return null;
+    const s = { kind: "build", name, ids }; this.history.push(s); if (this.history.length > 60) this.history.shift(); this.redoStack = []; this.onHistory?.(); return s;
+  }
   /** 정해 둔 자리에 짓기(🔨 건설). */
   /** 다리 줄의 칸들과 그중 놓을 수 있는(물) 칸 */
   bridgeLine(p) {
@@ -370,15 +399,18 @@ export class Tools {
     }
     if (this.mode !== "build" || !h) return;
     if (h.bridge) {
-      const { ok } = this.bridgeLine(h); let n = 0, fee = 0; for (const [x, z] of ok) { const r = this.world.placeBuilding("bridge", x, z, 0); if (r.ok) { n++; fee += r.building.fee || 0; } }
-      const paid = fee ? ` · 설계비 🪙${fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "", cut = n && n < ok.length ? ` · 금고가 모자라 ${ok.length - n}칸은 못 놓았어요` : "";
-      this.plan = null; this.refresh(); this.onStatus(n ? `다리 ${n}칸 공사를 시작했어요${paid}${cut} · 🪚 목수가 땅 쪽부터 한 칸씩 놓아요` : "놓을 수 있는 물 칸이 없어요"); return;
+      const { ok } = this.bridgeLine(h), put = []; let fee = 0; for (const [x, z] of ok) { const r = this.world.placeBuilding("bridge", x, z, 0); if (r.ok) { put.push(r.building); fee += r.building.fee || 0; } }
+      const n = put.length, paid = fee ? ` · 설계비 🪙${fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "", cut = n && n < ok.length ? ` · 금고가 모자라 ${ok.length - n}칸은 못 놓았어요` : "";
+      const s = n ? this.pushBuild(BUILDINGS.bridge.name, put) : null;
+      this.plan = null; this.refresh(); this.onStatus(n ? `다리 ${n}칸 공사를 시작했어요${paid}${cut}${s ? " · ↶ 누르면 되돌리기" : " · 🪚 목수가 땅 쪽부터 한 칸씩 놓아요"}` : "놓을 수 있는 물 칸이 없어요", s && this.undoAct(s)); return;
     }
     const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
     if (r.ok) this.plan = null;
-    const paid = r.ok && r.building.fee ? ` · 설계비 🪙${r.building.fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "";
-    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요${paid}` : `${def.name} 공사를 시작했어요${paid} · 갈매미가 나무·돌로 지어요`);
+    const paid = r.ok && r.building.fee ? ` · 설계비 🪙${r.building.fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "", s = r.ok ? this.pushBuild(def.name, [r.building]) : null;
+    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요${paid}` : `${def.name} 공사를 시작했어요${paid}${s ? " · ↶ 누르면 되돌리기" : " · 갈매미가 나무·돌로 지어요"}`, s && this.undoAct(s));
   }
+  /** 알림을 누르면 이 짓기를 되돌림(hud.status의 act) */
+  undoAct(s) { return { act: { label: "↶ 되돌리기", run: () => this.undoEntry(s) } }; }
   clearPlan() { this.plan = null; this.refresh(); }
 
   // 미리보기 갱신: 칸 커서 / 고스트 색(초록 = 지을 수 있음, 빨강 = 못 지음 + 이유) / 철거 대상 강조

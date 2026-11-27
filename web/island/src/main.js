@@ -217,6 +217,7 @@ function mount(w) {
   world.on("custom", e => hud?.customSpent(e));
   // 건축에서 금고 돈이 나감: 설계비(놓는 순간)·공사 한 바퀴 품삯 → 금고 칩 −n(합침)·숫자 줄어듦·빨간 글 + 공사장 위 표시. 밀리면 공사장 위 「💸 품삯 밀림」. 주문 공사(갈매미 돈)는 이벤트가 없어 안 뜸
   world.on("fee", e => { hud?.vaultSpent(-e.fee, { count: true }); queueMicrotask(() => spendFx.push(e.b, "fee", e.fee)); });   // 설계비는 공사장 모습(buildingAdded)보다 먼저 옴 → 다 놓은 뒤에
+  world.on("buildUndo", e => hud?.vaultSpent(e.refund));                          // 짓기 되돌리기: 돌려받은 설계비 +n(편의성 점검 8번)
   world.on("wage", e => { if (!e.b) return; hud?.vaultSpent(-e.n, { count: true }); spendFx.push(e.b, "wage", e.n); });   // b 없음 = 의원 진료 품삯(건축 아님)
   { const owed = "wageOwed"; world.on(owed, e => { if (e.b) spendFx.push(e.b, "owed", e.n); }); }   // 알림 줄 글은 ALERTS 표가 그대로 냄(여기는 공사장 위 표시만 — 같은 알림 두 번 아님)
   { let last = "", at = 0; world.on("customRefused", e => { const t = `🚫 ${e.reason}`, now = performance.now(); if (t === last && now - at < 1500) return; last = t; at = now; hud?.status(t); }); }
@@ -309,7 +310,7 @@ const backLetter = savedWorld ? welcomeBack(world) : null;                      
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
 addEventListener("visibilitychange", () => { if (document.hidden && ready) saveNow(); });
 addEventListener("pagehide", () => { if (ready) saveNow(); });
-tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
+tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: (t, opt) => hud?.status(t, opt || undefined) });
 const twoFinger = new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
 const quarterCam = new QuarterCam({ camera, controls });                        // 건설 모드: 고정 쿼터뷰(⟲ ⟳ 로 90°씩), 끝내면 보던 각도로
 const buildingThumbs = new BuildingThumbs(renderer);                            // 건설 갤러리의 건물 사진

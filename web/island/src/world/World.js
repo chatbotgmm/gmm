@@ -30,6 +30,7 @@ import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave,
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
+import { undoBlock, feeUndoLedger } from "./buildUndo.js";
 import * as P from "./population.js";
 import * as FM from "./farming.js";
 import * as CU from "./customize.js";
@@ -1630,6 +1631,7 @@ export class World {
     b.ramp = r.ramp; if (b.ramp) b.hits = Math.min(b.hits, b.need);
     b.fee = hits === null ? r.fee || 0 : 0;
     b.order = null; if (hits === null && opt.order && this.economy) this.openOrder(b, opt.order.u, opt.order.cost);   // 갈매미 주문 공사: 품삯·자재값을 맡김
+    if (hits === null && !opt.order) { b.undoable = true; b.placedDay = newsDay(this.time); b.lowWas = this.bank.low || 0; }   // 플레이어가 놓은 공사장: 아직 아무것도 안 썼으면 ↶로 무를 수 있음(undoBuild · 저장 안 함)
     if (b.fee) { this.bank.vault -= b.fee; this.bank.fees += b.fee; this.led("fees", b.fee); this.emit("fee", { b, fee: b.fee }); this.checkLow(); }
     this.grid.occupy(b.cells, b.id, { kind: "building", walkable: (!!b.ramp && this.isDone(b)) || !!def.field || (!!def.bridge && this.isDone(b)), surface: r.elevation, ramp: b.ramp });   // 밭은 처음부터 걸어 다님   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
     if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
@@ -1638,6 +1640,15 @@ export class World {
     this.dropDecor(b.cells);                                                     // 지은 칸의 놓은 덤불·꽃은 지움(돈은 안 돌려줌)
     if (this.isDone(b)) { this.completed(b); if (hits === null) this.builtNow(b); if (b.order) this.settleOrder(b); }   // ⚡ 바로 완공도 다 지은 것(불러오기·시험 받침은 hits를 넘김 → 아님)
     return { ok: true, building: b };
+  }
+  /** 짓기 되돌리기(편의성 점검 8번, 규칙은 buildUndo.js): 방금 놓고 아직 망치질·재료 쓰기 전인 공사장을 없애고 설계비를 그대로 돌려줌. { ok, reason, refund } */
+  undoBuild(id) {
+    const b = this.buildings.get(id), why = undoBlock(b, !!b && this.isDone(b)); if (why) return { ok: false, reason: why, refund: 0 };
+    const fee = b.fee || 0, bk = this.bank;
+    if (fee) { const L = feeUndoLedger(fee, b.placedDay, newsDay(this.time)); bk.vault += fee; bk.fees -= fee; this.led(L.key, L.n); b.fee = 0; if (bk.vault >= BK.VAULT_REARM || (!b.lowWas && bk.vault >= BK.VAULT_LOW)) bk.low = 0; }   // 놓기 전에 안 켜져 있던 '얼마 안 남음'은 다시 끔 · 같은 날이면 그날 설계비 칸에서 뺌, 날이 바뀌었으면 오늘 환불 칸에
+    this.removeBuilding(id); if (fee) this.settleOwed();                           // b.fee를 0으로 해 둬서 removeBuilding이 또 돌려주지 않음
+    this.emit("buildUndo", { b, refund: fee });
+    return { ok: true, reason: "", refund: fee, building: b };
   }
   isDone(b) { return b.hits >= b.need; }
   /** 저장할 은행 창고: 짓는 갈매미가 공사 재료로 꺼내 들고 있는 짐(u.load, 저장 안 함)을 창고에 되돌려 셈 */
