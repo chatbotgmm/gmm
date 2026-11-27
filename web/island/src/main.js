@@ -59,6 +59,8 @@ import { gridShown } from "./ui/gridView.js";
 import { loadCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 import { GullPool, loadingView, failReason } from "./render/gullLoad.js";
 import { installCloud } from "./ui/cloudView.js";
+import { RewardView } from "./ui/rewardView.js";
+import { rewardOf, REWARD_EVENTS } from "./ui/rewardFx.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -135,8 +137,8 @@ function hookSounds(w) {
   for (const ev of ["market", "bank", "foodSale", "granary"]) w.on(ev, e => sfx.play("coins", { pos: at(e.u || e.buyer), vol: 0.6 }));
   w.on("furnitureBought", e => sfx.play("bag", { pos: at(e.u) }));
   w.on("beachcomb", e => sfx.chime([1047, 1319], 0.07, 0.14));
-  w.on("wishDone", () => sfx.chime([784, 988, 1175, 1568], 0.1, 0.2));
-  w.on("rank", () => sfx.fanfare());
+  w.on("wishDone", () => { if (!rewards) sfx.chime([784, 988, 1175, 1568], 0.1, 0.2); });   // 보상 화면(rewards)이 있으면 그쪽이 소리도 냄
+  w.on("rank", () => { if (!rewards) sfx.fanfare(); });
   w.on("unitAdded", () => { if (ready) sfx.summon(); });
   w.on("custom", e => { if (e.op === "undo") return; const p = at(e); if (e.op === "dig" || e.op === "fill") sfx.splash(p, e.op === "dig" ? 0.6 : 0.35);   // 꾸미기: 파기·메우기 첨벙, 놓기·옮기기 툭, 치우기 도끼(되돌리기는 tools.onUndoSound가 한 번만 냄)
     else sfx.play(e.op === "remove" ? "chop" : "place", { pos: p, vol: 0.7 }); });
@@ -209,7 +211,10 @@ function mount(w) {
   { const d0 = daylight.now(); if (world.isNight == null) world.isNight = (2 - sunPosition(d0).elev) / 8 > 0.5; world.hour ??= d0.getHours() + d0.getMinutes() / 60; }   // 첫 프레임 전에 밤인지·몇 시인지(tickClock과 같은 규칙): 저녁에 고른 부탁엔 밤 부탁이 낄 수 있음
   world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
-  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };
+  // 플레이어 보상(ui/rewardFx.js rewardOf): 띠·큰 카드·+N이 크게 보여 주고 소리도 냄 → 알림 줄에는 안 띄우고 지난 알림에만(같은 소식 두 번 아님). small(세금·숙박비)은 알림 줄도 그대로
+  rewards?.reset(); const mineR = world, big = (ev, arg) => !!rewards && !!hud && (rewardOf(ev, arg, world)?.tier ?? "small") !== "small";
+  for (const ev of REWARD_EVENTS) world.on(ev, arg => { if (world !== mineR || !rewards) return; const r = rewardOf(ev, arg, world); if (r) rewards.push(r); });
+  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n && big(ev, arg)) { hud.logNote(`${n.icon} ${n.text}${tail}`, "good"); return; } if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
   // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
   world.on("custom", e => hud?.customSpent(e));
@@ -224,6 +229,7 @@ function mount(w) {
   for (const [ev, a] of Object.entries(ALERTS)) world.on(ev, arg => {
     if (world !== mine || !hud || !gate(ev, arg, world.time)) return;
     const text = alertLine(ev, arg, world); if (!text) return;
+    if (big(ev, arg)) { hud.logNote(text, a.kind); return; }                     // ✨ 반짝이 줍기 등: 보상 띠가 대신 보여 주고 소리도 냄
     if (!a.batch) { hud.status(text, a.now ? { kind: a.kind } : { kind: a.kind, queue: true }); ring(a, arg); return; }
     let b = batches.get(ev); if (!b) { b = { list: [], first: text }; batches.set(ev, b);
       setTimeout(() => { batches.delete(ev); if (world !== mine) return; const m = b.list.length > 1 && batchText(ev, b.list);
@@ -242,25 +248,26 @@ function mount(w) {
   world.on("beachcomb", e => say("beachcomb", e, ` (${e.u.name}의 소지품)`));
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
   // 수족관: 크기 기록(흔한 물고기의 첫 기록은 조용히) · 기증 · 기념 선물
-  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common" || (e.up && e.medal >= 2)) say("fishRecord", e, " (📖 도감)"); if (e.up && e.medal >= 3) sfx.chime([988, 1175, 1568], 0.09, 0.15); });
-  world.on("medalGift", e => { say("medalGift", e, " (🏠 집 꾸미기에서 놓아요)"); sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
-  world.on("donate", e => { say("donate", e, " (📖 도감)"); sfx.chime([784, 988, 1319], 0.09, 0.16); });
+  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common" || (e.up && e.medal >= 2)) say("fishRecord", e, " (📖 도감)"); if (e.up && e.medal >= 3 && !big("fishRecord", e)) sfx.chime([988, 1175, 1568], 0.09, 0.15); });
+  world.on("medalGift", e => { say("medalGift", e, " (🏠 집 꾸미기에서 놓아요)"); if (!big("medalGift", e)) sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
+  world.on("donate", e => { say("donate", e, " (📖 도감)"); if (!big("donate", e)) sfx.chime([784, 988, 1319], 0.09, 0.16); });
   world.on("donateGift", e => say("donateGift", e, " (🏠 집 꾸미기에서 놓아요)"));
   // 선물 반응 · 하트 단계가 올라 받은 답례(답례가 뒤에 와서 알림 줄에 남음)
   world.on("gift", e => { say("gift", e); sfx.chime(e.tier >= 2 ? [784, 988, 1175] : e.tier ? [784, 988] : [440], 0.08, 0.14); });
-  world.on("bondStage", e => { say("bondStage", e, !e.gift ? "" : e.gift.kind === "furniture" ? " (🏠 집 꾸미기에서 놓아요)" : " (🎁 내 주머니)"); sfx.chime([659, 784, 988, 1319], 0.09, 0.16); });
+  world.on("bondStage", e => { say("bondStage", e, !e.gift ? "" : e.gift.kind === "furniture" ? " (🏠 집 꾸미기에서 놓아요)" : " (🎁 내 주머니)"); if (!big("bondStage", e)) sfx.chime([659, 784, 988, 1319], 0.09, 0.16); });
   // 계절 축제의 날: 열림(색종이·팡파르) · 끝남(기념 가구)
   world.on("festival", e => { say("festival", e, ` · 마을 시간 ${Math.round(FESTIVAL_SECS / 60)}분 동안 열려요 (📱 마을)`); sfx.fanfare(); });
-  world.on("festivalEnd", e => { say("festivalEnd", e, e.item ? " (🏠 집 꾸미기에서 놓아요 · 📱 마을에 도장)" : ""); sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
+  world.on("festivalEnd", e => { say("festivalEnd", e, e.item ? " (🏠 집 꾸미기에서 놓아요 · 📱 마을에 도장)" : ""); if (!big("festivalEnd", e)) sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
   world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
   // 오늘의 부탁: 하나 끝날 때마다 알림(같은 일의 다른 알림에 묻히지 않게 한 박자 늦게), 모두 끝나면 도장
   world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
+    if (big("dailyDone", e)) { hud.logNote(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개)` : `📋 오늘의 부탁 완료: ${e.req.text}`, "good"); return; }
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
 }
-let tools = null, hud = null;
+let tools = null, hud = null, rewards = null;   // rewards: 플레이어 보상 화면(ui/rewardView.js)
 // 첫 화면: 모델을 다 받을 때까지 「불러오는 중」 화면(진행 막대)을 보여 주고, 그동안 마을 시간은 멈춤
 //  · 갈매미(목록 chars.json + 9종)는 다 받을 때까지 기다림(90초에 포기하지 않음). 실패하면 1.5·4·10초 뒤 자동으로 다시 받고(gullLoad.js),
 //    그래도 안 되면 까닭 한 줄 + [다시 시도](못 받은 것만 다시 받음, 새로고침 없이 이어서 시작)
@@ -329,8 +336,8 @@ hud.onTug = tugNow;
 // 선물 · 쓰다듬기(선물 알림은 월드가 알려 줌: gift · bondStage). 간직하기 단추는 없앰(내 주머니는 상인이 팔지 않음 — 옛 섬 규칙 world.toggleKeep은 그대로)
 hud.onGift = (u, id) => world.giveGift(u, id);
 // 도장 가게(오늘의 부탁을 모두 들어주고 받은 도장으로 한정 가구나 귀한 선물 사기)
-hud.onStampBuy = id => { const ok = world.buyStamp(id); if (ok) sfx.play("bag", { vol: 0.7 });
-  hud.status(stampBuyText(id, ok, josa)); return ok; };   // 가구·귀한 선물 둘 다(예전엔 가구 표만 찾아 선물을 사면 TypeError)
+hud.onStampBuy = id => { const ok = world.buyStamp(id);   // 산 물건은 보상 카드(stampBuy → rewards)가 크게 보여 줌 · 알림은 지난 알림에만
+  if (ok) hud.logNote(stampBuyText(id, ok, josa), "good"); else hud.status(stampBuyText(id, ok, josa)); return ok; };   // 가구·귀한 선물 둘 다(예전엔 가구 표만 찾아 선물을 사면 TypeError)
 hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
   if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘은 여기까지, 내일 또 만나요`);
   else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요 · 마을 날이 바뀌면 또 할 수 있어요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
@@ -383,10 +390,12 @@ function makeFuss(w) {
   const f = new Fuss(w, 91), at = u => ({ pos: { x: toWorldX(u.x), z: toWorldZ(u.z) } });
   f.near = () => ({ x: toGridX(controls.target.x), z: toGridZ(controls.target.z) });   // 화면 중심 가까이에서만 소동(FUSS_SEE칸) — 안 보이는 곳의 🆘는 하루 상한만 씀
   f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요 · 꾹 눌러 들어서 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요 · 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" });
-  world.on("fussSolved", ({ u }) => { hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 알림 줄에 직접 연결(newsAlerts 표 밖)
+  world.on("fussSolved", ({ u }) => { if (rewards) { hud.logNote(`💕 ${josa(u.name, "이", "가")} 고마워해요`, "good"); return; } hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 보상 띠(rewards)가 크게 보여 줌   // 알림 줄에 직접 연결(newsAlerts 표 밖)
   f.onLand = u => { const k = footprints.thud(world, u); if (k) sfx.play("step", { ...at(u), vol: 0.6, rate: k === "snow" ? 0.5 : 0.6 }); return k; };
   return f;
 }
+// 🎁 플레이어 보상 화면: 반짝이·선물·기념 가구·등급·부탁·소원·소동은 띠나 큰 카드로, 세금·숙박비는 금고 칩으로 날아가는 +N(ui/rewardFx.js · rewardView.js)
+rewards = new RewardView({ sfx, hud });
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
@@ -538,5 +547,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, edition, footprints, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get rewards() { return rewards; }, reward: (ev, arg) => { const r = rewardOf(ev, arg, world); if (r) rewards.push(r); return r; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
