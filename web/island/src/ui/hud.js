@@ -722,12 +722,17 @@ export class Hud {
     let s = this.chipVault.querySelector(".vspend"); if (!s) { s = el("span", "vspend"); s.setAttribute("aria-hidden", "true"); this.chipVault.appendChild(s); }
     s.textContent = chipSpendText(sum); s.dataset.sign = sum > 0 ? "plus" : "minus"; s.hidden = !sum;
     clearTimeout(this.spendT); this.spendT = setTimeout(() => { s.hidden = true; this.spendSum.reset(); }, VF_SUM_MS);
-    if (count && d < 0) this.countVault(-d);
+    if (count) this.countVault(-d);
   }
-  /** 칩 숫자: 지금 보이는 값(또는 나가기 전 값)에서 금고 값까지 VF_COUNT_MS 동안 줄어듦. 움직임 줄이기면 바로 새 값(빨간 글은 그대로 — 움직임이 아님) */
+  /** 보상(ui/rewardView.js small): +n이 금고 칩으로 날아가는 동안 칩은 들어오기 전 값으로 잠깐 둠(ms 뒤엔 저절로 지금 값). 닿으면 vaultSpent(+n, { count: true })가 올려 셈 */
+  holdVault(n, ms = 2000) {
+    const w = this.world; if (!w?.economy || !this.chipParts || !(n > 0)) return;
+    this.countShown = Math.floor(w.bank?.vault ?? 0) - n; this.countEnd = performance.now() + ms; cardPut(this.chipParts.vv, this.vaultChip(this.countShown).text);
+  }
+  /** 칩 숫자: 지금 보이는 값(또는 나가기 전 값)에서 금고 값까지 VF_COUNT_MS 동안 줄어듦(n < 0 = 들어온 돈: 올라감 + 초록 글). 움직임 줄이기면 바로 새 값(색 글은 그대로 — 움직임이 아님) */
   countVault(n) {
-    const w = this.world, c = this.chipVault; if (!w?.economy || !c) return;
-    c.classList.add("spent"); clearTimeout(this.flashT); this.flashT = setTimeout(() => c.classList.remove("spent"), VF_FLASH_MS);
+    const w = this.world, c = this.chipVault; if (!w?.economy || !c || !n) return;
+    const cls = n > 0 ? "spent" : "gained"; c.classList.remove("spent", "gained"); c.classList.add(cls); clearTimeout(this.flashT); this.flashT = setTimeout(() => c.classList.remove(cls), VF_FLASH_MS * (n > 0 ? 1 : 1.6));
     const to = Math.floor(w.bank?.vault ?? 0);
     if (document.documentElement.dataset.motion === "reduce") { this.countEnd = 0; this.drawMoneyChips(); return; }
     const from = this.countEnd > performance.now() ? this.countShown : to + n;

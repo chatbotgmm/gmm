@@ -775,6 +775,62 @@
   #cloudAsk .ca-mine { box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-accent-strong); } #cloudAsk .ca-gone { margin: var(--s-2) 0; font-size: var(--fs-title); font-weight: 700; color: var(--c-danger-ink); }
   #cloudAsk .ca-foot { margin: var(--s-2) 0 0; font-size: var(--fs-sm); color: var(--c-ink-2); }
   #cloudAsk .lbtns { display: flex; gap: var(--s-2); justify-content: flex-end; flex-wrap: wrap; margin-top: calc(14*var(--u)); } #cloudAsk .lbtns button { min-height: var(--hit); padding: calc(8*var(--u)) calc(14*var(--u)); }
+  /* ===== 🎁 플레이어 보상(ui/rewardView.js): 띠(medium) · 큰 카드(big) · 금고로 날아가는 +N(small). 시트(폰) 위·편지 모달 아래. 띠와 +N은 누를 수 없음(놀이를 막지 않음) ===== */
+  #reward { position: fixed; inset: 0; z-index: calc(var(--z-modal) - 2); pointer-events: none; overflow: hidden; }
+  .rwBan { position: absolute; left: 50%; top: max(calc(var(--safe-t) + var(--chips-h) + calc(52*var(--u))), 13vh); transform: translateX(-50%); display: flex; align-items: center; gap: calc(12*var(--u));
+    max-width: min(calc(480*var(--u)), calc(100vw - calc(24*var(--u)))); box-sizing: border-box; padding: calc(10*var(--u)) calc(22*var(--u)) calc(10*var(--u)) calc(10*var(--u));
+    border-radius: var(--r-pill, 999px); background: linear-gradient(180deg, #fffaf0, #ffeccb); box-shadow: 0 0 0 calc(3*var(--u)) #f6c453, var(--e-3); color: var(--c-ink); }
+  .rwBanIco { flex: none; display: grid; place-items: center; width: calc(56*var(--u)); height: calc(56*var(--u)); border-radius: 50%; font-size: calc(36*var(--u)); line-height: 1;
+    background: radial-gradient(circle, #fff 30%, #ffe08a 100%); box-shadow: 0 0 calc(16*var(--u)) rgba(255,196,60,.8); }
+  .rwBanTxt { display: flex; flex-direction: column; min-width: 0; } .rwBanTitle { font-size: calc(21*var(--u)); font-weight: 800; letter-spacing: -.01em; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rwBanLine { font-size: calc(13.5*var(--u)); color: var(--c-ink-2); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rwBan.on { animation: rwBanIn .5s cubic-bezier(.2,1.6,.4,1) both; } .rwBan.off { animation: rwBanOut .25s ease-in both; }
+  .rwBan.on .rwBanIco { animation: rwWiggle .7s .15s ease-out both; }
+  @keyframes rwBanIn { from { opacity: 0; transform: translateX(-50%) translateY(calc(-14*var(--u))) scale(.6); } to { opacity: 1; transform: translateX(-50%); } }
+  @keyframes rwBanOut { to { opacity: 0; transform: translateX(-50%) translateY(calc(-10*var(--u))) scale(.92); } }
+  @keyframes rwWiggle { 0% { transform: scale(.4) rotate(-20deg); } 55% { transform: scale(1.25) rotate(8deg); } 100% { transform: none; } }
+  .rwBanSpark, .rwConf { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  .rwBanSpark { left: calc(38*var(--u)); }
+  :is(.rwBanSpark, .rwConf) > i { position: absolute; left: 0; top: 0; width: calc(9*var(--u)); height: calc(13*var(--u)); border-radius: calc(2*var(--u)); background: hsl(var(--h) 90% 60%); opacity: 0;
+    animation: rwConf 1.1s var(--d) cubic-bezier(.15,.7,.4,1) both; }
+  .rwBanSpark > i { width: calc(7*var(--u)); height: calc(7*var(--u)); border-radius: 50%; animation-duration: .8s; }
+  @keyframes rwConf { 0% { opacity: 1; transform: translate(-50%, -50%) scale(.3); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(var(--dx) - 50%), calc(var(--dy) + 40px - 50%)) rotate(var(--r)); } }
+  .rwCard { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 46%, rgba(255,236,170,.55), rgba(30,24,10,.28) 70%); }
+  .rwCard.on { animation: rwFade .25s ease-out both; } .rwCard.out { animation: rwFadeOut .5s ease-in both; }
+  @keyframes rwFade { from { opacity: 0; } } @keyframes rwFadeOut { to { opacity: 0; } }
+  .rwRays { position: absolute; left: 50%; top: 46%; width: min(150vmin, calc(900*var(--u))); aspect-ratio: 1; transform: translate(-50%, -50%);
+    background: repeating-conic-gradient(from 0deg, rgba(255,226,120,.42) 0 10deg, rgba(255,226,120,0) 10deg 22.5deg);
+    -webkit-mask: radial-gradient(circle, #000 18%, transparent 62%); mask: radial-gradient(circle, #000 18%, transparent 62%); animation: rwSpin 14s linear infinite; }
+  @keyframes rwSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+  .rwConf { top: 44%; }
+  .rwBox { position: relative; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: calc(6*var(--u)); width: min(calc(340*var(--u)), calc(100vw - calc(40*var(--u))));
+    padding: calc(18*var(--u)) calc(20*var(--u)) calc(20*var(--u)); border-radius: calc(28*var(--u)); background: linear-gradient(180deg, #fffdf6 0%, #fff1d2 100%); color: var(--c-ink);
+    box-shadow: 0 0 0 calc(4*var(--u)) #f6c453, 0 0 calc(60*var(--u)) rgba(255,200,70,.75), var(--e-3); white-space: normal; text-align: center; overflow: hidden;
+    transition: transform .5s cubic-bezier(.5,0,.8,.4), opacity .5s ease-in; min-height: 0; }
+  .rwCard.on .rwBox { animation: rwPop .6s cubic-bezier(.2,1.5,.4,1) both; }
+  @keyframes rwPop { 0% { transform: scale(.3) rotate(-6deg); opacity: 0; } 60% { transform: scale(1.08) rotate(1deg); opacity: 1; } 100% { transform: none; } }
+  .rwKick { font-size: calc(13*var(--u)); font-weight: 700; color: #a8650a; letter-spacing: .08em; }
+  .rwIco { font-size: calc(92*var(--u)); line-height: 1.1; filter: drop-shadow(0 calc(6*var(--u)) calc(10*var(--u)) rgba(160,100,0,.35)); }
+  .rwCard.on .rwIco { animation: rwIcoPop .9s .12s cubic-bezier(.2,1.6,.4,1) both, rwFloat 2.4s 1s ease-in-out infinite; }
+  @keyframes rwIcoPop { 0% { transform: scale(0) rotate(-30deg); } 60% { transform: scale(1.3) rotate(8deg); } 100% { transform: none; } }
+  @keyframes rwFloat { 50% { transform: translateY(calc(-6*var(--u))) scale(1.04); } }
+  .rwTitle { font-size: calc(25*var(--u)); font-weight: 800; line-height: 1.25; letter-spacing: -.02em; word-break: keep-all; }
+  .rwLine { font-size: calc(14.5*var(--u)); color: var(--c-ink-2); line-height: 1.4; word-break: keep-all; }
+  .rwTake { margin-top: calc(8*var(--u)); padding: calc(10*var(--u)) calc(26*var(--u)); border-radius: var(--r-pill, 999px); background: var(--c-accent-strong); color: var(--c-on-accent); font-weight: 800; font-size: calc(17*var(--u)); box-shadow: var(--e-2); }
+  .rwCard.on .rwTake { animation: tugPulse .7s .8s ease-in-out infinite alternate; }
+  .rwBar { position: absolute; left: 0; right: 0; bottom: 0; height: calc(4*var(--u)); background: #f6c453; transform-origin: left; }
+  .rwNum { position: absolute; left: 50%; top: max(calc(var(--safe-t) + var(--chips-h) + calc(40*var(--u))), 24vh); margin-left: calc(-80*var(--u)); width: calc(160*var(--u)); display: flex; flex-direction: column; align-items: center; color: #f7b500;
+    text-shadow: 0 calc(2*var(--u)) 0 #8a5a00, 0 0 calc(14*var(--u)) rgba(255,210,80,.9), 0 calc(3*var(--u)) calc(6*var(--u)) rgba(0,0,0,.35); will-change: transform, opacity;
+    padding: calc(8*var(--u)) 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(70,40,0,.42), rgba(70,40,0,0)); }
+  .rwNum b { font-size: calc(60*var(--u)); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; } .rwNum .rwNumIco { font-size: calc(30*var(--u)); margin-top: calc(-4*var(--u)); }
+  .rwNum small { font-size: calc(14*var(--u)); font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); white-space: nowrap; }
+  .rwNum { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 0 calc(4*var(--u)); } .rwNum small { flex-basis: 100%; text-align: center; }
+  .rwNum.still { animation: rwFade .2s both; }
+  .rwHit { animation: rwHit .6s cubic-bezier(.2,1.6,.4,1) 1 !important; } @keyframes rwHit { 40% { transform: scale(1.22); filter: brightness(1.15) drop-shadow(0 0 calc(8*var(--u)) #ffd34d); } }
+  #chipVault.gained .vv { color: var(--c-ok-ink); font-weight: 800; }
+  html[data-motion="reduce"] :is(.rwBan.on, .rwBan.off, .rwBan.on .rwBanIco, .rwCard.on .rwBox, .rwCard.on .rwIco, .rwCard.on .rwTake, .rwRays, .rwHit) { animation: none !important; }
+  html[data-motion="reduce"] :is(.rwBanSpark, .rwConf) { display: none; } html[data-motion="reduce"] .rwBox { transition: opacity .2s; }
+  :where(html[data-form="portrait"]) .rwBan { padding-right: calc(16*var(--u)); } :where(html[data-form="portrait"]) .rwBanTitle { font-size: calc(18*var(--u)); }
 </style>
 </head>
 <body>
