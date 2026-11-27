@@ -149,6 +149,11 @@
   #minimap { position: fixed; right: var(--safe-r); top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); z-index: var(--z-hud); padding: calc(4*var(--u)); background: var(--c-hud); border-radius: var(--r-md); box-shadow: var(--e-1); }
   #minimap canvas { display: block; width: calc(176*var(--u)); height: calc(176*var(--u)); border-radius: var(--r-sm); cursor: pointer; touch-action: none; image-rendering: pixelated; }
   body.inroom #minimap { display: none !important; }
+  /* 🏝 전체 보기(편의성 점검 9번): 미니맵 자리(오른쪽 위) — 미니맵을 켰으면 그 바로 밑. 가까이 보거나 따라갈 때만(main.js가 hidden을 바꿈) */
+  #homeBtn { position: fixed; right: var(--safe-r); top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); z-index: var(--z-hud); min-height: var(--hit-sm); padding: calc(4*var(--u)) var(--s-2); background: var(--c-hud); font-size: var(--fs-sm); font-weight: 700; border-radius: var(--r-md); box-shadow: var(--e-1); touch-action: manipulation; }
+  #homeBtn[hidden], body.inroom #homeBtn { display: none !important; }
+  body:has(#minimap:not([hidden])) #homeBtn { top: calc(var(--safe-t) + var(--chips-h) + var(--s-2) + var(--mm-w) + var(--s-2)); }
+  html[data-form="portrait"] body:has(#giftPick:not([hidden])) #homeBtn { top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); }   /* 선물 판이 미니맵을 숨기면 그 자리로 */
   #roomTouch { position: fixed; inset: 0; z-index: var(--z-roomtouch); touch-action: none; }
   #room { position: fixed; inset: 0; z-index: var(--z-room); pointer-events: none; }
   #room > div { pointer-events: auto; }
@@ -618,6 +623,12 @@
   #giftPick { max-height: min(34dvh, max(calc(96*var(--u)), calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - var(--info-h) - calc(64*var(--u)) - calc(40*var(--u))))); }   /* 🎁·♥ 버튼은 이제 카드 안(행동 줄)이라 그 줄 높이는 빼지 않음. 낮은 세로 폰(320×568 + 펼친 카드)에서도 안내 글 + 선물 한 줄은 보이게 96px은 남김(예전엔 16px로 눌림) */
   html[data-form="landscape"] #giftPick { max-height: calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - max(calc(40*var(--u)), var(--hit-sm)) - calc(24*var(--u))); }
   html[data-form="portrait"] body:has(#giftPick:not([hidden])) #minimap { display: none; }
+  /* PC·태블릿(중간·넓음, 둘러보기): 따라가기 카드·선물 판·당기기를 📱과 같은 오른쪽 아래로(편의성 점검 14번 — 📱 → 갈매미 줄 → 🎁 → 선물 사이 마우스가 화면 양끝을 오가던 2345 px를 줄임).
+     위쪽은 미니맵·🏝 전체 보기 자리까지만. 왼손 배치(📱이 왼쪽)와 건설 모드는 예전처럼 왼쪽 */
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]) :is(#info, #bondBar, #tugBtn) { left: auto; right: var(--safe-r); }
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]) #info { max-height: min(72dvh, calc(100dvh - var(--info-b) - var(--safe-t) - var(--chips-h) - var(--s-2) - var(--mm-space) - var(--hit-sm) - calc(16*var(--u)))); }
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]):has(#giftPick:not([hidden])) #homeBtn { display: none; }   /* 낮은 창에서 선물 판과 겹치지 않게(고르는 동안만) */
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]) #giftPick { max-height: min(34dvh, max(calc(96*var(--u)), calc(100dvh - var(--safe-t) - var(--chips-h) - var(--mm-space) - var(--hit-sm) - var(--info-b) - var(--info-h) - calc(40*var(--u))))); }
   /* 가로 폰 건설: 미니맵을 작게, 확인 막대는 따라가기 카드 바로 위(카드가 없으면 맨 아래) → 크게(130%) 해도 미니맵·확인 막대·카드가 서로 안 덮음 */
   html[data-form="landscape"] body[data-mode="edit"] { --mm-w: calc(80*var(--u)); }
   html[data-form="landscape"] body[data-mode="edit"] #minimap canvas { width: calc(72*var(--u)); height: calc(72*var(--u)); }
@@ -640,6 +651,8 @@
   #coach .cskip { margin-left: auto; }
   #coach .ctop:not(:has(.cskip:not([hidden]))) { min-height: 0; }
   #coach .cmain { display: flex; align-items: flex-end; gap: var(--s-2); flex-wrap: wrap; }
+  #coach.cfold { display: flex; align-items: center; gap: var(--s-2); padding-top: calc(4*var(--u)); padding-bottom: calc(4*var(--u)); } #coach.cfold .ctext { display: none; }   /* 「처음이에요」 몇 초 뒤: 한 줄로 접힘(coachRules.js) */
+  #coach .cexp[hidden] { display: none; }
   #coach .ctext { flex: 1 1 calc(170*var(--u)); margin: calc(2*var(--u)) 0 calc(2*var(--u)); font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
   #coach .cok { margin-left: auto; }
   #coach button { flex: none; pointer-events: auto; min-height: var(--hit-sm); padding: calc(4*var(--u)) calc(12*var(--u)); font-size: var(--fs-sm); }
@@ -802,7 +815,7 @@
       <section class="agroup"><h5>🏘 마을 살림</h5><div class="agrid"><button data-app="town"><span>🏅</span>마을</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button><button data-app="build" hidden><span>🏠</span>건설</button></div></section>
       <section class="agroup"><h5>⚙ 갈매폰</h5><div class="agrid"><button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button></div></section>
     </div></div>
-    <div id="pageMenu" class="page" hidden><div class="mlist"><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="log">🔔 지난 알림</button><button data-go="home">📱 갈매폰 열기</button></div></div>
+    <div id="pageMenu" class="page" hidden><div class="mlist"><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="log">🔔 지난 알림</button><button data-go="overview">🏝 마을 전체 보기</button><button data-go="home">📱 갈매폰 열기</button></div></div>
     <div id="pageDex" class="page" hidden><div id="dexBody"></div></div>
     <div id="pageGulls" class="page" hidden><div id="units"></div></div>
     <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
@@ -857,6 +870,7 @@
 <div id="confirm" hidden role="group" aria-label="건설 확인"><div id="cfInfo" aria-live="polite" tabindex="0" role="button" aria-expanded="false" aria-label="설계비·재료 자세히"></div><div class="cfBtns"><button id="cfCancel">✕ 취소</button><button id="cfRot">↻ 돌리기</button><button id="cfBuild" class="go">🔨 건설</button></div></div>
 <div id="overlay"></div>
 <div id="minimap" hidden role="region" aria-label="미니맵: 누르거나 끌면 그곳으로"><canvas></canvas></div>
+<button id="homeBtn" hidden data-tip="마을 전체 보기: 따라가기를 풀고 처음처럼 섬 전체가 보이게">🏝 전체 보기</button><!-- 가까이 보거나 따라갈 때만 보임(main.js) -->
 <div id="cross" hidden></div><button id="crossGo" hidden>🖌 누르는 동안 칠하기</button>
 <div id="roomTouch" hidden></div>
 <div id="room" hidden role="region" aria-label="집 꾸미기">

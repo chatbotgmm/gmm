@@ -175,7 +175,7 @@ export class Hud {
     // ☰ 메뉴: 계속하기 · 설정 · 저장 · 도움말(메뉴에서 연 앱의 ‹ 뒤로는 메뉴로)
     document.getElementById("menuBtn").onclick = () => this.openMenu();
     document.getElementById("pageMenu").onclick = e => { const g = e.target.closest?.("[data-go]")?.dataset.go; if (!g) return;
-      if (g === "close") this.closePhone(); else if (g === "home") this.openApp(null); else this.openApp(g, "menu"); };
+      if (g === "close") this.closePhone(); else if (g === "overview") { this.closePhone(); this.onOverview?.(); } else if (g === "home") this.openApp(null); else this.openApp(g, "menu"); };
     this.watchSizes();
     // 설정 갈래 탭 + 고르기 칸(누른 값으로 바로: main.js 콜백에 목표 값을 넘김)
     this.setTab = "screen";
@@ -184,7 +184,7 @@ export class Hud {
     // 배지: 처음 본 값을 기준으로(불러온 직후엔 점이 없음)
     this.seen = null;
     // 배고픈 갈매미 알림: 누르면 그 갈매미를 따라감
-    this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitClick?.(this.hungry); };
+    this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitFollow?.(this.hungry); };   // 따라가기만(다시 눌러도 안 풀림) + 가까이
     this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
     this.chipTime.onclick = () => this.onSpeed?.("next");                          // 시간 칩 = ⏩ 배속 바꾸기(유료판 ×1→×2→×3, 무료판이면 잠금 안내)
     this.chipWeather = document.getElementById("chipWeather"); this.chipWeather.onclick = () => this.onWeatherInfo?.();
@@ -323,7 +323,7 @@ export class Hud {
   bldCardClick(e) {
     const t = e.target.closest?.("[data-act]"), b = this.cardB, w = this.world; if (!t || !b) return;
     const act = t.dataset.act; this.cardPress = 0;                                 // 누름은 끝났음: 이 단추가 바꾼 칸은 바로 다시 그림(0.3초 막기를 풀어 탭·당번 결과가 늦지 않게)
-    if (act === "follow") { const u = w.units.find(o => String(o.unitId) === t.dataset.id); if (u) this.onUnitClick?.(u); return; }
+    if (act === "follow") { const u = w.units.find(o => String(o.unitId) === t.dataset.id); if (u) this.onUnitFollow?.(u); return; }   // 따라가기만 + 가까이(다시 눌러도 안 풀림)
     if (act === "tab") { this.shopTab = t.dataset.tab; this.syncBldCard(); return; }
     if (act === "stamp") { this.openPhone(); this.openApp("wish"); const d = document.querySelector("#dailyBody details.sshop"); if (d) { d.open = true; d.scrollIntoView?.({ block: "nearest" }); } return; }
     if (act === "doctor") {
@@ -574,7 +574,7 @@ export class Hud {
       nm.append(el("span", "job", JOBS[u.job]?.icon ?? ""), u.name); nm.style.color = RARITY[u.rarity]?.color;
       nm.dataset.tip = `${RARITY[u.rarity]?.name} ${JOBS[u.job]?.name}: ${JOBS[u.job]?.desc}`;
       r.append(nm, el("span", "act"), el("span", "coins"), el("span", "full"));
-      r.onclick = () => { this.onUnitClick?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });
+      r.onclick = () => { this.onUnitFollow?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });   // 목록 줄: 따라가던 갈매미를 다시 눌러도 풀지 않고 가까이(그만은 카드 ✕)
     this.follow = null; this.seen = null; this.badgeKey = null; this.trayKey = null;   // 새 섬·불러오기: 배지 기준 · 건물 갤러리도 새로
   }
   /** 트레이의 묶음 하나(작은 이름 + 버튼들). 버튼을 담을 칸을 돌려줌 */

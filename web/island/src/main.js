@@ -44,6 +44,7 @@ import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
 import { ROOM_EXPOSURE } from "./render/roomLight.js";
 import { Minimap } from "./ui/minimap.js";
+import { HOME_OFF, HOME_TARGET, showOverviewBtn } from "./systems/camAssist.js";
 import { installKeys } from "./ui/keys.js";
 import { createEdition, simSteps } from "./systems/edition.js";
 import { Sfx } from "./audio/sfx.js";
@@ -73,11 +74,11 @@ const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 26
 const portrait = () => innerWidth < innerHeight;
 function fitView() { camera.fov = portrait() ? 62 : 45; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }   // 세로 화면은 넓은 렌즈
 fitView();
-camera.position.set(0, portrait() ? 70 : 54, portrait() ? 50 : 52);   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
+{ const h = portrait() ? HOME_OFF.portrait : HOME_OFF.wide; camera.position.set(HOME_TARGET.x + h.x, HOME_TARGET.y + h.y, HOME_TARGET.z + h.z); }   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5;   // 낮게(거의 눈높이)·가까이(1.5 m)까지 볼 수 있게. 땅속으로는 못 들어감(아래 keepCameraAboveGround)
  controls.maxDistance = 110;
-controls.screenSpacePanning = false; controls.target.set(0, 0, 4);
+controls.screenSpacePanning = false; controls.target.set(HOME_TARGET.x, HOME_TARGET.y, HOME_TARGET.z);
 const hemi = new THREE.HemisphereLight(0xdcefff, 0x8a8f5a, 0.85); scene.add(hemi);   // 하늘빛(위)·땅빛(아래)
 const sun = new THREE.DirectionalLight(0xffe2b8, 3.3);   // 따뜻한 햇빛
  sun.position.set(-26, 24, 14); sun.castShadow = true;   // 해를 조금 낮춰 언덕·비탈에 음영
@@ -377,7 +378,12 @@ unitControl.onTapFirst = e => {
 // 👉 톡: 성격별 반응(units/poke.js). 정·돈은 안 바뀜 · 소리만 반응 종류마다
 const POKE_SFX = { poke: [784, 988], sleep: [392, 330], sulk: [440, 370], sulkStart: [523, 440, 370], zoom: [659, 880, 1175] };
 unitControl.onPoke = u => { const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
-hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
+hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);   // 카드 ✕·키보드(Esc): 같은 갈매미면 그만(다가갔으면 원래 거리로)
+hud.onUnitFollow = u => unitControl.followClose(u);
+// 🏝 마을 전체 보기(편의성 점검 9번): 오른쪽 위 단추(가까이 보거나 따라갈 때만 보임) · ☰ 메뉴. 처음 시점의 높이·거리·중심으로(보던 방향은 그대로)
+hud.onOverview = () => { if (tools.mode !== "view" || roomView.isOpen) { hud.status("🏝 전체 보기는 둘러보기에서 써요 · ✓ 완료를 누른 뒤 다시 눌러요", { kind: "info" }); return; }
+  hud.houseCard(null); unitControl.overview(portrait()); };
+const homeBtn = document.getElementById("homeBtn"); homeBtn.onclick = () => hud.onOverview();                               // 목록 줄·건물 카드 「따라가기」·배고픔 칩: 늘 따라가기 + 10 m로 가까이(편의성 점검 1·2번)
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
   unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
@@ -484,6 +490,7 @@ function frameBody() {
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight); spendFx.update(innerWidth, innerHeight);
+  if (now - lastHud > 200) { const hb = showOverviewBtn({ len: camera.position.distanceTo(controls.target), following: !!unitControl.follow, portrait: portrait(), mode: tools.mode, inRoom: roomView.isOpen }); if (homeBtn.hidden === hb) homeBtn.hidden = !hb; }
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
   if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }
