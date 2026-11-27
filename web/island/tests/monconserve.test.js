@@ -88,3 +88,13 @@ test("재료를 먼저 쓴 공사(망치질 전)도 공사 시작: 설계비가 
   assert.equal(boss.coins - bc, h.fee); assert.ok(!h.feeHeld);
   const j2 = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j2.buildings.find(b => b.id === h.id).feeTo, boss.name, "받은 갈매미 이름 저장");
 });
+
+test("⚡ 바로 완공(finishAll)도 공사 시작: 맡아 둔 설계비가 건축가에게 감 → 다 지은 뒤 철거해도 돈이 사라지지 않음 · 예전 저장(다 지었는데 맡아 둠)은 불러올 때 건축가에게", () => {
+  const w = town(), s = spotFor(w, "house"), h = w.placeBuilding("house", s[0], s[1], 0).building, boss = w.units.find(u => u.job === "builder"), bc = boss.coins || 0, m0 = M(w);
+  assert.ok(h.feeHeld); w.finishAll(); assert.ok(w.isDone(h)); assert.ok(!h.feeHeld, "완공 = 공사 시작"); assert.equal(boss.coins - bc, h.fee);
+  w.removeBuilding(h.id); assert.equal(M(w), m0, "다 지은 건물 철거: 돈의 합 그대로");
+  const s2 = spotFor(w, "house"), h2 = w.placeBuilding("house", s2[0], s2[1], 0).building, m1 = M(w);
+  const j = JSON.parse(JSON.stringify(w.serialize())), jb = j.buildings.find(b => b.id === h2.id); jb.hits = 1e9; assert.equal(jb.feeHeld, 1);   // 고치기 전 ⚡ 완공으로 생긴 저장
+  const o = World.fromJSON(j, seededRandom(1)), o2 = o.buildings.get(h2.id); assert.ok(o.isDone(o2) && !o2.feeHeld, "불러올 때 건축가에게"); assert.equal(M(o), m1);
+  o.removeBuilding(o2.id); assert.equal(M(o), m1, "그 뒤 철거해도 그대로");
+});

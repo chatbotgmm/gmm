@@ -1867,7 +1867,7 @@ export class World {
     b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
     if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (!u && b.order) this.settleOrder(b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
-  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); } }
+  finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { this.releaseFee(b); b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); } }
   /** 공사가 끝나 다 지어졌을 때(망치질·finishAll·⚡ 바로 완공. 불러오기는 아님): 수족관이면 갈매미들이 아껴 둔 물고기를 기증 */
   builtNow(b) { if (b.defId === "aquarium") this.donateStashes(); if (b.upFrom) { const from = b.upFrom; b.upFrom = null; this.emit("upgraded", { b, from }); } }
 
@@ -1960,6 +1960,7 @@ export class World {
   }
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
+    if (b.feeHeld && this.isDone(b)) this.releaseFee(b);                          // 다 지었는데 맡아 둔 설계비가 남음(예전 ⚡ 완공 저장): 건축가에게 보내고 철거(돈이 사라지지 않게)
     if (b.fee && !this.isDone(b)) {                                                // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로). 중앙은행: 받은 갈매미가 가진 만큼만 되돌려 받음(돈이 새로 생기지 않게)
       const t = !b.feeHeld && this.monOn() ? (this.units.find(u => u.name === b.feeTo) || (b.feeTo ? null : this.feeTaker(b.defId))) : null;   // 맡아 둔 설계비는 그대로 · 이미 건축가에게 간 건 그 갈매미가 가진 만큼만(마을을 떠났으면 0)
       const n = b.feeHeld || !this.monOn() ? b.fee : t ? Math.min(b.fee, Math.max(0, Math.floor(t.coins || 0))) : 0; if (t) t.coins -= n;
@@ -2153,6 +2154,7 @@ export class World {
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);
     for (const b of w.buildings.values()) if (b.doctor && !w.units.some(u => u.name === b.doctor)) b.doctor = null;   // 마을에 없는 당번 의사는 비움
     w.tidyResidents();
+    for (const b of w.buildings.values()) if (b.feeHeld && w.isDone(b)) w.releaseFee(b);   // 다 지은 건물에 맡아 둔 설계비(⚡ 완공 고치기 전 저장): 갈매미를 다시 만든 뒤 건축가에게
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)
     // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김). 시계가 없으면(예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
     w.sparkles = sparklesFromSave(j.sparkles).filter(s => sparkleCellFree(w, s.x, s.z)).map(s => ({ id: w.sparkId++, ...s }));
