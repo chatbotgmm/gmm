@@ -204,7 +204,7 @@ function mount(w) {
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
-  if (world.isNight == null) world.isNight = (2 - sunPosition(daylight.now()).elev) / 8 > 0.5;   // 첫 프레임 전에 밤인지(tickClock과 같은 규칙): 밤에 고른 부탁엔 밤 부탁이 낄 수 있음
+  { const d0 = daylight.now(); if (world.isNight == null) world.isNight = (2 - sunPosition(d0).elev) / 8 > 0.5; world.hour ??= d0.getHours() + d0.getMinutes() / 60; }   // 첫 프레임 전에 밤인지·몇 시인지(tickClock과 같은 규칙): 저녁에 고른 부탁엔 밤 부탁이 낄 수 있음
   world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
   const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };

@@ -85,6 +85,9 @@ test("밤 부탁: 밤에 고를 때만 후보 · 밤 반짝이 2개 주우면 �
   let key = null; for (let d = 1; d <= 400 && !key; d++) { const k = `2026-${String(1 + (d % 12)).padStart(2, "0")}-${String(1 + (d % 28)).padStart(2, "0")}-${d}`; if (D.rollDaily(k, w).reqs.some(r => r.id === "nightSparkle")) key = k; }
   assert.ok(key, "밤에는 고를 수 있음");
   w.isNight = false; assert.ok(!D.rollDaily(key, w).reqs.some(r => r.id === "nightSparkle"), "같은 날짜라도 낮에 고르면 안 낌");
+  // 자정~새벽(자정에 날짜가 바뀌며 고를 때)은 밤이어도 안 낌: 그 부탁이 그날 낮까지 남아 낮에만 하는 사람의 도장을 막으므로. 저녁 밤은 낌
+  w.isNight = true; w.hour = 0; assert.equal(req.ok(w), false); w.hour = 4.5; assert.ok(!D.rollDaily(key, w).reqs.some(r => r.id === "nightSparkle"), "자정 넘어 고르면 안 낌");
+  w.hour = 21; assert.equal(req.ok(w), true); w.hour = null;
   w.isNight = true; w.daily = D.rollDaily(key, w);
   w.isNight = false; const day = w.spawnSparkles()[0]; w.pickSparkle(day.id);
   const r = () => w.daily.reqs.find(q => q.id === "nightSparkle"); assert.equal(r().have, 0, "낮 반짝이는 안 셈");
