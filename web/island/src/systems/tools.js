@@ -372,7 +372,7 @@ export class Tools {
     this.buildingViews.setHighlight(b.id);
     const ok = this.onConfirm ? await this.onConfirm(demolishAsk({ name: def.name, done, fee: done ? 0 : b.fee || 0, owner: owner?.name || "", loan: owner?.loan?.left || 0 })) : true;
     if (!ok || w !== this.world || w.buildings.get(b.id) !== b) { this.refresh(); return; }
-    const fee = done ? 0 : b.fee || 0;
+    const fee = w.isDone(b) ? 0 : b.fee || 0;                                      // 확인창을 띄운 사이 다 지어졌을 수도 있어 지금 값으로(돌려받은 만큼만 알림에)
     if (!w.undoBuild(b.id).ok) w.removeBuilding(b.id);                            // 되돌릴 수 있는 공사장이면 undoBuild(같은 날 장부는 설계비 칸에서 뺌), 아니면 보통 철거(공사 중이면 환불 칸에)
     this.history = this.history.filter(h => !(h.kind === "build" && h.ids.includes(b.id))); this.onHistory?.();
     this.refresh(); this.onStatus(`🧹 ${josa(def.name, "을", "를")} 철거했어요${fee ? ` · 설계비 🪙${fee} 돌려받음` : ""}`);
