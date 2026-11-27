@@ -94,6 +94,18 @@ test("1장 고칠 곳: 조각 3 + 나무 2 → 등대 문 · 모자라면 안 �
   wave(w); const sp = sparkOf(w, "c2_wall"); assert.ok(sp && cheb(sp, w.landmarkFront("cave")) <= 3, "동굴 입구");
 });
 
+test("고칠 곳 재료가 창고에 없으면 갈매미 가방에서 시장 값으로 사 옴(창고에 철이 안 들어오는 마을도 안 막힘)", () => {
+  const w = town(); toChapter(w, 3); for (let d = 0; d < 3; d++) { dayOf(w, newsDayOf(w) + 1); wave(w); pickKey(w, "seed:B"); }
+  pickPlain(w, 5); w.units[0].petDay = 0; w.pet(w.units[0]); w.res.iron = 0;
+  for (const u of w.units) u.inv.iron = 0;
+  let chk = ST.restoreCheck(w.story, w, 3); assert.ok(!chk.ok, "철이 어디에도 없으면 아직");
+  const miner = addGull(w, "불씨"); miner.inv.iron = 4; miner.coins = 0; assert.ok(w.economy); w.bank.vault = 100;
+  chk = ST.restoreCheck(w.story, w, 3); const row = chk.rows.find(r => r.k === "iron"), price = ST.storyRawPrice(w, "iron");
+  assert.ok(chk.ok && row.buy === 1 && row.price === price && /갈매미에게 1개 사기/.test(row.text));
+  w.bank.vault = price - 1; assert.ok(!ST.restoreCheck(w.story, w, 3).ok, "금고가 모자라면 아직"); w.bank.vault = 100;
+  assert.ok(w.storyRestore(3).ok); assert.equal(miner.inv.iron, 3); assert.equal(miner.coins, price); assert.equal(w.bank.vault, 100 - price); assert.equal(w.res.iron, 0);
+});
+
 test("2장: 첫 비밀(♥♥♥, 이미 닿았으면 장이 열릴 때) · 매앰 쪽지 · 무지개 깃털(덤) · 일곱 둥지(축제 끝, 덤) · 가로등 2 → 메아리 굴", () => {
   const w = town(); start(w); pickPlain(w, 5); w.addBond(w.units[0], 30); w.res.wood += 2;   // ♥♥♥는 1장 중에 이미
   assert.ok(!w.story.found.c2_secret1); assert.ok(w.storyRestore(1).ok);
@@ -144,7 +156,8 @@ test("4장: 조개섬 말뚝(사흘 뒤 본섬 바닷가) · 깜빡이는 대답
   assert.ok(pole && Math.hypot(pole.x - isl.x, pole.z - isl.z) <= 8, "조개섬");
   // 깜빡임: 등불을 켠 날이라도 밤이면 연출(scene) · 엔딩 유리병은 세 조각 뒤 다음 차례
   const got = events(w, ["storyBlink", "storyEnd", "storyGather"]);
-  w.isNight = true; w.storyClock = 1; w.stepStory(0.1); assert.ok(w.story.found.c4_blink); assert.equal(got[0][1].scene, true); w.isNight = false;
+  w.isNight = true; w.storyClock = 1; w.stepStory(0.1); assert.ok(!w.story.found.c4_blink, "불을 막 켰으면 카드가 지나간 뒤에");
+  w.time += ST.STORY_BLINK_WAIT; w.storyClock = 1; w.stepStory(0.1); assert.ok(w.story.found.c4_blink); assert.equal(got[0][1].scene, true); w.isNight = false;
   assert.ok(!w.story.queue.includes("c4_reply"), "말뚝 전엔 아직");
   dayOf(w, d + 3); w.storyEvent("tick"); const moved = sparkOf(w, "c4_pole"); assert.ok(Math.hypot(moved.x - isl.x, moved.z - isl.z) > 20, "본섬 바닷가로");
   assert.equal(w.grid.get(moved.x, moved.z).groundType, "Sand");

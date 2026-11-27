@@ -10,6 +10,8 @@ import { STORY_CHAPTERS, STORY_PIECES, STORY_PIECE_IDS, STORY_NEED, STORY_SEEDS,
 import { bondStage } from "./bond.js";
 
 export const STORY_VERSION = 1;
+/** 밤에 등불을 고친 뒤 첫 깜빡임까지 기다리는 마을 초(고침·켜진 등대 카드가 지나간 뒤) */
+export const STORY_BLINK_WAIT = 45;
 const ST_RESTORE_IDS = ["door", "cave", "lamp", "mailbox"];
 const ST_EVERY_ORDER = STORY_PIECE_IDS.filter(id => STORY_PIECES[id].how === "every");   // 장 차례(c1_note → c2_name → c3_bottle)
 
@@ -71,6 +73,10 @@ export function lampsNearCave(w) {
   for (const b of w.buildings.values()) if (b.defId === "streetlamp" && w.isDone(b) && b.cells.some(([x, z]) => Math.max(Math.abs(x - f.x), Math.abs(z - f.z)) <= STORY_LAMP_R)) n++;
   return n;
 }
+/** 갈매미 가방에 든 원자재 k(나무·돌·철) 합 */
+export const storyBagHave = (w, k) => (w.units || []).reduce((n, u) => n + Math.max(0, Math.floor(u.inv?.[k] || 0)), 0);
+/** 원자재 k 하나의 시장 값(상인이 사 주는 값과 같게) */
+export const storyRawPrice = (w, k) => Math.max(1, Math.round(w.prices?.[k] ?? w.rawBase?.(k) ?? ({ wood: 2, stone: 3, iron: 6 })[k] ?? 1));
 /** 장 n 고칠 곳의 체크리스트: { rows: [{ icon, text, have, need, ok }], ok(다 찼나), done(고쳤나), kind: "pay" | "build", at, locked(엔딩 전 우체통) } */
 export function restoreCheck(s, w, n) {
   const r = restoredOf(n), rows = [], have = chapterCount(s, n), done = !!s.restored[r.id];
@@ -78,7 +84,10 @@ export function restoreCheck(s, w, n) {
   else rows.push({ icon: "🧩", text: "조각", have: Math.min(have, STORY_NEED), need: STORY_NEED, ok: have >= STORY_NEED });
   const RES = { wood: ["🪵", "나무"], stone: ["🪨", "돌"], iron: ["⛓", "철"] };
   if (r.seeds) rows.push({ icon: "🌟", text: "별씨", have: Math.min(s.seeds, r.seeds), need: r.seeds, ok: s.seeds >= r.seeds });
-  for (const [k, need] of Object.entries(r.cost || {})) { const h = Math.floor(w.res?.[k] || 0); rows.push({ icon: RES[k][0], text: `${RES[k][1]}(마을 창고)`, have: Math.min(h, need), need, ok: h >= need }); }
+  for (const [k, need] of Object.entries(r.cost || {})) {                       // 창고가 모자라면 갈매미 가방(광부가 캔 철 등)에서 시장 값으로 사 옴(금고에서): 창고에 철이 안 들어오는 마을도 막히지 않게
+    const h = Math.floor(w.res?.[k] || 0), buy = Math.min(Math.max(0, need - h), storyBagHave(w, k)), price = buy * storyRawPrice(w, k), afford = !buy || !w.economy || Math.floor(w.bank?.vault ?? Infinity) >= price;
+    rows.push({ icon: RES[k][0], text: buy ? `${RES[k][1]}(창고 ${h} + 갈매미에게 ${buy}개 사기 🪙${price}${afford ? "" : " · 금고가 모자라요"})` : `${RES[k][1]}(마을 창고)`, have: Math.min(h + buy, need), need, ok: h + buy >= need && afford, k, buy, price });
+  }
   if (r.lamps) { const h = lampsNearCave(w); rows.push({ icon: "💡", text: `동굴 입구 ${STORY_LAMP_R}칸 안 가로등`, have: Math.min(h, r.lamps), need: r.lamps, ok: h >= r.lamps }); }
   return { rows, ok: !done && rows.every(x => x.ok), done, kind: r.lamps ? "build" : "pay", at: r.at, locked: false };
 }
@@ -128,7 +137,8 @@ export function storyOnEvent(s, ev, arg, w, day) {
     if (canFind(s, "c4_blink") && s.restored.lamp) out.push({ blink: false }, { grant: "c4_blink", who: null }, { line: "💫 어젯밤 수평선에서 불빛이 세 번 깜빡였대요. (🗝 비밀 수첩)" });
     out.push(...retroActs(s, w));
   } else if (ev === "tick") {                                                      // 1초마다(월드 stepStory)
-    if (canFind(s, "c4_blink") && s.restored.lamp && (w.isNight === true || day > s.litDay)) out.push({ blink: w.isNight === true }, { grant: "c4_blink", who: null });
+    const settled = !(w.storyLitAt >= 0) || w.time - w.storyLitAt >= STORY_BLINK_WAIT;   // 밤에 불을 켰으면 불이 차오르고 카드를 다 읽은 뒤에(바로 겹쳐 뜨지 않게)
+    if (canFind(s, "c4_blink") && s.restored.lamp && (w.isNight === true && settled || day > s.litDay)) out.push({ blink: w.isNight === true }, { grant: "c4_blink", who: null });
     const pole = stSparkOf(s, "c4_pole");
     if (pole && pole.at !== "beach" && s.poleDay && day >= s.poleDay + STORY_POLE_DAYS) out.push({ move: "c4_pole", at: "beach" });   // 선착장·배가 없어도: 사흘 뒤 본섬 바닷가로
   }

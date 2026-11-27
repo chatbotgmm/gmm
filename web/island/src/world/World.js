@@ -147,7 +147,7 @@ export class World {
     this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
     this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
     // 🗝 메인 스토리(story.js): 기록(예전 저장엔 없음 → 0장부터) · 1초 시계 · 이야기 모임(엔딩 연출·노을 모임 { id, x, z, lx, lz, t }, 저장 안 함) · storyOff: 이야기를 끔(시험 비교용)
-    this.story = ST.storyFromSave(extra.story); this.storyClock = 0; this.storyBlinkClock = 0; this.gather = null; this.gatherSeq = 0; this.storyOff = false;
+    this.story = ST.storyFromSave(extra.story); this.storyClock = 0; this.storyBlinkClock = 0; this.gather = null; this.gatherSeq = 0; this.storyOff = false; this.storyLitAt = -1;
     // 섬 꾸미기(customize.js): 놓은 덤불·꽃과 치운 소품 자리(불러오기는 fromJSON이 건물을 다시 놓은 뒤 채움) · 플레이어가 판 물 칸 · 되돌리기 표(저장 안 함)
     this.decor = CU.newDecor(); this.dug = CU.dugFromSave(extra.dug); this.undo = new Map(); this.undoSeq = 0;
     // 기온(climate.js): 지금 바깥 공기 °C(update마다 셈, 저장 안 함) · 기기 시각(화면이 넣어 주면 하루 변화를 시각으로, 없으면 낮밤만)
@@ -2181,13 +2181,24 @@ export class World {
     const chk = ST.restoreCheck(s, this, n), r = ch.restore; if (chk.done) return { ok: false, reason: "이미 고쳤어요" };
     if (!chk.ok) return { ok: false, reason: chk.locked ? "이야기를 끝까지 읽으면 고칠 수 있어요" : "아직 모자란 게 있어요" };
     const day = newsDay(this.time);
+    for (const row of chk.rows) if (row.buy > 0) this.storyBuyRaw(row.k, row.buy);   // 창고가 모자란 만큼 갈매미 가방에서 사 옴(금고 → 그 갈매미)
     for (const [k, v] of Object.entries(r.cost || {})) this.res[k] -= v;
     if (r.seeds) s.seeds -= r.seeds;
     s.restored[r.id] = day; this.emit("storyRestore", { n, restore: r, chapter: ch, go: this.landmarkFront(r.at === "cave" ? "cave" : "lighthouse") });
-    if (n === 3) s.litDay = day;
+    if (n === 3) { s.litDay = day; this.storyLitAt = this.time; }
     if (n < STORY_CHAPTERS.length) this.storyApply(ST.openChapter(s, n + 1, this, day));
     if (n === 3) this.storyGrant("c4_lit", null);
     return { ok: true };
+  }
+  /** 고칠 곳 재료가 창고에 모자랄 때: 가방에 많이 든 갈매미부터(같으면 먼저 온 갈매미) n개를 시장 값으로 사서 창고에 넣음. 난수 안 씀 */
+  storyBuyRaw(k, n) {
+    const price = ST.storyRawPrice(this, k);
+    for (const u of [...this.units].sort((a, b) => (b.inv?.[k] || 0) - (a.inv?.[k] || 0) || this.units.indexOf(a) - this.units.indexOf(b))) {
+      if (n <= 0) break; const c = Math.min(n, Math.floor(u.inv?.[k] || 0)); if (c <= 0) continue;
+      u.inv[k] -= c; this.res[k] = (this.res[k] || 0) + c; n -= c;
+      if (this.economy && this.bank) { const pay = Math.min(c * price, Math.max(0, Math.floor(this.bank.vault))); if (pay > 0) { this.bank.vault -= pay; this.bank.bought += pay; this.led("buy", pay); this.checkLow(); } u.coins = (u.coins || 0) + pay; }
+      emote(u, `${({ wood: "🪵", stone: "🪨", iron: "⛓" })[k] || ""} 등대에 써!`, 2.4);
+    }
   }
   /** 엔딩: 보름의 답장 → 등불지기 도장 · 흔들의자 · 갈매미들이 등대 앞에 모여 수평선을 봄 */
   storyEnd() {

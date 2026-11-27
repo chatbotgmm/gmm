@@ -649,7 +649,7 @@ function startStoryGather(u, world) {
 /** 모임 자리에 닿음: 수평선을 보며 "매앰!" 하고 모임이 끝날 때까지 서 있음 */
 function gatherAt(u, world, rnd) {
   const g = world.gather; u.path = null; face(u, g.lx, g.lz);
-  setIdle(u, rnd, world, Math.max(2, Math.min(25, g.t))); face(u, g.lx, g.lz); emote(u, g.kind === "ending" ? "매앰!" : u.unitId.length % 2 ? "매앰~" : "🌅", 3);
+  setIdle(u, rnd, world, Math.max(2, Math.min(25, g.t))); face(u, g.lx, g.lz); emote(u, g.kind === "ending" ? "매앰!" : world.units.indexOf(u) % 2 ? "매앰~" : "🌅", 3);
 }
 // ---------------------------------------------------------------- 추위(climate.js)
 /** 들어가 몸을 녹일 수 있는 공공건물(다 지은 것): 은행·시장·저장고·카페·잡화점·우체국·수족관·병원 */
