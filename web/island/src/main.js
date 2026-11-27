@@ -49,6 +49,7 @@ import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
 import { ROOM_EXPOSURE } from "./render/roomLight.js";
 import { Minimap } from "./ui/minimap.js";
+import { HOME_OFF, HOME_TARGET, showOverviewBtn } from "./systems/camAssist.js";
 import { installKeys } from "./ui/keys.js";
 import { createEdition, simSteps } from "./systems/edition.js";
 import { Sfx } from "./audio/sfx.js";
@@ -66,6 +67,8 @@ import { GullPool, loadingView, failReason } from "./render/gullLoad.js";
 import { installCloud } from "./ui/cloudView.js";
 import { RewardView } from "./ui/rewardView.js";
 import { rewardOf, REWARD_EVENTS } from "./ui/rewardFx.js";
+import { noteTarget } from "./ui/qolViews.js";
+import { SparkleEdge } from "./render/sparkleEdge.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -81,11 +84,11 @@ const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 26
 const portrait = () => innerWidth < innerHeight;
 function fitView() { camera.fov = portrait() ? 62 : 45; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }   // 세로 화면은 넓은 렌즈
 fitView();
-camera.position.set(0, portrait() ? 70 : 54, portrait() ? 50 : 52);   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
+{ const h = portrait() ? HOME_OFF.portrait : HOME_OFF.wide; camera.position.set(HOME_TARGET.x + h.x, HOME_TARGET.y + h.y, HOME_TARGET.z + h.z); }   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5;   // 낮게(거의 눈높이)·가까이(1.5 m)까지 볼 수 있게. 땅속으로는 못 들어감(아래 keepCameraAboveGround)
  controls.maxDistance = 110;
-controls.screenSpacePanning = false; controls.target.set(0, 0, 4);
+controls.screenSpacePanning = false; controls.target.set(HOME_TARGET.x, HOME_TARGET.y, HOME_TARGET.z);
 const hemi = new THREE.HemisphereLight(0xdcefff, 0x8a8f5a, 0.85); scene.add(hemi);   // 하늘빛(위)·땅빛(아래)
 const sun = new THREE.DirectionalLight(0xffe2b8, 3.3);   // 따뜻한 햇빛
  sun.position.set(-26, 24, 14); sun.castShadow = true;   // 해를 조금 낮춰 언덕·비탈에 음영
@@ -213,7 +216,7 @@ function mount(w) {
   { const w = world, apply = s => { if (world === w) w.applyCharacterProfiles(s.chars, WALK_SCALE, RUN_SCALE); };   // 갈매미 몸 크기·걸음(목록을 받은 뒤 · 마을 시간은 갈매미를 다 받은 뒤에야 흐름)
     if (charPool.set) apply(charPool.set); else charPool.setReady.then(apply); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
-    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true }); });
+    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true, at: noteTarget(u) }); });
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
@@ -223,12 +226,13 @@ function mount(w) {
   // 플레이어 보상(ui/rewardFx.js rewardOf): 띠·큰 카드·+N이 크게 보여 주고 소리도 냄 → 알림 줄에는 안 띄우고 지난 알림에만(같은 소식 두 번 아님). small(세금·숙박비)은 알림 줄도 그대로
   rewards?.reset(); const mineR = world, big = (ev, arg) => !!rewards && !!hud && (rewardOf(ev, arg, world)?.tier ?? "small") !== "small";
   for (const ev of REWARD_EVENTS) world.on(ev, arg => { if (world !== mineR || !rewards) return; const r = rewardOf(ev, arg, world); if (r) rewards.push(r); });
-  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n && big(ev, arg)) { hud.logNote(`${n.icon} ${n.text}${tail}`, "good"); return; } if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true }); };
+  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n && big(ev, arg)) { hud.logNote(`${n.icon} ${n.text}${tail}`, "good", noteTarget(arg)); return; } if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true, at: noteTarget(arg) }); };   // at: 누르면 그 갈매미·건물로(편의성 점검 5번)
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
   // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
   world.on("custom", e => hud?.customSpent(e));
   // 건축에서 금고 돈이 나감: 설계비(놓는 순간)·공사 한 바퀴 품삯 → 금고 칩 −n(합침)·숫자 줄어듦·빨간 글 + 공사장 위 표시. 밀리면 공사장 위 「💸 품삯 밀림」. 주문 공사(갈매미 돈)는 이벤트가 없어 안 뜸
   world.on("fee", e => { hud?.vaultSpent(-e.fee, { count: true }); queueMicrotask(() => spendFx.push(e.b, "fee", e.fee)); });   // 설계비는 공사장 모습(buildingAdded)보다 먼저 옴 → 다 놓은 뒤에
+  world.on("buildUndo", e => hud?.vaultSpent(e.refund));                          // 짓기 되돌리기: 돌려받은 설계비 +n(편의성 점검 8번)
   world.on("wage", e => { if (!e.b) return; hud?.vaultSpent(-e.n, { count: true }); spendFx.push(e.b, "wage", e.n); });   // b 없음 = 의원 진료 품삯(건축 아님)
   { const owed = "wageOwed"; world.on(owed, e => { if (e.b) spendFx.push(e.b, "owed", e.n); }); }   // 알림 줄 글은 ALERTS 표가 그대로 냄(여기는 공사장 위 표시만 — 같은 알림 두 번 아님)
   { let last = "", at = 0; world.on("customRefused", e => { const t = `🚫 ${e.reason}`, now = performance.now(); if (t === last && now - at < 1500) return; last = t; at = now; hud?.status(t); }); }
@@ -238,11 +242,11 @@ function mount(w) {
   for (const [ev, a] of Object.entries(ALERTS)) world.on(ev, arg => {
     if (world !== mine || !hud || !gate(ev, arg, world.time)) return;
     const text = alertLine(ev, arg, world); if (!text) return;
-    if (big(ev, arg)) { hud.logNote(text, a.kind); return; }                     // ✨ 반짝이 줍기 등: 보상 띠가 대신 보여 주고 소리도 냄
-    if (!a.batch) { hud.status(text, a.now ? { kind: a.kind } : { kind: a.kind, queue: true }); ring(a, arg); return; }
+    if (big(ev, arg)) { hud.logNote(text, a.kind, noteTarget(arg)); return; }                     // ✨ 반짝이 줍기 등: 보상 띠가 대신 보여 주고 소리도 냄
+    if (!a.batch) { const at = noteTarget(arg); hud.status(text, a.now ? { kind: a.kind, at } : { kind: a.kind, queue: true, at }); ring(a, arg); return; }
     let b = batches.get(ev); if (!b) { b = { list: [], first: text }; batches.set(ev, b);
       setTimeout(() => { batches.delete(ev); if (world !== mine) return; const m = b.list.length > 1 && batchText(ev, b.list);
-        hud.status(m ? `${m.icon} ${m.text}` : b.first, { kind: a.kind, queue: true }); ring(a, b.list[0]); }, BATCH_MS); }
+        hud.status(m ? `${m.icon} ${m.text}` : b.first, { kind: a.kind, queue: true, at: m ? null : noteTarget(b.list[0]) }); ring(a, b.list[0]); }, BATCH_MS); }
     b.list.push(arg); });
   world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
   world.on("weather", e => say("weather", e, WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""));
@@ -250,9 +254,9 @@ function mount(w) {
   world.on("sky", e => { say("sky", e, ` · ${e.def.note} (📖 도감)`); sfx.chime(e.kind === "meteor" ? [988, 1319, 1568] : [659, 784, 988, 1175], 0.1, 0.14); });
   world.on("firstSnow", e => { say("firstSnow", e, " (📖 도감 · 하늘 기록)"); sfx.chime([1175, 988, 784], 0.14, 0.12); });
   world.on("starPiece", e => { say("starPiece", e, ` (${e.u.name}의 소지품)`); sfx.chime([1319, 1568], 0.08, 0.14); });
-  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`, { kind: "info", queue: true }); });
+  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`, { kind: "info", queue: true, at: noteTarget(u) }); });
   world.on("friendship", e => { say("friendship", e, " (📱 관계도)"); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
-  world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`, { kind: "warn", queue: true }));
+  world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`, { kind: "warn", queue: true, at: noteTarget(u) }));
   world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", e => say("beachcomb", e, ` (${e.u.name}의 소지품)`));
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
@@ -273,7 +277,7 @@ function mount(w) {
     if (big("dailyDone", e)) { hud.logNote(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개)` : `📋 오늘의 부탁 완료: ${e.req.text}`, "good"); return; }
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
-  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
+  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null, true); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
 }
 let tools = null, hud = null, rewards = null;   // rewards: 플레이어 보상 화면(ui/rewardView.js)
@@ -323,7 +327,7 @@ const backLetter = savedWorld ? welcomeBack(world) : null;                      
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
 addEventListener("visibilitychange", () => { if (document.hidden && ready) saveNow(); });
 addEventListener("pagehide", () => { if (ready) saveNow(); });
-tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: t => hud?.status(t) });
+tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: (t, opt) => hud?.status(t, opt || undefined) });
 const twoFinger = new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
 const quarterCam = new QuarterCam({ camera, controls });                        // 건설 모드: 고정 쿼터뷰(⟲ ⟳ 로 90°씩), 끝내면 보던 각도로
 const buildingThumbs = new BuildingThumbs(renderer);                            // 건설 갤러리의 건물 사진
@@ -354,6 +358,15 @@ hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06
 addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
 const roomView = new RoomView({ renderer, onExit: () => hud.status("집에서 나왔어요") });
+roomView.onShop = () => hud.openStampShop();                                     // 가구 없는 방: 🏵 도장 가게 바로가기(편의성 점검 10번)
+hud.leaveRoom = () => { if (roomView.isOpen) roomView.close(); };                 // 알림 눌러 그곳으로: 방 안이면 먼저 나옴
+// ✨ 화면 밖 반짝이 방향 표시(편의성 점검 11번): 가장자리 화살표 · 누르면 그쪽으로(따라가기는 풀되 거리는 그대로)
+const sparkleEdge = new SparkleEdge({ box: document.getElementById("sparkEdge"), camera, controls, getWorld: () => world,
+  onGo: () => { unitControl.setFollow(null, true); hud.houseCard(null); hud.status("✨ 반짝이 쪽으로 왔어요 · 반짝이를 톡 눌러 주워요", { kind: "info" }); } });
+function edgeBox(W, H) {                                                          // 화살표를 둘 네모: 위 칩 묶음 아래 ~ 아래 🔨·📱 줄 위
+  const chipR = document.getElementById("chips").getBoundingClientRect(), phoneR = document.getElementById("phoneBtn").getBoundingClientRect();
+  return { l: 26, r: W - 26, t: Math.min(H / 2, chipR.bottom + 26), b: Math.max(H / 2, (phoneR.height ? phoneR.top : H - 70) - 26) };
+}
 roomView.daylight = daylight;                                                   // 방 조명이 바깥 시간대(daylight.glow)를 따름
 sfx.listener = { target: controls.target, camera };
 tools.onEdit = kind => { if (kind !== "nature") sfx.play(kind === "height" ? "dig" : "paint", { vol: 0.5 }); };   // 자연·지형은 월드 custom 이벤트가 소리를 냄
@@ -374,7 +387,7 @@ const edition = createEdition();
 hud.edition = edition; hud.syncEdition();
 edition.onChange(() => hud.syncEdition());
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델(같은 메모리 캐시를 복제해 씀)
-hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
+hud.onDecorate = b => { unitControl.setFollow(null, true); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
 // 땅을 한 번 누름: ✨ 반짝이가 있으면 먼저 줍고(손가락 판정 지름 48px 이상 또는 1.2칸 안) 카드는 안 엶. 갈매미를 누른 것은 unitControl이 먼저 받음
 // 건물이면 카드: 집·공사장·밭·의원·잡화점은 hud(bldView.js), 풍차는 powerRange, 전기 없는 가로등·가게는 noPower(열린 카드면 까닭만 덧붙임)
@@ -398,17 +411,22 @@ unitControl.onPoke = u => { if (fuss?.nudge(u)) { hud.status(`🆘 ${josa(u.name
 function makeFuss(w) {
   const f = new Fuss(w, 91), at = u => ({ pos: { x: toWorldX(u.x), z: toWorldZ(u.z) } });
   f.near = () => ({ x: toGridX(controls.target.x), z: toGridZ(controls.target.z) });   // 화면 중심 가까이에서만 소동(FUSS_SEE칸) — 안 보이는 곳의 🆘는 하루 상한만 씀
-  f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요 · 꾹 눌러 들어서 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요 · 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" });
-  world.on("fussSolved", ({ u }) => { if (rewards) { hud.logNote(`💕 ${josa(u.name, "이", "가")} 고마워해요`, "good"); return; } hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 보상 띠(rewards)가 크게 보여 줌   // 알림 줄에 직접 연결(newsAlerts 표 밖)
+  f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요 · 꾹 눌러 들어서 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요 · 꾹 눌러 들어서 옮겨 주세요`, { kind: "info", at: { u: u.unitId } });   // at: 알림을 누르면 그 갈매미를 따라가며 가까이(편의성 점검 5번)
+  world.on("fussSolved", ({ u }) => { if (rewards) { hud.logNote(`💕 ${josa(u.name, "이", "가")} 고마워해요`, "good", { u: u.unitId }); return; } hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 보상 띠(rewards)가 크게 보여 줌   // 알림 줄에 직접 연결(newsAlerts 표 밖)
   f.onLand = u => { const k = footprints.thud(world, u); if (k) sfx.play("step", { ...at(u), vol: 0.6, rate: k === "snow" ? 0.5 : 0.6 }); return k; };
   return f;
 }
 // 🎁 플레이어 보상 화면: 반짝이·선물·기념 가구·등급·부탁·소원·소동은 띠나 큰 카드로, 세금·숙박비는 금고 칩으로 날아가는 +N(ui/rewardFx.js · rewardView.js)
 rewards = new RewardView({ sfx, hud });
-hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
+hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);   // 카드 ✕·키보드(Esc): 같은 갈매미면 그만(다가갔으면 원래 거리로)
+hud.onUnitFollow = u => unitControl.followClose(u);                                   // 목록 줄·건물 카드 「따라가기」·배고픔 칩: 늘 따라가기 + 10 m로 가까이(편의성 점검 1·2번)
+// 🏝 마을 전체 보기(편의성 점검 9번): 오른쪽 위 단추(가까이 보거나 따라갈 때만 보임) · ☰ 메뉴. 처음 시점의 높이·거리·중심으로(보던 방향은 그대로)
+hud.onOverview = () => { if (tools.mode !== "view" || roomView.isOpen) { hud.status("🏝 전체 보기는 둘러보기에서 써요 · ✓ 완료를 누른 뒤 다시 눌러요", { kind: "info" }); return; }
+  hud.houseCard(null); unitControl.overview(portrait()); };
+const homeBtn = document.getElementById("homeBtn"); homeBtn.onclick = () => hud.onOverview();
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
-  unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
+  unitControl.setFollow(null, true); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
   hud.houseCard(tools.mode === "view" ? b : null); };
 hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); if (!i.left) hud.status("모두 모였어요", { kind: "info" }); hud.setSummon(world); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭은 summonBlocked 알림(ALERTS)이 바로 띄움
 hud.setSummon(world);
@@ -524,6 +542,7 @@ function frameBody() {
   buildingViews.updateConstruction(dt, controls.target);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
+  sparkleEdge.update(dt, ready && tools.mode === "view" && !roomView.isOpen, edgeBox);
   dreams.step(); poke.stepReal(performance.now()); dreamView.update(dt, world, dreams, camera, innerWidth, innerHeight);
   water.userData.tick(simT); water.userData.setRain(world.weather.kind === "rain" || world.weather.kind === "storm", dt); clouds.userData.tick(dt); clouds.position.set(controls.target.x, 0, controls.target.z);   // 구름은 보는 곳을 따라감
   if (waterDirty && now - lastWater > 300) { waterWin.dirty = true; waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물가 자료(깊이·파도·쓸려 오는 물)도 다시
@@ -536,6 +555,7 @@ function frameBody() {
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight); spendFx.update(innerWidth, innerHeight);
+  if (now - lastHud > 200) { const hb = showOverviewBtn({ len: camera.position.distanceTo(controls.target), following: !!unitControl.follow, portrait: portrait(), mode: tools.mode, inRoom: roomView.isOpen, away: Math.hypot(controls.target.x - HOME_TARGET.x, controls.target.z - HOME_TARGET.z) }); if (homeBtn.hidden === hb) homeBtn.hidden = !hb; }
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
   if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }

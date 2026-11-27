@@ -72,6 +72,7 @@ function useMaterials(world, b, u = null) {
     const carried = Math.min(left, u?.load?.[k] || 0); if (carried) { u.load[k] -= carried; left -= carried; }   // 은행 창고에서 꺼내 온 짐(창고 몫으로 셈)
     world.res[k] -= left; fromBag[k] = mine; fromWare[k] = left + carried;
   }
+  b.used = true;                                                                  // 재료를 썼음 → 짓기 되돌리기(↶)는 안 됨(world/buildUndo.js)
   if (b.order) world.orderMaterials(b, u, fromBag, fromWare);                     // 갈매미 주문 공사: 주문한 갈매미가 자재값을 냄(창고 것은 금고로, 가방 것은 짓는 갈매미에게)
   if (u && b.supply) markSupply(world, b, u, "build");
 }
