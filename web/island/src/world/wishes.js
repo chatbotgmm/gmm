@@ -18,7 +18,7 @@ const homeB = (w, u) => (u?.home && w.buildings.get(u.home)) || null;
 const wishPal = (w, wish) => w.units.find(o => o.name === wish.base) || null;     // 옆집 소원의 단짝(이름으로 기억)
 /** 소원 글(단짝 이름이 들어가는 소원은 함수) */
 export const wishText = (d, w, u, wish) => typeof d.text === "function" ? d.text(w, u, wish) : d.text;
-export const WISH_REWARD = 10;                                                    // 축하금(공식은행이 새로 찍음)
+export const WISH_REWARD = 10;                                                    // 축하금(중앙은행이 켜진 섬은 금고에서, World.issue)
 export const WISHES = [
   { id: "market", icon: "🐚", text: "시장이 있으면 좋겠어요", hint: "🪚 목수가 시장을 지어요",
     ok: w => !builtAny(w, d => d.market), done: w => builtAny(w, d => d.market) },

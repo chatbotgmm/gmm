@@ -272,7 +272,7 @@ test("계단 이어 놓기: 아래 계단 위쪽 칸에 같은 방향으로 놓�
 
 test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공해 은행에 팔고(새 돈), 음식은 농부·어부에게서 사고, 집은 시장에서", async () => {
   const E = await import("../src/world/economy.js");
-  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true; w.bank.mon = null;   // 중앙은행을 끈 '지금 규칙'(한도·수수료·물가는 tests/monetary.test.js)
   assert.deepEqual(w.units.map(u => u.name), ["기본"], "기본 한 마리로 시작");
   assert.ok(w.economy && w.bankB(), "가운데 공식은행"); assert.equal(w.seeds.length, 0, "씨앗 없음");
   const boss = w.units[0], c = w.center;
@@ -317,7 +317,7 @@ test("넓은 섬: 기본 혼자 첫 집을 짓고(나무는 직접 벰), 모두 
   for (const d of ["market", "field", "house", "house"]) { const q = spot(d, c.x + 6, c.z + 8); w.placeBuilding(d, q[0], q[1], 0); }
   let minFull = 999, sold = 0; w.on("market", e => { if (e.kind === "house") sold++; });
   for (let t = 0; t < 900; t += 0.1) { w.update(0.1); if (t > 30) for (const u of w.units) minFull = Math.min(minFull, u.full); }
-  assert.ok(w.marketB(), "목수가 시장을 지음"); assert.ok(sold >= 1, `집이 팔림: ${sold}`); assert.ok(w.bank.issued > 0);
+  assert.ok(w.marketB(), "목수가 시장을 지음"); assert.ok(sold >= 1, `집이 팔림: ${sold}`); assert.ok(w.bank.bought > 0, "은행이 가공품을 금고 돈으로 삼"); assert.equal(w.bank.issued, 0, "찍지 않으면 새 돈 0(MON-5)");
   assert.ok(minFull > 3, `굶지 않음: ${minFull}`);
 });
 
@@ -566,17 +566,18 @@ test("계절·날씨: 날짜로 계절, 계절별 날씨, 폭풍엔 못 낚고 �
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(2)); assert.equal(back.weather.kind, "rain");
 });
 
-test("소원: 갈매미가 바라는 걸 말하고, 이루어지면 축하금(새 돈)", async () => {
+test("소원: 갈매미가 바라는 걸 말하고, 이루어지면 축하금(금고에서, MON-5)", async () => {
   const E = await import("../src/world/economy.js");
   const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }), u = w.units[0];
   const wish = w.makeWish(); assert.ok(wish, "소원이 생김"); assert.equal(wish.unitId, u.unitId); assert.equal(w.makeWish(), null, "한 마리에 하나(지금 한 마리)");
   // 친구 소원으로 바꿔서 확인: 소환하면 이루어짐
-  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0, issued = w.bank.issued;
+  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0, issued = w.bank.issued, v0 = w.bank.vault;
   w.stepWishes(1.1); assert.equal(w.wishes.length, 1, "아직");
   assert.equal(w.summon(), null, "집 1채에 갈매미 1마리: 집이 더 있어야 부를 수 있음"); w.placeStarterHouse();
   w.summon(); w.stepWishes(1.1);
   assert.equal(w.wishes.length, 0); assert.equal(w.wishDone, 1);
-  assert.equal(u.coins, coins + 10); assert.equal(w.bank.issued, issued + 10 + (w.units[1].job === "merchant" ? E.MERCHANT_START : 0));
+  assert.equal(u.coins, coins + 10); assert.equal(w.bank.issued, issued, "새로 찍지 않음");
+  assert.equal(w.bank.vault, v0 - 10 - (w.units[1].job === "merchant" ? E.MERCHANT_START : 0), "축하금(·상인 창업 자금)은 금고에서");
 });
 
 test("가격 변동: 상인 창고에 쌓이면 원자재 값이 내려가고, 음식이 모자라거나 겨울이면 음식 값이 오름", async () => {
@@ -612,9 +613,9 @@ test("저장고: 농부·어부의 남는 음식을 은행이 사서 쌓고, 배
   const mini = w.units.find(u => u.name === "미니"), boss = w.units[0];
   const c = w.center; let q = null; for (let r = 4; r < 40 && !q; r++) for (let k = 0; k < 64 && !q; k++) { const a = k / 64 * 6.28, x = Math.floor(c.x + Math.cos(a) * r), z = Math.floor(c.z + Math.sin(a) * r); if (w.check("storehouse", x, z, 0).ok) q = [x, z]; }
   assert.equal(w.stockFood(mini), 0, "저장고가 없으면 못 팖");
-  w.placeBuilding("storehouse", q[0], q[1], 0, null, 1e9); mini.inv.food = 10; const issued = w.bank.issued;
+  w.placeBuilding("storehouse", q[0], q[1], 0, null, 1e9); mini.inv.food = 10; const issued = w.bank.issued, v0 = w.bank.vault;
   assert.equal(w.stockFood(mini), 10 - (E.FOOD_KEEP + 2)); assert.equal(w.granary, 6); assert.equal(E.meals(mini), E.FOOD_KEEP + 2);
-  assert.equal(w.bank.issued, issued + 6 * E.GRANARY_BUY);
+  assert.equal(w.bank.issued, issued, "새로 찍지 않음"); assert.equal(w.bank.vault, v0 - 6 * E.GRANARY_BUY, "저장고 음식은 금고 돈으로 삼(MON-5)");
   boss.coins = 10; boss.inv.food = 0; assert.equal(w.takeFood(boss), "buy"); assert.equal(boss.coins, 10 - w.foodPrice()); assert.equal(w.granary, 5);
   boss.coins = 0; boss.full = 60; assert.equal(w.takeFood(boss), null, "돈이 없고 덜 배고프면 못 받음");
   boss.full = 10; assert.equal(w.takeFood(boss), "free", "아주 배고프면 나눠 받음"); assert.equal(w.granary, 4);
@@ -768,7 +769,7 @@ test("장식·전기·카페·우체국: 집 근처 장식·풍차 전기·가�
   assert.equal(w.canEnter(w.units[1], cafe), true, "카페는 누구나 들어감");
   // 우체국: 소원 축하금 두 배
   const po = spot("post", c.x - 12, c.z + 10); w.placeBuilding("post", po[0], po[1], 0);
-  w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0; w.placeStarterHouse(); assert.ok(w.summon(), "집 3채에 갈매미 2마리"); w.stepWishes(1.1);
+  w.bank.vault = 1000; w.wishes = [{ id: "friend", unitId: u.unitId, base: w.units.length, age: 0 }]; const coins = u.coins || 0; w.placeStarterHouse(); assert.ok(w.summon(), "집 3채에 갈매미 2마리"); w.stepWishes(1.1);   // 축하금은 금고에서(MON-5): 설계비로 빈 금고를 채워 둠
   assert.equal(u.coins - coins, 20, "축하금 10 × 2");
 });
 

@@ -22,7 +22,7 @@ import { CoachMarks } from "./coach.js";
 import { josa } from "../util.js";
 import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
 import { makeSpendSum, chipSpendText, countAt, VF_SUM_MS, VF_COUNT_MS, VF_FLASH_MS } from "./vaultFx.js";
-import { bankHtml } from "./bankView.js";
+import { bankAppHtml, printAsk, printPick } from "./monView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
@@ -215,8 +215,9 @@ export class Hud {
     this.chipVault = document.getElementById("chipVault"); this.chipTown = document.getElementById("chipTown");   // 🏦 내 금고(내 돈) · 🪙 마을 돈(갈매미들 돈 합계)
     this.chipParts = { vv: this.chipVault.querySelector(".vv"), vt: this.chipVault.querySelector(".vt"), wl: this.chipWeather.querySelector(".wl"), wt: this.chipWeather.querySelector(".wt") };
     document.getElementById("chipRank").onclick = () => { this.openPhone(); this.openApp("town"); };
-    this.chipVault.onclick = () => { this.openPhone(); this.openApp("bank"); };       // 금고 → 🏦 은행
-    this.chipTown.onclick = () => { this.moreOpen.set("bank.town", true); this.openPhone(); this.openApp("bank"); };   // 마을 돈 → 은행 앱의 「마을에 도는 돈」 접기를 펼친 채로(2단계가 열쇠 bank.town을 씀)
+    this.chipVault.onclick = () => { this.bankTab = "vault"; this.openPhone(); this.openApp("bank"); };       // 금고 → 🏦 은행(금고 탭)
+    this.chipTown.onclick = () => { this.bankTab = "vault"; this.moreOpen.set("bank.town", true); this.openPhone(); this.openApp("bank"); };
+    this.bankTab = "vault"; this.printStep = 100; document.getElementById("bankBody").addEventListener("click", e => this.bankClick(e));   // 은행 앱 탭(🏦 금고 | 🏛 중앙은행) · 중앙은행 단추(칸을 다시 그려도 그대로)   // 마을 돈 → 은행 앱의 「마을에 도는 돈」 접기를 펼친 채로(2단계가 열쇠 bank.town을 씀)
     // 자세히 보기 접기(details.more): 펼침을 이번 실행 동안 기억(저장 안 함) → 앱이 5Hz로 다시 그려도 펼친 채. toggle은 거품이 안 올라와서 잡는 단계(capture)에서 들음
     this.moreOpen = new Map();
     { const hx = document.querySelector("#houseCard .hcx"); hx.addEventListener("click", e => this.bldCardClick(e));   // 건물 카드 안 단추(칸을 다시 그려도 그대로)
@@ -362,6 +363,25 @@ export class Hud {
       this.syncBldCard();
     }
   }
+  /** 은행 앱 단추: 탭 · 🏛 중앙은행(찍을 양 고르기 · 🖨 찍어내기(확인창) · 금리 · 매입 예산 자동/직접·단계 · 🎁 축하) */
+  async bankClick(e) {
+    const t = e.target.closest?.("[data-banktab],[data-mon]"), w = this.world; if (!t || t.disabled) return;
+    const redraw = () => { this.bankHtmlNow = null; this.refreshApp(); };
+    if (t.dataset.banktab) { this.bankTab = t.dataset.banktab; redraw(); return; }
+    const mi = w.monInfo?.(); if (!mi) return; const act = t.dataset.mon, v = +t.dataset.v;
+    if (act === "pstep") this.printStep = v;
+    else if (act === "print") {
+      const n = printPick(v, mi.printLeft); if (!n) return;
+      const ask = printAsk(n, mi); if (!(await this.confirm({ title: ask.title, body: ask.body, ok: ask.ok }))) return;
+      const got = w.print(n);                                                       // 금고 칩 +n은 main.js의 monPrint가 띄움
+      this.status(got ? `🖨 새 돈 🪙${got}을 찍어 금고에 넣었어요 · 오늘 더 🪙${w.printLeft()}` : "🖨 오늘은 더 찍을 수 없어요", { kind: got ? "good" : "warn" });
+    }
+    else if (act === "rate") { if (w.setRate(v) && v !== mi.rate) this.status(`🏦 금리 ${mi.rate}% → ${v}% · 내일부터 저금·이자에 들어가요`, { kind: "info" }); }
+    else if (act === "auto") w.setAuto(v === 1);
+    else if (act === "issue") w.setIssue(v);
+    else if (act === "gift") { const sum = w.giftAll(); this.status(sum ? `🎁 금고에서 모두에게 🪙${Math.round(sum / Math.max(1, w.units.length))}씩 나눠 줬어요` : "🎁 금고가 모자라거나 오늘은 이미 나눠 줬어요", { kind: sum ? "good" : "warn" }); }
+    redraw();
+  }
   /** 확인창(브라우저 confirm 대신): 취소에 먼저 포커스, Esc·바깥 누르기 = 취소. 결과는 Promise<boolean> */
   confirm({ title, body = "", ok = "확인", cancel = "취소", danger = false } = {}) {
     const box = document.getElementById("ask"), yes = document.getElementById("askYes"), no = document.getElementById("askNo");
@@ -483,7 +503,7 @@ export class Hud {
   refreshApp() {
     const w = this.world;
     if (this.app === "bank") {
-      const html = bankHtml(w, (k, t, h, o) => this.more(k, t, h, o)), body = document.getElementById("bankBody");
+      const html = bankAppHtml(w, (k, t, h, o) => this.more(k, t, h, o), { tab: this.bankTab, pstep: this.printStep }), body = document.getElementById("bankBody");
       if (this.bankHtmlNow !== html) { this.bankHtmlNow = html; body.innerHTML = html; }   // 그릴 값이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게)
     } else if (this.app === "market") {
       const html = marketAppHtml(w, { more: (k, t, h, o) => this.more(k, t, h, o), price: k => this.priceCell(k) }), body = document.getElementById("marketBody");

@@ -1,10 +1,13 @@
 // 은행 금고(순수 계산·숫자). 금고(bank.vault) = 플레이어의 돈. 갈매미 각자의 돈(u.coins)은 그 갈매미 것.
 //  · 금고로 들어오는 돈: 갈매미가 은행에 낸 돈(집 계약금·대출 상환·저장고 음식·가구 = bank.returned) + 세금(마을 하루마다, 가진 돈의 일부).
 //  · 금고에서 나가는 돈: 플레이어가 놓는 건물의 설계비(놓을 때) + 공사 품삯(망치질 한 바퀴마다). 갈매미 돈은 건설에 쓰지 않음.
-//  · 새로 찍는 돈(bank.issued)은 그대로: 상인 가공품·저장고 매입·소지품 판매·창업 자금·축하금(마을 경제가 멈추지 않게).
+//  · 중앙은행(monetary.js)이 켜진 섬: 새 돈은 플레이어의 🖨 찍어내기로만(bank.issued·printed). 상인 가공품·저장고 매입·소지품 판매·창업 자금·축하금·예금 이자는 금고에서 나감.
+//    (중앙은행이 꺼진 예전 규칙에서만 이것들을 새로 찍음) 설계비는 지을 갈매미(건축가·목수)에게 가서 마을로 돎(예전 규칙은 그냥 나감).
+//    저절로 나가는 돈(매입·이자·축하금 등)은 금고에 BUY_KEEP × P를 남기고 그 위로만(품삯·설계비 몫).
 //  · 집: 집값을 다 못 가진 갈매미는 계약금(LOAN_DOWN)을 내고 나머지를 금고에서 빌림(이자 없음, 마을 하루마다 나눠 갚음).
 //  · 금고가 바닥나면: 대출 거절(집 없이 지냄·만족도 −10) · 품삯 밀림(일은 계속, 만족도 −10, 돈이 들어오면 나눠 갚음) · 말풍선·소식지.
 import { newsDay } from "./news.js";
+import { newMon, monFromSave } from "./monetary.js";
 
 export const VAULT_START = 300;      // 새 섬 금고 기본 돈(사용자 요청 "처음에 주는 조개 넉넉히" → 60에서 300. 집 한 채 = 설계비 10 + 품삯 약 10 → 처음 열다섯 채 몫. 첫 집 한 채는 섬에 지어져 있음)
 export const VAULT_LEGACY = 100;     // 금고가 생기기 전 저장을 불러올 때의 금고(예전 새 섬 값 그대로)
@@ -17,7 +20,7 @@ export const REPAY_KEEP = 10;        // 갚고도 갈매미에게 이만큼은 �
 export const TAX_RATE = 0.05, TAX_KEEP = 20, TAX_CAP = 8;   // 세금: (돈 − 20) × 5%, 한 마리 하루 8까지
 export const LEDGER_DAYS = 7;        // 장부는 최근 7일
 /** 장부 칸 중 returned(돌아온 돈) 안의 몫: 집값(계약금) · 대출 상환 · 진료·약 · 옷 · 가게(코코아·저장고 음식·가구) · 숙박(빈 집 손님 숙박비). 몫 합 ≤ returned, 나머지는 '그 밖'(주문 장식 자재값 등) */
-export const LEDGER_PARTS = ["house", "repay", "clinic", "clothes", "shop", "lodging"];
+export const LEDGER_PARTS = ["house", "repay", "clinic", "clothes", "shop", "lodging", "evening"];   // evening: 저녁 장보기 은행 가게 몫(monetary.js)
 /** 손님 숙박비(🪙): 집 없는 갈매미가 주인 없는 빈 집에서 자면 하룻밤(stayKey)에 한 번 → 금고. 가진 만큼, 없으면 무료(진료비와 같은 방식).
  *  2 = 품삯(E.WAGE) 한 바퀴 · 밥 한 끼(FOOD_PRICE 3)보다 싸고 진료비(3)보다 쌈. 작은 집 30이면 15박 값 → 오래 묵느니 집을 사는 게 낫게 */
 export const LODGING_FEE = 2;
@@ -28,7 +31,10 @@ export function stayKey(date, night) {
   const d = new Date(date.getTime()); if (night && d.getHours() < 12) d.setDate(d.getDate() - 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-const LEDGER_KEYS = ["tax", "returned", "fees", "wages", "lent", "refunds", "custom", ...LEDGER_PARTS];
+/** 중앙은행(monetary.js) 장부 칸: printed 🖨 찍어 금고에 넣은 돈(유일한 새 돈) · buy 금고로 산 가공품·저장고 음식·소지품 · grant 금고에서 준 축하금·창업 자금·나눠주기 ·
+ *  interest 금고에서 낸 예금 이자. seig(발행 수수료)·retired(거둬 없앤 돈)는 MON-4 옛 칸(이제 늘 0, 옛 저장 장부 읽기용) */
+export const LEDGER_MON = ["seig", "retired", "interest", "printed", "buy", "grant"];
+const LEDGER_KEYS = ["tax", "returned", "fees", "wages", "lent", "refunds", "custom", ...LEDGER_PARTS, ...LEDGER_MON];
 /** 하루치 빈 장부 칸 */
 export const ledgerDay = day => Object.fromEntries([["day", day], ...LEDGER_KEYS.map(k => [k, 0])]);
 export const FEE_UNKNOWN = 5;        // 표에 없는 건물의 설계비
@@ -58,7 +64,7 @@ export const scaled = (base, mult) => base > 0 ? Math.max(1, Math.round(base * m
 /** 물가에 세는 건물인가(다 지은 집·시설): 장식·계단·다리·하나뿐인 건물(은행)은 빼고 */
 export const growthCounts = def => !!def && !def.deco && !def.stairs && !def.bridge && !def.fixed && !def.bank;
 
-export const downOf = price => Math.ceil(price * LOAN_DOWN);
+export const downOf = (price, rate = LOAN_DOWN) => Math.ceil(price * rate);
 export const perOf = loan => Math.ceil(loan / LOAN_DAYS);
 /** 이 돈을 가진 갈매미의 하루 세금 */
 export const taxOf = coins => Math.min(TAX_CAP, Math.floor(Math.max(0, (coins || 0) - TAX_KEEP) * TAX_RATE));
@@ -67,11 +73,11 @@ export const repayOf = (loan, coins) => loan ? Math.max(0, Math.min(loan.per, lo
 
 /** 집 거래 판단(난수 안 씀): { ok, price, down, loan, reason: "coins" | "vault" | null }.
  *  집값을 다 가졌으면 현금(금고가 비어도 됨). 아니면 계약금이 있고 금고에 대출금 + LOAN_RESERVE가 있어야 함. 경제가 없으면 현금만 */
-export function houseDealFor(price, coins, vault, economy = true) {
+export function houseDealFor(price, coins, vault, economy = true, downRate = LOAN_DOWN) {
   coins = coins || 0;
   if (coins >= price) return { ok: true, price, down: price, loan: 0, reason: null };
   if (!economy) return { ok: false, price, down: price, loan: 0, reason: "coins" };
-  const down = downOf(price), loan = price - down;
+  const down = downOf(price, downRate), loan = price - down;
   if (coins < down) return { ok: false, price, down, loan, reason: "coins" };
   if (vault < loan + LOAN_RESERVE) return { ok: false, price, down, loan, reason: "vault" };
   return { ok: true, price, down, loan, reason: null };
@@ -89,14 +95,18 @@ export const newBank = (time = 0) => ({
   short: 0,                              // 1 = 금고 바닥 사태 진행 중(소식지는 사태마다 한 번)
   need: 0,                               // 거절한 대출이 요구한 금고(대출금 + 여유). 이만큼 차면 거절 표시(u.loanRefused)를 풂(사태 끝남과는 따로)
   low: 0,                                // 1 = "얼마 안 남음"을 이미 알림
+  seig: 0, retired: 0, interest: 0,      // 누계(중앙은행): MON-4 발행 수수료·거둬 없앤 돈(이제 안 늚) · 금고에서 낸 예금 이자
+  printed: 0, bought: 0, granted: 0,     // 누계(중앙은행): 🖨 찍은 돈 · 금고로 산 물건 · 금고에서 준 축하금 등
+  mon: newMon(),                         // 중앙은행(monetary.js): 물가 · 발행 단계 · 금리 · 자동 · 오늘 한도
   ledger: [],                            // 최근 7일 [{ day, tax, returned, fees, wages, lent, refunds, custom, house, repay, clinic, clothes, shop, lodging }] (house·repay·clinic·clothes·shop·lodging: returned 안의 몫, LEDGER_PARTS) (custom: 그날 꾸미기에 쓴 돈) (clinic: 그날 의원 진료비·약값, returned 안에 든 몫) (refunds: 그날 공사 취소로 돌려받은 설계비, 놓은 날과 다를 수 있음)
 });
 const num = v => Number.isFinite(+v) ? +v : 0;
 /** 저장에서 읽은 은행. 금고가 없는 예전 저장은 VAULT_LEGACY(100) + 지금까지 돌아온 돈(정의상 플레이어 돈이고 쓴 적이 없음),
  *  세금 날은 불러온 날로(불러오자마자 걷지 않게). 이상한 값은 0 이상으로 */
 export function bankFromSave(j, time = 0) {
-  const b = newBank(time); if (!j || typeof j !== "object") { b.vault = VAULT_LEGACY; return b; }   // 은행 기록이 아예 없는 예전 저장도 100
-  for (const k of ["issued", "returned", "taxed", "fees", "wages", "lent", "repaid", "forgiven", "need", "custom"]) b[k] = Math.max(0, num(j[k]));
+  const b = newBank(time); b.mon = j && j.mon === null ? null : monFromSave(j?.mon);   // 중앙은행이 없는 옛 저장: 돈은 그대로 + 4일 적응 + 자동(null = 중앙은행을 끈 지금 규칙, 시험 받침)
+  if (!j || typeof j !== "object") { b.vault = VAULT_LEGACY; return b; }   // 은행 기록이 아예 없는 예전 저장도 100
+  for (const k of ["issued", "returned", "taxed", "fees", "wages", "lent", "repaid", "forgiven", "need", "custom", "seig", "retired", "interest", "printed", "bought", "granted"]) b[k] = Math.max(0, num(j[k]));
   b.vault = "vault" in j ? Math.max(0, num(j.vault)) : VAULT_LEGACY + b.returned;
   if (Number.isFinite(j.day) && j.day >= 1) b.day = Math.floor(j.day);
   b.short = j.short ? 1 : 0; b.low = j.low ? 1 : 0;

@@ -47,9 +47,10 @@ export const total = o => Object.values(o || {}).reduce((s, n) => s + (n || 0), 
 
 // ---- 가격 변동: 상인 창고에 많이 쌓인 원자재는 싸게, 모자라면 비싸게 사 줌(은행 가공품 값보다 1 아래까지)
 //  배수 = 1.3 − 0.04 × 창고 개수 (0.5 ~ 1.3). 예) 나무(기본 2): 창고 0개 2×1.3=2.6→3, 8개 2×0.98→2, 20개 이상 2×0.5→1
-export function marketPrice(k, stock) {
+//  base·proc: 물가(monetary.js)를 곱한 기본값·가공품 값(없으면 상수 그대로)
+export function marketPrice(k, stock, base = MARKET_BUY[k], proc = BANK_PROCESSED[k]) {
   const f = Math.max(0.5, Math.min(1.3, 1.3 - 0.04 * stock));
-  return Math.max(1, Math.min(BANK_PROCESSED[k] - 1, Math.round(MARKET_BUY[k] * f)));
+  return Math.max(1, Math.min(proc - 1, Math.round(base * f)));
 }
 // 음식 값: 기본 3. 농부·어부가 내놓을 수 있는 음식이 모자라면(3개 미만) +1, 넘치면(15개 넘게) −1, 배고픈 갈매미가 많으면 +1, 겨울 +1. 2 ~ 5
 export function foodPriceFor(spareFood, hungryShare, seasonExtra = 0) {

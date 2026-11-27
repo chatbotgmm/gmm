@@ -11,6 +11,8 @@ import { yardFlat } from "./improve.js";
 import { FESTIVAL_SAT } from "./festival.js";
 import { isCold, COLD_SAT } from "./climate.js";
 import { SICK } from "./health.js";
+import { newsDay } from "./news.js";
+import { SAT_SHOP, SAT_INTEREST, SAT_PRICEUP, SAT_JOBLESS, PRICEUP_AT } from "./monetary.js";
 
 export const PAVED = new Set([GroundType.Cobble, GroundType.WoodDeck]);
 export function isPaved(world, x, z) {
@@ -65,7 +67,13 @@ export function satisfaction(world, u, net = world.roads?.net) {
   if ((u.wageOwed || 0) > 0) parts.push(["💸 밀린 품삯", -10]);
   if ((u.cheer || 0) > 0) parts.push(["🎉 축제의 여운", FESTIVAL_SAT]);
   if (isCold(u.bodyT)) parts.push(["🥶 추움", COLD_SAT]);
-  if (u.sick) { const d = SICK[u.sick.kind] || SICK.cold; parts.push([`${d.icon} ${d.name}`, d.sat]); }   // 아픈 동안(health.js)                       // 체온 39.0 이하(climate.js). 집·카페에서 몸을 녹이면 사라짐
+  if (u.sick) { const d = SICK[u.sick.kind] || SICK.cold; parts.push([`${d.icon} ${d.name}`, d.sat]); }
+  const mon = world.economy && world.bank?.mon;                                    // 중앙은행(monetary.js): 오늘 장 봄 · 오늘 이자 받음 · 어제 값이 2% 넘게 오름 · 어제 일감 없음
+  if (mon) { const day = newsDay(world.time);
+    if (u.shopDay === day) parts.push(["🛍 장 봤다", SAT_SHOP]);
+    if (u.intDay === day) parts.push(["🐷 저금이 불었다", SAT_INTEREST]);
+    if (mon.pi > PRICEUP_AT) parts.push(["😟 값이 자꾸 올라요", SAT_PRICEUP]);
+    if (u.jlDay === day) parts.push(["😴 일감 없음", SAT_JOBLESS]); }   // 아픈 동안(health.js)                       // 체온 39.0 이하(climate.js). 집·카페에서 몸을 녹이면 사라짐
   return { value: Math.max(0, Math.min(100, parts.reduce((s, p) => s + p[1], 0))), parts };
 }
 /** 포장도로로 시장이나 은행과 이어진 집 수 */
