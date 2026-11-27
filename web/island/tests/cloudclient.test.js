@@ -148,7 +148,7 @@ test("새 기기의 손대지 않은 새 섬 → 묻지 않고 계정 섬 받기
 });
 
 test("받은 계정 섬이 다른 지도 크기면 이 기기 섬을 덮어쓰지 않음", async () => {
-  const s = fakeServer(), w = played(), j = w.serialize(1); j.grid = { ...j.grid, w: 10 };
+  const s = fakeServer(), w = played(), j = w.serialize(1); j.grid = { w: 10, h: 10 };   // 판 3인데 격자가 판 3 모양이 아님(다른 지도)
   s.row = { rev: 1, data: gzipSync(JSON.stringify(j)).toString("base64"), summary: null, savedAt: 1, updatedAt: 1, deleted: false, prev: null };
   const st = mem(); st.setItem(SAVE_KEY, "mine"); const d = device(s, brandNew(), { storage: st });
   await d.cloud.start();

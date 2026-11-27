@@ -13,11 +13,17 @@ export class Grid {
     this.doors = new Map();         // 칸 번호 → 건물 id. 문 앞 칸은 다른 건물이 막지 못한다.
     this.dirtyChunks = new Set();   // 다시 그려야 할 청크 "cx,cz"
     this.version = 0;               // 걷기 가능 여부가 바뀔 때마다 1씩 오름
+    this.box = { x0: 0, z0: 0, x1: w, z1: h };   // 섬 상자(ChunkGrid와 같은 이름: 섬 전체를 훑는 곳이 이 상자만 봄)
   }
   get chunksX() { return Math.ceil(this.w / this.chunk); }
   get chunksZ() { return Math.ceil(this.h / this.chunk); }
   inBounds(x, z) { return x >= 0 && z >= 0 && x < this.w && z < this.h; }
   index(x, z) { return z * this.w + x; }
+  xOf(i) { return i % this.w; }
+  zOf(i) { return Math.floor(i / this.w); }
+  inBox(x, z) { return this.inBounds(x, z); }
+  /** 칸 모두: fn(cell, x, z) (ChunkGrid는 상주 칸만) */
+  eachCell(fn) { const w = this.w; for (let i = 0; i < this.cells.length; i++) fn(this.cells[i], i % w, (i / w) | 0); }
   get(x, z) { return this.inBounds(x, z) ? this.cells[this.index(x, z)] : null; }
   isWater(x, z) { const c = this.get(x, z); return !c || c.elevation < SEA_LEVEL; }
   chunkKey(x, z) { return `${Math.floor(x / this.chunk)},${Math.floor(z / this.chunk)}`; }

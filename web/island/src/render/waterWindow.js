@@ -15,24 +15,34 @@ const SAND = GROUND_TYPES.indexOf("Sand");
 
 /** 창 하나 물가 자료: 왼위 칸 (x0, z0), 크기 W → { data: RGBA Uint8Array(W*W*4), sd: 해안선 거리 } */
 export function shoreWindow(view, x0, z0, W) {
-  const N = W * W, el = new Float64Array(N), sand = new Uint8Array(N), inner = new Uint8Array(N), g = view.inner;
+  const N = W * W, el = new Float64Array(N), sand = new Uint8Array(N), inner = new Uint8Array(N), g = view.inner, B = g.box, BW = B.x1 - B.x0, BH = B.z1 - B.z0;
   for (let tz = z0 >> WCH_SHIFT; tz <= (z0 + W - 1) >> WCH_SHIFT; tz++) for (let tx = x0 >> WCH_SHIFT; tx <= (x0 + W - 1) >> WCH_SHIFT; tx++) {   // 32칸 타일마다 데이터를 한 번만 꺼냄
     const ax = Math.max(x0, tx * WCH), bx = Math.min(x0 + W, tx * WCH + WCH), az = Math.max(z0, tz * WCH), bz = Math.min(z0 + W, tz * WCH + WCH);
-    const hit = !(bx <= 0 || bz <= 0 || ax >= g.w || az >= g.h), d = view.chunkData(tx, tz);   // hit: 시작 섬 상자에 걸친 타일
+    const hit = !(bx <= B.x0 || bz <= B.z0 || ax >= B.x1 || az >= B.z1), d = view.chunkData(tx, tz);   // hit: 시작 섬 상자에 걸친 타일
+    const sim = !hit && view.sim && g.isResidentChunk(tx, tz);                        // 바깥이라도 바꾼 칸이 있는 청크는 시뮬 칸 그대로(판 연못·메운 땅)
     for (let z = az; z < bz; z++) for (let x = ax; x < bx; x++) {
       const i = (z - z0) * W + (x - x0);
-      if (hit && g.inBounds(x, z)) { const c = g.cells[g.index(x, z)]; el[i] = c.elevation; sand[i] = c.groundType === "Sand" && c.elevation <= 0.02 ? 1 : 0; inner[i] = 1; }
+      if (hit && g.inBox(x, z)) { const c = g.get(x, z); el[i] = c.elevation; sand[i] = c.groundType === "Sand" && c.elevation <= 0.02 ? 1 : 0; inner[i] = 1; }
+      else if (sim) { const c = g.get(x, z); el[i] = c.elevation; sand[i] = c.groundType === "Sand" && c.elevation <= 0.02 ? 1 : 0; }
       else { const j = (z & WCH_MASK) * WCH + (x & WCH_MASK); el[i] = d.elev[j] / 1000; sand[i] = d.ground[j] === SAND && d.elev[j] <= 20 ? 1 : 0; }
     }
   }
   const water = waterMask(el), wet = new Uint8Array(N), seeds = [];
-  const isea = floodSea(g.w, g.h, waterMask(g.cells.map(c => c.elevation)), null);   // 시작 섬 격자 가장자리에서 퍼진 바다(연못 빠짐)
+  const isea = startSea(g, BW, BH);                                                // 시작 섬 상자 가장자리에서 퍼진 바다(연못 빠짐)
   for (let z = 0; z < W; z++) for (let x = 0; x < W; x++) {
     const i = z * W + x; if (!water[i]) continue;
-    if (inner[i]) { if (isea[g.index(x + x0, z + z0)]) { wet[i] = 1; seeds.push(i); } }                    // 시작 섬 안: 시작 섬 바다만(연못은 막음)
+    if (inner[i]) { if (isea[(z + z0 - B.z0) * BW + (x + x0 - B.x0)]) { wet[i] = 1; seeds.push(i); } }                    // 시작 섬 안: 시작 섬 바다만(연못은 막음)
     else { wet[i] = 1; if (x === 0 || z === 0 || x === W - 1 || z === W - 1) seeds.push(i); }
   }
   return shoreCore(W, W, el, sand, water, floodSea(W, W, wet, seeds), DIST_CAP);
+}
+/** 시작 섬 상자의 바다(가장자리에서 물로만 퍼진 칸). 칸이 바뀔 때만(version) 다시 셈 */
+const seaCache = new WeakMap();
+function startSea(g, BW, BH) {
+  const c = seaCache.get(g); if (c && c.v === g.version) return c.sea;
+  const el = new Float64Array(BW * BH);
+  for (let z = 0; z < BH; z++) for (let x = 0; x < BW; x++) el[z * BW + x] = g.get(x + g.box.x0, z + g.box.z0).elevation;
+  const sea = floodSea(BW, BH, waterMask(el), null); seaCache.set(g, { v: g.version, sea }); return sea;
 }
 /** 창 하나 깊이만: Uint8Array(W*W) (깊이 0~3 m를 0~255로) */
 export function waterDepths(view, x0, z0, W) {

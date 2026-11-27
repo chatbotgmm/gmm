@@ -83,7 +83,7 @@ export class Tools {
     for (const [id, a] of w.roadAsks) {
       if (!w.units.includes(a.u) || !roadWant(w, a.u)) { w.roadAsks.delete(id); continue; }
       for (const [x, z] of a.cells) {
-        const k = z * g.w + x; if (n >= this.askMax || seen.has(k) || !g.inBounds(x, z) || isPaved(w, x, z)) continue; seen.add(k);
+        const k = g.index(x, z); if (n >= this.askMax || seen.has(k) || !g.inBounds(x, z) || isPaved(w, x, z)) continue; seen.add(k);
         mat.makeTranslation(toWorldX(x + 0.5), Math.max(terrainHeight(g, x + 0.5, z + 0.5), g.walkHeight(x, z) ?? -9) + 0.03, toWorldZ(z + 0.5)); m.setMatrixAt(n++, mat);
       }
     }
@@ -270,11 +270,13 @@ export class Tools {
 
   /** 화면 좌표 → 칸. 바닥 청크 메쉬에 광선을 쏴서 맞은 점을 면 안쪽으로 살짝 밀어 칸을 정한다. */
   /** 마우스 아래 정확한 점(격자 좌표, 소수). 물 위면 물 표면과 만나는 점. 없으면 null. */
+  /** 땅 고르기 레이캐스트 대상: 시작 섬 조각 + 바깥 땅 조각(넓은 섬은 바깥도 시뮬 격자라 칠하기·짓기가 됨) */
+  groundMeshes() { const out = [...this.chunks.meshes.values()]; if (this.stream) for (const m of this.stream.meshes.values()) out.push(m); return out; }
   pickPoint(clientX, clientY) {
     const r = this.dom.getBoundingClientRect();
     this.ndc.set((clientX - r.left) / r.width * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.ndc, this.camera);
-    const hit = this.ray.intersectObjects([...this.chunks.meshes.values()], false)[0];
+    const hit = this.ray.intersectObjects(this.groundMeshes(), false)[0];
     let p = hit ? hit.point.clone() : null;
     if (!p || p.y < WATER_Y) {                                                    // 물속 바닥 대신 물 표면
       const q = this.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -WATER_Y), new THREE.Vector3());
@@ -289,7 +291,7 @@ export class Tools {
     const r = this.dom.getBoundingClientRect();
     this.ndc.set((clientX - r.left) / r.width * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.ndc, this.camera);
-    const hit = this.ray.intersectObjects([...this.chunks.meshes.values()], false)[0];
+    const hit = this.ray.intersectObjects(this.groundMeshes(), false)[0];
     if (!hit) return null;
     const p = hit.point.clone().addScaledVector(hit.face.normal, -0.01);
     const x = Math.floor(toGridX(p.x)), z = Math.floor(toGridZ(p.z));

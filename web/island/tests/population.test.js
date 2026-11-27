@@ -147,7 +147,7 @@ test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(13·2138
   for (const seed of [13, 213821, 944352]) {
     const w = World.create(seed, seededRandom(3), { wild: true }), bk = w.bankB(), c = w.center;
     assert.ok(bk, `씨앗 ${seed}: 공식은행`); assert.equal(w.economy, true);
-    const mid = { x: w.grid.w / 2, z: w.grid.h / 2 }, bx = Math.floor(mid.x) - Math.floor(BUILDINGS.bank.footprint.w / 2), bz = Math.floor(mid.z) - Math.floor(BUILDINGS.bank.footprint.d / 2);   // center는 이제 은행을 따라가므로 지도 한가운데 기준으로 잼
+    const mid = { x: (w.grid.box.x0 + w.grid.box.x1) / 2, z: (w.grid.box.z0 + w.grid.box.z1) / 2 }, bx = Math.floor(mid.x) - Math.floor(BUILDINGS.bank.footprint.w / 2), bz = Math.floor(mid.z) - Math.floor(BUILDINGS.bank.footprint.d / 2);   // center는 이제 은행을 따라가므로 지도 한가운데 기준으로 잼
     assert.ok(Math.hypot(bk.x - bx, bk.z - bz) <= 3, "가운데에서 세 칸 안"); assert.ok(Math.hypot(bk.x - bx, bk.z - bz) > 0, "가운데에는 못 놓는 씨앗");
     const hs = houses(w); assert.equal(hs.length, 1); assert.ok(w.isDone(hs[0])); assert.ok(findPath(w.grid, bk.door.x, bk.door.z, hs[0].door.x, hs[0].door.z));
     assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(w.units.length, 0); assert.equal(w.summonInfo().gated, true);

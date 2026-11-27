@@ -47,24 +47,28 @@ const villageCore = (world, b) => { const d = BUILDINGS[b.defId]; return !!d && 
 /** 반짝이 후보 칸: { beach: [[x,z]], village: [[x,z]], lamp: { beach, village } } (바닷가 = 모래, 마을 = 모래가 아니고 건물 둘레 SPARKLE_NEAR칸 안,
  *  lamp = 그중 전기가 들어오는 다 지은 가로등에서 SPARKLE_LAMP_R칸 안 — 밤 반짝이가 먼저 고르는 칸) */
 export function sparkleCells(world) {
-  const g = world.grid, W = g.w, near = new Uint8Array(W * g.h), lit = new Uint8Array(W * g.h), out = { beach: [], village: [], lamp: { beach: [], village: [] } };
+  const g = world.grid, near = new Set(), lit = new Set(), out = { beach: [], village: [], lamp: { beach: [], village: [] } };   // 칸 번호 모음(끝없는 세계라 상자 배열 대신)
   for (const b of world.buildings.values()) {
     if (b.defId !== "streetlamp" || !world.isDone(b) || !world.powered?.(b)) continue;
-    for (const [bx, bz] of b.cells) for (let z = Math.max(0, bz - SPARKLE_LAMP_R); z <= Math.min(g.h - 1, bz + SPARKLE_LAMP_R); z++)
-      for (let x = Math.max(0, bx - SPARKLE_LAMP_R); x <= Math.min(W - 1, bx + SPARKLE_LAMP_R); x++) lit[z * W + x] = 1;
+    for (const [bx, bz] of b.cells) for (let z = bz - SPARKLE_LAMP_R; z <= bz + SPARKLE_LAMP_R; z++) for (let x = bx - SPARKLE_LAMP_R; x <= bx + SPARKLE_LAMP_R; x++) if (g.inBounds(x, z)) lit.add(g.index(x, z));
   }
   for (const b of world.buildings.values()) {
     if (!villageCore(world, b)) continue;
-    for (const [bx, bz] of b.cells) for (let z = Math.max(0, bz - SPARKLE_NEAR); z <= Math.min(g.h - 1, bz + SPARKLE_NEAR); z++)
-      for (let x = Math.max(0, bx - SPARKLE_NEAR); x <= Math.min(W - 1, bx + SPARKLE_NEAR); x++) near[z * W + x] = 1;
+    for (const [bx, bz] of b.cells) for (let z = bz - SPARKLE_NEAR; z <= bz + SPARKLE_NEAR; z++) for (let x = bx - SPARKLE_NEAR; x <= bx + SPARKLE_NEAR; x++) if (g.inBounds(x, z)) near.add(g.index(x, z));
   }
-  for (let z = 0; z < g.h; z++) for (let x = 0; x < W; x++) {
-    const c = g.cells[z * W + x], sand = c.groundType === GroundType.Sand;
-    if (!sand && !near[z * W + x] && !lit[z * W + x]) continue;
+  // 후보 칸: 상주 칸(시작 섬 + 바뀐·지은 청크)을 칸 번호 순서로(같은 섬 → 같은 순서 → 같은 씨앗이면 같은 자리)
+  //  마을·가로등 둘레 칸은 상주 청크 밖으로 삐져나와도 넣는다(상주 여부와 상관없이 같은 후보)
+  g.unpinStale?.();                                                               // 되돌아간 청크는 상주에서 뺌 → 바닷가 후보 = 지금 칸 상태만의 함수(저장 전후 같음)
+  const cand = [], seen = new Set(); g.eachCell((c, x, z) => { if (c.groundType === GroundType.Sand) { const i = g.index(x, z); cand.push(i); seen.add(i); } });
+  for (const s of [near, lit]) for (const i of s) if (!seen.has(i)) { seen.add(i); cand.push(i); }
+  cand.sort((p, q) => g.zOf(p) - g.zOf(q) || g.xOf(p) - g.xOf(q));
+  for (const i of cand) {
+    const x = g.xOf(i), z = g.zOf(i), c = g.get(x, z), sand = c.groundType === GroundType.Sand, nr = near.has(i), lt = lit.has(i);
+    if (!sand && !nr && !lt) continue;
     if (!sparkleCellFree(world, x, z)) continue;
     const where = sand ? "beach" : "village";
-    if (lit[z * W + x]) out.lamp[where].push([x, z]);
-    if (sand || near[z * W + x]) out[where].push([x, z]);
+    if (lt) out.lamp[where].push([x, z]);
+    if (sand || nr) out[where].push([x, z]);
   }
   return out;
 }

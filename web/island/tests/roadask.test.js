@@ -69,7 +69,7 @@ test("월드: 갈매미는 바닥을 바꾸지 않고, 집이 시장과 안 이�
   const hq = spot("house", c.x + 12, c.z + 10), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", c.x + 2, c.z + 14), mk = w.placeBuilding("market", mq[0], mq[1], 0).building;
   const u = w.units.find(o => o.name === "불씨"); u.home = h.id; h.owner = u.unitId; u.inv.stone = 10; w.res.stone = 10;
   w.updateRoads();
-  const ground = () => w.grid.cells.map(x => x.groundType).join(",");
+  const ground = () => { const a = []; w.grid.eachCell(c => a.push(c.groundType)); return a.join(","); };
   const g0 = ground(), asks = [], bubbles = new Set(); w.on("roadAsk", e => asks.push(e));
   for (let t = 0; t < 900; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (u.emoteText?.startsWith("🛣")) bubbles.add(u.emoteText); }
   assert.equal(ground(), g0, "갈매미가 바닥 종류를 하나도 바꾸지 않음");

@@ -20,22 +20,24 @@ export function isPaved(world, x, z) {
   if (c.occupiedId) { const b = world.buildings.get(c.occupiedId); return !!b && BUILDINGS[b.defId].bridge && world.isDone(b); }
   return PAVED.has(c.groundType);
 }
-/** 포장도로 칸마다 도로망 번호(8방향 — 모서리로 닿아도 이어짐, 갈매미가 대각선으로도 걸으니까). -1 = 포장 아님 */
+/** 포장도로 칸마다 도로망 번호(8방향 — 모서리로 닿아도 이어짐, 갈매미가 대각선으로도 걸으니까): Map(칸 번호 → 도로망 번호). 없는 칸 = 포장 아님.
+ *  포장도로는 플레이어가 칠하거나 지은 칸이라 상주 칸(grid.eachCell: 시작 섬 + 바뀐 청크)에만 있다 → 끝없는 세계에서도 그 칸만 훑음 */
 export function roadNet(world) {
-  const g = world.grid, W = g.w, net = new Int32Array(W * g.h).fill(-1); let id = 0;
-  for (let s = 0; s < net.length; s++) {
-    if (net[s] >= 0 || !isPaved(world, s % W, (s / W) | 0)) continue;
-    const q = [s]; net[s] = id;
-    while (q.length) { const i = q.pop(), x = i % W, z = (i / W) | 0;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) { const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const ni = nz * W + nx; if (net[ni] < 0 && isPaved(world, nx, nz)) { net[ni] = id; q.push(ni); } } }
+  const g = world.grid, net = new Map(); let id = 0;
+  const paved = []; g.eachCell((c, x, z) => { if ((c.occupiedId || PAVED.has(c.groundType)) && isPaved(world, x, z)) paved.push(x, z); });
+  for (let p = 0; p < paved.length; p += 2) {
+    const s = g.index(paved[p], paved[p + 1]); if (net.has(s)) continue;
+    const q = [s]; net.set(s, id);
+    while (q.length) { const i = q.pop(), x = g.xOf(i), z = g.zOf(i);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) { const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const ni = g.index(nx, nz); if (!net.has(ni) && isPaved(world, nx, nz)) { net.set(ni, id); q.push(ni); } } }
     id++;
   }
   return net;
 }
 /** 이 건물 문이 닿는 도로망 번호들 */
 export function netsAt(world, net, b) {
-  const W = world.grid.w, out = new Set(), d = b.door;
-  for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = d.x + dx, z = d.z + dz; if (world.grid.inBounds(x, z) && net[z * W + x] >= 0) out.add(net[z * W + x]); }
+  const g = world.grid, out = new Set(), d = b.door;
+  for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = d.x + dx, z = d.z + dz; if (!g.inBounds(x, z)) continue; const n = net.get(g.index(x, z)); if (n !== undefined) out.add(n); }
   return out;
 }
 const linked = (a, b) => [...a].some(n => b.has(n));

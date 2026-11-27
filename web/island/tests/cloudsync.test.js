@@ -64,7 +64,12 @@ test("덮어쓰기 칸은 {server.rev, replace:true} · 묘비 뒤 멈춤 → �
 test("checkPulled: 다른 지도·작은 섬·망가진 저장은 거절(이 기기 섬 그대로)", () => {
   const j = fresh().serialize(Date.now());
   assert.equal(CS.checkPulled(j, GRID_W).ok, true);
-  assert.equal(CS.checkPulled({ ...j, grid: { ...j.grid, w: 10 } }, GRID_W).ok, false);
+  assert.equal(j.version, 3, "넓은 섬 = 저장 판 3(씨앗 + 시작 섬 기준 + 바뀐 칸)"); assert.equal(j.grid.kind, "chunks");
+  assert.equal(CS.checkPulled({ ...j, grid: { w: 10, h: 10 } }, GRID_W).ok, false, "판 3인데 격자가 판 3 모양이 아님");
+  assert.equal(CS.checkPulled({ ...j, grid: { ...j.grid, genV: 2 } }, GRID_W).ok, false, "더 새 생성 판");
+  assert.equal(CS.checkPulled({ ...j, grid: { ...j.grid, genV: undefined } }, GRID_W).ok, true, "생성 판이 없으면 1");
+  const old = { ...j, version: 2, grid: { w: GRID_W, h: GRID_W, chunk: 16, ground: [], elevation: [] } };   // 예전 판 2(192칸 격자 전체)도 받음 → 불러올 때 판 3으로 옮김
+  assert.equal(CS.checkPulled(old, GRID_W).ok, true); assert.equal(CS.checkPulled({ ...old, grid: { ...old.grid, w: 10 } }, GRID_W).ok, false);
   assert.equal(CS.checkPulled({ ...j, wild: false }, GRID_W).ok, false);
   assert.equal(CS.checkPulled({ ...j, units: null }, GRID_W).ok, false);
   assert.equal(CS.checkPulled([], GRID_W).ok, false);
@@ -109,6 +114,20 @@ test("켜는 곳: 같은 출처 /village3d/만(아티팩트·로컬 파일·개�
   assert.equal(CS.cloudWhere({ protocol: "file:", pathname: "/village3d/index.html" }), false);
   assert.equal(CS.cloudWhere({ protocol: "about:", pathname: "srcdoc" }), false);
   assert.equal(CS.cloudWhere(null), false);
+});
+
+test("저장 크기: 새 넓은 섬 계정 저장(gzip+base64)은 keepalive 안 · 2만 칸을 바꿔도 140KB 아래(한도 256KB)", async () => {
+  const { gzipSync } = await import("node:zlib");
+  const b64 = j => gzipSync(JSON.stringify(j)).toString("base64").length;
+  const w = fresh(), n0 = b64(w.serialize(1));
+  assert.ok(n0 < 30_000 && CS.keepaliveOk(n0 + 200), `새 섬 ${n0}자`);
+  const r = seededRandom(5), g = w.grid, T = ["Grass", "Cobble", "WoodDeck", "Dirt", "Sand", "Rock"], seen = new Set();   // 붓질처럼 7×7 덩어리, 높이는 연속값(다듬기 도구를 쓴 최악) · 바닥 무작위
+  while (seen.size < 20000) { const cx = Math.floor(r() * 900) - 350, cz = Math.floor(r() * 900) - 350;
+    for (let dz = 0; dz < 7; dz++) for (let dx = 0; dx < 7; dx++) { const x = cx + dx, z = cz + dz, k = x + "," + z; if (seen.has(k) || seen.size >= 20000) continue; seen.add(k);
+      g.setElevation(x, z, Math.round((r() * 3 - 1.5) * 1000) / 1000); g.setGround(x, z, T[Math.floor(r() * 6)]); } }
+  const j = w.serialize(1), n = b64(j);
+  assert.ok(j.grid.n >= 19000, `바뀐 칸 ${j.grid.n}`); assert.ok(n < 140_000 && n < CS.ISLAND_B64_LIMIT, `2만 칸 ${n}자`);
+  assert.equal(CS.checkPulled(j, GRID_W).ok, true);
 });
 
 test("keepalive는 60KB 아래만 · 상태 한 줄 다섯 가지 · n분 전", () => {

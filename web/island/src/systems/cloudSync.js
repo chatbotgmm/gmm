@@ -86,12 +86,19 @@ export function overwriteRequest(conflictServer) { const b = overwriteBaseRev(co
 /** 계정에서 섬을 지운 뒤(이 기기에서든, 다른 기기 묘비를 보고 "올리지 않기"를 골랐든): 그 rev를 보고 멈춤 */
 export function afterTombstone(meta, rev) { return { ...meta, baseRev: rev, paused: true, dirty: true }; }
 
+/** 넓은 섬 저장 판 3(오픈월드: 씨앗 + 시작 섬 기준 + 바뀐 칸, world/saveDelta.js)의 격자 칸이 읽을 만한가.
+ *  생성 판(genV)이 이 게임보다 새것이면 못 읽음(바깥 섬 모양이 달라 델타가 틀어짐). 없으면 1 */
+export const GEN_V_MAX = 1;
+export function gridV3Ok(g) {
+  if (!g || g.kind !== "chunks" || !Array.isArray(g.box) || g.box.length !== 4 || typeof g.base !== "string" || typeof g.delta !== "string") return false;
+  const v = g.genV ?? 1; return Number.isInteger(v) && v >= 1 && v <= GEN_V_MAX;
+}
 /** 받은 섬 검사(B3-6). 실패하면 이 기기 섬을 덮어쓰지 않는다(덮어쓰면 loadSaved가 새 섬을 만들고 → dirty → 계정 섬까지 덮일 수 있음).
  *  j: 계정에서 받아 푼 JSON. 성공이면 {ok:true}, 실패면 {ok:false, why}. 호출하는 쪽은 이어서 World.fromJSON도 try로 돌려 본다. */
 export function checkPulled(j, gridW) {
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, why: "계정 섬을 읽을 수 없어요." };
-  if (![1, 2].includes(j.version)) return { ok: false, why: "계정 섬이 다른 판 형식이라 열 수 없어요. 게임을 새로 고침해 보세요." };
-  if (j.grid?.w !== gridW) return { ok: false, why: "계정 섬이 예전 판(지도 크기가 다름)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
+  if (![1, 2, 3].includes(j.version)) return { ok: false, why: "계정 섬이 다른 판 형식이라 열 수 없어요. 게임을 새로 고침해 보세요." };
+  if (j.version === 3 ? !gridV3Ok(j.grid) : j.grid?.w !== gridW) return { ok: false, why: "계정 섬이 예전 판(지도 크기가 다름)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
   if (!j.wild) return { ok: false, why: "계정 섬이 예전 판(작은 섬)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
   if (!Array.isArray(j.buildings) || !Array.isArray(j.units)) return { ok: false, why: "계정 섬 저장이 망가져 열 수 없어요." };
   return { ok: true };

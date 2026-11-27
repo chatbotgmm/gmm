@@ -694,7 +694,7 @@ test("저장: 등급·저장고·소원·가구·날씨·시세 기록까지 저
 test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어지고, 선착장이 있으면 배를 타고 먼 섬에 감", async () => {
   const { BUILDINGS } = await import("../src/data/catalog.js");
   const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수");
-  assert.equal(w.grid.w, 192); assert.equal(w.zones.filter(z => z.id.startsWith("islet-")).length, 5);
+  assert.deepEqual(w.grid.box, { x0: 0, z0: 0, x1: 192, z1: 192 }, "시작 섬 상자 192칸(끝없는 시뮬 격자)"); assert.equal(w.zones.filter(z => z.id.startsWith("islet-")).length, 5);
   const c = w.center, home = w.compAt(Math.floor(c.x), Math.floor(c.z) + 6);
   const zone = id => w.zones.find(z => z.id === id);
   // 섬 가운데 칸에 나무가 서 있을 수 있어(생성 난수 순서가 지형에 따라 바뀜) 가운데에서 가장 가까운 걸을 수 있는 칸의 덩어리로 봄
@@ -703,7 +703,7 @@ test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어
   assert.notEqual(compOf(forest), home, "처음엔 숲섬이 따로 떨어져 있음");
   // 본섬 땅 → 숲섬 땅 사이 곧은 물길(가로·세로) 중 가장 짧은 것에 다리
   let best = null;
-  for (let z = 0; z < w.grid.h; z++) for (let x = 0; x < w.grid.w; x++) {
+  for (let z = w.grid.box.z0; z < w.grid.box.z1; z++) for (let x = w.grid.box.x0; x < w.grid.box.x1; x++) {
     if (w.compAt(x, z) !== home) continue;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const line = []; let k = 1; while (k < 20 && w.grid.isWater(x + dx * k, z + dz * k)) { line.push([x + dx * k, z + dz * k]); k++; }
@@ -797,7 +797,7 @@ test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고�
   w.updateRoads(); const before = u.sat; assert.ok(before < 75, `처음 만족도 ${before}`); assert.equal(IM.yardFlat(w, h), false);
   for (const o of w.units) o.full = 90;
   let jobs = new Set(); w.on("improve", e => { if (e.u === u) jobs.add(e.kind); });
-  const ground = () => w.grid.cells.map(x => x.groundType).join(","), g0 = ground();
+  const ground = () => { const a = []; w.grid.eachCell(c => a.push(c.groundType)); return a.join(","); }, g0 = ground();
   for (let t = 0; t < 900 && !IM.yardFlat(w, h); t += 0.1) { u.full = 90; w.update(0.1); }
   assert.ok(jobs.has("yard"), "마당 고르기"); assert.ok(!jobs.has("pave"), "돌길은 깔지 않음");
   for (let t = 0; t < 300; t += 0.1) { u.full = 90; w.update(0.1); }

@@ -5,6 +5,9 @@ import { WATER_Y, SEA_LEVEL, MAX_STEP } from "../config.js";
 import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
 import { Grid } from "./Grid.js";
+import { ChunkGrid } from "./chunkGrid.js";
+import { CompLabels, FrozenComps } from "./chunkComps.js";
+import * as SD from "./saveDelta.js";
 import { generateIsland, generateWildIsland } from "./islandGen.js";
 import { checkPlacement, footprint } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
@@ -51,13 +54,13 @@ import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells
  * @returns 놓은 은행 건물(끝내 못 놓으면 null)
  */
 export function placeTownBank(w, R = 16) {
-  const def = BUILDINGS.bank, g = w.grid, mid = { x: g.w / 2, z: g.h / 2 }, ax0 = mid.x - Math.floor(def.footprint.w / 2), az0 = mid.z - Math.floor(def.footprint.d / 2);
+  const def = BUILDINGS.bank, g = w.grid, B = g.box, mid = { x: (B.x0 + B.x1) / 2, z: (B.z0 + B.z1) / 2 }, ax0 = mid.x - Math.floor(def.footprint.w / 2), az0 = mid.z - Math.floor(def.footprint.d / 2);
   const first = w.placeBuilding("bank", ax0, az0, 0, null, 1e9); if (first.ok) return first.building;
   const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const reach = (sx, sz) => {                                                     // 걸어서 닿는 칸(4방향, grid.canStep)
-    const seen = new Uint8Array(g.w * g.h), st = [[sx, sz]]; seen[g.index(sx, sz)] = 1;
+    const seen = new Set([g.index(sx, sz)]), st = [[sx, sz]];                     // 칸 번호 모음(넓은 섬의 칸 번호는 시작 섬 상자 밖까지 이어짐)
     while (st.length) { const [x, z] = st.pop(); for (const [dx, dz] of N4) { const nx = x + dx, nz = z + dz;
-      if (!g.inBounds(nx, nz) || seen[g.index(nx, nz)] || !g.canStep(x, z, nx, nz)) continue; seen[g.index(nx, nz)] = 1; st.push([nx, nz]); } }
+      if (!g.inBounds(nx, nz) || seen.has(g.index(nx, nz)) || !g.canStep(x, z, nx, nz)) continue; seen.add(g.index(nx, nz)); st.push([nx, nz]); } }
     return seen;
   };
   const anchors = []; for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (dx * dx + dz * dz <= R * R) anchors.push([dx, dz]);
@@ -73,7 +76,7 @@ export function placeTownBank(w, R = 16) {
     const after = reach(fp.door.x, fp.door.z);
     for (const [x, z] of fp.cells) g.get(x, z).occupiedId = null; g.occupants.delete(tmp);
     const inFp = new Set(fp.cells.map(([x, z]) => g.index(x, z)));
-    for (let i = 0; i < base.length; i++) if (base[i] && !after[i] && !inFp.has(i)) return false;   // 은행 때문에 못 가게 되는 땅이 없어야 함
+    for (const i of base) if (!after.has(i) && !inFp.has(i)) return false;   // 은행 때문에 못 가게 되는 땅이 없어야 함
     return true;
   };
   const put = (ax, az) => w.placeBuilding("bank", ax, az, 0, null, 1e9).building;
@@ -158,7 +161,8 @@ export class World {
   /** empty: 갈매미 없이 시작. wild: 넓은 섬(자연만 + 가운데 공식은행 + 다 지은 작은 집 한 채, 갈매미 없음 → 첫 갈매미는 🥚 소환으로. 게임 화면).
    *  firstGull: 넓은 섬에 기본 갈매미를 미리 불러 둠(시험 받침). 시험은 기본값(예전 섬, 8마리 모두). */
   static create(seed = 7, rnd = Math.random, { empty = false, wild = false, firstGull = false } = {}) {
-    const g = wild ? generateWildIsland(seed) : generateIsland(seed), w = new World(g.grid, g.modules, rnd, g);
+    const g = wild ? generateWildIsland(seed) : generateIsland(seed), grid = wild ? ChunkGrid.fromStart(seed, g.grid) : g.grid;   // 넓은 섬 = 끝없는 시뮬 격자(시작 섬 192칸은 고정 청크), 옛 64칸 섬은 그대로 Grid
+    const w = new World(grid, g.modules, rnd, g);
     w.seed = seed; w.wild = wild; w.sparkRnd = seededRandom(sparkleSeed(seed, 0));   // 반짝이 난수는 섬 씨앗으로(생성 결과 g에는 seed가 없음)
     w.hrnd = seededRandom((seed * 104729 + 31) >>> 0);                            // 병 난수도 섬 씨앗으로
     if (wild) {
@@ -188,9 +192,9 @@ export class World {
   }
   /** 마을 가운데: 지도 한가운데. 넓은 섬에서 은행이 가운데에 못 놓여 옆으로 비켜 섰으면 그만큼 옮긴 곳(은행 앞 광장·소환 자리가 은행을 따라감) */
   get center() {
-    const c = { x: this.grid.w / 2, z: this.grid.h / 2 }; if (!this.wild) return c;
+    const B = this.grid.box, mx = (B.x0 + B.x1) / 2, mz = (B.z0 + B.z1) / 2, c = { x: mx, z: mz }; if (!this.wild) return c;   // 시작 섬 상자 가운데
     for (const b of this.buildings.values()) { const def = BUILDINGS[b.defId]; if (!def.bank) continue;
-      c.x += b.x - (this.grid.w / 2 - Math.floor(def.footprint.w / 2)); c.z += b.z - (this.grid.h / 2 - Math.floor(def.footprint.d / 2)); break; }
+      c.x += b.x - (mx - Math.floor(def.footprint.w / 2)); c.z += b.z - (mz - Math.floor(def.footprint.d / 2)); break; }
     return c;
   }
   /** 이름으로 갈매미 하나를 가운데(은행 앞) 근처에 부름. */
@@ -923,20 +927,13 @@ export class World {
     const [x, z] = b.cells[0]; for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) if (this.grid.isWalkable(x + dx, z + dz)) return { x: x + dx, z: z + dz };
     return null;
   }
-  /** 걸어서 이어진 땅 덩어리 번호(칸마다). 땅·건물이 바뀔 때만 다시 셈 */
+  /** 걸어서 이어진 땅 덩어리 번호: at(x, z)로 물음(chunkComps.js). 땅·건물이 바뀔 때만(grid.version) 새로 셈. 청크를 올리고 내리는 일은 version을 안 바꿈 */
   comps() {
-    const g = this.grid; if (this._comp && this._compV === g.version) return this._comp;
-    const comp = new Int32Array(g.w * g.h).fill(-1); let id = 0;
-    for (let s = 0; s < comp.length; s++) {
-      if (comp[s] >= 0) continue; const sx = s % g.w, sz = (s / g.w) | 0; if (!g.isWalkable(sx, sz)) continue;
-      const q = [s]; comp[s] = id;
-      while (q.length) { const i = q.pop(), x = i % g.w, z = (i / g.w) | 0;
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const ni = nz * g.w + nx; if (comp[ni] >= 0 || !g.canStep(x, z, nx, nz)) continue; comp[ni] = id; q.push(ni); } }
-      id++;
-    }
-    this._comp = comp; this._compV = g.version; return comp;
+    const g = this.grid; if (this._comp && this._compV === g.version && this._comp.g === g) return this._comp;
+    this._comp = new CompLabels(g); this._compV = g.version; return this._comp;
   }
-  compAt(x, z) { return this.grid.inBounds(x, z) ? this.comps()[z * this.grid.w + x] : -1; }
+  /** 칸의 덩어리 번호. 걸을 수 없으면 −1. 넓은 섬은 안 가 본 곳도 처음 물을 때 만들어 셈(−1 = 못 닿음이 아님) */
+  compAt(x, z) { return this.comps().at(x, z); }
   piers() { return [...this.buildings.values()].filter(b => BUILDINGS[b.defId].pier && this.isDone(b)); }
   /** 배 길: 출발 칸 덩어리의 선착장 → 도착 칸 덩어리의 선착장(가장 가까운 것끼리). 없으면 null */
   ferryRoute(sx, sz, gx, gz) {
@@ -949,16 +946,16 @@ export class World {
   berth(p) { const [x, z] = p.cells[0]; return { x: 2 * x - p.door.x, z: 2 * z - p.door.z }; }
   /** 두 물 칸 사이 뱃길(물 칸만, 8방향 A*). 못 찾으면 곧은 줄 */
   seaPath(a, b) {
-    const g = this.grid, W = g.w, open = [[a.x, a.z, 0]], dist = new Map([[a.z * W + a.x, 0]]), from = new Map();
+    const g = this.grid, open = [[a.x, a.z, 0]], dist = new Map([[g.index(a.x, a.z), 0]]), from = new Map();
     const water = (x, z) => g.inBounds(x, z) && g.isWater(x, z) && (!g.get(x, z).occupiedId || BUILDINGS[this.buildings.get(g.get(x, z).occupiedId)?.defId]?.bridge);
     const h = (x, z) => Math.hypot(x - b.x, z - b.z); let n = 0;
     while (open.length && n++ < 40000) {
       let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][2] + h(open[i][0], open[i][1]) < open[bi][2] + h(open[bi][0], open[bi][1])) bi = i;
       const [x, z, d] = open.splice(bi, 1)[0];
-      if (x === b.x && z === b.z) { const out = []; let k = z * W + x; while (k !== undefined) { out.push([k % W, (k / W) | 0]); k = from.get(k); } return out.reverse().filter((_, i, arr) => i % 3 === 0 || i === arr.length - 1); }
+      if (x === b.x && z === b.z) { const out = []; let k = g.index(x, z); while (k !== undefined) { out.push([g.xOf(k), g.zOf(k)]); k = from.get(k); } return out.reverse().filter((_, i, arr) => i % 3 === 0 || i === arr.length - 1); }
       for (const [dx, dz, c] of [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.41], [1, -1, 1.41], [-1, 1, 1.41], [-1, -1, 1.41]]) {
         const nx = x + dx, nz = z + dz; if (!water(nx, nz) && !(nx === b.x && nz === b.z)) continue;
-        const k = nz * W + nx, nd = d + c; if (nd < (dist.get(k) ?? Infinity)) { dist.set(k, nd); from.set(k, z * W + x); open.push([nx, nz, nd]); }
+        const k = g.index(nx, nz), nd = d + c; if (nd < (dist.get(k) ?? Infinity)) { dist.set(k, nd); from.set(k, g.index(x, z)); open.push([nx, nz, nd]); }
       }
     }
     return [[a.x, a.z], [b.x, b.z]];
@@ -1434,52 +1431,45 @@ export class World {
     if (!CU.DECOR.includes(kind) && this.spots.some(s => s.x === x && s.z === z)) return "낚시 자리예요";   // 걷기를 막는 것(나무·바위·지형지물)은 낚시 자리에 못 놓음(덤불·꽃은 됨)
     return kind ? CU.groundReason(kind, c.groundType) : "";
   }
-  /** 걸어서 이어진 덩어리 번호(캐시·grid.version을 건드리지 않고 지금 칸 상태로 새로 셈). comps()와 같은 규칙 */
-  floodComps() {
-    const g = this.grid, comp = new Int32Array(g.w * g.h).fill(-1); let id = 0;
-    for (let s = 0; s < comp.length; s++) {
-      if (comp[s] >= 0) continue; const sx = s % g.w, sz = (s / g.w) | 0; if (!g.isWalkable(sx, sz)) continue;
-      const q = [s]; comp[s] = id;
-      while (q.length) { const i = q.pop(), x = i % g.w, z = (i / g.w) | 0;
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const ni = nz * g.w + nx; if (comp[ni] >= 0 || !g.canStep(x, z, nx, nz)) continue; comp[ni] = id; q.push(ni); } }
-      id++;
-    }
-    return comp;
-  }
-  /** 칸 상태를 잠깐 바꿔(fn) 덩어리를 새로 세고 되돌림(grid.version·캐시는 그대로) */
-  probeComps(cells, free = [], elev = null) {
+  /** 걸어서 이어진 덩어리 번호(캐시·grid.version을 건드리지 않고 지금 칸 상태로 새로 셈). comps()와 같은 규칙. 물을 때 세므로 칸을 바꾼 채로 물어야 함 */
+  floodComps() { return new CompLabels(this.grid); }
+  /** 칸 상태를 잠깐 바꿔 pts 점들의 덩어리를 새로 세고 되돌림(grid.version·캐시는 그대로). 돌려주는 것은 pts만 답하는 at(x, z) */
+  probeComps(cells, free = [], elev = null, pts = []) {
     const g = this.grid, saved = [], P = "__probe"; g.occupants.set(P, { kind: "module", walkable: false, surface: 0 });
     for (const [x, z] of free) { const c = g.get(x, z); saved.push([c, c.occupiedId, c.elevation]); c.occupiedId = null; }
     for (const [x, z] of cells) { const c = g.get(x, z); saved.push([c, c.occupiedId, c.elevation]); if (elev === null) c.occupiedId = P; else c.elevation = elev; }
-    const comp = this.floodComps();
-    for (let i = saved.length - 1; i >= 0; i--) { const [c, id, e] = saved[i]; c.occupiedId = id; c.elevation = e; }
-    g.occupants.delete(P); return comp;
+    const comp = this.floodComps(), vals = new Map();
+    try { for (const [x, z] of pts) if (g.inBounds(x, z)) vals.set(g.index(x, z), comp.at(x, z)); }
+    finally { for (let i = saved.length - 1; i >= 0; i--) { const [c, id, e] = saved[i]; c.occupiedId = id; c.elevation = e; } g.occupants.delete(P); }
+    return new FrozenComps(g, vals);
   }
   /** 걸을 수 없는 것을 cells에 놓아도(free 칸은 비운 채로) 둘레 8칸의 걸을 수 있는 칸끼리 이어짐이 그대로인가(길 끊김 검사) */
   /** 빠른 길: excl 칸을 빼고도 starts 칸들이 둘레 R칸 창 안에서 서로 걸어서 이어지나(이어지면 섬 전체 이어짐도 그대로라 덩어리를 새로 셀 필요 없음) */
   localLinked(excl, starts, R = 3) {
     if (starts.length < 2) return true;
-    const g = this.grid, W = g.w, xs = [...excl].map(i => i % W), zs = [...excl].map(i => (i / W) | 0);
+    const g = this.grid, xs = [...excl].map(i => g.xOf(i)), zs = [...excl].map(i => g.zOf(i));
     const x0 = Math.min(...xs) - R, x1 = Math.max(...xs) + R, z0 = Math.min(...zs) - R, z1 = Math.max(...zs) + R;
     const seen = new Set([starts[0]]), q = [starts[0]];
-    while (q.length) { const i = q.pop(), x = i % W, z = (i / W) | 0;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz, ni = nz * W + nx;
-        if (nx < x0 || nx > x1 || nz < z0 || nz > z1 || !g.inBounds(nx, nz) || seen.has(ni) || excl.has(ni) || !g.canStep(x, z, nx, nz)) continue; seen.add(ni); q.push(ni); } }
+    while (q.length) { const i = q.pop(), x = g.xOf(i), z = g.zOf(i);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz;
+        if (nx < x0 || nx > x1 || nz < z0 || nz > z1 || !g.inBounds(nx, nz)) continue; const ni = g.index(nx, nz);
+        if (seen.has(ni) || excl.has(ni) || !g.canStep(x, z, nx, nz)) continue; seen.add(ni); q.push(ni); } }
     return starts.every(i => seen.has(i));
   }
   keepsLinks(cells, free = []) {
-    const g = this.grid, W = g.w, own = new Set(cells.map(([x, z]) => z * W + x)), near = [];
+    const g = this.grid, own = new Set(cells.map(([x, z]) => g.index(x, z)));
     if (!free.length) {                                                            // 나무·바위 하나: 둘레 걸을 수 있는 칸끼리 가까이에서 이어지면 바로 통과(붓·고스트가 매번 섬 전체를 세지 않게)
-      const nb = []; for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz, i = nz * W + nx; if (g.inBounds(nx, nz) && !own.has(i) && g.isWalkable(nx, nz)) nb.push(i); }
+      const nb = []; for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && !own.has(g.index(nx, nz)) && g.isWalkable(nx, nz)) nb.push(g.index(nx, nz)); }
       if (this.localLinked(own, nb)) return true;
     }
-    const before = free.length ? this.probeComps([], free) : this.comps();
+    const cand = [], seenC = new Set();
     for (const [x, z] of cells) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-      const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const i = nz * W + nx; if (own.has(i) || before[i] < 0) continue; near.push(i);
+      const nx = x + dx, nz = z + dz; if (!g.inBounds(nx, nz)) continue; const i = g.index(nx, nz); if (own.has(i) || seenC.has(i)) continue; seenC.add(i); cand.push([nx, nz]);
     }
+    const before = free.length ? this.probeComps([], free, null, cand) : this.comps(), near = cand.filter(([x, z]) => before.at(x, z) >= 0);
     if (near.length < 2) return true;
-    const after = this.probeComps(cells, free), pair = new Map();
-    for (const i of near) { const b = before[i], a = after[i]; if (!pair.has(b)) pair.set(b, a); else if (pair.get(b) !== a) return false; }
+    const after = this.probeComps(cells, free, null, near), pair = new Map();
+    for (const [x, z] of near) { const b = before.at(x, z), a = after.at(x, z); if (!pair.has(b)) pair.set(b, a); else if (pair.get(b) !== a) return false; }
     return true;
   }
   /** 파기: 다 지은 건물 문 → 공식은행 문 이어짐이 끊기지 않나(은행이 없으면 검사 안 함) */
@@ -1487,18 +1477,18 @@ export class World {
   /** 파기(땅 → 물) 길 검사: 다 지은 건물 문 → 공식은행 문 이어짐, 그리고 밖에 있는 갈매미(헤엄 중이면 올라올 칸)가 물에 둘러싸여 갇히지 않는가.
    *  기준 칸은 공식은행 문(은행이 없는 예전 섬은 섬 가운데). 문제가 있으면 까닭(한국어), 없으면 "" */
   digLinkProblem(x, z, e) {
-    const g = this.grid, W = g.w;
+    const g = this.grid, B = g.box;
     { const nb = [];                                                               // 빠른 길: 이 칸으로 드나들던 이웃끼리 가까이에서 이어지면 아무 길도 안 끊김
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && g.canStep(x, z, nx, nz)) nb.push(nz * W + nx); }
-      if (this.localLinked(new Set([z * W + x]), nb)) return ""; }
-    const bank = this.bankB(); let ref = bank ? bank.door : { x: Math.floor(this.center?.x ?? g.w / 2), z: Math.floor(this.center?.z ?? g.h / 2) };
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (g.inBounds(nx, nz) && g.canStep(x, z, nx, nz)) nb.push(g.index(nx, nz)); }
+      if (this.localLinked(new Set([g.index(x, z)]), nb)) return ""; }
+    const bank = this.bankB(); let ref = bank ? bank.door : { x: Math.floor(this.center?.x ?? (B.x0 + B.x1) / 2), z: Math.floor(this.center?.z ?? (B.z0 + B.z1) / 2) };
     if (ref.x === x && ref.z === z) { const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => g.inBounds(x + dx, z + dz) && g.canStep(x, z, x + dx, z + dz)); if (!n) return ""; ref = { x: x + n[0], z: z + n[1] }; }   // 은행 없는 섬의 가운데 칸을 파면 이웃 칸을 기준으로
-    const before = this.comps(), at = p => g.inBounds(p.x, p.z) ? before[p.z * W + p.x] : -1, home = at(ref); if (home < 0) return "";
+    const before = this.comps(), at = p => before.at(p.x, p.z), home = at(ref); if (home < 0) return "";
     const doors = bank ? [...this.buildings.values()].filter(b => b !== bank && this.isDone(b) && !BUILDINGS[b.defId].bridge && at(b.door) === home).map(b => b.door) : [];
     const gulls = this.units.filter(u => !u.insideBuildingId && u.state !== UnitState.Held && !u.sailing)
       .map(u => u.swimming && u.swim ? { x: u.swim.sx, z: u.swim.sz } : { x: Math.floor(u.x), z: Math.floor(u.z) }).filter(p => !(p.x === x && p.z === z) && at(p) === home);
     if (!doors.length && !gulls.length) return "";
-    const after = this.probeComps([[x, z]], [], e), aid = p => after[p.z * W + p.x], h = aid(ref);
+    const after = this.probeComps([[x, z]], [], e, [ref, ...doors, ...gulls].map(p => [p.x, p.z])), aid = p => after.at(p.x, p.z), h = aid(ref);
     if (!doors.every(d => aid(d) === h)) return "길이 끊겨요(다리를 먼저 놓아요)";
     if (!gulls.every(p => aid(p) === h)) return "갈매미가 갇혀요(물로 둘러싸지 말아 주세요)";
     return "";
@@ -2119,7 +2109,8 @@ export class World {
   /** savedAt: 저장하는 실제 시각(ms). 월드는 기기 시계를 모르므로 화면이 넣어 줌. */
   serialize(savedAt = null) {
     this.syncGrow();
-    return { version: 2, ownership: this.ownershipPending ? 0 : 1, seed: this.seed ?? null, nextId: this.nextId, grid: this.grid.serialize(), modules: this.modules,
+    const chunked = this.grid instanceof ChunkGrid;                              // 넓은 섬: 씨앗 + 시작 섬 기준 + 바뀐 칸만(saveDelta.js, version 3)
+    return { version: chunked ? 3 : 2, ownership: this.ownershipPending ? 0 : 1, seed: this.seed ?? null, nextId: this.nextId, grid: chunked ? SD.gridToSave(this.grid) : this.grid.serialize(), modules: this.modules,
       spots: this.spots.map(({ x, z, dir, dock }) => dock ? { x, z, dir, dock } : { x, z, dir }), zones: this.zones,
       decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
@@ -2131,9 +2122,15 @@ export class World {
       sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, ...(b.mates?.length ? { mates: b.mates } : {}), fee: b.fee || 0, ...(b.feeHeld ? { feeHeld: 1 } : {}), ...(b.feeTo ? { feeTo: b.feeTo } : {}), order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
+  /** 저장의 격자: version 3 = 바뀐 칸만(ChunkGrid) · 넓은 섬 예전 저장(192칸 격자 전체) = 그 격자를 시작 섬 기준으로 옮김 · 옛 작은 섬 = Grid 그대로 */
+  static gridFromSave(j) {
+    if (j.grid?.kind === "chunks") return SD.gridFromSave(j.grid);
+    if (j.wild && j.grid?.w === 192 && j.grid?.h === 192) return SD.migrateGrid(j.seed ?? 7, j.grid);
+    return Grid.fromJSON(j.grid);
+  }
   static fromJSON(j, rnd = Math.random) {
-    if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
-    const w = new World(Grid.fromJSON(j.grid), j.modules, rnd, j);
+    if (!j || ![1, 2, 3].includes(j.version)) throw new Error("저장 형식이 달라요");
+    const w = new World(World.gridFromSave(j), j.modules, rnd, j);
     w.time = j.time || 0;
     if (j.firstSnowYear === undefined && w.snow > 0.02) w.firstSnowYear = "?";    // 예전 저장(첫눈 기록 없음)인데 눈이 쌓여 있으면 이번 겨울 첫눈은 지난 일
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);

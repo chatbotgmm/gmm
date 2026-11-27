@@ -14,7 +14,7 @@ const awake = u => { u.state = "Idle"; u.once = null; u.path = null; u.insideBui
 function perchSetup(seed = 3) {
   const w = fresh(seed), mini = w.units[0]; mini.name = "미니"; awake(mini);
   const g = w.grid; let spot = null;
-  for (let z = 2; z < g.h - 2 && !spot; z++) for (let x = 6; x < g.w - 6 && !spot; x++)
+  for (let z = g.box.z0 + 2; z < g.box.z1 - 2 && !spot; z++) for (let x = g.box.x0 + 6; x < g.box.x1 - 6 && !spot; x++)
     if ([0, 1, 2, -3].every(d => g.isWalkable(x + d, z) && !g.get(x + d, z).occupiedId)) spot = [x, z];
   const [x, z] = spot; mini.x = x + 0.5; mini.z = z + 0.5;
   w.modules = w.modules.filter(m => m.defId !== "beachRock");   // 섬에 원래 있던 바위는 빼고 시험 바위 하나만
@@ -52,7 +52,7 @@ test("길게 눌러 들어 옮기면 풀림: 💕 말풍선 · 주변 갈매미 
 test("내려놓기가 실패해 바위로 돌아오면 소동이 이어짐", () => {
   const { w, mini, rock } = perchSetup(), f = new Fuss(w, 5); f.start("perch", mini);
   w.pickUpUnit(mini); f.step(0.05);
-  const sea = (() => { for (let z = 0; z < w.grid.h; z++) for (let x = 0; x < w.grid.w; x++) if (w.grid.isWater(x, z) && !w.grid.isWalkable(x, z)) { let near = false; for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (w.grid.isWalkable(x + dx, z + dz)) near = true; if (!near) return [x, z]; } })();
+  const sea = (() => { for (let z = w.grid.box.z0; z < w.grid.box.z1; z++) for (let x = w.grid.box.x0; x < w.grid.box.x1; x++) if (w.grid.isWater(x, z) && !w.grid.isWalkable(x, z)) { let near = false; for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (w.grid.isWalkable(x + dx, z + dz)) near = true; if (!near) return [x, z]; } })();
   const r = w.dropUnit(mini, ...sea); assert.equal(r.ok, false);
   f.step(0.05); assert.equal(f.of(mini), "perch"); assert.equal(mini.x, rock[0] + 0.5);
 });
