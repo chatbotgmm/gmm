@@ -1000,6 +1000,8 @@ export class World {
 
   // ---- 저장고(겨울 대비): 은행이 남는 음식을 사서 쌓아 두고, 배고픈 갈매미에게 시세대로 팔거나(돈 없고 아주 배고프면) 나눠 줌
   granaryB() { for (const b of this.buildings.values()) if (BUILDINGS[b.defId].storehouse && this.isDone(b)) return b; return null; }
+  /** 갈매미 AI: 저장고에 음식을 팔러 가도 될까. 중앙은행이 켜진 섬은 금고 − BUY_KEEP × P로 1개(GRANARY_BUY)라도 살 수 있을 때만(못 사는데 가면 0개 팔고 문 앞에서 또 가기를 되풀이: MON-5 검토 60일 찍지 않음 씨앗 11·13·17에서 stockFood 호출 약 7만 번 중 99.9%가 0개) */
+  granaryCanBuy() { return !this.monOn() || this.bank.vault - this.vaultKeep() >= E.GRANARY_BUY; }
   /** 농부·어부: 먹을 것 FOOD_KEEP+2개를 남기고 나머지를 저장고에 팖(1개 🪙GRANARY_BUY, 중앙은행이 켜진 섬은 금고에서·꺼진 예전 규칙은 새로 찍음) */
   stockFood(u) {
     let n = Math.min(E.meals(u) - (E.FOOD_KEEP + 2), E.GRANARY_MAX - this.granary); if (this.monOn()) n = Math.min(n, Math.floor(Math.max(0, this.bank.vault - this.vaultKeep()) / E.GRANARY_BUY));   // 중앙은행: 금고 돈으로 삼(금고 − BUY_KEEP × P 만큼)

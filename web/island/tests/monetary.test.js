@@ -116,6 +116,8 @@ test("저절로 나가는 돈(축하금·창업 자금·저장고·소지품·�
   mini.stash = { bottle: 2 }; assert.equal(w.stashCanSell(mini), false, "못 사는 날은 팔러 가지 않음(헛걸음 되풀이 방지)");
   assert.equal(w.sellStash(mini).n, 0, "소지품도 안 삼(가방에 남음)"); assert.deepEqual(mini.stash, { bottle: 2 });
   w.bank.vault = keep + 100; assert.equal(w.stashCanSell(mini), true, "금고가 차면 다시 팖"); w.bank.vault = keep;
+  w.bank.vault = keep + E.GRANARY_BUY - 1; assert.equal(w.granaryCanBuy(), false, "저장고 음식 1개도 못 사면 팔러 가지 않음(문 앞 헛걸음 되풀이 방지)");
+  w.bank.vault = keep + E.GRANARY_BUY; assert.equal(w.granaryCanBuy(), true); w.bank.vault = keep;
   w.bank.vault = 0; const per = MON.scaleP(MON.GIFT_PER, 1.5); w.bank.vault = per * w.units.length;
   assert.equal(w.giftAll(), per * w.units.length, "나눠주기는 남길 돈 없이 금고를 다 써도 됨"); assert.equal(w.bank.vault, 0);
 });

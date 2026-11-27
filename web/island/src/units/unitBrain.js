@@ -686,7 +686,7 @@ function chooseNext(u, world, rnd) {
       if (E.total(u.goods) > 0 && (world.bankCanBuy?.(u) ?? true) && startActivity(u, "deposit", world, rnd)) return;   // 오늘 한도로 못 파는 가공품만 있으면 은행에 가지 않음(헛걸음 없음, 다음 날 팖)
       if (E.total(u.raw) >= 3 && startActivity(u, "process", world, rnd)) return;
     }
-    if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
+    if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && (world.granaryCanBuy?.() ?? true) && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에(은행이 못 사는 날은 안 감)
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
     if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && (world.stashCanSell?.(u) ?? true) && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀). 은행이 못 사는 날은 안 감(헛걸음 되풀이 방지)
