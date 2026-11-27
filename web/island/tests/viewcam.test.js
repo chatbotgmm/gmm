@@ -93,3 +93,14 @@ test("🏝 전체 보기·따라가기 그만: 가까운 비스듬히는 55 m·5
   assert.equal(showOverviewBtn({ ...base, len: 12, homeLen: viewHomeLen("near", true) }), true, "가까이 보면 보임");
   assert.equal(showOverviewBtn({ ...base, len: 30, homeLen: viewHomeLen("free", true) }), true, "자유 회전은 예전 기준(처음 시점 83.8 m)");
 });
+
+test("건설 모드를 끝내며 되돌아가는 중에 돌리면: 끝난 뒤 순간이동하지 않고 부드럽게 돌아감", () => {
+  const camera = { position: vec(0, 70, 50), fov: 50, lookAt() {} }, controls = { target: vec(0, 0, 4), enableRotate: true, minDistance: 1.5, maxDistance: 110 };
+  const quarterCam = { locked: false, tween: null };
+  const v = new ViewCam({ camera, controls, quarterCam, mode: "near", portrait: () => true, quick: () => false }); v.init(); v.tick(0);
+  quarterCam.tween = {}; assert.ok(v.turn(1)); v.tick(16); assert.equal(v.tw, null);   // 쿼터뷰 되돌림이 잡고 있는 동안은 손대지 않음
+  quarterCam.tween = null; v.tick(32);
+  const yaw = v.state().yaw; assert.ok(yaw < 45, `한 프레임 만에 90°로 튀지 않음(${yaw})`); assert.ok(v.tw);
+  for (let t = 48; t < 1000; t += 16) v.tick(t);
+  assert.ok(near(v.state().yaw, 90, 0.01));
+});

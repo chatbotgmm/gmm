@@ -119,7 +119,8 @@ export class ViewCam {
     if (this.quarterCam?.locked || this.quarterCam?.tween) { this.tw = null; return; }
     if (this.tw) { this.step(dt); return; }
     if (!this.locked) return;
-    const o = this.orbit(), pitch = nearPitch(o.r, this.portrait());                 // 확대·축소에 따라 각도를 거리 곡선에 맞춤, 방향은 90° 자리 그대로
-    if (Math.abs(quarterDelta(o.yaw, this.yaw)) > 1e-4 || Math.abs(o.pitch - pitch) > 1e-4) this.place(o.r, this.yaw, pitch);
+    const o = this.orbit(), pitch = nearPitch(o.r, this.portrait()), dy = Math.abs(quarterDelta(o.yaw, this.yaw));   // 확대·축소에 따라 각도를 거리 곡선에 맞춤, 방향은 90° 자리 그대로
+    if (dy > 0.05) { this.go(o, this.yaw, pitch, null, NEAR_VIEW.turnSec); return; }   // 크게 어긋남(건설 모드를 끝내며 되돌아가는 중에 ⟲ ⟳ 누름 등): 순간이동 말고 부드럽게
+    if (dy > 1e-4 || Math.abs(o.pitch - pitch) > 1e-4) this.place(o.r, this.yaw, pitch);
   }
 }
