@@ -86,7 +86,7 @@ test("오는 순서: 건축가 → 목수 → 야행성(불씨) → 상인, 그�
   assert.equal(w2.summon().name, "자이언트"); assert.equal(w2.summon(), null); assert.match(w2.summonInfo().reason, /집이 모자라요/);
   // 순수 계산: 난수를 쓰지 않음
   const pure = P.summonInfoFor([{ name: "기본", job: "builder" }], [{ defId: "house" }, { defId: "cottage" }, { defId: "giantHouse", owner: "u9" }, { defId: "market" }], true);
-  assert.deepEqual([pure.houses, pure.gulls, pure.free, pure.next, pure.needGiantHouse], [2, 1, 1, "목수", true], "주인 있는 자이언트의 집·시장은 자리가 아님");
+  assert.deepEqual([pure.houses, pure.homes, pure.gulls, pure.free, pure.next, pure.needGiantHouse], [3, 2, 1, 2, "목수", true], "주인 있는 자이언트의 집·시장은 자리가 아님 · 2층집은 두 자리");
 });
 
 test("철거·예전 저장: 집이 갈매미보다 적어져도 갈매미는 그대로, 새 소환만 막힘(집이 갈매미보다 많아지면 다시 됨)", () => {

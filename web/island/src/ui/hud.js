@@ -10,6 +10,7 @@ import { QUALITY, ORDER, QUALITY_NOTE } from "../render/quality.js";
 import { RANKS } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
+import { residentsText, residentsOf } from "../world/homes.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
 import { MEDALS, MEDAL_GIFTS, fishMedal, medalLine } from "../world/medals.js";
 import { newsDay } from "../world/news.js";
@@ -288,8 +289,7 @@ export class Hud {
     c.dataset.kind = kind; c.setAttribute("aria-label", BUILDINGS[b.defId].name);
     const go = c.querySelector(".go"); go.hidden = kind !== "house"; c.querySelector(".hx").onclick = () => { c.hidden = true; };
     if (kind === "house") {
-      const owner = w.units.find(u => u.unitId === b.owner);
-      c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 아늑함 ${Fu.comfort(b)}`;
+      c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${residentsText(b, w.units)} · 🛋 아늑함 ${Fu.comfort(b)}`;   // 2층집은 「주민 2/2 · 주인 A · 같이 사는 B」(homes.js)
       go.onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); }; c.hidden = false; return;
     }
     const card = this.bldCardOf(b, kind); c.querySelector("b").textContent = card.title; c.querySelector("span").textContent = card.sub;
@@ -456,11 +456,12 @@ export class Hud {
     } else if (this.app === "decor") {
       const houses = [...w.buildings.values()].filter(b => BUILDINGS[b.defId].house && w.isDone(b));
       const body = document.getElementById("decorBody");
-      if (this.decorKey === houses.map(b => b.id + ":" + Fu.comfort(b) + ":" + (b.owner || "")).join(",")) return;   // 바뀐 게 없으면 다시 안 그림(버튼이 눌리게)
-      this.decorKey = houses.map(b => b.id + ":" + Fu.comfort(b) + ":" + (b.owner || "")).join(",");
+      const dk = houses.map(b => b.id + ":" + Fu.comfort(b) + ":" + residentsOf(b).join("+")).join(",");
+      if (this.decorKey === dk) return;   // 바뀐 게 없으면 다시 안 그림(버튼이 눌리게)
+      this.decorKey = dk;
       body.innerHTML = decorHeadHtml(houses.map(b => { const o = w.units.find(u => u.unitId === b.owner); return { name: `${BUILDINGS[b.defId].name}${o ? `(${o.name})` : ""}`, comfort: Fu.comfort(b) }; }), { more: (k, t, h, o) => this.more(k, t, h, o) });
-      for (const b of houses) { const owner = w.units.find(u => u.unitId === b.owner), row = el("div", "row");
-        row.append(el("span", "nm", `🏠 ${BUILDINGS[b.defId].name}`), el("span", "act", `${owner ? `주인 ${owner.name}` : "주인 없음"} · 🛋 ${Fu.comfort(b)}`));
+      for (const b of houses) { const row = el("div", "row");
+        row.append(el("span", "nm", `🏠 ${BUILDINGS[b.defId].name}`), el("span", "act", `${residentsText(b, w.units)} · 🛋 ${Fu.comfort(b)}`));
         row.onclick = () => { this.closePhone(); this.onDecorate?.(b); this.coach?.moment("room"); }; body.appendChild(row); }
     } else if (this.app === "town") {
       const html = townAppHtml(w, { today: this.today?.() || new Date(), more: (k, t, h, o) => this.more(k, t, h, o) }), body = document.getElementById("townBody");

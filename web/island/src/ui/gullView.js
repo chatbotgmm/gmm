@@ -8,6 +8,9 @@
 //  · stampShopHtml · stampBuyText: 📋 도장 가게(🎁 귀한 선물 8 · 🛋 한정 가구 4)와 산 뒤 안내 글
 import { UnitState } from "../data/types.js";
 import { BUILDINGS, FURNITURE, PERSONA, CLOTHES, CLOTHES_ORDER } from "../data/catalog.js";
+import { residentsOf } from "../world/homes.js";
+/** 둘이 사는 집이면 같이 사는 갈매미 이름(" · 💞 같이 사는 A") */
+const housemate = (u, b, world) => { const o = residentsOf(b).filter(id => id !== u.unitId).map(id => world.units?.find(x => x.unitId === id)?.name).filter(Boolean); return o.length ? ` · 같이 사는 ${o.join(", ")}` : ""; };
 import { SICK, secsLeft } from "../world/health.js";
 import { bodyState, COLD_AT, HOT_AT } from "../world/climate.js";
 import { GIFT_CAT_NAME, giftables, pocketCount, giftTier, bondStage, giftDef, STAMP_GIFT_BOND } from "../world/bond.js";
@@ -71,7 +74,7 @@ export function gullChips(u, world) {
   const load = ITEMS_ORDER.filter(k => (u.load?.[k] || 0) > 0).map(k => `${ITEM_ICON[k]}${u.load[k]}`).join(" ");
   return {
     coin: eco ? `🪙 ${Math.floor(u.coins || 0)}` : "",
-    home: !eco ? "" : loan ? `🏠 집값 ${loan.left} 남음` : homeB ? `🏠 ${BUILDINGS[homeB.defId]?.name ?? "집"}` : "🏠 집 없음",
+    home: !eco ? "" : loan ? `🏠 집값 ${loan.left} 남음` : homeB ? `🏠 ${BUILDINGS[homeB.defId]?.name ?? "집"}${housemate(u, homeB, world)}` : "🏠 집 없음",
     wage: (u.wageOwed || 0) > 0 ? `💸 밀린 품삯 ${u.wageOwed}` : "",
     wear: wear ? `${wear} 입음` : "",
     sick: sd ? `${sd.icon} ${sd.name}${u.sick.med ? " · 💊" : ""} · ${fmtLeft(sickLeftOf(u, world))} 남음` : "",
