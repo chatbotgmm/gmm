@@ -30,7 +30,7 @@ const KEY_KEEP_LIST = [
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
 const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"],
   ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"], ["#viewL", "Z"], ["#viewR", "X"], ["#gridBtn", "G"]];
-const KEY_OVERLAYS = ["ask", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
+const KEY_OVERLAYS = ["ask", "cloudAsk", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
 const KEY_CONTROL_SEL = "button, a[href], summary, select, [role=button]";
 
 /** main.js가 한 번 부름. hud·tools·roomView는 읽기만 하고, 동작은 기존 버튼·메서드를 그대로 부름 */
@@ -80,6 +80,7 @@ export function installKeys({ hud, tools, roomView }) {
   const escStep = ov => {
     if (!tip.hidden) { hideTip(); return true; }                                // ② 툴팁
     if (ov?.id === "ask") { hud.askCancel?.(); return true; }                    // ③ 확인창 = 취소
+    if (ov?.id === "cloudAsk") { hud.cloudAskCancel?.(); return true; }         // ③ 계정 충돌 창 = 나중에(cloudView.js)
     if (ov?.id === "letter") { const c = $("letterClose"); if (c?.onclick) c.click(); else ov.hidden = true; return true; }   // ③ 편지
     if (ov?.id === "phone") { hud.phoneBackStep(); return true; }               // ④ 앱 페이지 → 폰 홈(메뉴에서 왔으면 메뉴) → ⑤ 닫기
     if (roomView?.isOpen) return false;                                         // ⑦·① 방: 고른 가구 취소 → 나가기(room.js)
