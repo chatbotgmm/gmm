@@ -9,14 +9,15 @@ import * as J from "../src/world/jobs.js";
 const village = (seed, names) => { const w = World.create(seed, seededRandom(seed * 31 + 1), { wild: true, firstGull: true }); for (const n of names) w.addUnitByName(n); w.isNight = false; return w; };
 const WORK = ["GoChop", "Chop", "GoMine", "Mine", "GoFish", "Fish", "GoBuild", "Build", "GoFarm", "Farm"];
 
-test("쉬기 비중: 기력 50 이상이면 0(안 고름), 그 아래로 내려갈수록 커짐 · 일 사이 숨 고르기는 0.3~1초", () => {
+test("쉬기 비중: 기력 50 이상이면 0(안 고름), 그 아래로 내려갈수록 커짐 · 일 사이 숨 고르기는 0.3~1초 · 쉬기는 서서 2~5초·벤치 6~12초", () => {
   const u = { needs: { energy: 100, social: 50, fun: 50 } };
   for (const e of [100, 80, 50]) { u.needs.energy = e; assert.equal(M.needMult(u, "rest"), 0, `기력 ${e}: 쉬기 안 고름`); }
   u.needs.energy = 49; const a = M.needMult(u, "rest"); u.needs.energy = 30; const b = M.needMult(u, "rest");
   assert.ok(a > 0 && b > a, "피곤할수록 쉬기를 더 고름");
   u.needs.energy = 100; u.needs.social = 100; assert.ok(M.needMult(u, "enter") < 1, "기력·친구 욕구가 찼으면 집 구경도 덜 감");
   const rnd = seededRandom(5); for (let i = 0; i < 200; i++) { const s = M.pauseSecs(rnd); assert.ok(s >= 0.3 && s <= 1, `숨 고르기 ${s}`); }
-  assert.ok(M.TIRED < M.REST_BELOW && M.REST_BELOW < M.REST_UNTIL);
+  assert.ok(M.TIRED < M.REST_BELOW); assert.equal(M.REST_UNTIL, undefined, "기력이 찰 때까지 쉬기(예전 80)는 없앰");
+  for (let i = 0; i < 200; i++) { const a = M.breathSecs(rnd), b = M.benchSecs(rnd); assert.ok(a >= 2 && a <= 5 && b >= 6 && b <= 12, `숨 돌리기 ${a} · 벤치 ${b}`); }
 });
 
 test("일손 돕기 목록: 제 일거리가 없을 때 할 일 · 자재가 넉넉하면(창고 + 가방 30) 그 일은 돕지 않음", () => {
@@ -52,7 +53,7 @@ test("안 피곤하면 쉬지 않음: 지을 것 없는 초반 마을(건축가�
   }
 });
 
-test("피곤하면 쉬고, 기력이 차면 일어남: 기력 25 → 쉬기 → 80쯤에서 다시 움직임(벤치 없으면 서서)", () => {
+test("피곤하면 잠깐 숨 돌림: 기력 25 → 바로 서서 쉬고 2~5초 뒤 다시 움직임(기력은 거의 안 참) · 그 뒤 기력이 20~30에 머물러도 쉬기만 하지 않음", () => {
   const w = village(7, []), u = w.units[0];
   u.needs.energy = 25; u.full = 90; u.state = "Idle"; u.timer = 0; u.activity = null;
   let t = 0, started = -1, ended = -1, eEnd = 0;
@@ -62,10 +63,18 @@ test("피곤하면 쉬고, 기력이 차면 일어남: 기력 25 → 쉬기 → 
     else if (started >= 0 && u.activity !== "rest") { ended = t; eEnd = u.needs.energy; }
   }
   assert.ok(started >= 0 && started < 1, `피곤하면 바로 쉼(${started})`);
-  assert.ok(ended > 0, "쉬다가 일어남"); assert.ok(eEnd >= M.REST_UNTIL - 2, `기력이 찬 뒤 일어남(${eEnd.toFixed(1)})`);
-  assert.ok(ended - started < 35, `쉬는 시간 ${(ended - started).toFixed(1)}초(끝없이 쉬지 않음)`);
-  let again = false; for (let k = 0; k < 30 * 30; k++) { u.full = 90; w.update(1 / 30); if (u.activity === "rest") again = true; }
-  assert.equal(again, false, "기력이 찬 뒤 30초 동안은 다시 쉬지 않음");
+  assert.ok(ended > 0, "쉬다가 일어남"); assert.ok(ended - started >= 1.9 && ended - started <= 5.1, `쉬는 시간 ${(ended - started).toFixed(1)}초(2~5초)`);
+  assert.ok(eEnd - 25 <= (0.6 + M.REST_GAIN) * 5 + 0.1, `숨 돌리는 동안 기력 +${(eEnd - 25).toFixed(1)}(초당 ${0.6 + M.REST_GAIN} × 5초 이하)`);
+  let rest = 0, n = 0; for (let k = 0; k < 120 * 30; k++) { u.full = 90; u.needs.energy = Math.min(29, Math.max(21, u.needs.energy)); w.update(1 / 30); n++; if (u.activity === "rest" || u.state === "Sit") rest++; }
+  assert.ok(rest / n < 0.5, `기력 21~29에 붙잡아 둔 2분 동안 쉰 시간 ${(100 * rest / n).toFixed(0)}% < 50%(나머지는 일·돌아다님)`);
+});
+
+test("숨 돌리기는 BREATH_EVERY(20)초에 한 번: 기력 30~50(쉬기 비중이 있는 때)에도 방금 숨 돌렸으면 20초 동안 쉬기를 안 고름 → 20초가 지나면 다시 고를 수 있음", () => {
+  const w = village(7, []), u = w.units[0];
+  const restIn = (secs, t0) => { let first = -1; for (let k = 0; k < secs * 30 && first < 0; k++) { u.full = 90; u.needs.energy = 35; w.update(1 / 30); if (u.activity === "rest" || u.state === "GoSit" || u.state === "Sit") first = (w.time || 0) - t0; } return first; };
+  u.state = "Idle"; u.timer = 0; u.activity = null; u.breathAt = w.time || 0; const t0 = w.time || 0;
+  const first = restIn(60, t0);
+  assert.ok(first >= M.BREATH_EVERY - 0.1, `방금 숨 돌린 뒤 다시 쉬기까지 ${first.toFixed(1)}초(20초 넘게)`);
 });
 
 test("잠은 기력으로: 안 피곤하면 아침형도 밤에 자러 가지 않고 깨어 있음(야행성도)", () => {
@@ -100,7 +109,7 @@ test("피곤하면(기력 30 아래) 동네 고치기를 새로 시작하지 않
   const u = w.units.find(o => o.name === "불씨"); u.home = h.id; h.owner = u.unitId; u.inv.stone = 0; w.res.stone = 10; u.coins = 0;
   w.updateRoads(); assert.ok(u.sat < 75, `만족도 ${u.sat}: 고칠 마음이 있음`);
   const trial = energy => {                                                   // 한 번 고르게 해 보고 무엇을 시작했는지
-    setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null;
+    setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null; u.breathAt = null;   // 매번 처음 피곤해진 셈(숨 돌리기는 BREATH_EVERY초에 한 번)
     for (let k = 0; k < 90 && u.state === "Idle" && u.activity !== "rest"; k++) w.update(1 / 30);
     return u.state === "GoImprove" || u.state === "Improve" ? "improve" : u.activity === "rest" || u.state === "GoSit" ? "rest" : u.state;
   };
@@ -116,7 +125,7 @@ test("피곤하면(기력 30 아래) 심부름을 새로 시작하지 않고 먼
   const mq = spot("market", c.x + 2, c.z + 14); w.placeBuilding("market", mq[0], mq[1], 0);
   const u = w.units.find(o => o.name === "황금"); assert.equal(u.job, "merchant"); assert.ok(w.economy && w.bankB());
   const trial = (energy, bag) => {                                            // 한 번 고르게 해 보고 무엇을 시작했는지
-    setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null; u.sat = 100;
+    setIdle(u, w.rnd, w, 0); u.needs.energy = energy; u.full = 90; u.activity = null; u.sat = 100; u.breathAt = null;
     u.goods = { wood: 0, stone: 0, iron: 0 }; u.raw = { wood: 0, stone: 0, iron: 0 }; Object.assign(bag === "goods" ? u.goods : u.raw, { wood: 5 });
     for (let k = 0; k < 90 && u.state === "Idle" && u.activity !== "rest"; k++) w.update(1 / 30);
     return u.activity === "rest" || u.state === "GoSit" ? "rest" : u.state === "Sleep" || u.state === "GoToBuilding" && u.sleepy ? "sleep" : u.state;   // 집 없는 상인은 빈 첫 집으로 자러 감

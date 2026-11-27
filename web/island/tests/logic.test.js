@@ -808,13 +808,16 @@ test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고�
   assert.ok(yard, "마당 고르기"); assert.equal(IM.yardFlat(w2, h2), true, "마당이 문 높이로 평평해짐");
 });
 
-test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리만), 기력이 차오르고, 시간이 지나면 일어남", () => {
+test("벤치에 앉기: 쉴 때 가까운 빈 벤치에 가서 앉고(한 마리만), 앉아 있는 동안 기력이 조금 차고(초당 0.6 + BENCH_GAIN), 6~12초 뒤 일어남", async () => {
+  const M = await import("../src/units/mind.js");
   const w = World.create(7, seededRandom(8), { wild: true, firstGull: true }); w.instantBuild = true;
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 20; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q = spot("bench", c.x + 3, c.z + 6), b = w.placeBuilding("bench", q[0], q[1], 0).building, u = w.units[0];
-  let sat = false, stood = false, e0 = null; u.needs.energy = 25;                 // 쉬기는 피곤할 때만(기력 50 아래) 고름 → 피곤한 갈매미로 시험
-  for (let t = 0; t < 900 && !stood; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sit") { if (!sat) e0 = u.needs.energy; sat = true; assert.equal(b.sitter, u.unitId); } else if (sat) stood = true; }
-  assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null); assert.ok(u.needs.energy > e0 + 20, "앉아 있는 동안 기력이 참");
+  let sat = false, stood = false, e0 = null, sitT = 0, e1 = null; u.needs.energy = 25;   // 쉬기는 피곤할 때만(기력 50 아래) 고름 → 피곤한 갈매미로 시험
+  for (let t = 0; t < 900 && !stood; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sit") { if (!sat) e0 = u.needs.energy; sat = true; sitT += 0.1; e1 = u.needs.energy; assert.equal(b.sitter, u.unitId); } else if (sat) stood = true; }
+  assert.ok(sat, "벤치에 앉음"); assert.ok(stood, "일어남"); assert.equal(b.sitter, null, "일어나면 자리 비움"); assert.ok(e0 !== null);
+  assert.ok(sitT >= 5.9 && sitT <= 12.2, `앉은 시간 ${sitT.toFixed(1)}초(6~12초)`);
+  assert.ok(Math.abs((e1 - e0) - (0.6 + M.BENCH_GAIN) * (sitT - 0.1)) < 0.2, `앉아 있는 동안 기력 +${(e1 - e0).toFixed(2)}(초당 ${0.6 + M.BENCH_GAIN})`);
 });
 
 test("밤·낮과 피로: 밤에 지친 아침형은 집에서 자다 기력이 차면 밤이어도 일어나고(야행성은 밤에 일함), 낮엔 지친 야행성이 잠, 일하면 피로가 쌓이고 쉬면 풀림", async () => {
@@ -825,8 +828,8 @@ test("밤·낮과 피로: 밤에 지친 아침형은 집에서 자다 기력이 
   let slept = false, woke = false, nightWork = 0;
   for (let t = 0; t < 900; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (u.insideBuildingId === h.id && u.insideAct === "sleep") slept = true; else if (slept && !u.insideBuildingId) woke = true; if (["GoMine", "Mine", "GoChop", "Chop", "Wander", "Visit"].includes(n.state)) nightWork++; }
   assert.ok(slept, "밤에 지친 아침형은 집에 들어가 잠"); assert.ok(woke, "기력이 차면 밤이어도 일어나 나옴"); assert.ok(nightWork > 100, `야행성은 밤에 돌아다니며 일함(${nightWork})`);
-  // 낮: 지친(기력 25 — 어긋난 시간 문턱 30 아래) 야행성은 바로 잠
-  w.isNight = false; n.needs.energy = 25; n.state = "Idle"; n.timer = 0; n.activity = null; let nSleep = 0; for (let t = 0; t < 30; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (n.state === "Sleep" || n.insideAct === "sleep" || n.state === "GoToBuilding" && n.sleepy) nSleep++; }
+  // 낮: 지친(기력 20 — 잠 문턱, 체질과 상관없이 20 이하) 야행성은 바로 잠
+  w.isNight = false; n.needs.energy = 19.5; n.state = "Idle"; n.timer = 0; n.activity = null; let nSleep = 0; for (let t = 0; t < 30; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (n.state === "Sleep" || n.insideAct === "sleep" || n.state === "GoToBuilding" && n.sleepy) nSleep++; }
   assert.ok(nSleep > 100, `야행성은 낮에 지치면 잠(${nSleep})`);
   // 피로: 일하면 기력이 줄고(피로↑) 벤치·잠은 채움
   const { tickNeeds } = await import("../src/units/mind.js"); const z = { needs: { energy: 80, social: 50, fun: 50 } };

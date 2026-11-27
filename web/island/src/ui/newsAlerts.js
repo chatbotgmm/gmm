@@ -32,11 +32,12 @@ export const ALERTS = {
   sick: { kind: "warn", tail: (a, w) => w.clinics?.().length ? " (🏥 병원에서 쉬면 빨리 나아요)" : " (🏥 병원이 있으면 빨리 나아요)", snd: "sneeze" },
   healed: { kind: "good" },
   doctor: { kind: "good" },
+  faint: { kind: "warn", tail: a => a.clinic ? " → 🏥 병원으로 옮겨요" : " — 그 자리에서 자요 (🏥 병원이 있으면 실려 가 쉬어요)" },
   upgradeStart: { kind: "info", tail: " (🪚 목수가 재료를 모아 지어요)", snd: "bell" },
   upgraded: { kind: "good", snd: "bell" },
 };
-/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수는 소식지만 */
-export const SILENT = ["fee", "clinicVisit"];
+/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수·쓰러져 실려 감은 소식지만(쓰러짐 알림 한 줄이 이미 알림) */
+export const SILENT = ["fee", "clinicVisit", "faintCarried"];
 
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */
 export function batchText(ev, list) {

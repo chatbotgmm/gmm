@@ -575,8 +575,8 @@ export class World {
   clinics() { return [...this.buildings.values()].filter(b => BUILDINGS[b.defId].clinic && this.isDone(b)); }
   /** 의원에 누워 있는 환자 수 */
   patientsIn(b) { return this.units.filter(o => o.insideBuildingId === b.id && o.sick).length; }
-  /** 빈 침대: 침대 수 − (누운 환자 + 가는 중인 환자) */
-  bedsFree(b, except = null) { return (BUILDINGS[b.defId].beds || 0) - this.units.filter(o => o !== except && o.sick && (o.insideBuildingId === b.id || (o.targetBuildingId === b.id && o.goFor === "sick"))).length; }
+  /** 빈 침대: 침대 수 − (누운 환자 + 가는 중인 환자 + 쓰러져 실려 온 갈매미) */
+  bedsFree(b, except = null) { return (BUILDINGS[b.defId].beds || 0) - this.units.filter(o => o !== except && (o.sick || o.carried) && (o.insideBuildingId === b.id || (o.sick && o.targetBuildingId === b.id && o.goFor === "sick"))).length; }
   /** 이 갈매미가 갈 의원: 빈 침대가 있는 것 중 가장 가까운 것(없으면 null) */
   clinicFor(u) {
     const d = b => Math.hypot(b.door.x + 0.5 - u.x, b.door.z + 0.5 - u.z);
@@ -628,6 +628,12 @@ export class World {
     const fee = Math.min(HL.CLINIC_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee, "returned", "clinic"); }
     const med = this.doctorIn(b) ? this.giveMedicine(u) : 0;
     this.emit("clinicVisit", { u, fee, medicine: med });
+  }
+  /** 쓰러져 병원에 실려 옴(unitBrain afterFaint): 진료비는 접수와 같은 규칙(가진 만큼, 없으면 무료) → 금고 · 감기도 앓고 당번 의사가 있으면 약. 낸 진료비 */
+  faintCarried(u, b) {
+    const fee = Math.min(HL.CLINIC_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee, "returned", "clinic"); }
+    const med = u.sick && this.doctorIn(b) ? this.giveMedicine(u) : -1;
+    this.emit("faintCarried", { u, b, fee, medicine: med }); return fee;
   }
   /** 약(당번 의사가 있을 때, 한 번 앓을 때 한 번): 값은 가진 만큼(없으면 무료) → 금고. 낸 값을 돌려줌(못 먹였으면 −1) */
   giveMedicine(u) {
@@ -1749,7 +1755,7 @@ export class World {
 
   // ---- 갈매미 들어 옮기기(드래그). 건물 안에 있는 갈매미는 보이지 않으므로 들 수 없다.
   pickUpUnit(u) {
-    if (!u || u.insideBuildingId || u.state === UnitState.Held || u.sailing) return false;   // 배 타는 중엔 못 집음
+    if (!u || u.insideBuildingId || u.state === UnitState.Held || u.sailing || u.state === UnitState.Faint) return false;   // 배 타는 중엔 못 집음 · 쓰러진 갈매미도(곧 병원으로 실려 가거나 그 자리에서 잠)
     uncommit(u, this); setIdle(u, this.rnd, this);                          // 하던 일(찜한 나무·낚시 자리·맡은 공사)을 내려놓음
     u.heldFrom = { x: u.x, z: u.z, y: u.y }; u.state = UnitState.Held; emote(u, BOND_STAGES[bondStage(u.bond)].held);   // 친해질수록 덜 놀람
     return true;

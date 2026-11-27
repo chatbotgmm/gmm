@@ -457,6 +457,8 @@ export class UnitViews {
       if (u.sailing) { if (!v.boat) { v.boat = boatModel(); v.g.add(v.boat); } v.boat.visible = true; v.boat.position.y = -0.12 + Math.sin(time * 2 + i) * 0.02; }   // 배 타는 중: 밑에 배
       else if (v.boat) v.boat.visible = false;
       let d = u.heading - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 10);   // 몸 돌리기 부드럽게
+      const lie = v.lie = (v.lie || 0) + ((u.state === "Faint" ? 1 : 0) - (v.lie || 0)) * Math.min(1, dt * 6);   // 쓰러짐: 옆으로 눕힘(제 몸 기준 z축) · 몸통을 조금 띄워 땅에 안 묻히게
+      g.rotation.z = lie * 1.45; if (lie > 0.01) g.position.y += lie * r * 0.6;
       const walking = !!u.path && u.pathIndex < u.path.length && u.state !== "Held";
       if (ch) {
         if (ch.clip && u.clip !== ch.clip) u.clip = ch.clip;                                       // 실제 동작 길이를 AI에 알려 줌

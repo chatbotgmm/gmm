@@ -70,6 +70,9 @@ const NEWS_MAKERS = {
   sick: ({ u, from, first, why }) => ({ icon: "🤧", text: first ? `${josa(u.name, "이", "가")} 감기에 걸렸어요. 따뜻한 데서 푹 쉬면 나아요` : `${josa(u.name, "이", "가")} ${from ? `${from.name}에게서 ` : why === "wet" ? "젖은 채 떨다가 " : why === "overwork" ? "추운 날 너무 오래 일하다 " : ""}감기${from ? "가 옮았어요" : "에 걸렸어요"}`, weight: first ? 3 : 2 }),
   healed: ({ u, doctor }) => ({ icon: "😊", text: `${josa(u.name, "이", "가")} 감기가 다 나았어요${doctor ? ` (당번 ${doctor} 선생님 덕분)` : ""}`, weight: 1 }),
   clinicVisit: ({ u, fee, medicine }) => ({ icon: "🏥", text: `${josa(u.name, "이", "가")} 병원에 누웠어요 · 진료비 🪙${fee}${medicine >= 0 ? ` · 약 🪙${medicine}` : ""}`, weight: 0 }),
+  // 쓰러짐(chrono.js FAINT_AT): 기력이 0 가까이 → 그 자리에서 쓰러짐 · 병원에 실려 감(알림 줄엔 쓰러짐 한 줄만)
+  faint: ({ u }) => ({ icon: "😵", text: `${josa(u.name, "이", "가")} 너무 지쳐 쓰러졌어요`, weight: 2 }),
+  faintCarried: ({ u, b, fee }) => ({ icon: "🚑", text: `${josa(u.name, "이", "가")} ${BUILDINGS[b?.defId]?.name || "병원"}에 실려 가 누웠어요 · 진료비 🪙${fee}`, weight: 1 }),
   doctor: ({ b, u, was }) => { const n = BUILDINGS[b?.defId]?.name || "병원"; return { icon: "🩺", text: u ? `${josa(u.name, "이", "가")} ${n} 당번 의사가 됐어요` : `${was} 선생님의 ${n} 당번이 끝났어요`, weight: u ? 2 : 0 }; },
   // 건물 업그레이드(World.startUpgrade): 시작 · 완료
   upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? ` · 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },

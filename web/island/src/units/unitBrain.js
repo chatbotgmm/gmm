@@ -301,10 +301,10 @@ function startActivity(u, kind, world, rnd) {
 function startActivityInner(u, kind, world, rnd) {
   const g = world.grid, persona = PERSONA[u.name] || PERSONA["기본"];
   switch (kind) {
-    case "rest": {                                                                // 쉬기: 가까운 빈 벤치가 있으면 앉고, 없으면 서서. 피곤하면 기력이 REST_UNTIL까지 찰 때까지
+    case "rest": {                                                                // 쉬기 = 잠깐 숨 돌리기: 가까운 빈 벤치가 있으면 앉고(M.benchSecs), 없으면 서서(M.breathSecs). 기력을 채우는 건 잠
+      u.breathAt = world.time || 0;
       if (sitBench(u, world)) return true;
-      const lack = M.REST_UNTIL - (u.needs?.energy ?? 100);
-      setIdle(u, rnd, world, lack > 0 ? Math.min(30, Math.max(2, lack / (0.6 + M.REST_GAIN))) : 2 + rnd() * 4); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
+      setIdle(u, rnd, world, M.breathSecs(rnd)); if (rnd() < 0.3) emote(u, pick(["…", "♪", "z"], rnd)); return true;
     }
     case "sleep": return startSleep(u, world, rnd);                              // 지치면 잠(밤낮과 상관없이): 내 집 → 빈 집 손님 → 밖
     case "wander": {
@@ -558,11 +558,11 @@ function standUp(u, world) {
   const b = u.sitOn && world.buildings.get(u.sitOn); if (b) { if (b.sitter === u.unitId) b.sitter = null; if (u.state === US.Sit) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; } }
   u.sitOn = null; u.sitY = null;
 }
-// 체질(chrono.js: 아침형·야행성). 잠은 밤낮이 아니라 기력으로(CH.sleepBelow 아래면 자고 CH.WAKE_AT이면 깸)
+// 체질(chrono.js: 아침형·야행성). 잠은 밤낮이 아니라 기력으로(CH.SLEEP_BELOW 이하면 자고 CH.WAKE_AT이면 깸, CH.FAINT_AT 아래면 쓰러짐)
 /** 더 잘까: 기력이 아직 가득(피로 0)이 아니고, 아주 배고프지 않고(CH.SLEEP_HUNGRY — 깨어 있을 때 문턱 J.HUNGRY보다 낮음), 축제에 갈 만큼 깨어 있지 않음 */
 const keepSleeping = (u, world) => (u.needs?.energy ?? 100) < CH.WAKE_AT && (u.full ?? 80) >= CH.SLEEP_HUNGRY && !festAwake(u, world);
 /** 자는 중인가(밖 잠·조는 중·건물 안 잠) */
-const asleep = u => u.state === US.Sleep || (!!u.insideBuildingId && u.insideAct === "sleep");
+const asleep = u => u.state === US.Sleep || u.state === US.Faint || (!!u.insideBuildingId && u.insideAct === "sleep");
 /** 집에 가는 길이 막혔을 때 그 자리에서 졸며 집 길을 다시 보는 간격(초): 아직 막혔으면 계속 졸고, 뚫렸으면 깨서 집으로(매 프레임 길찾기·상태 떨림 없게) */
 export const BLOCKED_NAP = 20;
 /** 잠자리(밤잠·지쳐서 자는 잠 모두):
@@ -582,6 +582,26 @@ function startSleep(u, world, rnd) {
   setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false;
   if (world.economy) u.sleptOutAt = world.time || 0;
   emote(u, "🌙 집이 없어 밖에서 자요…", 2.6); return true;
+}
+// ---------------------------------------------------------------- 쓰러짐(chrono.js FAINT_AT·FAINT_LIE)
+/** 쓰러질까: 깨어 밖에 있고(건물 안·잠·들림·배·헤엄 아님) 기력이 FAINT_AT 이하. 한 번 쓰러지면 기력이 잠 문턱(20) 위로 올라와야 다시 쓰러질 수 있음
+ *  (배고파 깬 갈매미가 기력 2 근처에서 먹으러 가다 곧장 또 쓰러지지 않게. 저장 안 함 — 불러오면 처음부터) */
+const canFaint = u => !!u.needs && u.needs.energy <= CH.FAINT_AT && u.faintArm !== false && !u.insideBuildingId && !asleep(u) && u.state !== US.Held && !u.sailing && !u.swimming;
+/** 그 자리에서 쓰러짐: 하던 일·맡은 공사를 내려놓고(은행 짐은 창고로) FAINT_LIE초 누워 있음(😵). 알림 한 줄(world "faint") */
+function faintNow(u, world) {
+  uncommit(u, world); setIdle(u, null, world, CH.FAINT_LIE);
+  u.state = US.Faint; u.faintArm = false; u.sleepy = false; u.activity = null;
+  emote(u, "😵", CH.FAINT_LIE); world.emit?.("faint", { u, clinic: !!world.clinicFor?.(u) });
+}
+/** 누워 있다 깨어나는 대신: 빈 침대가 있는 병원이 있으면 실려 가(문 앞으로 옮겨져 바로 들어감) 침대에서 잠(진료비 World.faintCarried),
+ *  없으면 그 자리에서 잠(밖 잠: 기력이 가득 찰 때까지, 배고프면 깸 — 보통 잠과 같음) */
+function afterFaint(u, world, rnd) {
+  const b = world.clinicFor?.(u);
+  if (b) {
+    setIdle(u, rnd, world, 0); u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = world.grid.walkHeight?.(b.door.x, b.door.z) ?? u.y;
+    u.sleepy = true; enterBuilding(u, b, rnd); u.carried = true; world.faintCarried?.(u, b); return;
+  }
+  setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false; emote(u, "💤", 2.5);
 }
 /** 축제 모이기: 광장 둘레(1.5~4칸)의 빈 자리로 걸어감. 갈 수 있으면 true */
 function startGather(u, world, rnd) {
@@ -658,6 +678,11 @@ function keepInside(u, world) {
   if (u.insideAct === "warm") return (u.bodyT ?? CLIM.BODY_NORMAL) < CLIM.WARM_DONE || (CH.offHours(u, world) && (u.needs?.energy ?? 100) < CH.WAKE_AT && outdoorCold(u, world));
   return false;
 }
+/** 지쳤을 때 먹기보다 잠을 먼저 하는 포만감: 자는 중 배고파 깨는 문턱(CH.SLEEP_HUNGRY 20)보다 5 위 — 잠들자마자(8초 확인마다) 배고파 깨는 떨림이 없게.
+ *  25에서 잠들면 자는 중 배고픔(0.25 × 0.2 = 0.05/초)으로 20까지 100초는 잠 */
+export const SLEEP_EAT_FIRST = CH.SLEEP_HUNGRY + 5;
+/** 기력이 잠 문턱 아래로 떨어지면 멈추고 자러 가는 상태(일·일하러 가는 길·놀이) */
+const SLEEP_STOPS = new Set([US.Build, US.Chop, US.Mine, US.Fish, US.Farm, US.Trade, US.GoBuild, US.GoChop, US.GoMine, US.GoFish, US.GoFarm, US.GoTrade, US.Wander, US.Visit, US.Zoomies, US.Curious, US.GoSwim, US.GoImprove, US.Improve, US.Forage]);
 const WORKING = new Set(["Chop", "Mine", "Build", "Farm", "Trade", "Fish", "Improve"]);   // 일하는 중(체감 +2) = 욕구의 "일"과 같은 상태
 /** 체온 한 걸음: 밖이면 공기 기온, 안이면 실내 기온(늘 쾌적) + 옷 + 일 + 종족 덤 + 축제 광장 열기. 처음 추워지면 feltCold +1, 마을 하루 한 번 chill 알림 */
 function bodyTick(u, dt, world) {
@@ -670,16 +695,18 @@ function bodyTick(u, dt, world) {
   if (was > CLIM.COLD_AT && now <= CLIM.COLD_AT) world.noteChill?.(u);
 }
 /** 축제가 열려 있고 너무 지치지 않았는가(이럴 땐 자다가도 깨어 광장에 감. 지쳤으면 그대로 잠) */
-const festAwake = (u, world) => !!world.festival && (u.needs?.energy ?? 100) >= CH.SLEEP_BELOW;
+const festAwake = (u, world) => !!world.festival && (u.needs?.energy ?? 100) > CH.SLEEP_BELOW;
 function chooseNext(u, world, rnd) {
   // 배고프면 먼저 먹음. 음식이 넉넉하면(30 넘게) 배가 덜 고파도 먹어서 너무 부를 수 있음.
-  if ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75)) { if (startActivity(u, "eat", world, rnd)) return; }
+  // 다만 지쳤고(기력 20 이하) 아주 배고프진 않으면(포만감 SLEEP_EAT_FIRST 이상) 잠부터: 먹을 것 찾으러 가는 길(바닷가)에 기력이 바닥나 쓰러지지 않게
+  const sleepFirst = u.needs && u.needs.energy <= CH.SLEEP_BELOW && (u.full ?? 80) >= SLEEP_EAT_FIRST;
+  if (!sleepFirst && ((u.full ?? 80) < J.HUNGRY || (world.res.food > 30 && (u.full ?? 80) < 75))) { if (startActivity(u, "eat", world, rnd)) return; }
   // 아프면 쉬러(의원 → 집), 추우면(체온 39.0 이하) 몸부터 녹임: 집 · 카페 코코아 · 공공건물(난수 안 씀 → 안 추운 계절엔 예전과 똑같음)
   if (u.sick && startSickRest(u, world)) return;
   if (CLIM.isCold(u.bodyT) && startWarm(u, world)) return;
   // 축제의 날: 맡은 공사가 없고 너무 지치지 않았으면 광장에 모여 놂
   if (festAwake(u, world) && !u.committed && rnd() < FESTIVAL_JOIN_CHANCE && startGather(u, world, rnd)) return;
-  // (예전 '밤이면 무조건 잠'은 없음: 밤에도 기력이 남아 있으면 일함. 잠은 아래 '지치면 잠'(기력 CH.sleepBelow 아래) 하나)
+  // (예전 '밤이면 무조건 잠'은 없음: 밤에도 기력이 남아 있으면 일함. 잠은 아래 '지치면 잠'(기력 CH.SLEEP_BELOW 이하) 하나)
   if (startDoctor(u, world)) return;                                               // 당번 의사: 맡은 의원에 환자가 있으면 진료하러(난수 안 씀)
   if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
   // 피곤하면(기력 TIRED 아래) 심부름(가공·은행·시장·저장고·장보기)을 새로 시작하지 않고 아래에서 먼저 쉼: 상인이 가공 → 은행을 쉬지 않고 이어 가다 기력이 바닥나지 않게
@@ -711,11 +738,13 @@ function chooseNext(u, world, rnd) {
   // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 시장/은행까지 돌길 · 장식 주문. 낮을수록 더 자주
   if (world.economy && (u.sat ?? 100) < 75 && !u.committed && (u.needs?.energy ?? 100) >= M.TIRED && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
   if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
-  if (u.needs && u.needs.energy < CH.sleepBelow(u, world) && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠(밤낮 상관없이 기력 20 아래, 아침형의 밤·야행성의 낮엔 30 아래)
-  if (u.needs && u.needs.energy < M.TIRED) { startActivity(u, "rest", world, rnd); emote(u, pick(["🥱 좀 쉬자", "😮‍💨 피곤해", "후…"], rnd)); return; }   // 피곤하면 쉼(기력이 찰 때까지)
+  if (u.needs && u.needs.energy <= CH.sleepBelow(u, world) && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠(밤낮·체질 상관없이 기력 20 이하)
+  // 피곤하면(기력 TIRED 아래) 잠깐 숨 돌림 — BREATH_EVERY초에 한 번만: 매번 쉬면 숨 돌리기가 기력을 30 가까이 붙잡아 잠 문턱 20까지 안 내려감
+  if (u.needs && u.needs.energy < M.TIRED && !((world.time || 0) - (u.breathAt ?? -1e9) < M.BREATH_EVERY)) { startActivity(u, "rest", world, rnd); emote(u, pick(["🥱 좀 쉬자", "😮‍💨 피곤해", "후…"], rnd)); return; }
   // 성격 + 직업 특기 × 욕구(급한 욕구를 채우는 일) × 배운 취향(해 보니 좋았던 일)
   let opts = J.activityWeights(u).map(([k, w]) => [k, w * M.needMult(u, k) * M.prefMult(u, k)]);
   if (u.sick) opts = opts.map(([k, w]) => [k, w * HL.sickWeight(u, k)]);       // 아프면 일 ×0.5 · 집 구경 ×3(집도 의원도 못 가는 갈매미)
+  if ((world.time || 0) - (u.breathAt ?? -1e9) < M.BREATH_EVERY) opts = opts.map(([k, w]) => [k, k === "rest" ? 0 : w]);   // 방금 숨 돌렸으면 쉬기는 BREATH_EVERY초 뒤에(기력 30~50에서 숨 돌리기가 거듭돼 잠 문턱을 막지 않게)
   // 고른 일을 못 하면(공사장 없음·자리 없음…) 그 일을 빼고 다시 뽑음. 제 직업 일이 안 되면 먼저 대신 도울 일(J.helpJobs)을 해 봄.
   // 끝내 할 일이 없으면 쉬지 않고 산책(안 피곤한데 서서 쉬지 않게), 그것도 안 되면 잠깐 숨만 고르고 다시 고름.
   const skill = J.jobOf(u)?.skill; let helped = false;
@@ -753,7 +782,7 @@ export function exitBuilding(u, world, rnd) {
   if (b) b.occupants = b.occupants.filter(id => id !== u.unitId);
   const spot = b ? nearestWalkable(world.grid, b.door.x, b.door.z) : nearestWalkable(world.grid, Math.floor(u.x), Math.floor(u.z));
   if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; }
-  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null; u.dressT = 0;   // 나서면 바로 옷을 고름
+  u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null; u.dressT = 0; u.carried = false;   // 나서면 바로 옷을 고름 · 병원에 실려 왔던 것도 끝
   done(u, 0.7, rnd, world);                                                // 집 구경·잠 = 좋은 경험
   if (u.lodgeSay) { emote(u, u.lodgeSay, 2.4); u.lodgeSay = null; }        // 빈 집에서 자고 나오면 숙박비 말풍선(안에 있을 땐 바깥 화면에 말풍선이 안 보임)
 }
@@ -763,7 +792,7 @@ export function exitBuilding(u, world, rnd) {
 const MOODS = { sleep: ["💤", "zZ…"], hungry: ["😫 배고파", "🐟 먹고 싶다…"], tired: ["😮‍💨 피곤해", "🥱 쉬고 싶다"], happy: ["😊", "♪", "☺️ 좋다", "🌸 기분 좋아"], sit: ["☕ 편하다", "😌", "♪ 쉬는 중"], read: ["📖 재밌다", "📚 음…", "💭 그렇구나"], sad: ["😞", "😟 별로야…"], cold: ["🥶 추워", "❄️ 으슬으슬"], hot: ["🥵 더워", "🍦 시원한 거…"], sick: ["🤧 에취!", "🤒 으슬으슬…", "🤧 콜록"] };
 export function moodBubble(u, dt, world) {
   const id = Number.isFinite(u.unitId) ? u.unitId : 0;
-  if ((u.moodT = (u.moodT ?? 8 + (id * 7) % 20) - dt) > 0 || u.emoteT > 0 || u.state === US.Held) return;
+  if ((u.moodT = (u.moodT ?? 8 + (id * 7) % 20) - dt) > 0 || u.emoteT > 0 || u.state === US.Held || u.state === US.Faint) return;
   u.moodT = 20 + ((id * 13 + Math.floor(world.time || 0)) % 21);
   const n = u.needs, sat = u.sat ?? 50, k = u.state === US.Sleep || u.sleeping || u.useFurni && FURNITURE[u.useFurni.id]?.use === "sleep" ? "sleep"
     : u.sick ? "sick" : (u.full ?? 80) < J.HUNGRY ? "hungry" : n && n.energy < 20 ? "tired"
@@ -787,6 +816,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     const k = FURNITURE[u.useFurni.id]?.use, n = u.needs;
     if (k === "sleep") n.energy = Math.min(100, n.energy + (M.SLEEP_GAIN.bed - M.SLEEP_GAIN.inside) * dt); else if (k === "sit") n.energy = Math.min(100, n.energy + 1 * dt); else if (k === "read") n.fun = Math.min(100, n.fun + 1.5 * dt);
   }
+  if (u.carried && u.insideBuildingId && u.needs) u.needs.energy = Math.min(100, u.needs.energy + (M.SLEEP_GAIN.bed - M.SLEEP_GAIN.inside) * dt);   // 쓰러져 실려 온 병원 침대 = 침대 잠 빠르기
   if (u.insideBuildingId && u.needs && world.buildings.get(u.insideBuildingId)?.defId === "cafe") { u.needs.fun = Math.min(100, u.needs.fun + 2 * dt); u.needs.social = Math.min(100, u.needs.social + 1.5 * dt); }   // 카페: 재미·친구
   if (u.insideBuildingId && u.needs && world.buildings.get(u.insideBuildingId)?.defId === "aquarium") u.needs.fun = Math.min(100, u.needs.fun + 2.5 * dt);   // 수족관 구경: 재미
   if (u.needs && u.needs.energy < 15) u.eff *= 0.8;                       // 너무 지치면 일도 느림
@@ -798,6 +828,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   if (!u.swimming && !u.insideBuildingId && world.grid.isWater(...cellOf(u)) && !world.grid.isWalkable(...cellOf(u))) {   // 헤엄 중이 아닌데 물에 있으면(헤엄을 그만둠 등) 가까운 땅으로(부두 위는 그대로)
     const spot = nearestWalkable(world.grid, ...cellOf(u)); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; u.anim = null; emote(u, "푸하!"); }
   }
+  if ((u.needs?.energy ?? 0) > CH.SLEEP_BELOW) u.faintArm = true;
+  if (canFaint(u)) faintNow(u, world);                                  // 기력이 0 가까이(FAINT_AT 이하) → 그 자리에서 쓰러짐
   if (u.once) {                                                         // 한 번 하는 동작이 끝날 때까지 기다림
     const o = u.once; o.t += dt;
     if (o.onHit && o.t >= o.hit) { const f = o.onHit; o.onHit = null; f(); }
@@ -809,8 +841,13 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   if ((u.full ?? 80) < 12 && [US.Build, US.Chop, US.Mine, US.Fish, US.Farm, US.Trade, US.GoBuild, US.GoChop, US.GoMine].includes(u.state) && !u.once) {
     emote(u, "배고파…"); setIdle(u, rnd, world, 0); return settle(u, dt, world);
   }
+  // 지치면(기력 20 이하) 하던 일·놀이를 한 동작 끝에 멈추고 자러 감(맡은 공사는 유지): 일 한 바퀴·산책이 길어 20을 한참 지나 잠자리로 나서면
+  //  가는 길(넓은 섬에서 평균 31초, 기력 −6)에 쓰러지기 쉬움. 먹으러·몸 녹이러·아파서 가는 길은 그대로
+  if (u.needs && u.needs.energy <= CH.SLEEP_BELOW && SLEEP_STOPS.has(u.state) && !u.once) {
+    emote(u, "🥱 졸려…"); setIdle(u, rnd, world, 0); return settle(u, dt, world);
+  }
   // 반사 행동
-  if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding, US.Swim].includes(u.state)) {
+  if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding, US.Swim, US.Faint].includes(u.state)) {
     const big = world.units.find(o => o !== u && visible(o) && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < 1.8);
     if (big) {
       setIdle(u, rnd, world); emote(u, "!"); M.befriend(u, big, -0.3);
@@ -867,6 +904,10 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         if (home && world.isDone(home) && !startPath(u, world, home.door.x, home.door.z)) { u.timer = BLOCKED_NAP; break; }
       }
       if (u.timer <= 0 || (u.needs?.energy ?? 100) >= CH.WAKE_AT) { const nap = u.nap; u.nap = false; u.activity = "sleep"; done(u, 1, rnd, world); if (!nap) emote(u, "잘 잤다!"); }   // 피로 0이면 밤이어도 깸
+      break;
+    case US.Faint:                                                                  // 쓰러져 누움(일·공사 안 맡음, 들 수 없음): FAINT_LIE초 뒤 병원으로 실려 가거나 그 자리에서 잠
+      if ((u.emoteT ?? 0) <= 0) emote(u, "😵", 2.5);
+      if (u.timer <= 0) afterFaint(u, world, rnd);
       break;
     case US.GoFest:                                                                 // 축제 광장으로 가는 중(그사이 축제가 끝나면 그만둠)
       if (!world.festival) { setIdle(u, rnd, world); break; }
@@ -1069,7 +1110,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.GoSit: {
       const b = world.buildings.get(u.sitOn); if (!b) { standUp(u, world); setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = Math.min(30, Math.max(7 + rnd() * 7, (M.REST_UNTIL - (u.needs?.energy ?? 100)) / (0.6 + M.BENCH_GAIN))); u.path = null;   // 피곤하면 기력이 찰 때까지
+        const [cx, cz] = b.cells[0]; u.state = US.Sit; u.timer = M.benchSecs(rnd); u.path = null;   // 잠깐 앉아 숨 돌리기(기력은 잠으로)
         u.x = cx + 0.5 + (b.door.x - cx) * 0.2; u.z = cz + 0.5 + (b.door.z - cz) * 0.2;   // 좌판 앞쪽(다리가 앞으로 내려오게)
         u.heading = Math.atan2(b.door.x - cx, b.door.z - cz); u.sitY = b.seatY ?? (b.elevation ?? 0) + 0.33;   // 좌판 높이(그림이 모델에서 잰 값). 엉덩이를 여기 맞추는 건 views.js u.anim = "Sit"; emote(u, pick(["후~", "♪", "좋다"], rnd));
       }
