@@ -783,7 +783,7 @@ test("눈 깊이: 겨울 눈 오는 날 쌓이고(약 80초에 가득), 맑은 �
   w.setSeason("spring"); for (let i = 0; i < 600; i++) w.stepSnow(0.1); assert.equal(w.snow, 0, "봄엔 60초 안에 다 녹음");
 });
 
-test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고르고(높이·낮추기), 시장까지 돌길을 깔고, 장식을 주문해 만족도가 오름", async () => {
+test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고르고(높이·낮추기), 장식을 주문해 만족도가 오름 — 바닥(돌길)은 깔지 않음(부탁만, roadask.test.js)", async () => {
   const IM = await import("../src/world/improve.js");
   const w = World.create(7, seededRandom(5), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
@@ -794,11 +794,13 @@ test("스스로 동네 고치기: 만족도가 낮으면 집 앞 마당을 고�
   w.updateRoads(); const before = u.sat; assert.ok(before < 75, `처음 만족도 ${before}`); assert.equal(IM.yardFlat(w, h), false);
   for (const o of w.units) o.full = 90;
   let jobs = new Set(); w.on("improve", e => { if (e.u === u) jobs.add(e.kind); });
-  for (let t = 0; t < 600 && !jobs.has("pave"); t += 0.1) { u.full = 90; w.update(0.1); }
-  assert.ok(jobs.has("pave"), "돌길 깔기(시장까지)");
+  const ground = () => w.grid.cells.map(x => x.groundType).join(","), g0 = ground();
+  for (let t = 0; t < 900 && !IM.yardFlat(w, h); t += 0.1) { u.full = 90; w.update(0.1); }
+  assert.ok(jobs.has("yard"), "마당 고르기"); assert.ok(!jobs.has("pave"), "돌길은 깔지 않음");
   for (let t = 0; t < 300; t += 0.1) { u.full = 90; w.update(0.1); }
+  assert.equal(ground(), g0, "갈매미가 바닥 종류를 바꾸지 않음");
   w.updateRoads(); assert.ok(u.sat > before, `만족도 ${before} → ${u.sat} (${u.satParts.map(p => p[0]).join(",")})`);
-  // 돌이 없으면(길을 못 깖 — 돌을 캐지 않는 농부) 마당을 높이고 낮춰 고름
+  // 돌이 없어도 마당을 높이고 낮춰 고름(높이·낮추기 둘 다)
   const w2 = World.create(7, seededRandom(6), { wild: true, firstGull: true }); w2.instantBuild = true; w2.addUnitByName("꽃");
   const sp2 = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w2.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const q2 = sp2("house", c.x + 12, c.z + 10), h2 = w2.placeBuilding("house", q2[0], q2[1], 0).building, u2 = w2.units.find(o => o.name === "꽃"); u2.home = h2.id; h2.owner = u2.unitId; u2.inv.stone = 0; w2.res.stone = 0;

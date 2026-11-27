@@ -8,6 +8,7 @@ import { FRIEND_STAGES } from "../units/mind.js";
 import { josa } from "../util.js";
 import { BOND_STAGES, GIFT_TIERS } from "./bond.js";
 import { MEDALS } from "./medals.js";
+import { askNotice } from "./roadAsk.js";
 
 export const NEWS_DAY_SECS = 600;       // 마을 하루 = 마을 시간(world.time) 600초
 export const NEWS_KEEP_DAYS = 7;        // 소식지는 최근 7일치만
@@ -77,6 +78,8 @@ const NEWS_MAKERS = {
   // 건물 업그레이드(World.startUpgrade): 시작 · 완료
   upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? ` · 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },
   upgraded: ({ b, from }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏥", text: `${josa(f.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!${d.beds ? ` 침대 ${d.beds}개` : ""}`, weight: 6 } : null; },
+  // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄에만 · 같은 갈매미 하루 한 번은 ALERTS가 거름)
+  roadAsk: ({ u, label }) => ({ icon: "🛣", text: askNotice(u.name, label), weight: 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */

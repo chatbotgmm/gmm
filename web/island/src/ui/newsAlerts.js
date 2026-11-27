@@ -5,7 +5,7 @@
 //  · every + 같은 갈매미: 그 갈매미의 같은 알림은 마을 시간 every초에 한 번만
 //  · batch: 짧은 사이(BATCH_MS)에 여러 번 오면 한 줄로 묶음(batchText)
 //  · now: 플레이어가 누른 일의 대답 → 차례를 기다리지 않고 바로 보임(소환 단추·반짝이 줍기)
-import { newsDay, newsFor } from "../world/news.js";
+import { newsDay, newsFor, NEWS_DAY_SECS } from "../world/news.js";
 import { pocketCount } from "../world/bond.js";
 
 export const BATCH_MS = 400;   // 묶음 알림: 이 사이에 온 같은 알림은 한 줄로(밀린 품삯을 한꺼번에 치를 때 등)
@@ -34,6 +34,7 @@ export const ALERTS = {
   doctor: { kind: "good" },
   upgradeStart: { kind: "info", tail: " (🪚 목수가 재료를 모아 지어요)", snd: "bell" },
   upgraded: { kind: "good", snd: "bell" },
+  roadAsk: { kind: "info", every: NEWS_DAY_SECS, tail: " (🖌 바닥 칠하기 → 돌길·데크)" },   // 갈매미 길 부탁: 같은 갈매미는 마을 하루에 한 번만
 };
 /** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수는 소식지만 */
 export const SILENT = ["fee", "clinicVisit"];
