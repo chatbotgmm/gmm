@@ -62,7 +62,8 @@ export class Poke {
   poke(u, from = null) {
     const s = this.of(u), w = this.world, now = this.now, rnd = this.rnd;
     s.n = now - s.t <= POKE_COMBO_GAP ? s.n + 1 : 1; s.t = now;
-    const face = away => { if (!from) return; const a = Math.atan2(from.x - u.x, from.z - u.z) + (away ? Math.PI : 0); u.heading = a; if (u.state === UST.Idle) u.lookAt = a; };
+    const face = away => { if (!from || !isFree(u, true)) return;   // 일·벤치·낚시 중엔 방향을 안 바꿈(그 일들은 시작할 때 한 번만 방향을 정함)
+      const a = Math.atan2(from.x - u.x, from.z - u.z) + (away ? Math.PI : 0); u.heading = a; if (u.state === UST.Idle) u.lookAt = a; };
     const say = (line, secs = 2) => { emote(u, line, secs); return line; };
     if (this.sulking(u)) { s.n = 0; if (!isAsleep(u)) face(true); return { kind: "sulk", line: say(POKE_SULK_LINES[s.k++ % POKE_SULK_LINES.length]) }; }
     if (s.n >= POKE_COMBO) {

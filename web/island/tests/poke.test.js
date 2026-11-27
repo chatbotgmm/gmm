@@ -45,6 +45,13 @@ test("일하는 중이면 말풍선만(하던 일을 안 끊음)", () => {
   const w = fresh(), u = w.units[0], p = new Poke(w, 5);
   u.state = "Build"; u.once = null; const r = p.poke(u);
   assert.equal(r.act, "say"); assert.equal(u.state, "Build"); assert.equal(u.once, null);
+  // 낚시·앉기는 시작할 때 한 번만 방향을 정함: 톡·삐침에도 바다(벤치) 쪽을 그대로 봄
+  for (const st of ["Fish", "Sit", "Trade"]) {
+    const q = new Poke(w, 9); u.state = st; u.once = null; u.heading = 1.234;
+    q.poke(u, { x: u.x + 3, z: u.z }); assert.equal(u.heading, 1.234, st);
+    for (let i = 0; i < POKE_COMBO; i++) q.poke(u, { x: u.x + 3, z: u.z });
+    assert.ok(q.sulking(u)); q.poke(u, { x: u.x + 3, z: u.z }); assert.equal(u.heading, 1.234, st + " 삐침"); assert.equal(u.state, st);
+  }
 });
 
 test("자는 갈매미: 💤가 커졌다가 뒤척임, 깨우지 않음", () => {
