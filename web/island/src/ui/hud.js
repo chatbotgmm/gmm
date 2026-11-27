@@ -28,6 +28,7 @@ import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickH
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
 import { readGridPref, saveGridPref } from "./gridView.js";
+import { tapTool } from "../systems/pressKind.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
@@ -84,15 +85,16 @@ export class Hud {
     this.buildCat = "all"; this.ecats = el("div", "ecats"); this.ecats.setAttribute("role", "group"); this.ecats.setAttribute("aria-label", "건물 분류");
     this.catBtns = BUILD_CATS.map(([id, label]) => { const b = el("button", "", label); b.dataset.cat = id; b.onclick = () => { this.buildCat = id; this.sub.scrollLeft = this.sub.scrollTop = 0; this.filterBuild(); }; this.ecats.appendChild(b); return b; });
     this.ehint = el("span", "ehint", "🧹 누른 건물이 바로 사라져요 · 되돌릴 수 없어요");
-    // ✋ 화면 이동: 도구를 쓰는 중에 켜면 드래그로 화면만 옮김(도구는 잠시 멈춤)
-    this.handBtn = auxBtn("", "✋", "화면 이동", "켜면 드래그로 화면을 옮겨요(도구는 잠시 멈춤). PC는 스페이스를 누른 채 끌거나 오른쪽 버튼으로, 휴대폰은 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
+    // ✋ 화면 이동: 끌어서 칠하는 도구(칠하기·높이·자연)를 쓰는 중에 켜면 드래그로 화면만 옮김(도구는 잠시 멈춤).
+    // 짓기·철거·지형지물 옮기기는 끌기가 원래 화면 옮기기(톡 = 고르기)라 ✋를 숨김(showMode)
+    this.handBtn = auxBtn("", "✋", "화면 이동", "켜면 드래그로 화면을 옮겨요(칠하기는 잠시 멈춤). PC는 스페이스를 누른 채 끌거나 오른쪽 버튼으로, 휴대폰은 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
     this.handBtn.onclick = () => tools.setHand(!tools.hand);
     tools.onHand = on => { this.handBtn.classList.toggle("on", on); this.handBtn.setAttribute("aria-pressed", String(on)); };
     const undo = auxBtn("", "↶", "되돌리기", "되돌리기(Ctrl+Z)"), redo = auxBtn("", "↷", "다시하기", "다시하기(Ctrl+Shift+Z)"); undo.onclick = () => tools.undo(); redo.onclick = () => tools.redo();
     undo.disabled = redo.disabled = true; this.undoBtns = [undo, redo];
     this.crossBtn = auxBtn("", "🎯", "십자선", "화면 가운데를 붓으로: 한 손가락으로 화면을 옮기고, 아래 큰 버튼을 누르는 동안 칠해요");
     this.crossBtn.onclick = () => { tools.setCross(!tools.cross); this.crossBtn.classList.toggle("on", tools.cross); this.crossBtn.setAttribute("aria-pressed", String(tools.cross)); };
-    aux.appendChild(el("i", "vsep"));
+    this.auxSep = el("i", "vsep"); aux.appendChild(this.auxSep);
     // ▦ 격자: 건설 모드 땅 위 칸 경계선 켜기·끄기(G). 처음엔 켜짐, 고른 것은 기억(main.js가 gridOn을 읽어 땅 셰이더 세기만 바꿈)
     this.gridOn = readGridPref(k => localStorage.getItem(k));
     this.gridBtn = auxBtn("gridBtn", "▦", "격자 보기", "칸 경계 격자선 켜기·끄기"); this.gridBtn.classList.add("grid");
@@ -649,8 +651,12 @@ export class Hud {
     if (!terrain && this.tools.cross) this.tools.setCross(false);                   // 십자선은 칠하기·높이에서만(켜 둔 채 짓기로 가면 누르기가 안 먹던 것)
     // 보조 줄: 도구에 맞는 것만
     this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish"; this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
+    const tap = tapTool(mode, nature ? natureAction(arg).kind : null);             // 톡 = 고르기 · 끌기 = 화면 옮기기 도구: ✋가 필요 없음(켜 둔 채 오면 끔 — 켜져 있으면 톡이 안 먹음)
+    if (tap && this.tools.hand) this.tools.setHand(false);
+    this.handBtn.hidden = mode === "view" || tap;
     this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
     for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
+    this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
     this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만
     // 트레이: 같은 도구 안에서 고르기만 했으면 밀어 둔 자리를 지킴
     const keep = mode === this.shownMode ? [sub.scrollLeft, sub.scrollTop] : null; this.shownMode = mode;
@@ -676,7 +682,7 @@ export class Hud {
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
       this.drawBuildTray(arg);                                                      // ↻ 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
     }
-    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 누르면 바로 사라져요 · 되돌릴 수 없으니 천천히 골라요");
+    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 바로 사라져요 · 끌면 화면 이동 · 되돌릴 수 없으니 천천히 골라요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
     else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
     if (!keep && nature) { const c = this.natCards?.find(x => x.dataset.nat === arg); if (c && (c.offsetLeft + c.offsetWidth > sub.clientWidth || c.offsetTop + c.offsetHeight > sub.clientHeight)) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 도구가 보이게
@@ -698,7 +704,7 @@ export class Hud {
       }
     }
     if (a.kind === "dig" || a.kind === "fill") this.addEditTools();
-    const t = tools.find(x => x.arg === arg); if (t) this.status(`${t.icon} ${t.name} ${t.verb}: ${t.tip}${a.kind === "move" ? " · 자리를 누르고 🚚 옮기기" : a.kind === "dig" || a.kind === "fill" ? "" : " · 누르거나 끌어서"}`);
+    const t = tools.find(x => x.arg === arg); if (t) this.status(`${t.icon} ${t.name} ${t.verb}: ${t.tip}${a.kind === "move" ? " · 자리를 톡 누르고 🚚 옮기기 · 끌면 화면 이동" : a.kind === "dig" || a.kind === "fill" ? "" : " · 누르거나 끌어서"}`);
   }
   /** 자연·지형 카드 아래 글(값·한도·금고 모자람)을 금고·수에 맞춰 고침(바뀐 카드만) */
   drawNatureMeta() {

@@ -109,7 +109,7 @@ export class CoachMarks {
     if (tools.mode === "view") return { kind: "step", stepNo: 3, text: "🔨 이제 집을 한 채 지어 봐요. 「🔨 건설」을 눌러요.", target: "#editBtn" };
     if (tools.mode !== "build") return { kind: "step", stepNo: 3, text: "🏠 「짓기」를 골라요.", target: '#tools [data-mode="build"]' };
     if (tools.plan) return { kind: "step", stepNo: 3, text: "🔨 「건설」을 누르면 갈매미들이 지어요.", target: "#cfBuild" };
-    return { kind: "step", stepNo: 3, text: touch ? "🏠 집을 고르고 지을 땅을 눌러요." : "🏠 집을 고르고 지을 땅을 눌러요(R = 돌리기)." };
+    return { kind: "step", stepNo: 3, text: touch ? "🏠 집을 고르고 지을 땅을 톡 눌러요(끌면 화면이 옮겨져요)." : "🏠 집을 고르고 지을 땅을 눌러요(끌면 화면 이동 · R = 돌리기)." };
   }
   show(want) {
     const box = this.box;
