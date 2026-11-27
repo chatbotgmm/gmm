@@ -242,7 +242,13 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
   // 바닷가 작은 둥근 언덕 셋(2~3층 계단식, 가장자리는 바위 비탈, 흙길 비탈 하나)
   const smallHills = [{ a: Math.PI * 0.55, n: 3 }, { a: Math.PI * 0.2, n: 2 }, { a: Math.PI * 0.9, n: 2 }];
   for (const sh of smallHills) {
-    let hx = 0, hz = 0; for (let r = WILD.r; r > 10; r -= 0.5) { hx = cx + Math.cos(sh.a) * r; hz = cz + Math.sin(sh.a) * r; const c = grid.get(Math.floor(hx), Math.floor(hz)); if (c && c.groundType === GroundType.Grass && c.elevation === 0) { let ok = true; for (const [dx, dz] of [[6, 0], [-6, 0], [0, 6], [0, -6]]) if (grid.isWater(Math.floor(hx + dx * 0.7), Math.floor(hz + dz * 0.7))) ok = false; if (ok) break; } }
+    const spot = (a, clear) => { for (let r = WILD.r; r > 10; r -= 0.5) { const px = cx + Math.cos(a) * r, pz = cz + Math.sin(a) * r, c = grid.get(Math.floor(px), Math.floor(pz)); if (c && c.groundType === GroundType.Grass && c.elevation === 0) { let ok = true; for (const [dx, dz] of [[6, 0], [-6, 0], [0, 6], [0, -6]]) if (grid.isWater(Math.floor(px + dx * 0.7), Math.floor(pz + dz * 0.7))) ok = false;
+        if (ok && clear) for (let dz = -7; dz <= 7 && ok; dz++) for (let dx = -7; dx <= 7; dx++) { const qx = Math.floor(px) + dx, qz = Math.floor(pz) + dz; if (head.cells.has(key(qx, qz)) && grid.get(qx, qz).elevation > 0.05) { ok = false; break; } }
+        if (ok) return { hx: px, hz: pz, r }; } } return { hx: cx + Math.cos(a) * 10, hz: cz + Math.sin(a) * 10, r: 10 }; };
+    // 곶 언덕 바로 뒤는 피함: 곶이 언덕 앞자락을 깎아 곶 위에 1.8 m 맨 돌벽 상자가 섰음. 안쪽(마을 평지)으로 밀지 않고 옆으로 돌려 바닷가 가까이 둠
+    const base = spot(sh.a, false); let pick = base;
+    for (const off of [0, -0.05, 0.05, -0.1, 0.1, -0.15, 0.15]) { const s2 = spot(sh.a + off * Math.PI, true); if (s2.r >= base.r - 3) { pick = s2; break; } }
+    const { hx, hz } = pick;
     const R0 = 3 + sh.n * 1.4, cellsH = [];
     for (let z = Math.floor(hz - R0); z <= hz + R0; z++) for (let x = Math.floor(hx - R0); x <= hx + R0; x++) {
       const c = grid.get(x, z); if (!c || c.groundType !== GroundType.Grass || c.elevation !== 0 || level.has(key(x, z))) continue;
