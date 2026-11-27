@@ -1732,9 +1732,10 @@ test("전기 없음 배지 규칙: 다 지은 가로등·등불 건물·집 가�
 import { dayLook, moonMix, nightLook, DAY_CHANNELS } from "../src/render/dayKeys.js";
 import { sunPosition } from "../src/world/sun.js";
 
-test("하루 빛: 점심·밤은 전과 같은 값, 아침 하늘과 저녁 하늘은 다른 빛", () => {
+test("하루 빛: 점심(햇빛 쉐이딩: 하늘빛 줄임)·밤 값, 아침 하늘과 저녁 하늘은 다른 빛", () => {
   const noon = dayLook(40, 180), night = dayLook(-30, 0);
-  assert.ok(Math.abs(noon[15] - 3.3) < 1e-6 && Math.abs(noon[18] - 1.12) < 1e-6 && Math.abs(noon[16] - 0.85) < 1e-6);   // 햇빛·노출·하늘빛 세기(점심)
+  assert.ok(Math.abs(noon[15] - 3.0) < 1e-6 && Math.abs(noon[18] - 1.0) < 1e-6 && Math.abs(noon[16] - 0.62) < 1e-6);   // 햇빛·노출·하늘빛 세기(점심)
+  assert.ok(noon[15] / noon[16] > 3.3 / 0.85, "점심 햇빛 대 하늘빛 비가 전보다 큼(그늘이 또렷)");
   assert.ok(Math.abs(night[15] - 0.35) < 1e-6 && Math.abs(night[18] - 0.95) < 1e-6);
   const dawn = dayLook(-2, 90), dusk = dayLook(-2, 270);                          // 같은 해 높이, 동쪽(새벽) / 서쪽(저녁)
   assert.ok(dusk[0] / dusk[2] > dawn[0] / dawn[2], "저녁 하늘 위는 더 보랏빛");
