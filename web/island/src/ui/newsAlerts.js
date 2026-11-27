@@ -34,9 +34,14 @@ export const ALERTS = {
   doctor: { kind: "good" },
   upgradeStart: { kind: "info", tail: " (🪚 목수가 재료를 모아 지어요)", snd: "bell" },
   upgraded: { kind: "good", snd: "bell" },
+  // 🏛 중앙은행: 물가 사태(world가 사태마다 한 번만 냄) · 옛 저장에 판이 처음 생김. 덧말은 판으로 가는 길
+  inflation: { kind: "warn", tail: " (📱 은행 · 🏛 중앙은행)" },
+  deflation: { kind: "warn", tail: " (📱 은행 · 🏛 중앙은행)" },
+  priceStable: { kind: "good", snd: "bell" },
+  monStart: { kind: "info", tail: " (📱 은행 · 🏛 중앙은행)" },
 };
 /** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수는 소식지만 */
-export const SILENT = ["fee", "clinicVisit", "monIssue", "monRate", "monGift", "monPrint", "inflation", "deflation", "priceStable", "capFull", "monAuto", "monStart"];   // 중앙은행 소식은 소식지에만(알림 줄 연결은 화면 단계에서)
+export const SILENT = ["fee", "clinicVisit", "monIssue", "monRate", "monGift", "monPrint", "capFull", "monAuto"];   // 중앙은행 손잡이(찍기·예산·금리·축하)는 플레이어가 누른 일 → 판의 상태 줄이 대답(hud.bankClick), 예산 참·자동 바꿈은 잦아서 소식지에만
 
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */
 export function batchText(ev, list) {

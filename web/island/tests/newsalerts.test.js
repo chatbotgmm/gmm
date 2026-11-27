@@ -19,7 +19,7 @@ test("news.js에 문장이 있는데 알림 줄(main.js 직접 연결 또는 ALE
   assert.deepEqual(SILENT.filter(ev => !NEWS_EVENTS.includes(ev)), [], "일부러 뺀 목록도 news.js에 있는 이름");
   assert.equal(Object.keys(ALERTS).filter(ev => !NEWS_EVENTS.includes(ev)).length, 0, "표의 이벤트는 모두 문장이 있음");
   assert.equal(Object.keys(ALERTS).filter(ev => direct.has(ev)).length, 0, "표와 직접 연결이 겹치지 않음(같은 알림 두 번 방지)");
-  assert.equal(Object.keys(ALERTS).length, 21, "21개(업그레이드 시작·완료 · 빈 집 숙박비 하루 합계 포함) + 일부러 뺀 2개 = 23개");
+  assert.equal(Object.keys(ALERTS).length, 25, "25개(업그레이드 시작·완료 · 빈 집 숙박비 하루 합계 · 중앙은행 물가 사태 3개·판 생김 포함)");
   assert.match(MAIN, /Object\.entries\(ALERTS\)/, "main.js가 표를 돌며 연결");
 });
 

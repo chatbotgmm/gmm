@@ -23,7 +23,7 @@ export function dayFlow(e) {
   const inRows = Object.entries(inV).map(([k, v]) => [k === "customBack" ? "🌳 꾸미기 되돌려 받음" : IN_NAMES[k], v]);
   const outRows = Object.entries(outV).map(([k, v]) => [OUT_NAMES[k], v]);
   const sum = rows => rows.reduce((s, r) => s + r[1], 0);
-  return { inRows, outRows, inSum: sum(inRows), outSum: sum(outRows), lent: d.lent || 0 };
+  return { inRows, outRows, inSum: sum(inRows), outSum: sum(outRows), lent: d.lent || 0, inV, outV };
 }
 /** 오늘 장부 칸(오늘 아직 아무 일이 없으면 빈 칸) */
 export const todayOf = w => { const L = w.bank?.ledger || [], e = L[L.length - 1], d = newsDay(w.time); return e && e.day === d ? e : BK.ledgerDay(d); };
@@ -43,7 +43,8 @@ export function bankHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o)) {
   const toneText = state === "empty" ? "바닥" : state === "low" ? "얼마 안 남음" : "넉넉해요";
   const head = sumHead({ icon: "🏦", big: `🪙${fmtNum(bk.vault)}`, label: "내 금고", tone: state, toneText,
     lineHtml: `오늘 ${sign(t.inSum, "up")} · ${sign(t.outSum, "down")}${owed > 0 ? ` · 💸 밀린 품삯 🪙${fmtNum(owed)}` : ""}` });
-  const sub = `<p class="bk-sub">📈 물가 ×${pi.mult.toFixed(2)} · 금고는 건설 설계비·품삯·꾸미기에 써요</p>`;
+  const mi = w.monInfo?.(), mpi = mi ? Math.round(mi.pi * 1000) / 10 : 0;
+  const sub = `<p class="bk-sub">${mi ? `📈 물가 ${mi.index}${mi.pi > 0.002 ? ` ▲+${mpi}%` : mi.pi < -0.002 ? ` ▼−${Math.abs(mpi)}%` : ""} · 🏘 마을 성장 ×${pi.mult.toFixed(2)}` : `📈 물가 ×${pi.mult.toFixed(2)}`} · 금고는 건설 설계비·품삯·꾸미기에 써요</p>`;
 
   const ledger = `<div class="bk-cols"><div><h4>들어온 돈 ${sign(t.inSum, "up")}</h4>${valueRows(t.inRows)}</div>` +
     `<div><h4>나간 돈 ${sign(t.outSum, "down")}</h4>${valueRows(t.outRows)}</div></div>` +
@@ -73,12 +74,12 @@ export function bankHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o)) {
   const r = w.res || {}, rk = RANKS[pi.rank];
   const goods = `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.PROCESSED_NAME[k]}</td><td>창고 ${r[k] || 0}개 · 🪙${E.BANK_PROCESSED[k]}</td></tr>`).join("")}</table>` +
     `<p class="dim">상인이 가공품을 가져오면 은행이 금고 돈으로 사요(새로 찍지 않아요). 창고의 가공품은 공사 재료로 써요.</p>` +
-    `<h4>📈 물가 ×${pi.mult.toFixed(2)}</h4><p class="dim">1 + ${esc(rk?.name ?? "마을")} ${pi.rankPart} + 집·시설 ${pi.n}채 ${pi.buildPart}${pi.nextAt ? ` · 다음 오름 ${pi.nextAt}채째` : " · 최대"}. 설계비와 집값에 곱해요.</p>`;
+    `<h4>🏘 마을 성장 ×${pi.mult.toFixed(2)}</h4><p class="dim">1 + ${esc(rk?.name ?? "마을")} ${pi.rankPart} + 집·시설 ${pi.n}채 ${pi.buildPart}${pi.nextAt ? ` · 다음 오름 ${pi.nextAt}채째` : " · 최대"}. 설계비와 집값에 곱해요${mi ? `(× 📈 물가 ${mi.index}, 🏛 중앙은행 탭)` : ""}.</p>`;
 
   return head + sub +
     more("bank.today", "📒 오늘 장부", ledger, { note: `+${fmtNum(t.inSum)} · −${fmtNum(t.outSum)}` }) +
     more("bank.week", "📊 최근 7일", weekH, { note: `${week.length}일` }) +
     more("bank.loan", "🏠 대출", loanH, { note: loans.length ? `${loans.length}건 · 남은 🪙${fmtNum(loanLeft)}` : "없음" }) +
     more("bank.town", "🪙 마을에 도는 돈", townH, { note: `🪙${fmtNum(supply)}` }) +
-    more("bank.goods", "🐚 가공품 · 물가", goods, { note: `×${pi.mult.toFixed(2)}` });
+    more("bank.goods", mi ? "🐚 가공품 · 마을 성장" : "🐚 가공품 · 물가", goods, { note: `×${pi.mult.toFixed(2)}` });
 }

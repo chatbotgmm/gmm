@@ -716,6 +716,40 @@
   .bk-week td:first-child, .bk-week td:last-child { white-space: nowrap; } .bk-week td:nth-child(3) { white-space: nowrap; text-align: right; }
   .bk-bars { width: 40%; } .bk-bars i { display: block; height: calc(5*var(--u)); min-width: 1px; border-radius: var(--r-pill); margin: 1px 0; } .bk-bars i.up { background: var(--c-good-strong); } .bk-bars i.down { background: var(--c-danger); }
   .bk-total { margin: var(--s-1) 0; font-size: var(--fs-body); } .bk-total b { font-size: var(--fs-title); }
+  /* 🏛 중앙은행 판(ui/monView.js): 탭 두 개 · 핵심 칸 넷(큰 숫자) · 🖨 찍어내기 · 손잡이(.seg, 누르는 칸 --hit) · 자세히 보기 막대 */
+  .bk-tabs { grid-template-columns: 1fr 1fr; } .bk-tabs button { font-size: var(--fs-body); }
+  .mon-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); margin: 0 0 var(--s-3); }
+  .mon-kpi { display: flex; flex-direction: column; gap: calc(2*var(--u)); min-width: 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--c-surface-2); }
+  .mon-kpi[data-tone="ok"] { background: var(--c-ok-bg); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-ok-ink); } .mon-kpi[data-tone="low"], .mon-kpi[data-tone="warn"] { background: var(--c-low-bg); } .mon-kpi[data-tone="empty"] { background: var(--c-empty-bg); }
+  .mon-kl { font-size: var(--fs-cap); font-weight: 700; color: var(--c-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .mon-kl small { font-size: var(--fs-cap); font-weight: 400; }
+  .mon-kv { font-size: var(--fs-big); font-weight: 800; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mon-kpi[data-tone="ok"] .mon-kv { color: var(--c-ok-ink); } .mon-kpi[data-tone="low"] .mon-kv, .mon-kpi[data-tone="warn"] .mon-kv { color: var(--c-low-ink); } .mon-kpi[data-tone="empty"] .mon-kv { color: var(--c-empty-ink); }
+  .mon-ks { font-size: var(--fs-cap); color: var(--c-ink-2); line-height: var(--lh-tight); overflow-wrap: anywhere; }
+  .mon-ar[data-dir="up"] { color: var(--c-danger-ink); } .mon-ar[data-dir="down"] { color: var(--c-cold); } .mon-ar[data-dir="flat"] { color: var(--c-ink-2); }
+  .mon section { margin: 0 0 var(--s-3); }
+  .mon-print { padding: var(--s-2) var(--s-3) var(--s-3); border-radius: var(--r-md); background: var(--c-warm); }
+  .mon-kh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s-2); margin-bottom: var(--s-1); } .mon-kh b { font-size: var(--fs-body); } .mon-kh span { font-size: var(--fs-cap); color: var(--c-ink-2); }
+  .mon-psteps button { font-size: var(--fs-body); font-weight: 700; } .mon-psteps button:disabled { opacity: 1; color: var(--c-ink-2); background: transparent; box-shadow: inset 0 0 0 1px var(--c-line-strong); }
+  .mon-pbtn { display: block; width: 100%; min-height: var(--hit); margin: var(--s-2) 0 var(--s-1); font-size: var(--fs-title); font-weight: 800; }
+  .mon-pbtn:disabled { opacity: 1; background: var(--c-surface-2); color: var(--c-ink-2); box-shadow: inset 0 0 0 1px var(--c-line-strong); }
+  .mon-pleft { margin: 0; font-size: var(--fs-sm); line-height: var(--lh-tight); } .mon-pleft b { font-variant-numeric: tabular-nums; }
+  .mon-rates button { flex: 1 1 0; min-width: 0; padding-left: 0; padding-right: 0; }
+  .mon-auto { margin-bottom: var(--s-1); } .mon-auto button { flex: 1 1 0; }
+  .mon-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mon-steps button { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; padding: calc(4*var(--u)) calc(4*var(--u)); line-height: 1.15; } .mon-steps button small { font-size: var(--fs-cap); color: var(--c-ink-2); font-weight: 400; }
+  .mon-steps button.on::before { content: none; } .mon-steps button.on { font-weight: 700; box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-accent-strong), var(--e-1); }
+  .mon-gift { display: block; width: 100%; min-height: var(--hit); margin: 0 0 var(--s-3); font-size: var(--fs-body); } .mon-gift:disabled { opacity: 1; background: var(--c-surface-2); color: var(--c-ink-2); box-shadow: inset 0 0 0 1px var(--c-line-strong); cursor: default; }
+  .mon-note { margin: var(--s-1) 0 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--c-low-bg); color: var(--c-ink); font-size: var(--fs-sm); font-weight: 600; line-height: var(--lh-tight); }
+  .mon-fsum { margin: var(--s-1) 0; font-size: var(--fs-sm); }
+  .mon-chart { margin: var(--s-1) 0 var(--s-3); } .mon-ct { display: block; font-size: var(--fs-sm); margin-bottom: calc(2*var(--u)); }
+  .mon-bars { display: flex; align-items: flex-end; gap: calc(4*var(--u)); height: calc(72*var(--u)); padding-bottom: 1px; border-bottom: 1px solid var(--c-line-strong); }
+  .mon-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+  .mon-col i { display: block; width: 70%; max-width: calc(28*var(--u)); min-height: calc(3*var(--u)); border-radius: var(--r-xs) var(--r-xs) 0 0; background: var(--c-accent-strong); }
+  .mon-col i.money { background: var(--c-good-strong); } .mon-col i.vault { background: var(--c-cold); }
+  .mon-cv { font-size: var(--fs-cap); font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: clip; }
+  .mon-days { display: flex; gap: calc(4*var(--u)); } .mon-days span { flex: 1; min-width: 0; text-align: center; font-size: var(--fs-cap); color: var(--c-ink-2); white-space: nowrap; overflow: hidden; }
+  .mon-help { margin: 0; padding-left: 1.1em; } .mon-help li { margin: calc(3*var(--u)) 0; }
+  #chipVault.gained .vv { color: var(--c-ok-ink); }
   /* 위쪽 상태 줄: 🏦 내 금고(가장 굵게·테두리, 상태 색) · 🪙 마을 돈(작게) · 🌡 기온(날씨 칸 안). 휴대폰은 금고 아래에 마을 돈을 작게 겹쳐 칸 하나로 */
   #stat > #chipVault { position: relative; z-index: 0; display: inline-flex; align-items: center; line-height: 1.1; font-weight: 800; color: var(--c-ok-ink); }
   #chipVault::before { content: ""; position: absolute; z-index: -1; inset: var(--stat-bw) calc(2*var(--u)); border-radius: var(--r-sm); background: var(--c-ok-bg); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-ok-ink); }
