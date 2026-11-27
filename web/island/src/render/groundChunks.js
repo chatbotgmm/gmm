@@ -154,7 +154,8 @@ const FLAT_N = [0, 1, 0];
 const toW = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
 
 function cliffColor(grid, x, z, y, gx, gz, tall = false) {
-  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : c && c.groundType === GroundType.Rock ? CLIFF_ROCK_COOL : tall ? CLIFF_ROCK : CLIFF;   // 바위 칸 비탈·벽은 바위 윗면처럼 푸른 회색
+  const c = grid.get(x, z), rockNb = () => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => grid.get(x + dx, z + dz)?.groundType === GroundType.Rock && !grid.isWater(x + dx, z + dz));
+  const base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : c && (c.groundType === GroundType.Rock || (c.groundType === GroundType.Grass && !tall && rockNb())) ? CLIFF_ROCK_COOL : tall ? CLIFF_ROCK : CLIFF;   // 바위 칸(과 바위 옆 잔디) 비탈·벽은 바위 윗면처럼 푸른 회색(바위 곶 안쪽 비탈이 흙빛과 섞여 누런 얼룩이 됐음)
   const strata = tall ? 0.9 + 0.12 * noise(gx * 0.7, y * 4.5) : 1;                 // 높은 절벽은 돌빛 + 가로 결
   return new THREE.Color().copy(base).multiplyScalar((0.82 + 0.18 * noise(gx * 2 + y * 3, gz * 2 - y * 3) + Math.max(-0.15, y * 0.1)) * strata);
 }
@@ -204,7 +205,9 @@ function seaCliff(b, grid, x, z, ha, hb, la, lb, ax, az, bx, bz, nrm) {
     const u = [q[1].p[0] - q[0].p[0], q[1].p[1] - q[0].p[1], q[1].p[2] - q[0].p[2]], v = [q[3].p[0] - q[0].p[0], q[3].p[1] - q[0].p[1], q[3].p[2] - q[0].p[2]];
     let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
     if (n[0] * nrm[0] + n[2] * nrm[2] < 0) n = n.map(a => -a);
-    const l = Math.hypot(...n) || 1; n = n.map(a => a / l);
+    let l = Math.hypot(...n) || 1; n = n.map(a => a / l);
+    // 면 법선은 벽 바깥 방향과 반반 섞고 아래로 향하지 않게: 위가 더 튀어나온 면(아래를 봄)은 툰 명암에서 가장 어두운 단이 돼 벽에 검은 네모 구멍처럼 보였음
+    n = [n[0] * 0.55 + nrm[0] * 0.45, Math.max(0, n[1] * 0.55), n[2] * 0.55 + nrm[2] * 0.45]; l = Math.hypot(...n) || 1; n = n.map(a => a / l);
     b.quad(q.map(o => ({ p: toW(o.p[0], o.p[1], o.p[2]), n, c: o.c })));
   }
 }
