@@ -4,7 +4,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { World, SPEED_BOOST } from "./world/World.js";
 import { GRID_W, toWorldX, toWorldZ, toGridX, toGridZ } from "./config.js";
 import { GroundChunks } from "./render/groundChunks.js";
-import { ViewGrid, SOFT } from "./render/viewGrid.js";
+import { ViewGrid } from "./render/viewGrid.js";
+import { SOFT } from "./world/chunkGrid.js";
 import { ChunkStream } from "./render/chunkStream.js";
 import { WaterWindow } from "./render/waterWindow.js";
 import { terrainHeight } from "./world/terrain.js";
@@ -278,7 +279,7 @@ function mount(w) {
     if (big("dailyDone", e)) { hud.logNote(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개)` : `📋 오늘의 부탁 완료: ${e.req.text}`, "good"); return; }
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
-  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null, true); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
+  if (tools) { Object.assign(tools, { world, chunks, stream, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null, true); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
 }
 let tools = null, hud = null, rewards = null;   // rewards: 플레이어 보상 화면(ui/rewardView.js)
@@ -311,7 +312,7 @@ function saveNow(quiet = true) {
   catch (e) { if (!quiet) hud?.status("저장하지 못했어요: " + e.message); return false; }
 }
 let oldMap = false;
-function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const j = JSON.parse(s); if (j.grid?.w !== GRID_W) { oldMap = true; return null; } const w = World.fromJSON(j); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }   // 지도 크기가 바뀐 예전 저장은 새 섬으로
+function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const j = JSON.parse(s); if (j.grid?.kind !== "chunks" && j.grid?.w !== GRID_W) { oldMap = true; return null; } const w = World.fromJSON(j); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }   // 지도 크기가 바뀐 예전 저장은 새 섬으로
 const savedWorld = loadSaved(); resumed = !!savedWorld;
 /** 다녀온 사이 편지: 저장한 때부터 지금까지 지난 실제 시간(기기 시계 그대로 → 설정의 시간 배수와 상관없음)을 월드에 넘겨 가볍게 쳐 주고, 편지 글을 만듦.
  *  섬을 올린(mount) 뒤에 부름(계절이 정해진 뒤). 10분이 안 지났거나 예전 저장(시각 없음)이면 null. */
@@ -332,7 +333,7 @@ tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, ch
 const twoFinger = new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
 const quarterCam = new QuarterCam({ camera, controls });                        // 건설 모드: 고정 쿼터뷰(⟲ ⟳ 로 90°씩), 끝내면 보던 각도로
 const buildingThumbs = new BuildingThumbs(renderer);                            // 건설 갤러리의 건물 사진
-tools.applyControls();                              // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대)
+tools.stream = stream; tools.applyControls();                              // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대)
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
@@ -525,6 +526,7 @@ function frameBody() {
   }
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 4, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도(프레임당 4 ms만큼만 나눠 만듦)
+  world.grid.visit?.(Math.floor(toGridX(controls.target.x)) >> 5, Math.floor(toGridZ(controls.target.z)) >> 5);   // 지나온 청크(저장 visited — 미니맵 「가 본 곳」용, 시뮬에는 안 쓰임)
   stream.update(controls.target, drawDist * 0.7, 3);                             // 바깥 땅: 그리기 반경 안 조각만(프레임당 3 ms만큼 나눠 만듦)
   cullFar(now);
   daylight.focus = controls.target; daylight.world = world; daylight.update(dt, now); powerRange.update(tools);   // world: 가로등·등불이 풍차 전기를 확인

@@ -31,6 +31,7 @@ export class ChunkStream {
       if (this.job && this.job.key === k) this.job = null;
     }
     if (this.sea.size > 4096) this.sea.clear();
+    this.rebuildDirty(focus);
     const deadline = performance.now() + budgetMs;
     for (;;) {
       if (!this.job) { const j = this.pick(focus, radius, dist, gx, gz, deadline); this.idle = j === null; if (!j) break; this.job = j; }   // idle: 반경 안이 다 만들어짐(시험·확인용)
@@ -60,6 +61,16 @@ export class ChunkStream {
     }
     if (!best) return null;
     const u = best.userData, job = startBuild(this.view, u.cx, u.cz, this.ground.lodFor(u.cx, u.cz, focus, u.sub)); job.key = u.chunk; return job;
+  }
+  /** 바깥 섬에서 칠하기·파기·짓기로 바뀐 조각(view.outerDirty): 있는 메쉬는 바로 다시 만듦(붓질이 바로 보이게), 바다뿐이라 건너뛴 조각은 다시 잼 */
+  rebuildDirty(focus) {
+    const d = this.view.outerDirty; if (!d || !d.size) return;
+    resetCaches(this.view); this.job = null;
+    for (const k of d) {
+      this.sea.delete(k); const m = this.meshes.get(k); if (!m) continue;
+      const u = m.userData, job = startBuild(this.view, u.cx, u.cz, this.ground.lodFor(u.cx, u.cz, focus, u.sub)); job.key = k; stepBuild(job); this.put(job);
+    }
+    d.clear();
   }
   put(job) {
     const geo = job.b.geometry(); let m = this.meshes.get(job.key);

@@ -31,7 +31,8 @@ export class Decor {
     const at = (x, z) => g.get(x, z), cells = { bush: [], flower: [], pebble: [], tuft: [] }, tr = seededRandom((world.seed ?? 7) * 53 + 11);
     const treeNear = new Set(); for (const t of world.trees) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) treeNear.add(`${t.x + dx},${t.z + dz}`);
     const c0 = world.center;
-    for (let z = 1; z < g.h - 1; z++) for (let x = 1; x < g.w - 1; x++) {
+    const B = g.box;                                                                  // 시작 섬 상자만(바깥 섬 덤불은 아직 없음 — 오픈월드 6단계)
+    for (let z = B.z0 + 1; z < B.z1 - 1; z++) for (let x = B.x0 + 1; x < B.x1 - 1; x++) {
       const c = at(x, z); if (!c || c.occupiedId || g.isWater(x, z)) continue;
       if (Math.abs(x - c0.x) < 8 && Math.abs(z - c0.z) < 8) continue;                 // 은행 앞 광장 자리는 비움
       let wallBase = false, wallTop = false, sandNear = false;
