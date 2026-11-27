@@ -31,6 +31,8 @@ import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
 import { readGridPref, saveGridPref } from "./gridView.js";
 import { tapTool } from "../systems/pressKind.js";
+import { atKey, atParse, atLabel, furniGuideHtml, quickLabels } from "./qolViews.js";
+import { cardSide } from "../systems/buildSpot.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
@@ -61,6 +63,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 export class Hud {
   constructor({ tools, world, onSave, onLoad, onReset }) {
     this.tools = tools; this.world = world;
+    tools.onConfirm = o => this.confirm({ ...o, danger: true });                      // 철거 확인(편의성 점검 8번)
     tools.onHistory = () => { if (this.undoBtns) { this.undoBtns[0].disabled = !tools.history.length; this.undoBtns[1].disabled = !tools.redoStack.length; } };
     const crossUI = document.getElementById("cross"), crossGo = document.getElementById("crossGo");
     tools.onCross = on => { crossUI.hidden = !on; crossGo.hidden = !on; };
@@ -86,7 +89,7 @@ export class Hud {
     const auxBtn = (id, icon, label, tip) => { const b = el("button", "abtn", icon); if (id) b.id = id; b.setAttribute("aria-label", label); b.dataset.tip = tip; aux.appendChild(b); return b; };
     this.buildCat = "all"; this.ecats = el("div", "ecats"); this.ecats.setAttribute("role", "group"); this.ecats.setAttribute("aria-label", "건물 분류");
     this.catBtns = BUILD_CATS.map(([id, label]) => { const b = el("button", "", label); b.dataset.cat = id; b.onclick = () => { this.buildCat = id; this.sub.scrollLeft = this.sub.scrollTop = 0; this.filterBuild(); }; this.ecats.appendChild(b); return b; });
-    this.ehint = el("span", "ehint", "🧹 누른 건물이 바로 사라져요 · 되돌릴 수 없어요");
+    this.ehint = el("span", "ehint", "🧹 건물을 누르면 철거할지 한 번 더 물어요");
     // ✋ 화면 이동: 끌어서 칠하는 도구(칠하기·높이·자연)를 쓰는 중에 켜면 드래그로 화면만 옮김(도구는 잠시 멈춤).
     // 짓기·철거·지형지물 옮기기는 끌기가 원래 화면 옮기기(톡 = 고르기)라 ✋를 숨김(showMode)
     this.handBtn = auxBtn("", "✋", "화면 이동", "켜면 드래그로 화면을 옮겨요(칠하기는 잠시 멈춤). PC는 스페이스를 누른 채 끌거나 오른쪽 버튼으로, 휴대폰은 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
@@ -116,7 +119,10 @@ export class Hud {
     tools.onPlan = (on, ok, plan) => {
       cf.hidden = !on; cfBuild.disabled = !ok;                                       // 자리: CSS(--dock-b, 세로 폰은 아래 도구 막대 바로 위)
       this.planNow = on ? plan || null : null; this.drawPlan();                      // 설계비·금고·재료 요약(금고가 바뀌면 update가 다시 셈)
+      queueMicrotask(() => this.placeConfirm());                                    // 고스트를 다 옮긴 뒤(refresh가 끝난 뒤) 카드 자리를 봄
     };
+    // 못 짓는 자리를 눌렀는데 옆에도 빈 자리가 없음: 까닭을 주황 알림으로 + 확인 카드를 한 번 흔듦(그냥 날아가지 않게 · 편의성 점검 4번)
+    tools.onBadSpot = why => { this.status(`🚫 ${why || "여기는 지을 수 없어요"} · 초록 고스트가 되는 자리를 눌러요`, { kind: "warn" }); cf.classList.remove("shake"); void cf.offsetWidth; cf.classList.add("shake"); clearTimeout(this.shakeT); this.shakeT = setTimeout(() => cf.classList.remove("shake"), 500); };
     cfBuild.onclick = () => tools.confirmBuild();
     const cfInfo = document.getElementById("cfInfo");                                // 휴대폰: 둘째 줄(재료·짓는 이)은 한 줄로 줄여 두고 누르면 펼침
     cfInfo.onclick = () => { const open = cfInfo.dataset.open !== "1"; cfInfo.dataset.open = open ? "1" : "0"; cfInfo.setAttribute("aria-expanded", String(open)); };
@@ -156,6 +162,23 @@ export class Hud {
     // 알림: 버튼 안내(바로 바꿈) + 차례로 보여 주는 알림(최대 3개 대기) · 지난 알림 30개(이번에 켠 동안만, 저장 안 함)
     this.toastQ = []; this.toastCur = null; this.noteLog = [];
     document.getElementById("logOpen").onclick = () => this.openApp("log", "news");
+    // 알림 눌러 그곳으로(편의성 점검 5번): 토스트 · 지난 알림 줄 → 그 갈매미 따라가기 / 그 건물로 + 카드
+    this.msg.addEventListener("click", () => { const it = this.toastCur; if (!(it?.at || it?.act) || this.msg.dataset.go == null) return; this.toastEnd(); if (it.act) it.act.run(); else this.gotoAt(it.at); });   // act: 누르면 할 일(짓기 「↶ 되돌리기」 · 편의성 점검 8번)
+    { const lb = document.getElementById("logBody"), go = e => { const li = e.target.closest?.("li[data-at]"); if (!li) return false; this.closePhone(); this.gotoAt(atParse(li.dataset.at)); return true; };
+      lb.addEventListener("click", go); lb.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && go(e)) e.preventDefault(); }); }
+    // 소원 줄 → 그 갈매미 따라가기 · 「🔨 지으러 가기」 → 그 건물을 고른 채 건설 모드(편의성 점검 6번)
+    { const wb = document.getElementById("wishBody"), go = e => {
+        const bt = e.target.closest?.("[data-wbuild]"); if (bt) { this.closePhone(); this.tools.setMode("build", bt.dataset.wbuild); return true; }
+        const li = e.target.closest?.("li[data-wu]"); if (!li) return false; const u = this.world.units.find(o => String(o.unitId) === li.dataset.wu); if (!u) return false;
+        this.closePhone(); if (this.tools.mode !== "view") this.tools.setMode("view"); this.onUnitFollow?.(u); return true; };
+      wb.addEventListener("click", go); wb.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("li[data-wu]") && go(e)) e.preventDefault(); }); }
+    // 🔎 건물 찾기(마을 앱): 줄 → 그 건물로 + 카드(편의성 점검 7번)
+    document.getElementById("townBody").addEventListener("click", e => { const bt = e.target.closest?.("[data-goto]"); if (!bt) return;
+      const b = [...this.world.buildings.values()].find(x => String(x.id) === bt.dataset.goto); if (!b) return; this.closePhone(); this.gotoAt({ b: b.id }); });
+    // ☰ 메뉴 빠른 켜고 끄기: 🔊 소리 · ⏩ 배속(유료판일 때만)(편의성 점검 12번)
+    this.qSound = document.getElementById("qSound"); this.qSpeed = document.getElementById("qSpeed");
+    this.qSound.onclick = () => { this.sfx?.setOn(!this.sfx.on); this.drawQuick(); this.soundLabel?.(); };
+    this.qSpeed.onclick = () => { this.onSpeed?.("next"); this.drawQuick(); };
     document.getElementById("coachAgain").onclick = () => { this.closePhone(); this.coach.start({ force: true }); };   // 도움말: 처음 안내 다시 보기
     // ---- 갈매폰: 📱 → 홈(맨 아래 독 4개 + 묶음 셋), 같은 시트에 ☰ 메뉴·도감
     this.phone = document.getElementById("phone"); this.phoneBtn = document.getElementById("phoneBtn");
@@ -176,7 +199,7 @@ export class Hud {
     // ☰ 메뉴: 계속하기 · 설정 · 저장 · 도움말(메뉴에서 연 앱의 ‹ 뒤로는 메뉴로)
     document.getElementById("menuBtn").onclick = () => this.openMenu();
     document.getElementById("pageMenu").onclick = e => { const g = e.target.closest?.("[data-go]")?.dataset.go; if (!g) return;
-      if (g === "close") this.closePhone(); else if (g === "home") this.openApp(null); else this.openApp(g, "menu"); };
+      if (g === "close") this.closePhone(); else if (g === "overview") { this.closePhone(); this.onOverview?.(); } else if (g === "home") this.openApp(null); else this.openApp(g, "menu"); };
     this.watchSizes();
     // 설정 갈래 탭 + 고르기 칸(누른 값으로 바로: main.js 콜백에 목표 값을 넘김)
     this.setTab = "screen";
@@ -185,7 +208,7 @@ export class Hud {
     // 배지: 처음 본 값을 기준으로(불러온 직후엔 점이 없음)
     this.seen = null;
     // 배고픈 갈매미 알림: 누르면 그 갈매미를 따라감
-    this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitClick?.(this.hungry); };
+    this.alertBtn = document.getElementById("alert"); this.alertBtn.onclick = () => { if (this.hungry) this.onUnitFollow?.(this.hungry); };   // 따라가기만(다시 눌러도 안 풀림) + 가까이
     this.chipPop = document.getElementById("chipPop"); this.chipTime = document.getElementById("chipTime");
     this.chipTime.onclick = () => this.onSpeed?.("next");                          // 시간 칩 = ⏩ 배속 바꾸기(유료판 ×1→×2→×3, 무료판이면 잠금 안내)
     this.chipWeather = document.getElementById("chipWeather"); this.chipWeather.onclick = () => this.onWeatherInfo?.();
@@ -290,11 +313,15 @@ export class Hud {
     const go = c.querySelector(".go"); go.hidden = kind !== "house"; c.querySelector(".hx").onclick = () => { c.hidden = true; };
     if (kind === "house") {
       c.querySelector("b").textContent = `🏠 ${BUILDINGS[b.defId].name}`; c.querySelector("span").textContent = `${residentsText(b, w.units)} · 🛋 아늑함 ${Fu.comfort(b)}`;   // 2층집은 「주민 2/2 · 주인 A · 같이 사는 B」(homes.js)
-      go.onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); }; c.hidden = false; return;
+      go.onclick = () => { c.hidden = true; this.onDecorate?.(b); this.coach?.moment("room"); };
+      const fg = furniGuideHtml(w, b); if (fg) { x.innerHTML = fg; x.hidden = false; }   // 놓을 가구가 없으면: 안내 + 🛍 잡화점 · 🏵 도장 가게 바로가기(편의성 점검 10번)
+      c.hidden = false; return;
     }
     const card = this.bldCardOf(b, kind); c.querySelector("b").textContent = card.title; c.querySelector("span").textContent = card.sub;
     x.hidden = false; c.hidden = false; this.syncBldCard(card);
   }
+  /** 🏵 도장 가게(소원 앱의 가게 접기를 펼친 채로): 건물 카드·가구 없는 방에서 */
+  openStampShop() { this.openPhone(); this.openApp("wish"); const d = document.querySelector("#dailyBody details.sshop"); if (d) { d.open = true; d.scrollIntoView?.({ block: "nearest" }); } }
   /** 카드 종류별 글(bldView.js) */
   bldCardOf(b, kind) {
     const w = this.world, more = (k, t, h, o) => this.more(k, t, h, o);
@@ -323,9 +350,10 @@ export class Hud {
   bldCardClick(e) {
     const t = e.target.closest?.("[data-act]"), b = this.cardB, w = this.world; if (!t || !b) return;
     const act = t.dataset.act; this.cardPress = 0;                                 // 누름은 끝났음: 이 단추가 바꾼 칸은 바로 다시 그림(0.3초 막기를 풀어 탭·당번 결과가 늦지 않게)
-    if (act === "follow") { const u = w.units.find(o => String(o.unitId) === t.dataset.id); if (u) this.onUnitClick?.(u); return; }
+    if (act === "follow") { const u = w.units.find(o => String(o.unitId) === t.dataset.id); if (u) this.onUnitFollow?.(u); return; }   // 따라가기만 + 가까이(다시 눌러도 안 풀림)
     if (act === "tab") { this.shopTab = t.dataset.tab; this.syncBldCard(); return; }
-    if (act === "stamp") { this.openPhone(); this.openApp("wish"); const d = document.querySelector("#dailyBody details.sshop"); if (d) { d.open = true; d.scrollIntoView?.({ block: "nearest" }); } return; }
+    if (act === "stamp") { document.getElementById("houseCard").hidden = true; this.openStampShop(); return; }
+    if (act === "shop") { const s = [...w.buildings.values()].find(o => String(o.id) === t.dataset.id); if (s) this.onGoto?.(s); return; }   // 가구 없는 집 카드: 🛍 잡화점으로 + 잡화점 카드
     if (act === "doctor") {
       const id = t.dataset.id, u = id ? w.units.find(o => String(o.unitId) === id) : null, r = w.setDoctor(b.id, u ? u.unitId : null);
       if (!r.ok) { this.status(r.reason, { kind: "warn" }); return; }
@@ -377,7 +405,7 @@ export class Hud {
     this.drawTimeChip();
     this.chipTime.dataset.tip = paid ? `⏩ 배속 ×${sp} · 누르면 ×1 → ×2 → ×3 (F)` : "⏩ 배속은 유료판 기능 🔒 · 누르면 안내 (F)";
     this.chipTime.setAttribute("aria-label", `${this.chipTime.textContent} · ${paid ? `배속 ×${sp}, 누르면 바꾸기` : "배속은 유료판 기능"}`);
-    this.syncSettings(); }
+    this.drawQuick(); this.syncSettings(); }
   /** 시간 칩: 시각 + ⏩ 배속. 넓은 화면은 글자로(🌙 22:02 ⏩×3), 휴대폰은 칩 폭이 늘지 않게 오른쪽 위 작은 딱지(data-speed, CSS ::before) */
   drawTimeChip() {
     const sp = this.edition?.speed ?? 1, small = this.phoneForm, c = this.chipTime; if (!c || !this.timeLabel) return;
@@ -408,7 +436,7 @@ export class Hud {
   openPhone() { this.phone.hidden = false; this.openApp(null); this.sfx?.play("phoneOpen", { vol: 0.5 }); }
   closePhone() { if (!this.phone.hidden) this.sfx?.play("phoneClose", { vol: 0.5 }); this.phone.hidden = true; this.app = null; this.appFrom = null; }
   /** ☰ 메뉴(같은 시트를 씀) */
-  openMenu() { if (this.phone.hidden) { this.phone.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 }); } this.openApp("menu"); }
+  openMenu() { if (this.phone.hidden) { this.phone.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 }); } this.openApp("menu"); this.drawQuick(); }
   /** ‹ 뒤로 · Esc 한 단계: 앱 → (메뉴·소식지에서 왔으면 그곳, 아니면 홈) → 닫기 */
   phoneBackStep() {
     if (this.app == null || this.app === "menu") this.closePhone();
@@ -416,7 +444,14 @@ export class Hud {
   }
   initSound() {
     const b = document.getElementById("sfxBtn"), v = document.getElementById("sfxVol"), s = this.sfx, label = () => { b.textContent = `소리: ${s.on ? "켬" : "끔"}`; };
-    label(); v.value = Math.round(s.volume * 100); b.onclick = () => { s.setOn(!s.on); label(); }; v.oninput = () => s.setVolume(v.value / 100);
+    label(); v.value = Math.round(s.volume * 100); b.onclick = () => { s.setOn(!s.on); label(); this.drawQuick(); }; v.oninput = () => s.setVolume(v.value / 100);
+    this.soundLabel = label; this.drawQuick();
+  }
+  /** ☰ 메뉴의 빠른 켜고 끄기 글자(소리 켬·끔 · 배속은 유료판에서만 보임) */
+  drawQuick() {
+    if (!this.qSound) return; const q = quickLabels({ soundOn: !!this.sfx?.on, paid: !!this.edition?.isPaid, speed: this.edition?.speed });
+    if (this.qSound.textContent !== q.sound) this.qSound.textContent = q.sound; this.qSound.setAttribute("aria-pressed", String(!!this.sfx?.on));
+    this.qSpeed.hidden = !q.speed; if (q.speed && this.qSpeed.textContent !== q.speed) this.qSpeed.textContent = q.speed;
   }
   openApp(app, from = null) {
     if (app !== this.app && this.sbody) this.sbody.scrollTop = 0;                    // 다른 페이지로 가면 맨 위부터
@@ -575,7 +610,7 @@ export class Hud {
       nm.append(el("span", "job", JOBS[u.job]?.icon ?? ""), u.name); nm.style.color = RARITY[u.rarity]?.color;
       nm.dataset.tip = `${RARITY[u.rarity]?.name} ${JOBS[u.job]?.name}: ${JOBS[u.job]?.desc}`;
       r.append(nm, el("span", "act"), el("span", "coins"), el("span", "full"));
-      r.onclick = () => { this.onUnitClick?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });
+      r.onclick = () => { this.onUnitFollow?.(u); this.closePhone(); }; this.list.appendChild(r); return r; });   // 목록 줄: 따라가던 갈매미를 다시 눌러도 풀지 않고 가까이(그만은 카드 ✕)
     this.follow = null; this.seen = null; this.badgeKey = null; this.trayKey = null;   // 새 섬·불러오기: 배지 기준 · 건물 갤러리도 새로
   }
   /** 트레이의 묶음 하나(작은 이름 + 버튼들). 버튼을 담을 칸을 돌려줌 */
@@ -656,7 +691,7 @@ export class Hud {
     const tap = tapTool(mode, nature ? natureAction(arg).kind : null);             // 톡 = 고르기 · 끌기 = 화면 옮기기 도구: ✋가 필요 없음(켜 둔 채 오면 끔 — 켜져 있으면 톡이 안 먹음)
     if (tap && this.tools.hand) this.tools.setHand(false);
     this.handBtn.hidden = mode === "view" || tap;
-    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;
+    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
     for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
     this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
     this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만
@@ -684,7 +719,7 @@ export class Hud {
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
       this.drawBuildTray(arg);                                                      // ↻ 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
     }
-    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 바로 사라져요 · 끌면 화면 이동 · 되돌릴 수 없으니 천천히 골라요");
+    if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 철거할지 한 번 더 물어요 · 끌면 화면 이동 · 다 지은 건물은 되돌릴 수 없어요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
     else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
     if (!keep && nature) { const c = this.natCards?.find(x => x.dataset.nat === arg); if (c && (c.offsetLeft + c.offsetWidth > sub.clientWidth || c.offsetTop + c.offsetHeight > sub.clientHeight)) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 도구가 보이게
@@ -833,31 +868,53 @@ export class Hud {
    *  full: true = 차례를 기다리는 소식이라도 꼬리말까지 다 보임(처음 켤 때 안내처럼 할 일이 꼬리에 있는 글)
    *  kind: info(파랑) · good(초록) · warn(주황) · error(빨강) — 왼쪽 색 띠(색만으로 알리지 않게 글 앞에 이모지가 붙어 옴) */
   status(text, opt) {
-    const kind = opt?.kind || "info";
-    if (opt?.queue) return this.notify(text, kind, !!opt.full);
+    const kind = opt?.kind || "info", at = opt?.at || null, act = opt?.act || null;                      // at = 누르면 갈 곳 { u: 갈매미 id } | { b: 건물 id }(qolViews.noteTarget · 편의성 점검 5번)
+    if (opt?.queue) return this.notify(text, kind, !!opt.full, at);
     if (!text) { if (this.toastCur && !this.toastCur.q) this.toastEnd(); return; }
-    if (opt?.kind === "warn" || opt?.kind === "error") this.logNote(text, kind);
+    if (opt?.kind === "warn" || opt?.kind === "error") this.logNote(text, kind, at);
     if (this.toastCur?.q) this.toastQ.unshift(this.toastCur);                     // 보이던 소식은 맨 앞으로 되돌려 안내 다음에 다시
     while (this.toastQ.length > 3) this.toastQ.pop();
-    this.toastShow({ text, kind, q: false, n: 1 }, document.body.dataset.mode === "edit" ? 4000 : 6000);   // 건설 중 안내는 4초(화면을 덜 가리게)
+    this.toastShow({ text, kind, q: false, n: 1, at, act }, document.body.dataset.mode === "edit" ? 4000 : 6000);   // 건설 중 안내는 4초(화면을 덜 가리게)
   }
-  notify(text, kind = "info", full = false) {
-    if (!text) return; this.logNote(text, kind);
+  notify(text, kind = "info", full = false, at = null) {
+    if (!text) return; this.logNote(text, kind, at);
     const same = [this.toastCur, this.toastQ[this.toastQ.length - 1]].find(x => x?.q && x.text === text);
-    if (same) { same.n++; if (same === this.toastCur) this.toastShow(same, this.toastMs(same)); return; }   // 같은 소식이 이어지면 ×2, ×3
-    this.toastQ.push({ text, kind, q: true, n: 1, full }); while (this.toastQ.length > 3) this.toastQ.shift();   // 너무 밀리면 오래된 것부터 버림(지난 알림엔 남음)
+    if (same) { same.n++; if (atKey(same.at) !== atKey(at)) same.at = null; if (same === this.toastCur) this.toastShow(same, this.toastMs(same)); return; }   // 같은 소식이 이어지면 ×2, ×3(대상이 다르면 누르기 없음)
+    this.toastQ.push({ text, kind, q: true, n: 1, full, at }); while (this.toastQ.length > 3) this.toastQ.shift();   // 너무 밀리면 오래된 것부터 버림(지난 알림엔 남음)
     if (!this.toastCur) this.toastNext();
   }
   toastMs(it) { return toastHtml(it.text, { keepTail: !it.q || it.full }).len > 40 ? 6500 : 4500; }
   toastShow(it, ms) {
     this.toastCur = it; const t = toastHtml(it.text, { keepTail: !it.q || it.full, count: it.n });   // 아이콘 + 핵심 낱말 굵게 · 마을 소식의 긴 꼬리말은 지난 알림에서만
     if (this.msgHtml !== t.html) { this.msgHtml = t.html; this.msg.innerHTML = t.html; } this.msg.dataset.kind = it.kind; this.msg.hidden = false;
+    const go = it.act?.label || it.at && atLabel(this.world, it.at);                               // 누르면 그곳으로(따라가기 · 건물): 그때만 손가락을 받음(CSS #msg[data-go])
+    if (go) { this.msg.dataset.go = go; this.msg.title = `누르면 ${go}`; this.msg.setAttribute("role", "button"); } else if (this.msg.dataset.go != null) { delete this.msg.dataset.go; this.msg.removeAttribute("title"); this.msg.removeAttribute("role"); }
     clearTimeout(this.msgT); this.msgT = setTimeout(() => this.toastEnd(), ms);
+  }
+  /** 확인 카드 자리(편의성 점검 4번): 고스트가 아래 카드 밑에 숨으면 위(칩 아래)로, 아니면 아래 그대로. 정할 때·화면을 옮길 때(update 5Hz) */
+  placeConfirm() {
+    const cf = document.getElementById("confirm"); if (cf.hidden) { if (cf.dataset.side) delete cf.dataset.side; this.cfBottom = null; return; }
+    const g = this.tools.planScreen?.(); if (!g) return;
+    const r = cf.getBoundingClientRect(), side = cf.dataset.side || "bottom";
+    if (side === "bottom") this.cfBottom = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };   // 아래에 있을 때 자리를 기억(위로 옮긴 뒤에도 견줄 수 있게)
+    const bot = this.cfBottom || { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    const t0 = document.getElementById("chips").getBoundingClientRect().bottom + 56, top = { left: bot.left, right: bot.right, top: t0, bottom: t0 + (bot.bottom - bot.top) };
+    const want = cardSide(g, bot, top);
+    if (want !== side) { if (want === "top") cf.dataset.side = "top"; else delete cf.dataset.side; }
+  }
+  /** 알림 대상으로 가기: 갈매미는 따라가기(+ 가까이), 건물은 그 건물로 + 카드. 건설 모드·방 안이면 먼저 둘러보기로. 이미 없으면 안내 */
+  gotoAt(at) {
+    const w = this.world; if (!at) return false;
+    const u = at.u != null ? w.units.find(o => o.unitId === at.u) : null, b = at.b != null ? w.buildings.get(at.b) : null;
+    if (!u && !b) { this.status("그 갈매미·건물은 이제 없어요", { kind: "info" }); return false; }
+    this.leaveRoom?.(); if (this.tools.mode !== "view") this.tools.setMode("view");
+    if (u) this.onUnitFollow?.(u); else { this.onGoto?.(b); if (document.getElementById("houseCard").hidden) this.status(`📍 ${atLabel(w, at).replace(/ 가기$/, "")} 왔어요`, { kind: "info" }); }   // 카드가 없는 건물(시장·은행·장식…): 어느 건물로 왔는지 한 줄
+    return true;
   }
   toastEnd() { clearTimeout(this.msgT); this.toastCur = null; this.msg.hidden = true; if (this.toastQ.length) this.msgT = setTimeout(() => this.toastNext(), 220); }   // 잠깐 비웠다가 다음 것
   toastNext() { const it = this.toastQ.shift(); if (it) this.toastShow(it, this.toastMs(it)); }
-  logNote(text, kind) {
-    this.noteLog.unshift({ text, kind, at: Date.now() }); if (this.noteLog.length > 30) this.noteLog.length = 30;
+  logNote(text, kind, to = null) {
+    this.noteLog.unshift({ text, kind, at: Date.now(), to }); if (this.noteLog.length > 30) this.noteLog.length = 30;
     if (!this.phone.hidden && this.app === "log") this.drawLog();
   }
   /** 🔔 지난 알림(새 것부터) */
@@ -865,7 +922,8 @@ export class Hud {
     const body = document.getElementById("logBody"), key = `${this.noteLog.length}|${this.noteLog[0]?.at}|${this.noteLog[0]?.text}`;
     if (key === this.logKey && body.firstChild) return; this.logKey = key;
     const tm = at => new Date(at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-    body.innerHTML = this.noteLog.length ? this.noteLog.map(n => `<li data-kind="${n.kind}"><time>${tm(n.at)}</time><span>${escHtml(n.text)}</span></li>`).join("")
+    body.innerHTML = this.noteLog.length ? this.noteLog.map(n => { const go = n.to && atLabel(this.world, n.to);   // 대상이 아직 있으면 눌러서 그곳으로(›)
+      return `<li data-kind="${n.kind}"${go ? ` data-at="${atKey(n.to)}" class="go" role="button" tabindex="0" title="${escHtml(go)}"` : ""}><time>${tm(n.at)}</time><span>${escHtml(n.text)}</span>${go ? `<i class="lgo" aria-hidden="true">›</i>` : ""}</li>`; }).join("")
       : `<li class="dim">아직 지난 알림이 없어요. 마을에서 일이 생기면 여기에 쌓여요.</li>`;
   }
   update(chunkInfo) {
@@ -878,6 +936,7 @@ export class Hud {
     this.drawBadges();
     this.drawMoneyChips();
     if (this.planNow) this.drawPlan();                                               // 건설 확인창: 품삯·세금으로 금고가 바뀌면 설계비 줄·단추를 다시
+    if (this.planNow) this.placeConfirm();                                           // 화면을 옮겨 고스트가 확인 카드 밑으로 가면 카드를 반대쪽으로
     if (document.body.dataset.mode === "edit" && this.tools?.mode === "build") this.drawCardMeta();
     if (document.body.dataset.mode === "edit" && this.tools?.mode === "nature") this.drawNatureMeta();
     const sat = w.avgSat ? w.avgSat() : 50, face = sat >= 75 ? "😄" : sat >= 55 ? "🙂" : sat >= 35 ? "😐" : "😣";

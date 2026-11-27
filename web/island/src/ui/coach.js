@@ -1,7 +1,8 @@
 // 처음 안내: 첫 세션 3단계 말풍선(둘러보기 → 갈매미 누르기 → 집 한 채 짓기)과, 앱·상호작용을 처음 만날 때 한 번 뜨는 짧은 안내.
-// 화면을 막지 않는 말풍선(버튼만 눌림)이고 저절로 닫히지 않음. 상태는 이 기기에만(galmaemiman-hints) — 섬 저장과는 따로.
+// 화면을 막지 않는 말풍선(버튼만 눌림)이고 저절로 닫히지 않음(「처음이에요」는 몇 초 뒤 한 줄로 접히고 건설·방 화면에선 숨음 — coachRules.js). 상태는 이 기기에만(galmaemiman-hints) — 섬 저장과는 따로.
 // 매 프레임 돌지 않음: 안내가 떠 있거나 기다릴 때만 0.4초마다 살핌(글자·자리는 바뀔 때만 고침).
 import { BUILDINGS } from "../data/catalog.js";
+import { pickMoment, momentFolded } from "./coachRules.js";
 
 const COACH_KEY = "galmaemiman-hints";
 /** 앱 페이지를 처음 열 때 위에 붙는 안내(2문장 이내, 도움말·화면에 있던 말을 줄여 씀) */
@@ -24,13 +25,14 @@ export class CoachMarks {
   constructor(hud) {
     this.hud = hud; this.state = { coach: 0, seen: {} };
     try { const j = JSON.parse(localStorage.getItem(COACH_KEY) || "null"); if (j && typeof j === "object") { if (j.coach !== undefined) this.state.coach = j.coach; if (j.seen && typeof j.seen === "object") this.state.seen = j.seen; } } catch { /* 저장을 못 쓰는 곳: 처음처럼 */ }
-    this.step = 0; this.wait = null; this.moments = []; this.timer = 0; this.key = null; this.hi = null; this.done = false;
+    this.step = 0; this.wait = null; this.moments = []; this.momentAt = {}; this.momentKeep = {}; this.timer = 0; this.key = null; this.hi = null; this.done = false;
     const box = this.box = document.createElement("div"); box.id = "coach"; box.hidden = true; box.setAttribute("role", "region"); box.setAttribute("aria-label", "처음 안내");
-    box.innerHTML = `<div class="ctop"><span class="cstep"></span><span class="cdots" aria-hidden="true"></span><button class="cskip ghost" type="button">건너뛰기</button></div><div class="cmain"><p class="ctext" aria-live="polite"></p><button class="cok go" type="button">알겠어요</button></div>`;
+    box.innerHTML = `<div class="ctop"><span class="cstep"></span><span class="cdots" aria-hidden="true"></span><button class="cexp ghost" type="button" hidden>펼치기</button><button class="cskip ghost" type="button">건너뛰기</button></div><div class="cmain"><p class="ctext" aria-live="polite"></p><button class="cok go" type="button">알겠어요</button></div>`;
     document.body.append(box);
-    this.stepEl = box.querySelector(".cstep"); this.dots = box.querySelector(".cdots"); this.text = box.querySelector(".ctext"); this.skipBtn = box.querySelector(".cskip"); this.okBtn = box.querySelector(".cok");
+    this.stepEl = box.querySelector(".cstep"); this.dots = box.querySelector(".cdots"); this.text = box.querySelector(".ctext"); this.skipBtn = box.querySelector(".cskip"); this.okBtn = box.querySelector(".cok"); this.expBtn = box.querySelector(".cexp");
+    this.expBtn.onclick = () => { if (this.momentK) this.momentKeep[this.momentK] = 1; this.key = null; this.tick(); };   // 접힌 안내를 다시 펼침(그 안내는 더 안 접음)
     this.skipBtn.onclick = () => this.finish("skip");
-    this.okBtn.onclick = () => { if (this.moments.length && this.shown === "moment") { this.moments.shift(); } else if (this.done) { this.done = false; this.step = 0; } this.key = null; this.tick(); };
+    this.okBtn.onclick = () => { if (this.shown === "moment" && this.momentK) { this.moments = this.moments.filter(k => k !== this.momentK); } else if (this.done) { this.done = false; this.step = 0; } this.key = null; this.tick(); };
     // ① 둘러보기: 화면(캔버스)을 끌거나 휠·키로 옮기면 넘어감. 갈매미를 누르는 짧은 탭(조금 움직임)은 세지 않음
     let down = null;
     addEventListener("pointerdown", e => { down = this.step === 1 && e.target?.tagName === "CANVAS" ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null; }, true);
@@ -79,14 +81,16 @@ export class CoachMarks {
   }
   /** 0.4초마다: 단계 넘김 살피기 + 보일 글·자리 정하기(바뀐 때만 DOM을 고침) */
   tick() {
-    const h = this.hud, inRoom = document.body.classList.contains("inroom");
+    const h = this.hud, inRoom = document.body.classList.contains("inroom"), editMode = document.body.dataset.mode === "edit";
     if (inRoom) this.moment("room");
-    let want = null;                                                              // { kind, text, stepNo, target }
+    let want = null;                                                              // { kind, text, stepNo, target, fold }
     const blocked = this.blocked();
+    if (!inRoom) this.moments = this.moments.filter(k => k !== "room");          // 방을 이미 나왔으면 방 안내는 안 보여 줌
+    this.momentK = null;
     if (!blocked && this.moments.length) {
-      const k = this.moments[0], m = COACH_MOMENT_HINTS[k];
-      if (k === "room" && !inRoom) this.moments.shift();                         // 방을 이미 나왔으면 안 보여 줌
-      else want = { kind: "moment", text: m[document.documentElement.dataset.input === "touch" ? "touch" : "mouse"] };
+      const k = pickMoment(this.moments, { inRoom, editMode });                  // 선물·입질 안내는 둘러보기에서만(건설 모드·방 안이면 기다림)
+      if (k) { const m = COACH_MOMENT_HINTS[k], now = performance.now(); this.momentK = k; this.momentAt[k] ??= now;
+        want = { kind: "moment", text: m[document.documentElement.dataset.input === "touch" ? "touch" : "mouse"], fold: momentFolded(this.momentAt[k], now, !!this.momentKeep[k]) }; }
     }
     if (!want && this.step && !blocked && !inRoom) {
       // 편지·처음 알림이 지나간 뒤 시작: 알림이 비거나 8초가 지나면
@@ -113,7 +117,7 @@ export class CoachMarks {
   }
   show(want) {
     const box = this.box;
-    const key = want ? `${want.kind}|${want.stepNo || ""}|${want.text}|${want.target || ""}|${document.documentElement.dataset.form}|${document.body.dataset.mode}` : "";
+    const key = want ? `${want.kind}|${want.stepNo || ""}|${want.text}|${want.target || ""}|${want.fold ? 1 : 0}|${document.documentElement.dataset.form}|${document.body.dataset.mode}` : "";
     if (key === this.key) { if (want) this.place(); return; }                     // 자리는 매번(알림이 뜨고 사라짐 · 0.4초마다 몇 군데만 잼)
     this.key = key;
     this.shown = want?.kind || null;
@@ -125,13 +129,14 @@ export class CoachMarks {
     this.text.textContent = want.text;
     this.skipBtn.hidden = want.kind !== "step"; this.okBtn.hidden = want.kind === "step";
     this.okBtn.textContent = want.kind === "done" ? "좋아요" : "알겠어요";
+    box.classList.toggle("cfold", !!want.fold); this.expBtn.hidden = !want.fold;   // 접힘: 「처음이에요 · 펼치기 · 알겠어요」 한 줄
     box.dataset.kind = want.kind; box.hidden = false; this.place();
   }
   /** 위쪽 가운데(가로는 CSS: 건설 레일만큼 비킴): 칩·알림·미니맵·방 머리줄 밑으로(가로로 겹치는 것만 피함) */
   place() {
     const box = this.box; box.style.left = "";                                   // 기본 자리(가운데)에서 재고, 끝에 정한 자리로(같은 프레임이라 깜빡이지 않음)
     const b = box.getBoundingClientRect(); let top = 0;
-    for (const sel of ["#chips", "#msg", "#minimap", "#room .rhead", "#tools", "#ebar", "#sub"]) {
+    for (const sel of ["#chips", "#msg", "#minimap", "#homeBtn", "#room .rhead", "#tools", "#ebar", "#sub"]) {
       const e = document.querySelector(sel); if (!e || e.hidden || !e.getClientRects().length) continue;
       const q = e.getBoundingClientRect(); if (q.width < 2 || q.height < 2 || q.top > innerHeight * 0.45) continue;   // 아래쪽에 있는 것은 상관없음
       if (q.right > b.left && q.left < b.right) top = Math.max(top, q.bottom);

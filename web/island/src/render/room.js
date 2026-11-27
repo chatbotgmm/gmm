@@ -107,7 +107,7 @@ export class RoomView {
     const it = this.L, span = Math.max(it.w, it.d);
     this.controls.target.set(0, 0.4, 0); this.camera.position.set(span * 0.55, span * 0.95, span * 1.15); this.fit(); this.controls.update();
     this.onSound?.("doorIn"); this.touch.hidden = false; this.ui.hidden = false; this.bubbleBox.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
-    this.offFurn = () => {}; this.status(`${BUILDINGS[b.defId].name}에 들어왔어요 · 가구를 골라 방에 놓아 보세요`);
+    this.offFurn = () => {}; this.status(Object.keys(F.available(world, b)).length ? `${BUILDINGS[b.defId].name}에 들어왔어요 · 가구를 골라 방에 놓아 보세요` : `${BUILDINGS[b.defId].name}에 들어왔어요 · 놓을 가구는 아직 없어요(잡화점·도장 가게에서) · 바닥·벽지는 바꿀 수 있어요`);
   }
   /** 화면 모양에 맞춰 방 전체가 보이게: 세로 화면은 렌즈를 넓히고 더 멀리서 */
   fit() {
@@ -267,7 +267,7 @@ export class RoomView {
   }
   // ---- 아래 판(가구·바닥·벽지)
   refreshUI() {
-    const w = this.world, b = this.b, it = this.L, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = "";
+    const w = this.world, b = this.b, it = this.L, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = ""; list.classList.remove("empty");
     const inside = w.units.filter(u => u.insideBuildingId === b.id);
     this.ui.querySelector(".rtitle").textContent = `🏠 ${BUILDINGS[b.defId].name} · ${residentsText(b, w.units)} · 🛋 아늑함 ${F.comfort(b)}`;   // 2층집: 주민 2/2 · 주인 · 같이 사는(homes.js)
     this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : "";
@@ -283,7 +283,9 @@ export class RoomView {
         bt.append(sw, rel("b", "", `${f.name} ×${av[id].n}`), rel("small", "", `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${bag ? " · 🎒" : ""}`));
         if (bag) bt.dataset.tip = `${roomFurniSource(av[id].item)}(마을 가방)`;
         bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
-      if (!ids.length) list.appendChild(rel("span", "dim", w.shopB() ? "놓을 가구가 없어요. 집주인이 돈이 모이면 잡화점에서 사 와요" : "놓을 가구가 없어요. 잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요 · 낚시·축제·도장 가게에서 얻은 가구도 놓을 수 있어요"));
+      if (!ids.length) { list.classList.add("empty");                                                             // 가구가 없으면: 어디서 얻는지 + 🏵 도장 가게 바로가기(편의성 점검 10번) · 바닥·벽지는 탭에서 바꿀 수 있음
+        list.appendChild(rel("span", "dim", `놓을 가구가 없어요 · 가구는 잡화점·도장 가게에서. ${w.shopB() ? "집주인이 돈이 모이면 잡화점에서 사 와요" : "잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요"} · 낚시·축제에서 얻은 가구도 놓을 수 있어요 · 바닥·벽지는 위 탭에서 바꿔요`));
+        if (this.onShop) { const sb = rel("button", "go", "🏵 도장 가게 보기"); sb.onclick = () => { this.close(); this.onShop(); }; list.appendChild(sb); } }
     } else {
       const table = this.tab === "floor" ? FLOORS : WALLPAPERS, key = this.tab === "floor" ? "floor" : "wallpaper";
       for (const [id, d] of Object.entries(table)) { const bt = rel("button", it[key] === id ? "on" : "", d.name); const sw = rel("span", "sw"); sw.style.background = "#" + d.color.toString(16).padStart(6, "0"); bt.prepend(sw);

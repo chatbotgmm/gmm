@@ -14,7 +14,7 @@ const fresh = () => World.create(7, seededRandom(3), { wild: true, firstGull: tr
 const details = html => [...html.matchAll(/<details class="more" data-more="([^"]+)"( open)?/g)].map(m => [m[1], !!m[2]]);
 const first = (html, re) => html.search(re);
 
-test("마을: 머리(등급·점수/다음 점수·남은 점수·막대)가 맨 앞, 한눈 칸(겨울·저장고), 세부는 다섯 접기(처음엔 닫힘)", () => {
+test("마을: 머리(등급·점수/다음 점수·남은 점수·막대)가 맨 앞, 한눈 칸(겨울·저장고), 세부는 여섯 접기(처음엔 닫힘 · 맨 앞은 🔎 건물 찾기)", () => {
   const w = fresh(), html = townAppHtml(w, { today: new Date(2026, 10, 26) });
   assert.equal(first(html, /<div class="sum"/), 0, "맨 앞은 핵심 요약 머리");
   const nxt = RANKS[w.rank + 1];
@@ -23,7 +23,7 @@ test("마을: 머리(등급·점수/다음 점수·남은 점수·막대)가 맨
   assert.match(html, /role="progressbar"/);
   assert.match(html, /class="facts".*❄️ 겨울까지 5일/, "11월 26일 → 12월 1일까지 5일");
   assert.match(html, /🏚 저장고 없음/);
-  assert.deepEqual(details(html).map(d => d[0]), ["town.score", "town.next", "town.fest", "town.winter", "town.ranks"]);
+  assert.deepEqual(details(html).map(d => d[0]), ["town.find", "town.score", "town.next", "town.fest", "town.winter", "town.ranks"]);
   assert.ok(details(html).every(d => !d[1]), "처음엔 모두 접힘");
   assert.ok(html.indexOf("id=\"festNow\"") > html.indexOf('data-more="town.fest"'), "축제 줄은 접기 안쪽");
   // 점수 내역: 0점 줄은 흐리게(.zero) + 맨 아래

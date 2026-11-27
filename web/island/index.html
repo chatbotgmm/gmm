@@ -149,6 +149,11 @@
   #minimap { position: fixed; right: var(--safe-r); top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); z-index: var(--z-hud); padding: calc(4*var(--u)); background: var(--c-hud); border-radius: var(--r-md); box-shadow: var(--e-1); }
   #minimap canvas { display: block; width: calc(176*var(--u)); height: calc(176*var(--u)); border-radius: var(--r-sm); cursor: pointer; touch-action: none; image-rendering: pixelated; }
   body.inroom #minimap { display: none !important; }
+  /* 🏝 전체 보기(편의성 점검 9번): 미니맵 자리(오른쪽 위) — 미니맵을 켰으면 그 바로 밑. 가까이 보거나 따라갈 때만(main.js가 hidden을 바꿈) */
+  #homeBtn { position: fixed; right: var(--safe-r); top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); z-index: var(--z-hud); min-height: var(--hit-sm); padding: calc(4*var(--u)) var(--s-2); background: var(--c-hud); font-size: var(--fs-sm); font-weight: 700; border-radius: var(--r-md); box-shadow: var(--e-1); touch-action: manipulation; }
+  #homeBtn[hidden], body.inroom #homeBtn { display: none !important; }
+  body:has(#minimap:not([hidden])) #homeBtn { top: calc(var(--safe-t) + var(--chips-h) + var(--s-2) + var(--mm-w) + var(--s-2)); }
+  html[data-form="portrait"] body:has(#giftPick:not([hidden])) #homeBtn { top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); }   /* 선물 판이 미니맵을 숨기면 그 자리로 */
   #roomTouch { position: fixed; inset: 0; z-index: var(--z-roomtouch); touch-action: none; }
   #room { position: fixed; inset: 0; z-index: var(--z-room); pointer-events: none; }
   #room > div { pointer-events: auto; }
@@ -423,6 +428,7 @@
   html[data-form="landscape"] body[data-mode="edit"] #msg { left: calc(var(--safe-l) + var(--edit-w)); }
   html[data-form="portrait"] body { --toast-t: calc(var(--chips-h) + var(--s-2)); }   /* 세로 폰: 칩 묶음 아래, 미니맵 왼쪽 */
   :where(html[data-form="portrait"]) #msg { right: calc(var(--safe-r) + var(--mm-space)); }
+  html[data-form="portrait"] body:has(#homeBtn:not([hidden])):not(:has(#minimap:not([hidden]))) #msg { right: calc(var(--safe-r) + calc(100*var(--u))); }   /* 🏝 전체 보기가 미니맵 자리에 있으면 알림은 그 왼쪽(따라가기를 시작하면 둘이 함께 떠서 단추 글자를 덮던 것) */
   /* 넓은 화면이 21:9보다 길면(울트라와이드) HUD를 가운데 16:9 안으로 */
   @media (min-aspect-ratio: 21/9) { html[data-form="wide"] { --hud-inset-x: calc((100vw - 100dvh * 16 / 9) / 2); } }
   html[data-form="wide"] .sheet { padding-right: var(--hud-inset-x); }
@@ -618,6 +624,12 @@
   #giftPick { max-height: min(34dvh, max(calc(96*var(--u)), calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - var(--info-h) - calc(64*var(--u)) - calc(40*var(--u))))); }   /* 🎁·♥ 버튼은 이제 카드 안(행동 줄)이라 그 줄 높이는 빼지 않음. 낮은 세로 폰(320×568 + 펼친 카드)에서도 안내 글 + 선물 한 줄은 보이게 96px은 남김(예전엔 16px로 눌림) */
   html[data-form="landscape"] #giftPick { max-height: calc(100dvh - var(--safe-t) - var(--chips-h) - var(--info-b) - max(calc(40*var(--u)), var(--hit-sm)) - calc(24*var(--u))); }
   html[data-form="portrait"] body:has(#giftPick:not([hidden])) #minimap { display: none; }
+  /* PC·태블릿(중간·넓음, 둘러보기): 따라가기 카드·선물 판·당기기를 📱과 같은 오른쪽 아래로(편의성 점검 14번 — 📱 → 갈매미 줄 → 🎁 → 선물 사이 마우스가 화면 양끝을 오가던 2345 px를 줄임).
+     위쪽은 미니맵·🏝 전체 보기 자리까지만. 왼손 배치(📱이 왼쪽)와 건설 모드는 예전처럼 왼쪽 */
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]) :is(#info, #bondBar, #tugBtn) { left: auto; right: var(--safe-r); }
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]) #info { max-height: min(72dvh, calc(100dvh - var(--info-b) - var(--safe-t) - var(--chips-h) - var(--s-2) - var(--mm-space) - var(--hit-sm) - calc(16*var(--u)))); }
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]):has(#giftPick:not([hidden])) #homeBtn { display: none; }   /* 낮은 창에서 선물 판과 겹치지 않게(고르는 동안만) */
+  html:is([data-form="medium"], [data-form="wide"]):not([data-hand="left"]) body:not([data-mode="edit"]) #giftPick { max-height: min(34dvh, max(calc(96*var(--u)), calc(100dvh - var(--safe-t) - var(--chips-h) - var(--mm-space) - var(--hit-sm) - var(--info-b) - var(--info-h) - calc(40*var(--u))))); }
   /* 가로 폰 건설: 미니맵을 작게, 확인 막대는 따라가기 카드 바로 위(카드가 없으면 맨 아래) → 크게(130%) 해도 미니맵·확인 막대·카드가 서로 안 덮음 */
   html[data-form="landscape"] body[data-mode="edit"] { --mm-w: calc(80*var(--u)); }
   html[data-form="landscape"] body[data-mode="edit"] #minimap canvas { width: calc(72*var(--u)); height: calc(72*var(--u)); }
@@ -640,6 +652,8 @@
   #coach .cskip { margin-left: auto; }
   #coach .ctop:not(:has(.cskip:not([hidden]))) { min-height: 0; }
   #coach .cmain { display: flex; align-items: flex-end; gap: var(--s-2); flex-wrap: wrap; }
+  #coach.cfold { display: flex; align-items: center; gap: var(--s-2); padding-top: calc(4*var(--u)); padding-bottom: calc(4*var(--u)); } #coach.cfold .ctext { display: none; }   /* 「처음이에요」 몇 초 뒤: 한 줄로 접힘(coachRules.js) */
+  #coach .cexp[hidden] { display: none; }
   #coach .ctext { flex: 1 1 calc(170*var(--u)); margin: calc(2*var(--u)) 0 calc(2*var(--u)); font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
   #coach .cok { margin-left: auto; }
   #coach button { flex: none; pointer-events: auto; min-height: var(--hit-sm); padding: calc(4*var(--u)) calc(12*var(--u)); font-size: var(--fs-sm); }
@@ -831,6 +845,35 @@
   html[data-motion="reduce"] :is(.rwBan.on, .rwBan.off, .rwBan.on .rwBanIco, .rwCard.on .rwBox, .rwCard.on .rwIco, .rwCard.on .rwTake, .rwRays, .rwHit) { animation: none !important; }
   html[data-motion="reduce"] :is(.rwBanSpark, .rwConf) { display: none; } html[data-motion="reduce"] .rwBox { transition: opacity .2s; }
   :where(html[data-form="portrait"]) .rwBan { padding-right: calc(16*var(--u)); } :where(html[data-form="portrait"]) .rwBanTitle { font-size: calc(18*var(--u)); }
+  /* ===== 편의성 점검 2묶음(4·5·6·7·10·11·12) ===== */
+  /* 4: 고스트가 아래 확인 카드에 가리면 카드를 위(칩 아래)로 · 못 짓는 자리를 누르면 카드를 한 번 흔듦 */
+  #confirm[data-side="top"] { bottom: auto; top: calc(var(--safe-t) + var(--chips-h) + calc(56*var(--u))); }   /* 칩 아래 + 알림 한 줄 자리(알림이 카드 단추를 덮지 않게) */
+  #confirm.shake { animation: cfShake .42s var(--ease) 1; } @keyframes cfShake { 20%, 60% { translate: calc(-6*var(--u)) 0; } 40%, 80% { translate: calc(6*var(--u)) 0; } }
+  @media (prefers-reduced-motion: reduce) { #confirm.shake { animation: none; box-shadow: 0 0 0 calc(3*var(--u)) var(--c-danger); } }
+  html[data-motion="reduce"] #confirm.shake { animation: none; box-shadow: 0 0 0 calc(3*var(--u)) var(--c-danger); }
+  /* 5: 대상이 있는 알림은 눌러서 그곳으로(›) */
+  #msg[data-go] { pointer-events: auto; cursor: pointer; } #msg[data-go] .t-txt::after { content: " ›"; font-weight: 700; color: var(--c-ink-2); }
+  .nlog li.go { cursor: pointer; } .nlog li.go:hover { background: rgba(0,0,0,.04); } .nlog .lgo { margin-left: auto; padding: 0 calc(6*var(--u)); font-style: normal; font-weight: 700; color: var(--c-ink-2); }
+  /* 6: 소원 줄 = 그 갈매미 따라가기 · 🔨 지으러 가기 */
+  .av-wish li.wgo { cursor: pointer; flex-wrap: wrap; border-radius: var(--r-sm); } .av-wish li.wgo:hover { background: rgba(0,0,0,.04); }
+  .av-wish li.wgo > span:nth-child(2)::after { content: " ›"; color: var(--c-ink-2); font-weight: 700; }
+  .av-wish .wbuild { margin-left: auto; min-height: var(--hit-sm); padding: calc(4*var(--u)) calc(10*var(--u)); font-size: var(--fs-sm); font-weight: 600; }
+  /* 7: 건물 찾기 */
+  .bf-h { margin: var(--s-2) 0 calc(2*var(--u)); font-size: var(--fs-sm); color: var(--c-ink-2); } .bf-list { display: flex; flex-direction: column; gap: calc(2*var(--u)); }
+  .bf-row { display: flex; gap: var(--s-2); align-items: center; justify-content: space-between; min-height: var(--hit-sm); text-align: left; padding: calc(4*var(--u)) calc(10*var(--u)); font-size: var(--fs-body); }
+  .bf-row { justify-content: flex-start; } .bf-row .nm { font-weight: 600; margin-right: auto; } .bf-row .act { color: var(--c-ink-2); font-size: var(--fs-cap); } .bf-row::after { content: "›"; color: var(--c-ink-2); font-weight: 700; }
+  /* 10: 가구 없는 집 카드 */
+  #houseCard .fg-line { font-size: var(--fs-sm); } #houseCard .fg-sub { font-size: var(--fs-cap); } #houseCard .fg-btns { display: flex; gap: var(--s-2); flex-wrap: wrap; } #houseCard .fg-btns button { min-height: var(--hit-sm); font-size: var(--fs-sm); }
+  /* 11: 화면 밖 ✨ 반짝이 방향 표시(가장자리) */
+  #sparkEdge { position: fixed; inset: 0; pointer-events: none; z-index: calc(var(--z-hud) - 1); } #sparkEdge[hidden] { display: none; }
+  #sparkEdge button { position: absolute; width: calc(40*var(--u)); height: calc(40*var(--u)); min-width: 0; min-height: 0; margin: calc(-20*var(--u)) 0 0 calc(-20*var(--u)); padding: 0; border-radius: 50%; pointer-events: auto; touch-action: manipulation;
+    background: rgba(255,248,220,.92); box-shadow: var(--e-1); font-size: calc(17*var(--u)); line-height: 1; display: grid; place-items: center; }
+  #sparkEdge button i { position: absolute; inset: 0; transform: rotate(var(--deg)); pointer-events: none; }
+  #sparkEdge button i::after { content: ""; position: absolute; right: calc(-7*var(--u)); top: 50%; margin-top: calc(-6*var(--u)); border: calc(6*var(--u)) solid transparent; border-left: calc(8*var(--u)) solid #c98a12; border-right: 0; }
+  body[data-mode="edit"] #sparkEdge, body.inroom #sparkEdge { display: none; }
+  /* 12: ☰ 메뉴 빠른 켜고 끄기 */
+  html[data-form="portrait"] #room .rlist.empty { flex-wrap: wrap; overflow-x: hidden; } #room .rlist.empty > .dim { flex: 1 1 100%; } #room .rlist.empty > button { flex: none; }   /* 10: 가구 없는 방 — 세로 폰에서 안내 글이 🏵 단추를 옆으로 밀어 잘리지 않게(안내 아래 줄에 단추) */
+  .mquick { display: flex; gap: var(--s-2); } .mquick button { flex: 1 1 0; text-align: center !important; }
 </style>
 </head>
 <body>
@@ -858,7 +901,7 @@
       <section class="agroup"><h5>🏘 마을 살림</h5><div class="agrid"><button data-app="town"><span>🏅</span>마을</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button><button data-app="build" hidden><span>🏠</span>건설</button></div></section>
       <section class="agroup"><h5>⚙ 갈매폰</h5><div class="agrid"><button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button></div></section>
     </div></div>
-    <div id="pageMenu" class="page" hidden><div class="mlist"><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="log">🔔 지난 알림</button><button data-go="home">📱 갈매폰 열기</button></div></div>
+    <div id="pageMenu" class="page" hidden><div class="mlist"><div class="mquick" role="group" aria-label="빠른 켜고 끄기"><button id="qSound" aria-pressed="true">🔊 소리: 켬</button><button id="qSpeed" hidden>⏩ 배속 ×1</button></div><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="log">🔔 지난 알림</button><button data-go="overview">🏝 마을 전체 보기</button><button data-go="home">📱 갈매폰 열기</button></div></div>
     <div id="pageDex" class="page" hidden><div id="dexBody"></div></div>
     <div id="pageGulls" class="page" hidden><div id="units"></div></div>
     <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
@@ -900,7 +943,7 @@
     <div id="pageLog" class="page" hidden><p class="dim">이번에 켠 뒤로 지나간 알림을 최근 30개까지 모아 둬요(껐다 켜면 비워져요).</p><ul id="logBody" class="nlog"></ul></div>
     <div id="pageHelp" class="page" hidden><button id="coachAgain" class="ghost">🧭 처음 안내 다시 보기</button><div id="help">
       <details class="hsec"><summary>👀 둘러보기</summary><details class="hsub" data-input="mouse"><summary>🖱 마우스·키보드</summary><p>화면: 드래그 돌리기 · 두 번 누르기 = 가까이 보기 · 오른쪽 드래그 옮기기 · 휠 확대 · Q/E 카메라 높이(Q 내리기·E 올리기) · W·A·S·D(방향키) 옮기기, Shift = 빠르게</p></details><details class="hsub" data-input="touch"><summary>👆 휴대폰·터치</summary><p>휴대폰: 한 손가락 = 화면 옮기기 · 두 손가락 비틀기 = 돌리기 · 두 손가락 위아래로 끌기 = 기울이기 · 벌리기 = 확대(건설 모드에서는 돌리기·기울이기 대신 ⟲ ⟳)</p></details><p>🗺 미니맵: 오른쪽 위 🗺 지도 버튼으로 켜고 끔. 누르거나 끌면 그곳으로 화면이 가요(흰 점 = 갈매미, 노란 점 = 배 타는 중, 주황 네모 = 지금 보는 곳).</p></details>
-      <details class="hsec"><summary>🔨 건설</summary><p>🔨 건설 모드: 아래 왼쪽 🔨 건설을 누르면 칠하기·높이·짓기·철거 도구가 나와요(숫자 2~5로도). 건설 중엔 내려다보는 각도가 고정이고, ⟲ ⟳(Z · X)로 화면을 90°씩 돌려요. 🏠 짓기·🧹 철거·🚚 옮기기: 톡(클릭) = 자리 정하기 · 끌기 = 화면 옮기기 · 칠하기·높이·자연(심기·치우기·파기·메우기): 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 옮기기 · ✋ 화면 이동(휴대폰은 두 손가락 끌기도) · R 건물 돌리기 · [ ] 붓 크기 · ✓ 완료(1)나 Esc = 끝내기</p><p>✏️ 땅 고치기(휴대폰): 🖌 바닥 칠하기·⛰ 높이에서 모양 붓 / 〰 길(두 칸을 누르면 걸어가는 길을 따라) / ▭ 네모(두 모서리), 🎯 십자선(화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함), ↶ 되돌리기 ↷ 다시하기(Ctrl+Z), 🎚 단 맞추기(문지른 곳을 정한 높이로).</p><p>🛣 포장도로: 🖌 바닥 칠하기로 돌길·나무 데크를 깔아 집과 🐚 시장·🏦 은행을 이으면 그 집 갈매미 만족도가 올라요(각 +15). 포장도로 위에선 20% 빨리 걷고, 만족도가 높으면 일도 조금 빨라요. 흙길은 포장이 아니에요.</p></details>
+      <details class="hsec"><summary>🔨 건설</summary><p>🔨 건설 모드: 아래 왼쪽 🔨 건설을 누르면 칠하기·높이·짓기·철거 도구가 나와요(숫자 2~5로도). 건설 중엔 내려다보는 각도가 고정이고, ⟲ ⟳(Z · X)로 화면을 90°씩 돌려요. 🏠 짓기·🧹 철거·🚚 옮기기: 톡(클릭) = 자리 정하기 · 끌기 = 화면 옮기기 · 칠하기·높이·자연(심기·치우기·파기·메우기): 왼쪽 = 도구 · 오른쪽 드래그나 스페이스+드래그 = 옮기기 · ✋ 화면 이동(휴대폰은 두 손가락 끌기도) · R 건물 돌리기 · [ ] 붓 크기 · ✓ 완료(1)나 Esc = 끝내기</p><p>✏️ 땅 고치기(휴대폰): 🖌 바닥 칠하기·⛰ 높이에서 모양 붓 / 〰 길(두 칸을 누르면 걸어가는 길을 따라) / ▭ 네모(두 모서리), 🎯 십자선(화면 가운데가 붓, 큰 버튼을 누르는 동안 칠함), ↶ 되돌리기 ↷ 다시하기(Ctrl+Z), 🎚 단 맞추기(문지른 곳을 정한 높이로).</p><p>↶ 짓기 되돌리기: 방금 놓은 공사장은 ↶(또는 알림을 눌러)로 무르면 설계비를 다 돌려받아요 — 갈매미가 재료를 쓰거나 망치질을 시작하기 전까지만. 그 뒤엔 🧹 철거(다 짓기 전이면 설계비만 돌려받고 쓴 재료·품삯은 그대로). 🧹 철거는 누르면 한 번 더 물어요.</p><p>🛣 포장도로: 🖌 바닥 칠하기로 돌길·나무 데크를 깔아 집과 🐚 시장·🏦 은행을 이으면 그 집 갈매미 만족도가 올라요(각 +15). 포장도로 위에선 20% 빨리 걷고, 만족도가 높으면 일도 조금 빨라요. 흙길은 포장이 아니에요.</p></details>
       <details class="hsec"><summary>🐦 갈매미</summary><p>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)</p><p>💭 소원: 갈매미가 바라는 걸 들어주면 기뻐하고 축하금을 받아요.</p><p>📋 오늘의 부탁: 📱 소원 맨 위에 날마다(기기 날짜) 부탁 3개가 와요. 모두 들어주면 도장 하나를 받고, 도장은 같은 화면의 🏪 도장 가게에서 귀한 선물(손뜨개 목도리 포함)이나 한정 가구로 바꿔요. 날짜가 바뀌면 새 부탁으로 바뀌어요.</p><p>🌙 하루: 해가 지면 갈매미들은 집(없으면 그 자리)에 가서 자고, 야행성(그림자·불씨)은 밤에 일하고 낮에 자요. 일하면 피로도가 쌓이고 벤치·침대에서 쉬거나 자면 풀려요.</p><p>🔧 스스로 고치기: 만족도가 75 아래인 갈매미는 스스로 집 앞 마당을 문 높이로 고르고(땅 높이·낮추기, 고른 마당 +5), 시장·은행까지 돌길을 깔고(돌 1개로 3칸), 벤치·화단 공사를 주문해요.</p><p>🛋 집 꾸미기: 집을 누르거나 📱 → 🛋 꾸미기에서 들어가 가구를 놓아요(누르기 = 고르기·놓기, 끌기 = 방 돌리기, R = 돌리기). 집주인은 돈이 모이면 잡화점에서 가구를 사 와요.</p></details>
       <details class="hsec"><summary>🏘 마을 살림</summary><p>경제: 🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼·광부는 원자재를 🐚 시장의 상인에게 팔고, 상인은 가공(목재·석재·철괴)해서 은행에 팔아 돈을 벌어요. 번 돈으로 농부·어부에게서 음식을 사고, 시장에서 집을 사요. 돈이 없으면 물물교환해요. 값은 쌓인 양에 따라 오르내려요.</p><p>🏅 마을 등급: 갈매미·집·시설·소원이 늘면 등급이 올라 새 건물(카페·잡화점·우체국·큰 집)이 열려요.</p><p>🌷 장식·⚡ 전기: 벤치·화단·분수·눈사람(겨울)이 집 근처 6칸 안에 있으면 만족도 +2씩(최대 +10). 풍차 발전소(다 지은 것) 둘레 18칸에만 전기가 들어와요: 가로등과 건물 등불·집 창은 전기가 닿아야 밤에 켜지고(없으면 꺼진 채), 그 안의 집은 만족도 +8. 풍차를 누르면 전기 범위가 보여요. ☕ 카페가 가까우면 +5, 카페에 가면 재미·친구가 차올라요. ✉ 우체국이 있으면 소원이 더 자주 오고 축하금이 두 배.</p><p>🗺 넓은 지도: 본섬 둘레에 숲섬·바위섬·들판섬(가까움, 🪚 목수가 다리를 놓으면 걸어감)과 야자섬·조개섬(멀어서 선착장 두 곳을 지으면 배를 타고 감)이 있어요. 다리는 물 칸을 두 번 눌러 줄로 정해요.</p></details>
       <details class="hsec"><summary>⏩ 배속 · 🎟 판</summary><p>⏩ 배속(유료판): 위쪽 시간 칩을 누르거나 F 키 → ×1 → ×2 → ×3. 갈매미 걸음·일·공사·밭·소원 같은 마을 진행이 빨라지고, 하루의 빛·날짜·계절은 실제 시각 그대로예요. 건설 모드·집 꾸미기 중에도 그대로 유지돼요.</p><p>🎟 판: ⚙ 설정 맨 위에서 무료/유료를 골라요(지금은 시험용). 무료판에선 배속이 🔒이고, 무료로 바꾸면 ×1로 돌아가요. 나중에는 게임을 켤 때 계정 값으로 정해져요.</p></details>
@@ -912,7 +955,9 @@
 </div>
 <div id="confirm" hidden role="group" aria-label="건설 확인"><div id="cfInfo" aria-live="polite" tabindex="0" role="button" aria-expanded="false" aria-label="설계비·재료 자세히"></div><div class="cfBtns"><button id="cfCancel">✕ 취소</button><button id="cfRot">↻ 돌리기</button><button id="cfBuild" class="go">🔨 건설</button></div></div>
 <div id="overlay"></div>
+<div id="sparkEdge" hidden aria-label="화면 밖 반짝이"></div>
 <div id="minimap" hidden role="region" aria-label="미니맵: 누르거나 끌면 그곳으로"><canvas></canvas></div>
+<button id="homeBtn" hidden data-tip="마을 전체 보기: 따라가기를 풀고 처음처럼 섬 전체가 보이게">🏝 전체 보기</button><!-- 가까이 보거나 따라갈 때만 보임(main.js) -->
 <div id="cross" hidden></div><button id="crossGo" hidden>🖌 누르는 동안 칠하기</button>
 <div id="roomTouch" hidden></div>
 <div id="room" hidden role="region" aria-label="집 꾸미기">
