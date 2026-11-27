@@ -266,7 +266,7 @@ export class RoomView {
   }
   // ---- 아래 판(가구·바닥·벽지)
   refreshUI() {
-    const w = this.world, b = this.b, it = this.L, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = "";
+    const w = this.world, b = this.b, it = this.L, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = ""; list.classList.remove("empty");
     const owner = w.units.find(u => u.unitId === b.owner), inside = w.units.filter(u => u.insideBuildingId === b.id);
     this.ui.querySelector(".rtitle").textContent = `🏠 ${BUILDINGS[b.defId].name}${owner ? ` · 주인 ${owner.name}` : " · 주인 없음"} · 🛋 아늑함 ${F.comfort(b)}`;
     this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : "";
@@ -282,7 +282,7 @@ export class RoomView {
         bt.append(sw, rel("b", "", `${f.name} ×${av[id].n}`), rel("small", "", `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${bag ? " · 🎒" : ""}`));
         if (bag) bt.dataset.tip = `${roomFurniSource(av[id].item)}(마을 가방)`;
         bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
-      if (!ids.length) {                                                             // 가구가 없으면: 어디서 얻는지 + 🏵 도장 가게 바로가기(편의성 점검 10번) · 바닥·벽지는 탭에서 바꿀 수 있음
+      if (!ids.length) { list.classList.add("empty");                                                             // 가구가 없으면: 어디서 얻는지 + 🏵 도장 가게 바로가기(편의성 점검 10번) · 바닥·벽지는 탭에서 바꿀 수 있음
         list.appendChild(rel("span", "dim", `놓을 가구가 없어요 · 가구는 잡화점·도장 가게에서. ${w.shopB() ? "집주인이 돈이 모이면 잡화점에서 사 와요" : "잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요"} · 낚시·축제에서 얻은 가구도 놓을 수 있어요 · 바닥·벽지는 위 탭에서 바꿔요`));
         if (this.onShop) { const sb = rel("button", "go", "🏵 도장 가게 보기"); sb.onclick = () => { this.close(); this.onShop(); }; list.appendChild(sb); } }
     } else {

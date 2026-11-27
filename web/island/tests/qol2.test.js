@@ -103,8 +103,10 @@ test("11: 화면 밖 반짝이 — 화면 안이면 없음, 밖이면 가장자�
   const corner = edgeArrow({ x: 5, y: -5 }, false, W, H, box); assert.ok(corner.x <= box.r + 1e-6 && corner.y <= box.b + 1e-6 && (Math.abs(corner.x - box.r) < 1e-6 || Math.abs(corner.y - box.b) < 1e-6), "모서리 쪽도 네모 위");
   const list = [{ id: 1, dist: 30, ndc: { x: 2, y: 0 }, behind: false }, { id: 2, dist: 5, ndc: { x: -2, y: 0 }, behind: false }, { id: 3, dist: 1, ndc: { x: 0, y: 0 }, behind: false }];
   assert.deepEqual(edgeList(list, W, H, box).map(a => a.id), [2, 1], "화면 안(3) 빼고 가까운 것부터");
-  const many = Array.from({ length: 9 }, (_, i) => ({ id: i, dist: i, ndc: { x: 3, y: 0 }, behind: false }));
+  const many = Array.from({ length: 9 }, (_, i) => ({ id: i, dist: i, ndc: { x: 3, y: -0.9 + i * 0.22 }, behind: false }));
   assert.equal(edgeList(many, W, H, box).length, EDGE_MAX);
+  const stack = [{ id: "far", dist: 20, ndc: { x: -3, y: 0.05 }, behind: false }, { id: "near", dist: 8, ndc: { x: -3, y: 0 }, behind: false }, { id: "other", dist: 30, ndc: { x: -3, y: 0.6 }, behind: false }];
+  assert.deepEqual(edgeList(stack, W, H, box).map(a => a.id), ["near", "other"], "겹치는 화살표는 가까운 반짝이 것만(실측: 폰 왼쪽 가장자리 306·343px에 두 개가 겹쳤음)");
 });
 
 test("12: ☰ 빠른 켜고 끄기 글자 — 소리 켬·끔, 배속은 유료판만", () => {

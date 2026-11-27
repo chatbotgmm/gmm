@@ -17,8 +17,16 @@ export function edgeArrow(ndc, behind, W, H, box) {
   return { x: cx + dx * s, y: cy + dy * s, deg: Math.atan2(dy, dx) * 180 / Math.PI };
 }
 
-/** 여러 반짝이 가운데 화면 밖 것만, 화면 가운데(보는 점)에서 가까운 것부터 max개. list: [{ id, dist, ndc, behind }] */
-export function edgeList(list, W, H, box, max = EDGE_MAX) {
-  return list.map(s => ({ s, a: edgeArrow(s.ndc, s.behind, W, H, box) })).filter(o => o.a)
-    .sort((p, q) => p.s.dist - q.s.dist).slice(0, max).map(o => ({ id: o.s.id, ...o.a }));
+/** 화살표끼리 이만큼(px) 안이면 겹친 것으로 봄(단추 40px) — 겹치면 가까운 반짝이 것만 남김(누르기 쉽게 · 주우면 다음 것이 나옴) */
+export const EDGE_GAP = 44;
+
+/** 여러 반짝이 가운데 화면 밖 것만, 화면 가운데(보는 점)에서 가까운 것부터 max개(서로 겹치는 화살표는 뺌). list: [{ id, dist, ndc, behind }] */
+export function edgeList(list, W, H, box, max = EDGE_MAX, gap = EDGE_GAP) {
+  const out = [];
+  for (const o of list.map(s => ({ s, a: edgeArrow(s.ndc, s.behind, W, H, box) })).filter(o => o.a).sort((p, q) => p.s.dist - q.s.dist)) {
+    if (out.length >= max) break;
+    if (out.some(k => Math.hypot(k.x - o.a.x, k.y - o.a.y) < gap)) continue;
+    out.push({ id: o.s.id, ...o.a });
+  }
+  return out;
 }

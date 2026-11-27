@@ -816,6 +816,7 @@
   #sparkEdge button i::after { content: ""; position: absolute; right: calc(-7*var(--u)); top: 50%; margin-top: calc(-6*var(--u)); border: calc(6*var(--u)) solid transparent; border-left: calc(8*var(--u)) solid #c98a12; border-right: 0; }
   body[data-mode="edit"] #sparkEdge, body.inroom #sparkEdge { display: none; }
   /* 12: ☰ 메뉴 빠른 켜고 끄기 */
+  html[data-form="portrait"] #room .rlist.empty { flex-wrap: wrap; overflow-x: hidden; } #room .rlist.empty > .dim { flex: 1 1 100%; } #room .rlist.empty > button { flex: none; }   /* 10: 가구 없는 방 — 세로 폰에서 안내 글이 🏵 단추를 옆으로 밀어 잘리지 않게(안내 아래 줄에 단추) */
   .mquick { display: flex; gap: var(--s-2); } .mquick button { flex: 1 1 0; text-align: center !important; }
 </style>
 </head>

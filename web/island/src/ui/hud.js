@@ -901,7 +901,7 @@ export class Hud {
     const u = at.u != null ? w.units.find(o => o.unitId === at.u) : null, b = at.b != null ? w.buildings.get(at.b) : null;
     if (!u && !b) { this.status("그 갈매미·건물은 이제 없어요", { kind: "info" }); return false; }
     this.leaveRoom?.(); if (this.tools.mode !== "view") this.tools.setMode("view");
-    if (u) this.onUnitFollow?.(u); else this.onGoto?.(b);
+    if (u) this.onUnitFollow?.(u); else { this.onGoto?.(b); if (document.getElementById("houseCard").hidden) this.status(`📍 ${atLabel(w, at).replace(/ 가기$/, "")} 왔어요`, { kind: "info" }); }   // 카드가 없는 건물(시장·은행·장식…): 어느 건물로 왔는지 한 줄
     return true;
   }
   toastEnd() { clearTimeout(this.msgT); this.toastCur = null; this.msg.hidden = true; if (this.toastQ.length) this.msgT = setTimeout(() => this.toastNext(), 220); }   // 잠깐 비웠다가 다음 것
