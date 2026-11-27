@@ -11,6 +11,7 @@ import { RANKS } from "../world/rank.js";
 import { SEASONS } from "../world/season.js";
 import * as Fu from "../world/furniture.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
+import { MEDALS, MEDAL_GIFTS, fishMedal, medalLine } from "../world/medals.js";
 import { newsDay } from "../world/news.js";
 import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftDef, petsLeft, PET_DAILY } from "../world/bond.js";
 import { stashTotals } from "../world/belongings.js";
@@ -793,14 +794,19 @@ export class Hud {
     box = fold("dex.fish", "🐟 물고기 도감", `${cnt.fish}/${cnt.fishAll}`);
     sec("", FISH, f => w.collection[f.id] || 0,
       f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${held[f.id] ? ` · 갈매미들이 ${held[f.id]} 가짐` : ""}`,
-      (f, c, n) => {                                                               // 수족관: 크기 기록 · 기증됨
-        if (n && w.fishRecord[f.id]) c.append(el("span", "rec", `📏 가장 큰 ${w.fishRecord[f.id]}cm`));
+      (f, c, n) => {                                                               // 수족관: 크기 기록·메달(다음 메달까지) · 기증됨
+        const m = n ? fishMedal(f, w.fishRecord[f.id]) : 0;
+        if (m) { const t = medalLine(f, w.fishRecord[f.id]); c.classList.add("m-" + MEDALS[m].id); c.append(el("span", "rec", t.now)); if (t.next) c.append(el("span", "dim", t.next)); }
         if (w.donated[f.id]) c.append(el("span", "donated", "🐠 기증됨"));
       });
     {                                                                              // 수족관 기증 현황(물고기 도감 바로 아래)
       const have = donatedCount(w.donated), next = DONATE_GIFTS[w.donateGifts], gift = next && ITEMS.find(i => i.id === next.item);
       box.append(el("p", "dim aqua", !w.aquariumB() && !have ? "🐠 수족관(마을 등급 ⚓ 항구 마을부터)을 지으면 처음 낚은 희귀 이상 물고기를 한 마리씩 기증해요."
         : `🐠 수족관 기증 ${have}/${DONATE_KINDS.length}종 · ${next ? `다음 기념 선물: ${next.label} 기증하면 ${gift?.name ?? "선물"}` : "기념 선물을 모두 받았어요!"}`));
+    }
+    {                                                                              // 금메달 기념 가구(기증 현황 아래)
+      const next = MEDAL_GIFTS[w.medalGifts], gift = next && ITEMS.find(i => i.id === next.item);
+      box.append(el("p", "dim aqua", `🥇 금메달 ${cnt.gold}/${cnt.fishAll}종 · ${next ? `${next.label}이면 기념 가구 ${gift?.name ?? ""}` : "기념 가구를 모두 받았어요!"} · 🥈 상위 절반 · 🥇 상위 15%(제철 물고기 30%)`));
     }
     box = fold("dex.bag", "🎁 가방", `${cnt.bag}/${cnt.bagAll}`);
     sec("", ITEMS, i => w.items[i.id] || 0,

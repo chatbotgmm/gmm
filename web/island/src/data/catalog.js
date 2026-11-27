@@ -146,6 +146,10 @@ export const FURNITURE = {
   mintShelf:  { id: "mintShelf", name: "민트 책장", footprint: { w: 2, d: 1 }, height: 1.5, comfort: 4, use: "read", useLabel: "민트 책장에서 책 읽기", shape: "bookshelf", colors: [0x8fd3c1] },
   starBed:    { id: "starBed", name: "별밤 침대", footprint: { w: 1, d: 2 }, height: 0.5, comfort: 6, use: "sleep", useLabel: "별밤 침대에서 낮잠", shape: "bed", colors: [0x3b3f73, 0xf4f1ea, 0x6f78c9] },
   snowSofa:   { id: "snowSofa", name: "눈꽃 소파", footprint: { w: 2, d: 1 }, height: 0.8, comfort: 4, use: "sit", useLabel: "눈꽃 소파에서 뒹굴", shape: "sofa", colors: [0xbfdcf2, 0xffffff] },
+  // 물고기 금메달 기념 가구(금메달 종류 수가 4·8·12에 닿으면 하나씩. ITEMS의 medal, world/medals.js)
+  scaleRug:   { id: "scaleRug", name: "금빛 비늘 깔개", footprint: { w: 2, d: 2 }, height: 0.02, comfort: 3, layer: "floor", shape: "rug", colors: [0xe2b33c, 0xfff4d6] },
+  floatLamp:  { id: "floatLamp", name: "찌 모양 스탠드", footprint: { w: 1, d: 1 }, height: 1.5, comfort: 3, shape: "floorLamp", colors: [0x2f5d7a, 0xff7a5c], light: true },
+  trophyShelf: { id: "trophyShelf", name: "메달 진열장", footprint: { w: 2, d: 1 }, height: 1.5, comfort: 5, use: "read", useLabel: "메달 진열장 구경하기", shape: "bookshelf", colors: [0xd9a441] },
 };
 // 옷(clothes.js): 갈매미가 잡화점에서 자기 돈으로 사거나(낸 돈은 금고로) 도장 가게 선물 "손뜨개 목도리"로 받음. slot: 입는 자리 · warmth: 체감 보온(°C) ·
 // price: 잡화점 값(🪙) · below: 공기가 이 온도(°C) 이하일 때 입음. 우비·밀짚모자는 2단계(젖음·더위)
@@ -333,6 +337,10 @@ export const ITEMS = [
   { id: "fishTin",      name: "황금 생선 통조림",  rarity: "epic", gift: true, stampGift: 1 },
   { id: "crownCookie",  name: "갈매미 왕관 쿠키",  rarity: "epic", gift: true, stampGift: 2 },
   { id: "knitScarf",    name: "손뜨개 목도리",     rarity: "epic", gift: true, stampGift: 1, clothes: "scarf" },   // 주면 그 갈매미 옷(털목도리)이 되어 바로 둘러 줌
+  // 물고기 금메달 기념 가구(medal = 필요한 금메달 종류 수: 낚시로는 안 나옴. 맨 뒤에 붙여 기존 줄 순서가 그대로)
+  { id: "medalRug",   name: "금빛 비늘 깔개", rarity: "rare", furniture: "scaleRug",    medal: 4 },
+  { id: "medalLamp",  name: "찌 모양 스탠드", rarity: "epic", furniture: "floatLamp",   medal: 8 },
+  { id: "medalShelf", name: "메달 진열장",    rarity: "epic", furniture: "trophyShelf", medal: 12 },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

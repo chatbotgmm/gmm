@@ -22,6 +22,7 @@ import * as F from "./furniture.js";
 import * as RD from "./roads.js";
 import * as PW from "./power.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
+import { fishMedal, grantMedalGifts, medalGiftsFromSave } from "./medals.js";
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
@@ -125,6 +126,7 @@ export class World {
     this.newsLog = newsFromSave(extra.newsLog); this.newsSeason = extra.newsSeason ?? null; this.savedAt = Number.isFinite(extra.savedAt) ? extra.savedAt : null;
     // 수족관: 기증한 물고기 종류 { id: true } · 종류별 가장 큰 크기(cm) · 받은 기증 기념 선물 수(예전 저장엔 없음 → 처음부터)
     this.donated = donatedFromSave(extra.donated); this.fishRecord = recordsFromSave(extra.fishRecord); this.donateGifts = Math.max(0, Math.min(DONATE_GIFTS.length, extra.donateGifts | 0));
+    this.medalGifts = medalGiftsFromSave(extra.medalGifts);                       // 받은 금메달 기념 가구 수(메달은 fishRecord에서 셈 — medals.js)
     this.keep = keepFromSave(extra.keep);                                         // 간직하기: { 물건·보물 id: true } → 상인이 팔지 않음(예전 저장엔 없음)
     // 드문 하늘: 지금 떠 있는 것 { kind, t 남은 초 }(저장하지 않음 → 불러오면 끝난 것으로) · 본 횟수 · 첫눈을 본 겨울(해, 화면이 winterYear를 넣어 줌)
     this.sky = null; this.skySeen = skySeenFromSave(extra.skySeen); this.firstSnowYear = extra.firstSnowYear ?? null; this.winterYear = null;
@@ -1009,7 +1011,8 @@ export class World {
     if (this.rnd() >= Math.min(0.95, J.catchChance(u) * fishFx)) return null;
     const got = this.landFish(u, this.rnd, bonus), { fish: f, item, size } = got;
     this.emit("fish", { u, fish: f, item, size }); if (f.rarity !== "common" || item) this.notice(u.x, u.z, "fish", u);
-    if (got.record) this.emit("fishRecord", { u, fish: f, size, first: got.first });   // 크기 기록 → 기증 → 선물 순서로 알림(뒤의 것이 알림 줄에 남음)
+    if (got.record) this.emit("fishRecord", { u, fish: f, size, first: got.first, medal: got.medal, up: got.medal > got.prevMedal });
+    for (const g of got.medalGifts) this.emit("medalGift", g);   // 크기 기록 → 기증 → 선물 순서로 알림(뒤의 것이 알림 줄에 남음)
     if (got.gifts) this.tellDonation(u, f, got.gifts, size);
     return got;
   }
@@ -1026,17 +1029,18 @@ export class World {
   /** 낚은 것을 챙김(알림 없이): 물고기를 뽑아 도감에 적고(흔하면 음식, 희귀 이상이면 낚은 갈매미의 소지품), 가끔 물건도(그 갈매미 소지품,
    *  가구는 집이 있으면 그 집에 놓거나 창고로). 크기(cm)는 난수를 쓰지 않고 정해(aquarium.js) 종류별 기록을 고치고,
    *  수족관이 있으면 처음 낚은 희귀 이상 한 마리는 소지품 대신 기증.
-   *  돌려주는 값: { fish, item, size, record: 새 기록인지, first: 그 종류 첫 기록인지, donated, gifts: 기증했으면 받은 선물들(아니면 null) } */
+   *  돌려주는 값: { fish, item, size, record: 새 기록인지, first: 그 종류 첫 기록인지, donated, gifts: 기증했으면 받은 선물들(아니면 null), medal·prevMedal: 메달 단계(지금·전), medalGifts: 금메달 기념 가구들 } */
   landFish(u, rnd, bonus = 1) {
     const f = J.rollFish(u, rnd, this.season, bonus); if (!this.economy) this.res.fish++;
     const size = fishSize(f, sizeNoise(this.time, u.unitId, Object.values(this.collection).reduce((a, b) => a + b, 0)));
     const prev = this.fishRecord[f.id] || 0, record = size > prev; if (record) this.fishRecord[f.id] = size;
+    const medal = fishMedal(f, this.fishRecord[f.id]), prevMedal = fishMedal(f, prev), medalGifts = grantMedalGifts(this);   // 기록이 아니어도 셈(예전 저장의 밀린 가구가 다음 기록까지 기다리지 않게)
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     const gifts = this.donateFish(f);
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else if (!gifts) stashAdd(u, f.id);
     let item = null;
     if (rnd() < J.itemChance(u) * this.fx.item) { item = J.rollItem(u, rnd, this.season, bonus); this.keepCatch(u, item); }
-    return { fish: f, item, size, record, first: !prev, donated: !!gifts, gifts };
+    return { fish: f, item, size, record, first: !prev, donated: !!gifts, gifts, medal, prevMedal, medalGifts };
   }
   /** 낚시로 건진 물건을 그 갈매미가 챙김: 가구는 집이 있으면 그 집에 놓고(자리가 없으면 창고), 집이 없으면 들고 있다가 집을 사면 옮김. 나머지는 소지품 */
   keepCatch(u, item) {
@@ -1057,6 +1061,7 @@ export class World {
       const u = fishers[i % fishers.length]; if (rnd() >= J.catchChance(u)) continue;
       const got = this.landFish(u, rnd); catches.push({ who: u.name, fish: got.fish, item: got.item, size: got.size, donated: got.donated });
       if (got.gifts) { this.noteNews("donate", { u, fish: got.fish }); for (const g of got.gifts) this.noteNews("donateGift", g); }   // 그동안의 기증은 소식지에만
+      for (const g of got.medalGifts) this.noteNews("medalGift", g);               // 그동안 받은 금메달 기념 가구도 소식지에(가방에만 조용히 들어가던 것)
     }
     const fished = catches.length ? `물고기 ${catches.length}마리를 낚았어요` : "", did = ripened ? `밭 ${ripened}칸이 ${fished ? `익고 ${fished}` : "익었어요"}` : fished;
     if (did) addNews(this.newsLog, this.time, { icon: "💌", text: `다녀온 사이에 ${did}`, weight: 3 });
@@ -1882,7 +1887,7 @@ export class World {
       decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeDay: u.lodgeDay || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts,
+      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeDay: u.lodgeDay || 0, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,

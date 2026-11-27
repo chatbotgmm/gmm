@@ -15,6 +15,7 @@ import { FESTIVAL_RANK, FESTIVAL_NEED, FESTIVAL_RADIUS, festivalOf, festivalGift
 import { SEASONS } from "../world/season.js";
 import { WISH_BY_ID, WISH_REWARD, wishText } from "../world/wishes.js";
 import { DONATE_KINDS, donatedCount } from "../world/aquarium.js";
+import { medalCounts } from "../world/medals.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
 import { sumHead, moreBox, valueRows, factRow, fmtNum } from "./hudParts.js";
@@ -155,15 +156,15 @@ export function relLegendHtml(stages) {
 }
 
 // ---- 📖 도감
-/** 도감 수: 물고기 · 가방 · 기증 · 하늘 */
+/** 도감 수: 물고기 · 가방 · 기증 · 하늘 · 메달(gold·silver·bronze = 그 메달이 가장 좋은 종류 수, fishRecord에서 셈) */
 export function dexCounts(w) {
   const sky = Object.keys(SKY_EVENTS);
   return { fish: FISH.filter(f => w.collection[f.id]).length, fishAll: FISH.length, bag: ITEMS.filter(i => w.items[i.id]).length, bagAll: ITEMS.length,
-    donated: donatedCount(w.donated || {}), donateAll: DONATE_KINDS.length, sky: sky.filter(k => w.skySeen?.[k]).length, skyAll: sky.length };
+    donated: donatedCount(w.donated || {}), donateAll: DONATE_KINDS.length, sky: sky.filter(k => w.skySeen?.[k]).length, skyAll: sky.length, ...medalCounts(w.fishRecord) };
 }
 export function dexHeadHtml(c) {
   return sumHead({ icon: "📖", big: `${c.fish} / ${c.fishAll}`, label: "물고기", bar: c.fishAll ? c.fish / c.fishAll : 0,
-    line: `🐠 기증 ${c.donated}/${c.donateAll} · 🌈 하늘 ${c.sky}/${c.skyAll} · 🎁 가방 ${c.bag}/${c.bagAll}` });
+    line: `🥇 금메달 ${c.gold ?? 0}/${c.fishAll} · 🐠 기증 ${c.donated}/${c.donateAll} · 🌈 하늘 ${c.sky}/${c.skyAll} · 🎁 가방 ${c.bag}/${c.bagAll}` });
 }
 
 // ---- 📰 소식지

@@ -16,7 +16,7 @@ import { roomLight, ROOM_DARK_WHY } from "./roomLight.js";
 
 // 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
 const roomFurniSource = itemId => { const it = ITEMS.find(i => i.id === itemId); if (!it) return "마을 가방의 가구";
-  if (it.stamp) return "도장 가게에서 바꾼 가구"; if (it.fest) return "계절 축제 기념 가구";
+  if (it.stamp) return "도장 가게에서 바꾼 가구"; if (it.fest) return "계절 축제 기념 가구"; if (it.medal) return `물고기 금메달 ${it.medal}종 기념 가구`;
   return DONATE_GIFTS.some(g => g.item === it.id) ? "낚시로 건졌거나 수족관 기념으로 받은 가구" : "낚시로 건진 가구"; };
 
 const ROOM_WALL_H = 2.4, ROOM_TAP_PX = 8;
