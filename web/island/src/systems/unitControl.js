@@ -127,10 +127,11 @@ export class UnitControl {
     }
     if (this.follow !== u) this.setFollow(u);
   }
-  setFollow(u) {
+  /** keepDist: 그만둘 때 거리는 그대로(🏠 집 보기·방 꾸미기·새 섬 — 그곳을 보러 가는 것이라 멀리 물러나지 않음) */
+  setFollow(u, keepDist = false) {
     this.follow = u; this.onFollow?.(u);
     if (u) this.onStatus(`${josa(u.name, "을", "를")} 따라가요 · 빈 땅을 누르면 그만`);
-    else if (this.backLen != null) { if (!this.held) this.zoom = { to: null, len: this.backLen }; this.backLen = null; }   // 다가가기 전 거리로
+    else if (this.backLen != null) { if (!this.held && !keepDist) this.zoom = { to: null, len: this.backLen }; this.backLen = null; }   // ✕·Esc·땅 누르기: 다가가기 전 거리로
   }
   /** 🏝 마을 전체 보기(편의성 점검 9번): 따라가기를 풀고 처음 시점(높이·거리·중심)으로 부드럽게. 보던 가로 방향은 그대로 */
   overview(portrait) {

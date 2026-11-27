@@ -428,6 +428,7 @@
   html[data-form="landscape"] body[data-mode="edit"] #msg { left: calc(var(--safe-l) + var(--edit-w)); }
   html[data-form="portrait"] body { --toast-t: calc(var(--chips-h) + var(--s-2)); }   /* 세로 폰: 칩 묶음 아래, 미니맵 왼쪽 */
   :where(html[data-form="portrait"]) #msg { right: calc(var(--safe-r) + var(--mm-space)); }
+  html[data-form="portrait"] body:has(#homeBtn:not([hidden])):not(:has(#minimap:not([hidden]))) #msg { right: calc(var(--safe-r) + calc(100*var(--u))); }   /* 🏝 전체 보기가 미니맵 자리에 있으면 알림은 그 왼쪽(따라가기를 시작하면 둘이 함께 떠서 단추 글자를 덮던 것) */
   /* 넓은 화면이 21:9보다 길면(울트라와이드) HUD를 가운데 16:9 안으로 */
   @media (min-aspect-ratio: 21/9) { html[data-form="wide"] { --hud-inset-x: calc((100vw - 100dvh * 16 / 9) / 2); } }
   html[data-form="wide"] .sheet { padding-right: var(--hud-inset-x); }

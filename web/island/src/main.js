@@ -257,7 +257,7 @@ function mount(w) {
   world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
     hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
-  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
+  if (tools) { Object.assign(tools, { world, chunks, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null, true); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
 }
 let tools = null, hud = null;
@@ -358,7 +358,7 @@ const edition = createEdition();
 hud.edition = edition; hud.syncEdition();
 edition.onChange(() => hud.syncEdition());
 roomView.chars = charPool;                                                      // 방 안 갈매미 모델(같은 메모리 캐시를 복제해 씀)
-hud.onDecorate = b => { unitControl.setFollow(null); roomView.open(world, b); };
+hud.onDecorate = b => { unitControl.setFollow(null, true); roomView.open(world, b); };
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
 // 땅을 한 번 누름: ✨ 반짝이가 있으면 먼저 줍고(손가락 판정 지름 48px 이상 또는 1.2칸 안) 카드는 안 엶. 갈매미를 누른 것은 unitControl이 먼저 받음
 // 건물이면 카드: 집·공사장·밭·의원·잡화점은 hud(bldView.js), 풍차는 powerRange, 전기 없는 가로등·가게는 noPower(열린 카드면 까닭만 덧붙임)
@@ -379,14 +379,14 @@ unitControl.onTapFirst = e => {
 const POKE_SFX = { poke: [784, 988], sleep: [392, 330], sulk: [440, 370], sulkStart: [523, 440, 370], zoom: [659, 880, 1175] };
 unitControl.onPoke = u => { const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);   // 카드 ✕·키보드(Esc): 같은 갈매미면 그만(다가갔으면 원래 거리로)
-hud.onUnitFollow = u => unitControl.followClose(u);
+hud.onUnitFollow = u => unitControl.followClose(u);                                   // 목록 줄·건물 카드 「따라가기」·배고픔 칩: 늘 따라가기 + 10 m로 가까이(편의성 점검 1·2번)
 // 🏝 마을 전체 보기(편의성 점검 9번): 오른쪽 위 단추(가까이 보거나 따라갈 때만 보임) · ☰ 메뉴. 처음 시점의 높이·거리·중심으로(보던 방향은 그대로)
 hud.onOverview = () => { if (tools.mode !== "view" || roomView.isOpen) { hud.status("🏝 전체 보기는 둘러보기에서 써요 · ✓ 완료를 누른 뒤 다시 눌러요", { kind: "info" }); return; }
   hud.houseCard(null); unitControl.overview(portrait()); };
-const homeBtn = document.getElementById("homeBtn"); homeBtn.onclick = () => hud.onOverview();                               // 목록 줄·건물 카드 「따라가기」·배고픔 칩: 늘 따라가기 + 10 m로 가까이(편의성 점검 1·2번)
+const homeBtn = document.getElementById("homeBtn"); homeBtn.onclick = () => hud.onOverview();
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
-  unitControl.setFollow(null); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
+  unitControl.setFollow(null, true); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
   hud.houseCard(tools.mode === "view" ? b : null); };
 hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); if (!i.left) hud.status("모두 모였어요", { kind: "info" }); hud.setSummon(world); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭은 summonBlocked 알림(ALERTS)이 바로 띄움
 hud.setSummon(world);
