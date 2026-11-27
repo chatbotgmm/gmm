@@ -757,6 +757,23 @@
   #relBody .av-tap { margin: 0 0 var(--s-1); text-align: center; font-size: var(--fs-sm); }
   #dexBody details.more .more-b > .dexgrid { margin-top: var(--s-1); } #dexBody .more-b > p { margin: var(--s-2) 0 0; }
   #msg .t-ico { font-size: 1.15em; } #msg .t-head { font-weight: 700; } #msg .t-tail { font-weight: 400; color: var(--c-ink-2); } #msg .t-n { margin-left: .3em; }
+  /* ===== 💾 계정 저장(cloudView.js): 상태 한 줄 크게(.sum 재사용) · 단추 · 자세히 보기 / 충돌 창(#cloudAsk) 두 섬 카드 ===== */
+  .cc { margin: 0 0 var(--s-3); } .cc .sum[data-mode="off"] .cc-big { font-size: var(--fs-title); }   /* 상태 한 줄은 .sum-big(가장 큰 글자) · 긴 「쓸 수 없어요」만 한 단계 작게 */
+  .cc-note { margin: 0 0 var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--c-warm); font-size: var(--fs-body); }
+  .cc-note p { margin: 0 0 var(--s-1); } a.cc-link { display: inline-flex; align-items: center; min-height: var(--hit-sm); margin: 0 0 var(--s-2); font-size: var(--fs-body); font-weight: 700; color: var(--c-info); }
+  .cc-acts { margin: 0 0 var(--s-2); } .cc-acts [hidden] { display: none; }
+  .cc-rules { margin: 0 0 var(--s-2); padding-left: 1.2em; } .cc-rules li { margin: calc(3*var(--u)) 0; }
+  .cc-more .cc-del { width: 100%; margin-top: var(--s-2); min-height: var(--hit); }
+  .cc-h { margin-top: var(--s-2); }
+  #cloudAsk { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 1); background: var(--c-scrim-2); display: grid; place-items: center; padding: var(--safe-sheet); }
+  #cloudAsk[hidden] { display: none; }
+  #cloudAsk .card { background: var(--c-surface); border-radius: var(--r-lg); width: min(calc(560*var(--u)), 100%); max-height: 100%; overflow: auto; padding: calc(16*var(--u)) calc(18*var(--u)) calc(14*var(--u)); box-sizing: border-box; box-shadow: var(--e-3); }
+  #cloudAskTitle { display: block; font-size: var(--fs-title); } #cloudAskBody { margin: var(--s-2) 0; font-size: var(--fs-body); }
+  #cloudAsk .ca-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13em), 1fr)); gap: var(--s-2); }
+  #cloudAsk .ca-card { border-radius: var(--r-md); padding: var(--s-2) var(--s-3); background: var(--c-surface-2); } #cloudAsk .ca-card h5 { margin: 0 0 var(--s-1); font-size: var(--fs-body); }
+  #cloudAsk .ca-mine { box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-accent-strong); } #cloudAsk .ca-gone { margin: var(--s-2) 0; font-size: var(--fs-title); font-weight: 700; color: var(--c-danger-ink); }
+  #cloudAsk .ca-foot { margin: var(--s-2) 0 0; font-size: var(--fs-sm); color: var(--c-ink-2); }
+  #cloudAsk .lbtns { display: flex; gap: var(--s-2); justify-content: flex-end; flex-wrap: wrap; margin-top: calc(14*var(--u)); } #cloudAsk .lbtns button { min-height: var(--hit); padding: calc(8*var(--u)) calc(14*var(--u)); }
 </style>
 </head>
 <body>
@@ -790,7 +807,7 @@
     <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
     <div id="pageMarket" class="page" hidden><div id="marketBody"></div></div>
     <div id="pageSummon" class="page" hidden><div id="summonHead"></div><button id="summon" class="go">🥚 소환</button><p id="summonWhy" class="sm-why" hidden></p><div id="summonMid"></div><div id="summonMore"></div></div>
-    <div id="pageFiles" class="page" hidden><p class="dim">이 브라우저에 1분마다, 그리고 화면을 닫거나 다른 앱으로 갈 때 자동으로 저장돼요. 다시 열면 이어서 해요.</p><p id="saveInfo" class="dim"></p><div class="col"><button id="save">💾 지금 저장</button><button id="load">📂 마지막 저장 불러오기</button><button id="reset" class="danger">🏝 새 섬(지금 섬은 사라져요)</button></div></div>
+    <div id="pageFiles" class="page" hidden><div id="cloudBox" class="cc"></div><h4 class="cc-h">📱 이 브라우저 저장</h4><p class="dim">이 브라우저에 1분마다, 그리고 화면을 닫거나 다른 앱으로 갈 때 자동으로 저장돼요. 다시 열면 이어서 해요.</p><p id="saveInfo" class="dim"></p><div class="col"><button id="save">💾 지금 저장</button><button id="load">📂 마지막 저장 불러오기</button><button id="reset" class="danger">🏝 새 섬(지금 섬은 사라져요)</button></div></div>
     <div id="pageSettings" class="page" hidden>
       <section id="edBox" class="edbox" aria-labelledby="edTitle" data-edition="free">
         <div class="edhead"><span id="edTitle" class="slab">🎟 판</span><b id="edNow" class="ednow">🆓 무료판</b><span id="edSrc" class="edsrc">설정에서 고름</span></div>
@@ -849,6 +866,7 @@
 </div>
 <div id="houseCard" hidden role="group" aria-label="집"><b></b><span class="dim"></span><div class="hcx" hidden></div><button class="go">🛋 들어가 꾸미기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
 <div id="letter" hidden role="dialog" aria-modal="true" aria-labelledby="letterTitle"><div class="card"><div class="head"><b id="letterTitle">💌 다녀온 사이에</b></div><div id="letterBody"></div><div class="lbtns"><button id="letterNews">📰 소식지 보기</button><button id="letterClose" class="go">고마워요!</button></div></div></div>
+<div id="cloudAsk" hidden role="dialog" aria-modal="true" aria-labelledby="cloudAskTitle"><div class="card"><b id="cloudAskTitle"></b><p id="cloudAskBody"></p><div class="ca-cards"></div><p class="ca-foot"></p><div class="lbtns"></div></div></div>
 <div id="ask" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle"><div class="card"><b id="askTitle"></b><p id="askBody"></p><div class="lbtns"><button id="askNo" class="ghost">취소</button><button id="askYes" class="go">확인</button></div></div></div>
 <div id="loading"><div class="gull" aria-hidden="true">🐦</div><div class="title">갈매미맨 마을</div><div class="track"><div id="loadBar"></div></div><div id="loadText" role="status">불러오는 중…</div><div id="loadErr" hidden><p id="loadWhy" role="alert"></p><button id="loadRetry" class="go" type="button">↻ 다시 시도</button></div></div>
 

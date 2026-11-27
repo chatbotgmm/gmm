@@ -57,6 +57,7 @@ import { stepGridLines } from "./render/gridLines.js";
 import { gridShown } from "./ui/gridView.js";
 import { loadCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 import { GullPool, loadingView, failReason } from "./render/gullLoad.js";
+import { installCloud } from "./ui/cloudView.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -281,9 +282,9 @@ loadRetry.onclick = () => charPool.retry();
 addEventListener("keydown", e => { if ((e.key === "Enter" || e.code === "NumpadEnter") && !ready && !loadErr.hidden) { e.preventDefault(); e.stopPropagation(); charPool.retry(); } }, true);   // Enter = 다시 시도(초점이 어디든 · keys.js보다 먼저 받음 — keys.js는 키보드로 옮기지 않은 초점의 Enter를 막음)
 charPool.start(); drawLoading();
 // 저장: 이 브라우저에 1분마다·화면을 떠날 때 자동 저장, 다시 열면 이어서(저장이 없거나 망가졌으면 새 섬)
-let lastSaved = 0, resumed = false;
+let lastSaved = 0, resumed = false, cloud = null;   // cloud: 계정 저장(ui/cloudView.js · systems/cloudClient.js)
 function saveNow(quiet = true) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize(Date.now()))); lastSaved = Date.now(); if (!quiet) hud?.status("저장했어요(이 브라우저에만 · 1분마다 자동 저장)"); return true; }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize(Date.now()))); lastSaved = Date.now(); cloud?.touch(); if (!quiet) hud?.status("저장했어요(이 브라우저에만 · 1분마다 자동 저장)"); return true; }
   catch (e) { if (!quiet) hud?.status("저장하지 못했어요: " + e.message); return false; }
 }
 let oldMap = false;
@@ -312,7 +313,7 @@ tools.applyControls();                              // 처음부터 조작 배�
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
-  onReset: () => { mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
+  onReset: () => { mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); cloud?.markReplace(); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 // 건설 모드에 들어가고 나올 때: 카메라 고정·풀기 + 조작 배치(돌리기 대신 옮기기). 화면(HUD)은 hud.showMode가 그대로 맡음
 { const showMode = tools.onMode; tools.onMode = (m, arg) => { showMode(m, arg); const on = m !== "view"; if (on === quarterCam.locked) return;
@@ -347,6 +348,9 @@ const minimap = new Minimap({ getWorld: () => world, camera, controls });   // �
 // 키보드·포인터 층(Esc 단계 닫기 · 열린 창 뒤로 키 안 새게 · 단축키 · 툴팁) + 새 섬·불러오기 확인창은 hud.confirm
 hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
 installKeys({ hud, tools, roomView });
+// ☁️ 계정 저장: 💾 저장 앱 맨 위 카드. 받은 계정 섬은 여기서 올림(다녀온 사이 편지는 계정 판마다 한 번만 — cloudSync.awayFor)
+cloud = installCloud({ hud, saveKey: SAVE_KEY, gridW: GRID_W, getWorld: () => world, saveLocal: () => saveNow(), fromJSON: j => World.fromJSON(j),
+  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); hud.showLetter(welcomeBack(world)); saveNow(); } });   // 받은 섬을 바로 이 기기에도(savedAt 새로 → 다시 열어도 보상 두 번 없음)
 // 🎟 판(무료·유료)과 ⏩ 배속(유료판 전용, 마을 진행 ×1·×2·×3). 판은 systems/edition.js 한 곳에서만 읽고 씀(지금은 설정에서 고름, 나중엔 계정 값이 우선)
 const edition = createEdition();
 hud.edition = edition; hud.syncEdition();
@@ -392,6 +396,7 @@ Promise.all([assetsLoad, charPool.ready]).then(() => {
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true, full: true });
   else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true, full: true });
   hud.showLetter(backLetter);
+  cloud.start();                                   // 계정 확인(같은 출처 /village3d/에서만 · 아니면 요청 없이 꺼짐)
   hud.coach.start({ fresh: !resumed });           // 처음 안내 3단계(새 섬일 때 · 편지·처음 알림이 지나간 뒤 말풍선이 뜸)
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
 });
@@ -521,5 +526,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, edition, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
