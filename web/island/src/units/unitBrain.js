@@ -781,9 +781,9 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     if (k !== 1) u.needs.energy = Math.max(0, u.needs.energy - (e0 - u.needs.energy) * (k - 1));
   }
   if (u.sick || u.immune > 0) healthTick(u, dt, world);
-  if (u.useFurni && u.insideBuildingId && u.needs) {                              // 집 가구 쓰기: 침대 = 기력 회복 두 배, 앉기 = 조금 더, 책장 = 재미
+  if (u.useFurni && u.insideBuildingId && u.needs) {                              // 집 가구 쓰기: 침대 = 기력 회복이 M.SLEEP_GAIN.bed가 되게(건물 안 값에 더함), 앉기 = 조금 더, 책장 = 재미
     const k = FURNITURE[u.useFurni.id]?.use, n = u.needs;
-    if (k === "sleep") n.energy = Math.min(100, n.energy + 3 * dt); else if (k === "sit") n.energy = Math.min(100, n.energy + 1 * dt); else if (k === "read") n.fun = Math.min(100, n.fun + 1.5 * dt);
+    if (k === "sleep") n.energy = Math.min(100, n.energy + (M.SLEEP_GAIN.bed - M.SLEEP_GAIN.inside) * dt); else if (k === "sit") n.energy = Math.min(100, n.energy + 1 * dt); else if (k === "read") n.fun = Math.min(100, n.fun + 1.5 * dt);
   }
   if (u.insideBuildingId && u.needs && world.buildings.get(u.insideBuildingId)?.defId === "cafe") { u.needs.fun = Math.min(100, u.needs.fun + 2 * dt); u.needs.social = Math.min(100, u.needs.social + 1.5 * dt); }   // 카페: 재미·친구
   if (u.insideBuildingId && u.needs && world.buildings.get(u.insideBuildingId)?.defId === "aquarium") u.needs.fun = Math.min(100, u.needs.fun + 2.5 * dt);   // 수족관 구경: 재미
