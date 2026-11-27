@@ -415,7 +415,7 @@ function frame() {
 }
 function tickClock() {
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 잠은 기력으로(chrono.js) — 밤엔 아침형이, 낮엔 야행성이 피로가 1.5배로 쌓임
-  if (daylight.time) world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60;   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
+  if (daylight.time) { world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60; world.clock = daylight.time; }   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js) · 숙박비 하룻밤 키(BK.stayKey)
 }
 function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한

@@ -1033,7 +1033,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (!b) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
         const cocoa = u.cocoa; u.cocoa = false; enterBuilding(u, b, rnd); if (cocoa && b.defId === "cafe") world.buyCocoa?.(u);
-        if (u.insideAct === "sleep") world.lodge?.(u, b);                         // 빈 집 손님이면 숙박비(마을 하루에 한 번, World.lodge가 가림)
+        if (u.insideAct === "sleep") world.lodge?.(u, b);                         // 빈 집 손님이면 숙박비(하룻밤에 한 번, World.lodge가 가림)
         if (BUILDINGS[b.defId].clinic) { if (u.insideAct === "sick") world.clinicCheckIn?.(u, b); else if (u.insideAct === "doctor") world.doctorArrived?.(u, b); }
       }
       break;
