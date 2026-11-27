@@ -2,6 +2,7 @@
 // 참고 그림처럼 검은 외곽선 없이 부드러운 4단계 명암. 색·텍스처·꼭짓점 색·발광·투명도·스키닝은 그대로 옮김.
 // 새로 생기는 모델(건물·갈매미·소품)도 sweep()을 주기적으로 불러 바꿔 줌. off로 되돌릴 수 있음(설정).
 import * as THREE from "three";
+import { markToonMade, origin } from "./toonSrc.js";
 
 function gradient(steps = [0.42, 0.62, 0.82, 1.0]) {
   const data = new Uint8Array(steps.map(v => Math.round(v * 255)));
@@ -68,7 +69,9 @@ export class Toon {
     this.toToon.clear(); this.toStd.clear(); this.style = s; this.on = s !== "basic"; this.sweep();
   }   // snow: 물체 위 눈(방 안은 끔)
   convert(m) {
-    if (!m || !(m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial) || m.userData.noToon || this.toStd.has(m)) return m;   // 이미 바꾼 재질(클레이는 같은 Standard라 다시 바꾸지 않게)
+    if (!m || this.toStd.has(m)) return m;                                        // 이미 이 Toon이 바꾼 재질
+    m = origin(m);                                                                // 다른 Toon(섬)이 바꾼 재질이면 원래 재질에서 다시(클레이 셰이더 수정이 두 번 붙어 깨지지 않게 — 방 안 갈매미가 그림자만 남던 버그)
+    if (!(m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial) || m.userData.noToon) return m;
     let t = this.toToon.get(m);
     if (!t) {
       const base = { color: m.color, map: m.map, vertexColors: m.vertexColors, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap,
@@ -77,7 +80,7 @@ export class Toon {
       t = clay ? new THREE.MeshStandardMaterial({ ...base, roughness: 1, metalness: 0 }) : new THREE.MeshToonMaterial({ ...base, gradientMap: GRAD });
       const own = Object.prototype.hasOwnProperty.call(m, "onBeforeCompile") ? m.onBeforeCompile : null, snow = this.snow && !m.userData.noSnow;   // 지붕 색 바꾸기 같은 셰이더 수정도 옮김 + 눈
       t.onBeforeCompile = (sh, r) => { own?.call(t, sh, r); if (snow) addSnow(sh); if (clay) addClay(sh); else addToonShadow(sh); }; t.customProgramCacheKey = () => `${this.style}-ts-${snow ? "snow-" : ""}${own ? m.customProgramCacheKey() : ""}`;
-      t.userData.src = m; t.userData.fromPatched = !!m.userData.treeSeason; this.toToon.set(m, t); this.toStd.set(t, m);   // 나무 계절 셰이더가 이미 붙은 재질을 바꾼 것(다시 붙이지 않게)
+      markToonMade(t, m); t.userData.src = m; t.userData.fromPatched = !!m.userData.treeSeason; this.toToon.set(m, t); this.toStd.set(t, m);   // 나무 계절 셰이더가 이미 붙은 재질을 바꾼 것(다시 붙이지 않게)
     }
     return t;
   }
@@ -86,7 +89,7 @@ export class Toon {
     let n = 0;
     root.traverse(o => {
       if (!o.isMesh || !o.material) return;
-      const swap = m => { const r = this.on ? this.convert(m) : (this.toStd.get(m) || m); if (r !== m) n++; return r; };
+      const swap = m => { const r = this.on ? this.convert(m) : (this.toStd.get(m) || origin(m)); if (r !== m) n++; return r; };   // 되돌릴 때도 다른 Toon이 바꾼 재질은 원래 재질로
       o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
     });
     return n;
