@@ -2,7 +2,7 @@
 import { toWorldX, toWorldZ, toGridX, toGridZ, SEA_LEVEL } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
 
-const GROUND_RGB = { Grass: [140, 196, 78], Cobble: [140, 152, 166], WoodDeck: [200, 150, 95], Dirt: [200, 160, 118], Sand: [240, 222, 160], Rock: [150, 144, 135] };
+const GROUND_RGB = { Grass: [140, 196, 78], Cobble: [116, 130, 154], WoodDeck: [147, 94, 56], Dirt: [189, 139, 92], Sand: [240, 222, 160], Rock: [150, 144, 135] };
 const SIZE = 176, BRIDGE_RGB = [176, 128, 80], HOUSE_RGB = [214, 110, 75], BUILDING_RGB = [120, 92, 70];
 
 export class Minimap {
