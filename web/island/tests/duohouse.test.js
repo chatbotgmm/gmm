@@ -6,7 +6,7 @@ import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import { findPath } from "../src/world/pathfinding.js";
 import { checkPlacement } from "../src/world/placement.js";
-import { BUILDINGS } from "../src/data/catalog.js";
+import { BUILDINGS, FURNITURE } from "../src/data/catalog.js";
 import * as HM from "../src/world/homes.js";
 import * as F from "../src/world/furniture.js";
 import * as P from "../src/world/population.js";
@@ -90,6 +90,8 @@ test("같이 사는 갈매미: 숙박비 없음 · 침대는 따로(사는 수�
   const ls = F.levels(c), beds = F.allFurniture(c).filter(o => o.id === "bed"); assert.equal(beds.length, 2);
   for (const o of beds) assert.equal(ls[ls.findIndex(L => L.furniture.includes(o))].role, "bedroom", "침대 둘 다 2층 침실");
   assert.equal(F.pickUse(c, true, () => 0, [beds[0]]), beds[1], "남이 쓰는 침대는 피함"); assert.equal(F.pickUse(c, true, () => 0, beds), beds[0]);
+  F.autoPlace(w, c, "chair"); F.autoPlace(w, c, "chair"); const seats = F.allFurniture(c).filter(o => FURNITURE[o.id].use && FURNITURE[o.id].use !== "sleep"); assert.ok(seats.length >= 2);
+  for (const r of [0, 0.5, 0.99]) assert.notEqual(F.pickUse(c, false, () => r, [seats[0]]), seats[0], "같이 사는 갈매미가 앉은 의자는 피함");
   const coins0 = [boss.coins, mini.coins]; w.isNight = true; let lodged = 0; w.on("lodging", () => lodged++);
   for (const u of [boss, mini]) { u.state = "Idle"; u.timer = 0; u.needs.energy = 10; }
   const slept = new Set();

@@ -171,6 +171,7 @@ export function pickUse(b, sleepy, rnd = Math.random, busy = []) {
   const list = allFurniture(b).filter(o => FURNITURE[o.id].use);
   const beds = list.filter(o => FURNITURE[o.id].use === "sleep");
   if (sleepy && beds.length) return beds.find(o => !busy.includes(o)) || beds[0];
-  const other = list.filter(o => FURNITURE[o.id].use !== "sleep"); const pool = other.length ? other : list;
+  const other = list.filter(o => FURNITURE[o.id].use !== "sleep"), all = other.length ? other : list, free = all.filter(o => !busy.includes(o));
+  const pool = free.length ? free : all;                                           // 같이 사는 갈매미가 앉은 의자는 피함(다 차면 아무거나)
   return pool.length ? pool[Math.floor(rnd() * pool.length)] : null;
 }
