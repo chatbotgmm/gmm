@@ -1034,7 +1034,7 @@ export class World {
     const f = J.rollFish(u, rnd, this.season, bonus); if (!this.economy) this.res.fish++;
     const size = fishSize(f, sizeNoise(this.time, u.unitId, Object.values(this.collection).reduce((a, b) => a + b, 0)));
     const prev = this.fishRecord[f.id] || 0, record = size > prev; if (record) this.fishRecord[f.id] = size;
-    const medal = fishMedal(f, this.fishRecord[f.id]), prevMedal = fishMedal(f, prev), medalGifts = record ? grantMedalGifts(this) : [];
+    const medal = fishMedal(f, this.fishRecord[f.id]), prevMedal = fishMedal(f, prev), medalGifts = grantMedalGifts(this);   // 기록이 아니어도 셈(예전 저장의 밀린 가구가 다음 기록까지 기다리지 않게)
     this.collection[f.id] = (this.collection[f.id] || 0) + 1;
     const gifts = this.donateFish(f);
     if (f.rarity === "common") { if (this.economy) this.gain(u, "fish", 1); else this.res.food += f.food; } else if (!gifts) stashAdd(u, f.id);
@@ -1061,6 +1061,7 @@ export class World {
       const u = fishers[i % fishers.length]; if (rnd() >= J.catchChance(u)) continue;
       const got = this.landFish(u, rnd); catches.push({ who: u.name, fish: got.fish, item: got.item, size: got.size, donated: got.donated });
       if (got.gifts) { this.noteNews("donate", { u, fish: got.fish }); for (const g of got.gifts) this.noteNews("donateGift", g); }   // 그동안의 기증은 소식지에만
+      for (const g of got.medalGifts) this.noteNews("medalGift", g);               // 그동안 받은 금메달 기념 가구도 소식지에(가방에만 조용히 들어가던 것)
     }
     const fished = catches.length ? `물고기 ${catches.length}마리를 낚았어요` : "", did = ripened ? `밭 ${ripened}칸이 ${fished ? `익고 ${fished}` : "익었어요"}` : fished;
     if (did) addNews(this.newsLog, this.time, { icon: "💌", text: `다녀온 사이에 ${did}`, weight: 3 });

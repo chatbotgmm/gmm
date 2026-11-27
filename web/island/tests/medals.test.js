@@ -78,3 +78,14 @@ test("알림·소식지: 금메달이 처음 되면 소식지에, 은·같은 �
   const w = World.create(7, seededRandom(3), { empty: true }); w.fishRecord = { flatfish: 78.4, octopus: 31 };
   const c = dexCounts(w); assert.equal(c.gold, 1); assert.equal(c.bronze, 1); assert.match(dexHeadHtml(c), /🥇 금메달 1\/16/);
 });
+
+test("다녀온 사이에 받은 금메달 기념 가구도 소식지에 실림(가방에만 조용히 들어가지 않게)", () => {
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.addUnitByName("물방울");
+  if (!w.spots.length) w.spots.push({ x: 1, z: 1, dir: [1, 0], claimed: null });
+  const fisher = w.units.find(u => u.job === "fisher"); assert.ok(fisher, "어부가 있어야 함");
+  for (const id of ["anchovy", "mackerel", "squid", "flatfish"]) w.fishRecord[id] = A.fishSize(byId(id), 1);   // 금 4종(예전 저장: 받은 수 0). 가장 큰 크기라 새 기록이 안 나와도 받아야 함
+  w.medalGifts = 0;
+  const r = w.applyAway(8 * 3600000, () => 0);                                   // rnd 0 → 늘 낚음
+  assert.ok(r.catches.length >= 1); assert.equal(w.medalGifts, 1); assert.equal(w.items.medalRug, 1);
+  assert.ok(w.newsLog.some(n => /금메달 4종 기념으로 금빛 비늘 깔개/.test(n.text)), "소식지에 기념 가구");
+});
