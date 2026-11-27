@@ -9,6 +9,7 @@
 //  · stash: 그 집에 있지만 아직 안 놓은 가구(주인이 산 것, 치운 것). 마을 가방(world.items)의 낚시 가구도 아무 집에나 놓음
 import { FURNITURE, ITEMS } from "../data/catalog.js";
 import { arrRelayout, arrPlaceOne, arrKind, isKitchen } from "./arrange.js";
+import { residentsOf } from "./homes.js";
 
 // 집마다 구조. 방(levels)은 한 번에 하나씩 보이고, 문을 누르면 다른 방으로 가거나(to: 방 번호) 밖으로 나감(to: "exit").
 //  · doors [{ wall: "W"|"E"|"N"|"S", at, to }]: W = 왼쪽(−x) · E = 오른쪽 · N = 뒤(−z) · S = 앞. at = 벽을 따라 몇 번째 칸. 문 앞 칸엔 가구를 못 놓음
@@ -161,12 +162,16 @@ export const comfort = b => allFurniture(b).reduce((s, o) => s + (FURNITURE[o.id
 export const owns = (b, id) => allFurniture(b).some(o => o.id === id) || (room(b).stash[id] || 0) > 0;
 /** 갈매미가 다음에 사고 싶은 가구(없는 것 중 이 순서대로) */
 export const WANT_ORDER = ["bed", "chair", "table", "plant", "rug", "floorLamp", "bookshelf", "sofa", "wardrobe", "oven"];
-export function nextWant(b) { return WANT_ORDER.find(id => !owns(b, id)) || null; }
-/** 집에 들어온 갈매미가 쓸 가구: 졸리면 침대, 아니면 앉을 것·책장 중 하나 */
-export function pickUse(b, sleepy, rnd = Math.random) {
+/** 집에 있는(놓였거나 창고) 침대 수 */
+export const bedCount = b => allFurniture(b).filter(o => FURNITURE[o.id]?.use === "sleep").length + Object.entries(room(b).stash).reduce((s, [id, n]) => s + (FURNITURE[id]?.use === "sleep" ? Math.max(0, n) : 0), 0);
+/** 다음에 살 가구: 사는 갈매미보다 침대가 적으면 침대부터(둘이 사는 2층집 = 침대 둘, homes.js), 아니면 없는 것 중 WANT_ORDER 차례 */
+export function nextWant(b) { return bedCount(b) < Math.max(1, residentsOf(b).length) ? "bed" : WANT_ORDER.find(id => !owns(b, id)) || null; }
+/** 집에 들어온 갈매미가 쓸 가구: 졸리면 침대(busy = 같은 집에서 다른 갈매미가 쓰는 가구 — 빈 침대부터, 다 차면 첫 침대), 아니면 앉을 것·책장 중 하나 */
+export function pickUse(b, sleepy, rnd = Math.random, busy = []) {
   const list = allFurniture(b).filter(o => FURNITURE[o.id].use);
   const beds = list.filter(o => FURNITURE[o.id].use === "sleep");
-  if (sleepy && beds.length) return beds[0];
-  const other = list.filter(o => FURNITURE[o.id].use !== "sleep"); const pool = other.length ? other : list;
+  if (sleepy && beds.length) return beds.find(o => !busy.includes(o)) || beds[0];
+  const other = list.filter(o => FURNITURE[o.id].use !== "sleep"), all = other.length ? other : list, free = all.filter(o => !busy.includes(o));
+  const pool = free.length ? free : all;                                           // 같이 사는 갈매미가 앉은 의자는 피함(다 차면 아무거나)
   return pool.length ? pool[Math.floor(rnd() * pool.length)] : null;
 }

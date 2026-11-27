@@ -10,7 +10,7 @@ import { SPECIAL_HOME } from "../world/population.js";
 const svEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 먼저 오는 직업이 마을에 주는 것 */
 export const NEXT_WHY = { builder: "집을 지을 수 있어요", carpenter: "시장을 지을 수 있어요", merchant: "시장에 새 돈이 돌아요" };
-export const RULES = ["다 지은 집 한 채에 갈매미 한 마리", "짓는 중인 집은 세지 않아요", "🗿 자이언트는 빈 '자이언트의 집'에만 와요(보통 집 자리는 안 써요)", "온 갈매미는 떠나지 않아요"];
+export const RULES = ["다 지은 집 한 채에 갈매미 한 마리(🏡 2층집은 두 마리)", "짓는 중인 집은 세지 않아요", "🗿 자이언트는 빈 '자이언트의 집'에만 와요(보통 집 자리는 안 써요)", "온 갈매미는 떠나지 않아요"];
 const svJobOf = name => JOBS[(UNIT_JOBS[name] || [])[1]] || JOBS.builder;
 
 /** 소환 단추 상태: { disabled, text, why } */
@@ -27,7 +27,7 @@ export function summonHtml(info, units, more = (k, t, h, o) => moreBox(k, t, h, 
   else if (!info.gated) head = sumHead({ icon: "🥚", big: `${info.left}마리`, label: "아직 안 왔어요", line: "이 섬은 집 수와 상관없이 불러요" });
   else head = sumHead({ icon: "🥚", big: `${info.count}마리`, label: info.can ? "지금 부를 수 있어요" : "지금은 못 불러요", tone: info.can ? "ok" : "warn",
     toneText: info.can ? "부를 수 있어요" : info.needHouse ? "집이 모자라요" : "자이언트의 집이 필요해요",
-    lineHtml: `🏠 집 <b>${info.houses}</b>채 · 🐦 갈매미 <b>${info.gulls}</b>마리`, bar: info.houses ? Math.min(1, info.gulls / info.houses) : 1 });
+    lineHtml: `🏠 집 <b>${info.homes ?? info.houses}</b>채${info.homes != null && info.homes !== info.houses ? ` (자리 <b>${info.houses}</b>)` : ""} · 🐦 갈매미 <b>${info.gulls}</b>마리`, bar: info.houses ? Math.min(1, info.gulls / info.houses) : 1 });
   const lines = [];
   if (info.can && info.next) { const j = svJobOf(info.next), why = NEXT_WHY[j.id]; lines.push(`<p class="sm-next">다음: <b>${j.icon} ${svEsc(info.next)}</b> (${svEsc(j.name)}${why ? ` — ${why}` : ""})</p>`); }
   const giant = Object.keys(SPECIAL_HOME).find(n => absent.includes(n));

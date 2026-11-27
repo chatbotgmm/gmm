@@ -13,6 +13,7 @@ import * as M from "./mind.js";
 import { areNeighbors } from "../world/wishes.js";
 import * as E from "../world/economy.js";
 import * as F from "../world/furniture.js";
+import * as HM from "../world/homes.js";
 import * as IM from "../world/improve.js";
 import * as RA from "../world/roadAsk.js";
 import * as FM from "../world/farming.js";
@@ -612,7 +613,7 @@ function afterFaint(u, world, rnd) {
   const b = world.clinicFor?.(u);
   if (b) {
     setIdle(u, rnd, world, 0); u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = world.grid.walkHeight?.(b.door.x, b.door.z) ?? u.y;
-    u.sleepy = true; enterBuilding(u, b, rnd); u.carried = true; world.faintCarried?.(u, b); return;
+    u.sleepy = true; enterBuilding(u, b, rnd, world); u.carried = true; world.faintCarried?.(u, b); return;
   }
   setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false; emote(u, "💤", 2.5);
 }
@@ -732,12 +733,14 @@ function chooseNext(u, world, rnd) {
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
     if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀)
-    if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝 옆집이 있으면 그 집부터, 다음은 싼 집)
-      const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => areNeighbors(b, palHome) ? 1 : 0;
+    if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝과 같은 집·옆집이 있으면 그 집부터, 다음은 싼 집)
+      const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => b === palHome ? 2 : areNeighbors(b, palHome) ? 1 : 0;
       const deals = world.housesForSale(u).map(b => [b, world.houseDeal(u, b)]);   // 집값을 다 가졌거나, 계약금이 있고 금고가 빌려줄 수 있으면(bank.js)
-      if (!deals.some(([, d]) => d.ok)) { const v = deals.find(([, d]) => d.reason === "vault"); if (v) world.refuseLoan(u, v[1]); }   // 금고가 비어 대출 거절(한 사태에 한 번 말풍선)
-      const h = deals.filter(([, d]) => d.ok).map(([b]) => b).sort((a, c) => nearPal(c) - nearPal(a) || BUILDINGS[a.defId].price - BUILDINGS[c.defId].price)[0];
-      if (h && startActivity(u, "market", world, rnd)) { u.shop = { kind: "house", b: h.id }; emote(u, "집 사러!"); return; }
+      const shares = (world.housesToShare?.(u) || []).map(b => [b, world.shareDeal(u, b)]);   // 자리가 남은 2층집에 같이 살기(집값 절반을 주인에게, homes.js)
+      if (!deals.some(([, d]) => d.ok) && !shares.some(([, d]) => d.ok)) { const v = deals.find(([, d]) => d.reason === "vault"); if (v) world.refuseLoan(u, v[1]); }   // 금고가 비어 대출 거절(한 사태에 한 번 말풍선)
+      const cost = ([b, d]) => d.share ?? BUILDINGS[b.defId].price;
+      const h = [...deals, ...shares].filter(([, d]) => d.ok).sort((a, c) => nearPal(c[0]) - nearPal(a[0]) || cost(a) - cost(c))[0];
+      if (h && startActivity(u, "market", world, rnd)) { const share = h[1].share != null; u.shop = { kind: share ? "share" : "house", b: h[0].id }; emote(u, share ? "같이 살 집 구하러!" : "집 사러!"); return; }
     }
     const home = u.home && world.buildings.get(u.home), shop = world.shopB();
     // 추웠던 적이 있으면 잡화점에서 옷을 삼(목도리 → 외투, 밥값 두 번어치는 남김). 난수를 안 써서 안 추운 계절엔 예전과 똑같음
@@ -781,13 +784,15 @@ function helpOut(u, world, rnd) {
 }
 const HELP_SAY = { chop: ["🪓 나무 해 올게!", "일손 돕기!"], mine: ["⛏ 돌 캐 올게!", "일손 돕기!"], fish: ["🎣 낚시 도울게!", "일손 돕기!"] };
 
-export function enterBuilding(u, b, rnd) {
+/** 같은 집 안에서 다른 갈매미가 쓰는 가구(둘이 사는 2층집에서 한 침대에 둘이 눕지 않게) */
+const busyIn = (u, b, world) => (world?.units || []).filter(o => o !== u && o.insideBuildingId === b.id && o.useFurni).map(o => o.useFurni);
+export function enterBuilding(u, b, rnd, world = null) {
   release(u);
   const act = u.activity, sleepy = u.sleepy, go = u.goFor; u.activity = null; u.sleepy = false; u.goFor = null;
   release(u);
   u.state = US.Inside; u.insideBuildingId = b.id; u.timer = sleepy ? 15 + rnd() * 10 : 6 + rnd() * 8; u.path = null; u.goal = null; u.running = false;
   u.insideAct = sleepy ? "sleep" : go || act;                                     // go: 몸 녹이러("warm") 들어온 것
-  u.useFurni = b.owner === u.unitId ? F.pickUse(b, sleepy || go === "sick", rnd) : null;   // 자기 집이면 가구를 씀(침대에서 낮잠 등, 아프면 침대에서 쉼)
+  u.useFurni = HM.livesIn(b, u) ? F.pickUse(b, sleepy || go === "sick", rnd, busyIn(u, b, world)) : null;   // 자기 집(주인·같이 사는 갈매미)이면 가구를 씀(침대에서 낮잠 등, 아프면 침대에서 쉼). 남이 쓰는 침대는 피함
   if (u.useFurni && FURNITURE[u.useFurni.id].use === "sleep") u.timer += 6;
   if (!b.occupants.includes(u.unitId)) b.occupants.push(u.unitId);
 }
@@ -1047,7 +1052,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = world.buildings.get(u.targetBuildingId);
       if (!b) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
-        const cocoa = u.cocoa; u.cocoa = false; enterBuilding(u, b, rnd); if (cocoa && b.defId === "cafe") world.buyCocoa?.(u);
+        const cocoa = u.cocoa; u.cocoa = false; enterBuilding(u, b, rnd, world); if (cocoa && b.defId === "cafe") world.buyCocoa?.(u);
         if (u.insideAct === "sleep") world.lodge?.(u, b);                         // 빈 집 손님이면 숙박비(하룻밤에 한 번, World.lodge가 가림)
         if (BUILDINGS[b.defId].clinic) { if (u.insideAct === "sick") world.clinicCheckIn?.(u, b); else if (u.insideAct === "doctor") world.doctorArrived?.(u, b); }
       }
@@ -1056,8 +1061,8 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     case US.Inside:
       if (u.timer <= 0 && keepInside(u, world)) { u.timer = 2; break; }       // 몸 녹이는 중(체온 39.6까지, 아침형의 밤에 밖이 추우면 기력이 찰 때까지 안에서 쉼)
       // 자는 중이면 피로 0이 되는 대로 일어남(밤이어도)
-      if (u.timer <= 0 || (u.insideAct === "sleep" && (u.needs?.energy ?? 100) >= CH.WAKE_AT)) { const ib = world.buildings.get(u.insideBuildingId), taken = ib && ib.owner != null && ib.owner !== u.unitId && world.isHouse(ib);   // 손님으로 자던 빈 집을 누가 샀으면 깨서 나옴(다시 잠자리를 고름)
-        if (u.insideAct === "sleep" && !taken && keepSleeping(u, world)) { u.timer = 8; if (u.useFurni?.id && !/bed/i.test(u.useFurni.id)) { const b = world.buildings.get(u.insideBuildingId); u.useFurni = b ? F.pickUse(b, true, rnd) : u.useFurni; } } else exitBuilding(u, world, rnd); }   // 기력이 덜 찼으면 계속 잠(배고프거나 축제가 열리면 자다가도 나옴)
+      if (u.timer <= 0 || (u.insideAct === "sleep" && (u.needs?.energy ?? 100) >= CH.WAKE_AT)) { const ib = world.buildings.get(u.insideBuildingId), taken = ib && ib.owner != null && !HM.livesIn(ib, u) && world.isHouse(ib);   // 손님으로 자던 빈 집을 누가 샀으면 깨서 나옴(다시 잠자리를 고름). 같이 사는 갈매미는 자기 집
+        if (u.insideAct === "sleep" && !taken && keepSleeping(u, world)) { u.timer = 8; if (u.useFurni?.id && !/bed/i.test(u.useFurni.id)) { const b = world.buildings.get(u.insideBuildingId); u.useFurni = b ? F.pickUse(b, true, rnd, busyIn(u, b, world)) : u.useFurni; } } else exitBuilding(u, world, rnd); }   // 기력이 덜 찼으면 계속 잠(배고프거나 축제가 열리면 자다가도 나옴)
       break;
     case US.GoTrade:
       if (world.economy && followPath(u, dt, world, rnd)) {                         // 경제: 시장 앞에서 한동안 손님을 기다림
@@ -1119,6 +1124,9 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
         const n = world.stockFood(u); emote(u, n ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고가 꽉 찼네", 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
       } else if (shop.kind === "granary") {
         const r = world.takeFood(u); if (r) { world.eatFood(u); emote(u, r === "buy" ? "🏚 저장고 음식 냠" : "🏚 나눠 받았어요", 2.2); done(u, 0.8, rnd, world); } else { emote(u, "저장고가 비었네…"); setIdle(u, rnd, world); }
+      } else if (shop.kind === "share") {                                          // 2층집에 같이 살기(homes.js)
+        const b = world.buildings.get(shop.b);
+        if (b && world.moveIn(u, b)) { emote(u, "🏡 같이 살자!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, "놓쳤다…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "house") {
         const b = world.buildings.get(shop.b);
         if (b && world.buyHouse(u, b)) { emote(u, "🏠 내 집!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, b && world.houseDeal(u, b).reason === "vault" ? "은행에 돈이 없대…" : "놓쳤다…"); setIdle(u, rnd, world); }

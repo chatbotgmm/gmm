@@ -9,6 +9,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { FURNITURE, FLOORS, WALLPAPERS, BUILDINGS, ITEMS } from "../data/catalog.js";
 import { DONATE_GIFTS } from "../world/aquarium.js";
 import * as F from "../world/furniture.js";
+import { residentsText } from "../world/homes.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
@@ -267,8 +268,8 @@ export class RoomView {
   // ---- 아래 판(가구·바닥·벽지)
   refreshUI() {
     const w = this.world, b = this.b, it = this.L, list = this.ui.querySelector(".rlist"), act = this.ui.querySelector(".racts"); list.innerHTML = ""; act.innerHTML = "";
-    const owner = w.units.find(u => u.unitId === b.owner), inside = w.units.filter(u => u.insideBuildingId === b.id);
-    this.ui.querySelector(".rtitle").textContent = `🏠 ${BUILDINGS[b.defId].name}${owner ? ` · 주인 ${owner.name}` : " · 주인 없음"} · 🛋 아늑함 ${F.comfort(b)}`;
+    const inside = w.units.filter(u => u.insideBuildingId === b.id);
+    this.ui.querySelector(".rtitle").textContent = `🏠 ${BUILDINGS[b.defId].name} · ${residentsText(b, w.units)} · 🛋 아늑함 ${F.comfort(b)}`;   // 2층집: 주민 2/2 · 주인 · 같이 사는(homes.js)
     this.ui.querySelector(".rwho").textContent = inside.length ? `지금 안에: ${inside.map(u => `${u.name}${u.useFurni ? `(${FURNITURE[u.useFurni.id].useLabel})` : ""}`).join(", ")}` : "";
     for (const t of this.ui.querySelectorAll(".rtabs button[data-tab]")) t.classList.toggle("on", t.dataset.tab === this.tab);
     const lvBox = this.ui.querySelector(".rlevels"), ls = F.levels(b); lvBox.innerHTML = "";

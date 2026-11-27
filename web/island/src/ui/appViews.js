@@ -105,7 +105,7 @@ export function marketAppHtml(w, { more = avMore, price = k => priceCellHtml(w, 
     : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`;
   const foodH = `<p>음식 값 ${price("food")}</p><table class="tbl">${food.map(u => `<tr><td>${JOBS[u.job].icon} ${avEsc(u.name)}</td><td>🍗${u.inv?.food || 0} 🐟${u.inv?.fish || 0}</td></tr>`).join("") || `<tr><td class="dim">농부·어부가 없어요</td><td></td></tr>`}</table>` +
     `<p class="dim">농부·어부가 내놓을 음식이 모자라거나 배고픈 갈매미가 많으면 비싸지고, 겨울엔 더 비싸요.</p>`;
-  const ownH = `<table class="tbl">${owners.map(u => `<tr><td>${avEsc(u.name)}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
+  const ownH = `<table class="tbl">${owners.map(u => `<tr><td>${avEsc(u.name)}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}${w.buildings.get(u.home)?.owner === u.unitId || !w.buildings.get(u.home) ? "" : " (같이 삶)"}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
   return head +
     more("market.price", "📈 시세(상인이 사는 값)", priceH, { note: E.RAW.map(k => `${E.ITEM_ICON[k]}${w.prices[k]}`).join(" ") }) +
     more("market.sale", "🏠 팔리는 집", saleH, { note: `${sale.length}채` }) +

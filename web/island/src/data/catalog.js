@@ -21,7 +21,7 @@ export const BUILDINGS = {
     placeholder: { wall: 0xf7f2e8, roof: 0xd9774b, roof_shape: "pyramid", chimney: true }, interior: { w: 6, d: 5 },
   },
   cottage: {
-    id: "cottage", builtBy: "builder", house: true, price: 50, cost: { wood: 1, stone: 1 }, tier: 1, name: "2층집", footprint: { w: 3, d: 3 }, work: 4, height: 3.3, asset: "assets/props/cottage_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 2.7, d: 2.7 },   // 발코니·꽃 상자 2층집(사용자 제공, 문 +x → +z). 3칸에 꽉 채우면 높이 약 3.7 m로 은행(4.3 m)에 가까워져서 폭 2.5 m·높이 약 3.3 m로
+    id: "cottage", builtBy: "builder", house: true, residents: 2, price: 50, cost: { wood: 1, stone: 1 }, tier: 1, name: "2층집", footprint: { w: 3, d: 3 }, work: 4, height: 3.3, asset: "assets/props/cottage_{T}.glb", modelYaw: -Math.PI / 2, fit: { w: 2.7, d: 2.7 },   // 발코니·꽃 상자 2층집(사용자 제공, 문 +x → +z). 3칸에 꽉 채우면 높이 약 3.7 m로 은행(4.3 m)에 가까워져서 폭 2.5 m·높이 약 3.3 m로
     placeholder: { wall: 0xf7f2e8, roof: 0x9fd3e6, roof_shape: "pyramid" }, interior: { w: 6, d: 5 },
   },
   cafe: {

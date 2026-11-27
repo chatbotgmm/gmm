@@ -32,6 +32,7 @@ import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DA
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import * as P from "./population.js";
+import * as HM from "./homes.js";
 import * as FM from "./farming.js";
 import * as CU from "./customize.js";
 import * as CLIM from "./climate.js";
@@ -513,6 +514,21 @@ export class World {
     u.loanRefused = false; b.owner = u.unitId; u.home = b.id;
     for (const [id, n] of Object.entries(u.stash || {})) { const fid = stashFurniture(id); if (!fid || !(n > 0)) continue; const it = F.room(b); it.stash[fid] = (it.stash[fid] || 0) + n; delete u.stash[id]; }   // 들고 다니던 낚시 가구는 새 집 창고로
     this.emit("market", { u, kind: "house", b, down: deal.down, loan: deal.loan }); return true;
+  }
+  /** 같이 살 수 있는 집(homes.js): 다 지었고 주인이 있고 자리가 남은 집(2층집). u를 주면 그 갈매미 몸에 맞고 아직 집이 없을 때만 */
+  housesToShare(u = null) { return u?.home ? [] : [...this.buildings.values()].filter(b => BUILDINGS[b.defId].house && this.isDone(b) && b.owner != null && HM.roomLeft(b) > 0 && (!u || (this.canFit(u, b) && !HM.livesIn(b, u)))); }
+  /** 같이 살기 거래 판단(난수 안 씀): { ok, share, reason: "coins" | null }. 지금 집값의 절반(HM.shareOf)을 현금으로(대출 없음) */
+  shareDeal(u, b) { const share = HM.shareOf(this.economy ? this.housePrice(b) : BUILDINGS[b.defId].price || 30); return { ok: (u.coins || 0) >= share, share, reason: (u.coins || 0) >= share ? null : "coins" }; }
+  /** 같이 살러 들어감: 같이 살기 값을 갈매미 돈에서 주인 돈으로(금고를 안 거침 → 돈이 생기거나 사라지지 않음). 들고 다니던 낚시 가구는 그 집 창고로 */
+  moveIn(u, b) {
+    if (!this.marketB() || !b || u.home || b.owner == null || HM.roomLeft(b) <= 0 || !this.canFit(u, b) || !this.isDone(b)) return false;
+    const deal = this.shareDeal(u, b); if (!deal.ok) return false;
+    const owner = this.units.find(o => o.unitId === b.owner);
+    u.coins -= deal.share; if (owner) owner.coins = (owner.coins || 0) + deal.share; else this.deposit(deal.share, "returned", "house");   // 주인이 없을 리 없지만(위에서 봄) 그래도 돈은 사라지지 않게
+    (b.mates ||= []).push(u.unitId); u.home = b.id;
+    for (const [id, n] of Object.entries(u.stash || {})) { const fid = stashFurniture(id); if (!fid || !(n > 0)) continue; const it = F.room(b); it.stash[fid] = (it.stash[fid] || 0) + n; delete u.stash[id]; }
+    if (owner) befriend(u, owner, 1);
+    this.emit("market", { u, kind: "share", b, share: deal.share, owner }); return true;
   }
   /** 물물교환: 배고픈데 먹을 게 없는 쪽이 자재(없으면 돈)를 내고 상대의 먹을 것 하나를 받음. 일어난 일을 글로 돌려줌. */
   barter(a, b) {
@@ -1749,7 +1765,7 @@ export class World {
     if ((b.defId === "cafe" || b.defId === "aquarium") && this.isDone(b)) return true;   // 카페·수족관은 누구나(카페: 재미·친구, 수족관: 재미가 차오름)
     if (BUILDINGS[b.defId].clinic) return this.isDone(b) && (!!u.sick || b.doctor === u.name);   // 의원: 아픈 갈매미와 당번 의사만
     if (!this.isHouse(b) || !this.isDone(b)) return false;
-    if (this.economy) return b.owner === u.unitId;                                  // 경제가 있으면 산 집(주인)만
+    if (this.economy) return HM.livesIn(b, u);                                      // 경제가 있으면 사는 집만(산 주인 + 같이 사는 갈매미, homes.js)
     return this.canFit(u, b);
   }
   removeBuilding(id) {
@@ -1763,6 +1779,19 @@ export class World {
     this.spots = this.spots.filter(s => s.dock !== id);
     for (const u of this.units) if (u.home === id) { u.home = null; if (u.loan) { this.bank.forgiven += u.loan.left; u.loan = null; } }   // 플레이어가 부순 집의 남은 빚은 없애 줌
     return true;
+  }
+  /** 사는 갈매미 정리(불러온 뒤): 마을에 없거나 그 집을 집으로 두지 않은 같이 사는 갈매미는 빼고, 자리보다 많으면 뒤에서부터 집 없음,
+   *  주인이 마을에 없으면 같이 사는 갈매미가 주인이 됨(homes.js). 같이 살 수 없는 집(1자리)의 mates는 비움 */
+  tidyResidents() {
+    const byId = id => this.units.find(u => u.unitId === id);
+    for (const b of this.buildings.values()) {
+      if (!BUILDINGS[b.defId]?.house) { b.mates = []; continue; }
+      let mates = HM.matesFromSave(b.mates).filter((id, i, a) => a.indexOf(id) === i && id !== b.owner && byId(id)?.home === b.id);
+      if (b.owner != null && !byId(b.owner) && mates.length) { b.owner = mates.shift(); }
+      const keep = Math.max(0, HM.homeCap(b) - (b.owner != null ? 1 : 0));
+      for (const id of mates.slice(keep)) { const u = byId(id); if (u) u.home = null; }
+      b.mates = mates.slice(0, keep);
+    }
   }
   buildingAt(x, z) { const c = this.grid.get(x, z); return c && c.occupiedId ? this.buildings.get(c.occupiedId) || null : null; }
 
@@ -1782,7 +1811,7 @@ export class World {
     if (b && b.ramp && this.isDone(b) && this.grid.inBounds(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); return { ok: true }; }   // 다 지은 계단 위
     if (b && this.isDone(b) && !this.canEnter(u, b)) { u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
       const only = BUILDINGS[b.defId].forUnit; return { ok: false, reason: only ? `${only} 전용 집이에요` : BUILDINGS[b.defId].clinic ? "병원에는 아픈 갈매미와 당번 의사만 들어가요" : `${u.name}에게는 너무 작아요(전용 집에 들어가요)` }; }
-    if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd); return { ok: true, building: b }; }
+    if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd, this); return { ok: true, building: b }; }
     let spot = null;
     if (b) spot = this.grid.isWalkable(b.door.x, b.door.z) ? [b.door.x, b.door.z] : null;                 // 공사장: 문 앞에
     else if (this.grid.inBounds(x, z) && !this.grid.isWater(x, z)) { const s = nearestWalkable(this.grid, x, z, 2); if (s && Math.hypot(s[0] - x, s[1] - z) <= 2.5) spot = s; }   // 나무·광석 칸이면 바로 옆 땅
@@ -1905,7 +1934,7 @@ export class World {
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
       sparkles: this.sparkles.map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock,
-      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
+      buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, ...(b.mates?.length ? { mates: b.mates } : {}), fee: b.fee || 0, order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
   static fromJSON(j, rnd = Math.random) {
     if (!j || ![1, 2].includes(j.version)) throw new Error("저장 형식이 달라요");
@@ -1914,7 +1943,7 @@ export class World {
     if (j.firstSnowYear === undefined && w.snow > 0.02) w.firstSnowYear = "?";    // 예전 저장(첫눈 기록 없음)인데 눈이 쌓여 있으면 이번 겨울 첫눈은 지난 일
     w.seed = j.seed; if (j.res) Object.assign(w.res, j.res);
     Object.assign(w.treasures, j.treasures || {}); Object.assign(w.collection, j.collection || {}); Object.assign(w.items, j.items || {});
-    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; r.building.doctor = BUILDINGS[s.defId]?.clinic && typeof s.doctor === "string" ? s.doctor : null;
+    for (const s of j.buildings) { const r = w.placeBuilding(s.defId, s.x, s.z, s.rot, s.id, s.hits ?? 1e9); if (r.ok) { r.building.interior = s.interior; r.building.hits = Math.min(r.building.hits, r.building.need); r.building.owner = s.owner || null; r.building.mates = HM.matesFromSave(s.mates); r.building.fee = Math.max(0, +s.fee || 0); r.building.order = s.order && s.order.by != null ? { by: s.order.by, left: Math.max(0, Math.floor(+s.order.left || 0)) } : null; r.building.doctor = BUILDINGS[s.defId]?.clinic && typeof s.doctor === "string" ? s.doctor : null;
       r.building.upFrom = !w.isDone(r.building) && BUILDINGS[s.defId]?.upgradeFrom === s.up ? s.up : null; } }   // 업그레이드 공사 중(예전 저장엔 없음 → 보통 공사)
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     w.decor = CU.decorFromSave(j.decor, (x, z, k) => !w.landProblem(x, z, k));      // 덤불·꽃 겹(예전 저장엔 없음 → 빈 겹). 건물을 다시 놓은 뒤에(그사이 못 쓰게 된 칸은 버림)
@@ -1929,6 +1958,7 @@ export class World {
     w.bank = BK.bankFromSave(j.bank, w.time);                                     // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게). 금고가 없는 예전 저장은 100 + 돌아온 돈
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);
     for (const b of w.buildings.values()) if (b.doctor && !w.units.some(u => u.name === b.doctor)) b.doctor = null;   // 마을에 없는 당번 의사는 비움
+    w.tidyResidents();
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)
     // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김). 시계가 없으면(예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
     w.sparkles = sparklesFromSave(j.sparkles).filter(s => sparkleCellFree(w, s.x, s.z)).map(s => ({ id: w.sparkId++, ...s }));
