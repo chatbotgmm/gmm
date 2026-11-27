@@ -343,7 +343,7 @@ hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { r
 installKeys({ hud, tools, roomView });
 // ☁️ 계정 저장: 💾 저장 앱 맨 위 카드. 받은 계정 섬은 여기서 올림(다녀온 사이 편지는 계정 판마다 한 번만 — cloudSync.awayFor)
 cloud = installCloud({ hud, saveKey: SAVE_KEY, gridW: GRID_W, getWorld: () => world, saveLocal: () => saveNow(), fromJSON: j => World.fromJSON(j),
-  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); hud.showLetter(welcomeBack(world)); } });
+  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); hud.showLetter(welcomeBack(world)); saveNow(); } });   // 받은 섬을 바로 이 기기에도(savedAt 새로 → 다시 열어도 보상 두 번 없음)
 // 🎟 판(무료·유료)과 ⏩ 배속(유료판 전용, 마을 진행 ×1·×2·×3). 판은 systems/edition.js 한 곳에서만 읽고 씀(지금은 설정에서 고름, 나중엔 계정 값이 우선)
 const edition = createEdition();
 hud.edition = edition; hud.syncEdition();

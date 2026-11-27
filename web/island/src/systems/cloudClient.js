@@ -27,6 +27,7 @@ export class CloudSaver {
     this.o = o; this.now = o.now || (() => Date.now()); this.later = o.setTimeout || ((f, ms) => setTimeout(f, ms));
     this.mode = "checking"; this.offWhy = ""; this.err = ""; this.server = null; this.nickname = null; this.conflict = null;
     this.busy = false; this.lastTry = 0; this.lastCheck = 0; this.recheck = false; this.notice = null; this.requests = 0;
+    this.seq = 0; this.cache = null; this.prepping = false; this.prepAgain = false;   // seq: 이 기기 저장 차례(touch마다 +1) · cache: 미리 압축한 본문(prep)
     this.meta = this.loadMeta(); this.listeners = [];
     if (!cloudWhere(o.location)) { this.mode = "off"; this.offWhy = OFF_WHERE; }   // 아티팩트·로컬: 모델을 다 받기 전에도 카드가 바로 꺼짐(요청 없음)
   }
@@ -43,7 +44,19 @@ export class CloudSaver {
   saveMeta() { try { this.o.storage.setItem(CLOUD_META_KEY, JSON.stringify(this.meta)); } catch { /* 한도 초과 등: 다음에 다시 */ } }
   setMeta(m) { this.meta = m; this.saveMeta(); }
   /** 이 기기에 저장할 때마다(main.js saveNow): 계정과 맞춘 뒤 바뀜 */
-  touch() { if (!this.meta.dirty) { this.meta = { ...this.meta, dirty: true }; this.saveMeta(); } }
+  touch() { this.seq++; if (!this.meta.dirty) { this.meta = { ...this.meta, dirty: true }; this.saveMeta(); } this.prep(); }
+  /** 탭을 닫을 때(pagehide)는 비동기 gzip이 끝나기 전에 페이지가 사라져 요청이 아예 안 나간다(검토: Playwright page.close에서 POST 0번).
+   *  그래서 이 기기에 저장할 때마다(1분마다) 올릴 본문을 미리 압축해 두고(cache), 화면 떠날 때는 그것을 기다림 없이 바로 보낸다. */
+  prep() {
+    if ((this.mode !== "ok" && this.mode !== "error") || this.meta.paused) return;
+    if (this.prepping) { this.prepAgain = true; return; }
+    this.prepping = true;
+    this.later(async () => {
+      try { const e = await this.encode(); if (e && e.data.length <= ISLAND_B64_LIMIT && !(this.cache && this.cache.seq > e.seq)) this.cache = e; }
+      catch { /* 다음 저장 때 다시 */ }
+      finally { this.prepping = false; if (this.prepAgain) { this.prepAgain = false; this.prep(); } }
+    }, 0);
+  }
   /** 이 기기에서 새 섬을 만듦: 다음 올리기는 replace:true(덮이는 계정 섬을 prev로 남겨 한 단계 되돌릴 수 있게) */
   markReplace() { this.setMeta({ ...this.meta, dirty: true, replaceNext: true }); }
   setMode(m, extra = {}) { this.mode = m; Object.assign(this, extra); this.emit(); }
@@ -101,20 +114,21 @@ export class CloudSaver {
 
   // ── 올리기 ──
   async encode() {
-    const w = this.o.getWorld(), now = this.now();
+    const w = this.o.getWorld(), now = this.now(), seq = this.seq;
     let j = w.serialize(now);
     if (Number.isFinite(this.meta.grantAt)) j = withGrant(j, this.meta.grantAt);
     const data = await gzipB64(JSON.stringify(j), this.o.CompressionStream ?? globalThis.CompressionStream);
-    return data && { data, savedAt: Number.isInteger(j.savedAt) ? j.savedAt : now, summary: summaryOf(w, now) };
+    return data && { data, seq, savedAt: Number.isInteger(j.savedAt) ? j.savedAt : now, summary: summaryOf(w, now) };
   }
-  /** opt: force(5분 안 기다림) · keepalive(화면 떠날 때) · req({baseRev, replace} 덮어쓰기) · tries(429 다시 보내기 횟수) */
+  /** opt: force(5분 안 기다림) · keepalive(화면 떠날 때) · req({baseRev, replace} 덮어쓰기) · tries(429 다시 보내기 횟수)
+   *  · enc(미리 압축한 본문: 있으면 await 없이 같은 차례에 fetch → 탭 닫기에도 요청이 나감) · again(429 때 같은 요청 대신 부를 것) */
   async push(opt = {}) {
     if (this.busy || this.mode === "off" || this.mode === "logout" || this.mode === "checking") return null;
     if ((this.mode === "conflict" || this.meta.paused) && !opt.req && !opt.resume) return null;   // 고르기 전·멈춤에는 자동으로 올리지 않음
     this.busy = true; this.lastTry = this.now();
     try {
       if (opt.resume) this.setMeta({ ...this.meta, paused: false, dirty: true });
-      const enc = await this.encode();
+      const enc = opt.enc || await this.encode();
       if (!enc) { this.setMode("error", { err: "압축하지 못해 올리지 못했어요." }); return "later"; }
       if (enc.data.length > ISLAND_B64_LIMIT) { this.setMode("error", { err: "섬이 너무 커서 계정에 올릴 수 없어요(256KB 넘음)." }); return "later"; }
       const replace = opt.req ? opt.req.replace === true : this.meta.replaceNext === true;
@@ -125,6 +139,8 @@ export class CloudSaver {
       const res = afterPush(this.meta, r.status, r.body, this.now());
       if (res.next === "done") {
         const { replaceNext, ...m } = res.meta; void replaceNext;
+        if (enc.seq !== this.seq) m.dirty = true;          // 올린 본문 뒤에 이 기기에서 또 저장함(미리 압축한 본문 등) → 다음에 또 올림
+        if (this.cache && this.cache.seq <= enc.seq) this.cache = null;
         this.setMeta(m);
         const prev = replace && before && before.rev > 0 && !before.deleted ? { rev: before.rev, summary: before.summary, savedAt: before.savedAt, deleted: false } : before?.prev ?? null;
         this.server = { slot: 0, rev: r.body.rev, savedAt: enc.savedAt, updatedAt: r.body.updatedAt, summary: enc.summary, deleted: false, prev };
@@ -135,7 +151,7 @@ export class CloudSaver {
       } else if (res.next === "retry") {
         const tries = (opt.tries || 0) + 1;
         if (tries > RETRY_MAX) this.setMode("error", { err: "계정 서버가 바빠요. 조금 뒤에 다시 올려요." });
-        else this.later(() => this.push({ ...opt, force: true, tries }), res.wait * 1000);
+        else this.later(() => (opt.again ? opt.again(tries) : this.push({ ...opt, enc: null, force: true, tries })), res.wait * 1000);
       } else if (res.next === "login") this.setMode("logout", { conflict: null });
       else if (res.next === "off") this.off("이 주소에는 계정 서버가 없어요. 이 섬은 이 브라우저에만 저장돼요.");
       else this.setMode("error", { err: r.status === 0 ? "인터넷이 끊겨 계정에 올리지 못했어요. 이 브라우저에는 저장돼요." : (r.body?.error || `계정에 올리지 못했어요(${r.status}).`) });
@@ -153,7 +169,8 @@ export class CloudSaver {
   onHide() {
     if (this.mode !== "ok" && this.mode !== "error") return null;
     if (!this.meta.dirty || this.meta.paused || this.now() - this.lastTry < HIDE_GAP_MS) return null;
-    return this.push({ force: true, keepalive: true });
+    const c = this.cache; this.cache = null;
+    return this.push({ force: true, keepalive: true, enc: c });
   }
   /** 섬 탭으로 돌아옴: /my에서 연결·로그아웃하러 새 탭을 열었으면 계정을 다시 확인 */
   onReturn() { if (this.recheck && this.mode !== "off" && !this.busy && this.now() - this.lastCheck > 3000) { this.recheck = false; this.check(); } }
@@ -184,7 +201,7 @@ export class CloudSaver {
       const away = awayFor(j, srv, this.meta, now);
       const { replaceNext, ...m0 } = this.meta; void replaceNext;
       this.setMeta({ ...m0, baseRev: srv.rev, dirty: false, upAt: now, paused: false });
-      this.server = srv;
+      this.server = srv; this.cache = null;
       const grant = away.away >= CLOUD_AWAY_MIN_MS;          // 10분 안이면 편지도 보상도 없음(applyAway가 null) → 다시 올릴 까닭 없음
       this.o.mountPulled(w, grant ? away.base : null, { auto, bak: wr.bak });
       if (grant) this.setMeta(afterGrant(this.meta, srv.rev, now));
@@ -197,14 +214,14 @@ export class CloudSaver {
   /** 충돌 창에서 고름. mine = 이 기기 섬으로 덮어쓰기(replace:true → 덮인 계정 섬은 prev) ·
    *  theirs = 계정 섬 받기(먼저 이 기기 섬을 replace로 올리고 되돌리기로 맞바꿔, 이 기기 섬이 prev에 남게 → 한 단계 되돌리기로 되찾음) ·
    *  skip(묘비: 올리지 않기) · later(나중에: 그대로 두고 자동 올리기 멈춤) */
-  async resolve(choice) {
+  async resolve(choice, tries = 0) {
     const c = this.conflict; if (!c) return null;
     if (choice === "later") return this.setMode("conflict");
     if (choice === "skip") { this.setMeta(afterTombstone(this.meta, c.server.rev)); return this.setMode("paused", { conflict: null }); }
     if (choice === "mine") return this.push({ req: overwriteRequest(c.server), force: true });
     if (choice === "theirs") {
       if (c.server?.deleted) return null;
-      const up = await this.push({ req: overwriteRequest(c.server), force: true });
+      const up = await this.push({ req: overwriteRequest(c.server), force: true, tries, again: n => this.resolve("theirs", n) });   // 429면 올리기만 다시 하지 않고 받기까지 다시(안 그러면 이 기기 섬만 계정에 남음)
       if (up === "done") {
         const r = await this.api("POST", `${CLOUD_API}/0/restore`, { baseRev: this.meta.baseRev });
         if (r.status !== 200 || r.body?.deleted) { this.setMode("error", { err: "계정 섬으로 바꾸지 못했어요. 이 기기 섬을 올려 두었어요." }); return "later"; }

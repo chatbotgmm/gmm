@@ -210,3 +210,27 @@ test("올리기 401 → 로그인 안 함 · 이 기기에서 새 섬을 만들�
   assert.equal(s.calls.at(-1).replace, true); assert.equal(s.row.prev.rev, 1); assert.equal(d.cloud.meta.replaceNext, undefined);
   s.logged = false; d.cloud.touch(); await d.cloud.push({ force: true }); assert.equal(d.cloud.mode, "logout");
 });
+
+test("탭 닫기: 저장할 때 미리 압축해 둔 본문을 화면 떠날 때 기다림 없이 보냄(같은 차례에 fetch) · 그 뒤 또 저장했으면 dirty 유지", async () => {
+  let t = 2_000_000; const s = fakeServer(), d = device(s, played(), { now: () => t });
+  await d.cloud.start(); assert.equal(s.row.rev, 1);
+  d.world.bank.vault = 4000; d.cloud.touch(); await flush(d);              // 1분 저장 → prep(미리 압축)
+  assert.ok(d.cloud.cache); const n = s.calls.length;
+  t += 20_000; const p = d.cloud.onHide();
+  assert.equal(s.calls.length, n + 1, "await 전에 fetch가 불려야 탭을 닫아도 요청이 나감");
+  assert.equal(s.calls.at(-1).keepalive, true);
+  assert.equal(await p, "done"); assert.equal(s.json().bank.vault, 4000); assert.equal(d.cloud.meta.dirty, false); assert.equal(d.cloud.cache, null);
+  d.cloud.touch(); await flush(d); d.cloud.touch();                         // 미리 압축한 뒤 또 저장(prep은 아직 안 돎)
+  t += 20_000; assert.equal(await d.cloud.onHide(), "done"); assert.equal(d.cloud.meta.dirty, true);   // 올린 본문이 마지막 저장이 아님 → 다음에 또 올림
+});
+
+test("충돌 「계정 섬 받기」 중 429 → 올리기만 다시 하지 않고 받기까지 다시(계정에 이 기기 섬만 남지 않게)", async () => {
+  const s = fakeServer(), a = device(s, played(1)); await a.cloud.start();
+  const other = played(2); other.bank.vault = 555; s.put(other);
+  a.cloud.touch(); await a.cloud.check(); assert.equal(a.cloud.mode, "conflict");
+  a.timers.length = 0; s.tooSoon = 1;
+  assert.equal(await a.cloud.resolve("theirs"), "retry"); assert.equal(s.row.rev, 2);
+  await flush(a);
+  assert.equal(a.world.bank.vault, 555); assert.equal(a.cloud.mode, "ok");
+  assert.equal(JSON.parse(gunzipSync(Buffer.from(s.row.prev.data, "base64"))).bank.vault, 1234);
+});
