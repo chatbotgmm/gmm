@@ -23,7 +23,9 @@ const COMMON = /* glsl */`
   vec4 shoreAt(vec2 p) { return texture2D(uDepth, clamp((p - uOrigin) / uSize, vec2(0.0), vec2(1.0))); }
   float sdOf(vec4 s) { return (s.g * 255.0 - 128.0) / ${SD_SCALE.toFixed(1)}; }
   void waveClock(vec2 p, out float u, out float k) {
-    float c = uTime / ${WAVE_T.toFixed(2)} + vnoise(p * 0.055) * 1.7 + vnoise(p * 0.21) * 0.18;   // 해안을 따라 차례로 밀려오게 자리마다 위상 차
+    // 해안을 따라 차례로 밀려오게 자리마다 위상 차. 위상이 공간에서 너무 빨리 바뀌면 마루 띠가 해안과 거의 직각인 흰 줄로 바다 쪽에 뻗어 보임
+    // (마루는 주기 반 동안 4.45칸 움직이므로 1주기 ≈ 8.9칸: 위상 기울기 최대 0.7×1.5×0.04 + 0.08×1.5×0.21 ≈ 0.07주기/m → 마루가 해안선에서 최대 약 30° 기움)
+    float c = uTime / ${WAVE_T.toFixed(2)} + vnoise(p * 0.04) * 0.7 + vnoise(p * 0.21) * 0.08;
     u = fract(c);
     float id = floor(c);
     k = 0.5 + 0.5 * vnoise(p * 0.09 + vec2(id * 5.31, id * 1.73));                                // 큰 파도·작은 파도가 섞여 옴
