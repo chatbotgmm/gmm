@@ -69,11 +69,11 @@ test("야행성은 낮에만 꾸벅: 밤이 되거나 FUSS_LIFE초가 지나면 
 test("깨어 있는 갈매미만: 자는·졸린·배고픈·아픈 갈매미는 소동 안 함 · 소동 중 기력이 잠 문턱 가까이 떨어지면 풀림(잠이 먼저)", () => {
   const w = fresh(), u = w.units[0]; u.name = "불씨"; awake(u);
   assert.ok(fussAwake(u, w));
-  u.needs.energy = SLEEP_BELOW + 5; assert.ok(!fussAwake(u, w), "기력 25(낮의 야행성은 문턱 30)");
+  u.needs.energy = SLEEP_BELOW + 5; assert.ok(!fussAwake(u, w), "기력 25(잠 문턱 20 + FUSS_AWAKE 이하)");
   awake(u); u.state = "Sleep"; assert.ok(!fussAwake(u, w));
   awake(u); u.full = 20; assert.ok(!fussAwake(u, w));
   awake(u); u.sick = { kind: "cold", left: 10 }; assert.ok(!fussAwake(u, w));
-  awake(u); const f = new Fuss(w, 5); f.start("doze", u); u.needs.energy = 31; f.step(0.1); assert.equal(f.of(u), null);
+  awake(u); const f = new Fuss(w, 5); f.start("doze", u); u.needs.energy = SLEEP_BELOW + 1; f.step(0.1); assert.equal(f.of(u), null);   // 잠 문턱(체질 상관없이 20) + 2 이하 → 풀림
 });
 
 test("하루 상한: 마을 하루에 FUSS_DAILY번, 처음엔 FUSS_FIRST초 기다리고 끝난 뒤 FUSS_GAP초 쉼", () => {

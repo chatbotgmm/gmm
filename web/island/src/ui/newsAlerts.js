@@ -21,7 +21,7 @@ export const ALERTS = {
   loanRefused: { kind: "warn", tail: " (🏠 집을 못 샀어요)" },
   loanPaid: { kind: "good", snd: "bell" },
   tax: { kind: "info", daily: true, tail: (a, w) => ` · 금고 🪙${Math.floor(w.bank?.vault ?? 0)}`, snd: "coins" },
-  lodging: { kind: "info", daily: true },                          // 빈 집 손님 숙박비: 마을 하루에 한 번 지난 하루 합계 한 줄(손님마다 띄우면 너무 잦음)
+  lodging: { kind: "info" },                                      // 빈 집 손님 숙박비: 밤이 끝날 때(아침) 그 밤 합계 한 줄 — World.stepLodging이 한 번만 냄(마을 하루로 거르면 빨리 감을 때 아침 소식이 사라짐)
   summonBlocked: { kind: "warn", tail: " · 📱 소환", now: true },   // 까닭 글 끝에 이미 (집 n채 · 갈매미 n마리)가 있어 괄호를 겹치지 않음
   sparkle: { kind: "good", tail: (a, w) => ` (🎁 내 주머니 ${pocketCount(w)})`, snd: "glint", now: true },
   stashSale: { kind: "info", snd: "coins" },
@@ -32,12 +32,13 @@ export const ALERTS = {
   sick: { kind: "warn", tail: (a, w) => w.clinics?.().length ? " (🏥 병원에서 쉬면 빨리 나아요)" : " (🏥 병원이 있으면 빨리 나아요)", snd: "sneeze" },
   healed: { kind: "good" },
   doctor: { kind: "good" },
+  faint: { kind: "warn", tail: a => a.clinic ? " → 🏥 병원으로 옮겨요" : " — 그 자리에서 자요 (🏥 병원이 있으면 실려 가 쉬어요)" },
   upgradeStart: { kind: "info", tail: " (🪚 목수가 재료를 모아 지어요)", snd: "bell" },
   upgraded: { kind: "good", snd: "bell" },
   roadAsk: { kind: "info", every: NEWS_DAY_SECS, tail: " (🖌 바닥 칠하기 → 돌길·데크)" },   // 갈매미 길 부탁: 같은 갈매미는 마을 하루에 한 번만
 };
-/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수는 소식지만 */
-export const SILENT = ["fee", "clinicVisit"];
+/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수·쓰러져 실려 감은 소식지만(쓰러짐 알림 한 줄이 이미 알림) */
+export const SILENT = ["fee", "clinicVisit", "faintCarried"];
 
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */
 export function batchText(ev, list) {

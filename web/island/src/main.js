@@ -454,9 +454,15 @@ function frame() {
     requestAnimationFrame(frame);
   }
 }
+let fastDays = 0, fastPrevH = -1;                                              // '빠르게(1분=1시간)'는 날짜가 오늘에 고정된 채 시각만 돌아서, 자정을 넘길 때마다 하루씩 더한 시계를 숙박 키에 넘김
 function tickClock() {
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 잠은 기력으로(chrono.js) — 밤엔 아침형이, 낮엔 야행성이 피로가 1.5배로 쌓임
-  if (daylight.time) world.hour = daylight.time.getHours() + daylight.time.getMinutes() / 60;   // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
+  if (daylight.time) {
+    const t = daylight.time, h = t.getHours() + t.getMinutes() / 60, fast = daylight.mode === "fast";
+    if (fast && fastPrevH >= 0 && h < fastPrevH - 12) fastDays++; fastPrevH = fast ? h : -1;
+    world.hour = h;                                                            // 기기 시각(소수, 0.5초마다 바뀜) → 기온이 하루 동안 오르내림(오후 3시가 가장 따뜻, climate.js)
+    world.clock = fast && fastDays ? new Date(t.getFullYear(), t.getMonth(), t.getDate() + fastDays, t.getHours(), t.getMinutes()) : t;   // 숙박비 하룻밤 키(BK.stayKey): 빠르게 모드면 넘긴 자정 수만큼 날짜를 더함
+  }
 }
 function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한

@@ -18,9 +18,16 @@ export const TAX_RATE = 0.05, TAX_KEEP = 20, TAX_CAP = 8;   // 세금: (돈 − 
 export const LEDGER_DAYS = 7;        // 장부는 최근 7일
 /** 장부 칸 중 returned(돌아온 돈) 안의 몫: 집값(계약금) · 대출 상환 · 진료·약 · 옷 · 가게(코코아·저장고 음식·가구) · 숙박(빈 집 손님 숙박비). 몫 합 ≤ returned, 나머지는 '그 밖'(주문 장식 자재값 등) */
 export const LEDGER_PARTS = ["house", "repay", "clinic", "clothes", "shop", "lodging"];
-/** 손님 숙박비(🪙): 집 없는 갈매미가 주인 없는 빈 집에서 자면 마을 하루에 한 번 → 금고. 가진 만큼, 없으면 무료(진료비와 같은 방식).
+/** 손님 숙박비(🪙): 집 없는 갈매미가 주인 없는 빈 집에서 자면 하룻밤(stayKey)에 한 번 → 금고. 가진 만큼, 없으면 무료(진료비와 같은 방식).
  *  2 = 품삯(E.WAGE) 한 바퀴 · 밥 한 끼(FOOD_PRICE 3)보다 싸고 진료비(3)보다 쌈. 작은 집 30이면 15박 값 → 오래 묵느니 집을 사는 게 낫게 */
 export const LODGING_FEE = 2;
+/** 숙박 한 번의 키 'YYYY-MM-DD'(기기 시계 = 화면의 daylight 시각, 시간 배수로 빨리 감아도 그 시각): 하룻밤 = 해 질 녘(world.isNight가 켜짐)부터
+ *  다음 아침(꺼짐)까지, 키는 그 밤이 시작된 날짜(밤인데 정오 전이면 전날). 낮잠은 그날 밤과 같은 키(그날 낮 + 그날 밤 = 한 번):
+ *  야행성(낮에 잠)도 한 번 내고, 아침형이 낮잠 뒤 밤에 또 자도 두 번 내지 않음 → 손님 한 마리 24시간에 최대 한 번 */
+export function stayKey(date, night) {
+  const d = new Date(date.getTime()); if (night && d.getHours() < 12) d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 const LEDGER_KEYS = ["tax", "returned", "fees", "wages", "lent", "refunds", "custom", ...LEDGER_PARTS];
 /** 하루치 빈 장부 칸 */
 export const ledgerDay = day => Object.fromEntries([["day", day], ...LEDGER_KEYS.map(k => [k, 0])]);

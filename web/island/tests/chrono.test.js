@@ -26,7 +26,8 @@ test("체질: 기본은 아침형, 불씨·그림자는 야행성 · 어긋난 �
   assert.equal(CH.offHours({ name: "기본" }, night), true); assert.equal(CH.offHours({ name: "기본" }, day), false);
   assert.equal(CH.offHours({ name: "그림자" }, day), true); assert.equal(CH.offHours({ name: "그림자" }, night), false);
   assert.equal(CH.fatigueMult({ name: "기본" }, none), 1); assert.equal(CH.fatigueMult({ name: "기본" }, night), CH.OFF_FATIGUE);
-  assert.equal(CH.sleepBelow({ name: "기본" }, day), CH.SLEEP_BELOW); assert.equal(CH.sleepBelow({ name: "기본" }, night), CH.SLEEP_BELOW_OFF);
+  for (const who of ["기본", "그림자"]) for (const t of [day, night, none]) assert.equal(CH.sleepBelow({ name: who }, t), 20, "잠 문턱은 체질·밤낮과 상관없이 20");
+  assert.equal(CH.SLEEP_BELOW, 20); assert.equal(CH.SLEEP_BELOW_OFF, undefined, "어긋난 시간 문턱(예전 30)은 없앰");
 });
 
 test("체질별 피로 배율: 일 10초에 기력 −5.5(맞는 시간) · −8.25(어긋난 시간, ×1.5) — 아침형의 밤·야행성의 낮", () => {
@@ -85,14 +86,14 @@ test("기력이 가득(피로 0)이면 밤에도 깸: 빈 집에서 자던 아�
   assert.ok(woke >= 0 && Math.abs(woke - 9.5 / 0.08) < 1, `기력 90 → 가득까지 9.5 / 0.08 = 약 119초 만에 깸(${woke.toFixed(1)}초)`);
 });
 
-test("기력이 낮으면 낮에도 잠: 아침형 기력 15 → 낮에 빈 집에서 손님으로 잠 · 기력 25는 낮엔 서서 쉬고 밤엔 바로 자러 감", () => {
+test("기력이 낮으면 낮에도 잠: 아침형 기력 15 → 낮에 빈 집에서 손님으로 잠 · 기력 20 이하면 낮·밤 모두 자러 가고, 25면 낮·밤 모두 숨만 돌림", () => {
   const { w, u, h } = isle(); w.isNight = false; u.needs.energy = 15; u.state = "Idle"; u.timer = 0;
   let slept = false; for (let t = 0; t < 120 && !slept; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId === h.id && u.insideAct === "sleep") slept = true; }
   assert.ok(slept, "낮에도 지치면 잠");
-  for (const night of [false, true]) {
-    const g = isle(6); g.w.isNight = night; g.u.needs.energy = 25; g.u.state = "Idle"; g.u.timer = 0; g.u.activity = null; let sleepy = false, rest = false;
+  for (const night of [false, true]) for (const e of [19.5, 25]) {   // 19.5: 고르기 전 숨 고르기(서 있기 +0.6/초) 한 틱에도 20을 안 넘게
+    const g = isle(6); g.w.isNight = night; g.u.needs.energy = e; g.u.state = "Idle"; g.u.timer = 0; g.u.activity = null; let sleepy = false, rest = false;
     for (let t = 0; t < 3; t += 0.1) { g.u.full = 90; g.w.update(0.1); if (g.u.sleepy || asleep(g.u)) sleepy = true; if (g.u.activity === "rest") rest = true; }
-    if (night) assert.ok(sleepy && !rest, "아침형의 밤: 기력 25면 자러 감"); else assert.ok(rest && !sleepy, "낮: 기력 25면 서서 쉼(잠은 20 아래)");
+    if (e < 20) assert.ok(sleepy && !rest, `${night ? "밤" : "낮"}: 기력 20 이하면 자러 감`); else assert.ok(rest && !sleepy, `${night ? "밤" : "낮"}: 기력 25면 숨 돌림(잠은 20 이하)`);
   }
 });
 

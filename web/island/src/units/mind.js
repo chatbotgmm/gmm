@@ -16,9 +16,16 @@ export function initMind(u, rnd) {
   u.friends = {};                                                   // 다른 갈매미 id → 호감(-5~10)
   u.activity = null;
 }
-// 쉬기는 피곤할 때만: 기력이 REST_BELOW 아래로 내려가야 쉬기를 고를 수 있고(낮을수록 자주), TIRED 아래면 바로 쉼. 한 번 쉬면 REST_UNTIL까지 차면 일어남.
-// 쉬기로 고른 쉼은 그냥 서 있을 때(+0.6/초)보다 빨리 참: 서서 +REST_GAIN, 벤치 +BENCH_GAIN(초당, 더해지는 값).
-export const REST_BELOW = 50, TIRED = 30, REST_UNTIL = 80, REST_GAIN = 1.4, BENCH_GAIN = 2.4;
+// 쉬기는 피곤할 때 잠깐 숨 돌리기만: 기력이 REST_BELOW 아래로 내려가야 쉬기를 고를 수 있고(낮을수록 자주), TIRED 아래면 바로 숨 돌림.
+// 어느 쪽이든 한 번 숨 돌리면 BREATH_EVERY초 동안은 다시 쉬지 않음(unitBrain chooseNext).
+// 한 번 쉬면 서서 breathSecs(2~5초) · 벤치 benchSecs(6~12초)만 쉬고 일어남. 그 사이 기력: 서서 +0.6 + REST_GAIN · 벤치 +0.6 + BENCH_GAIN(초당).
+// 기력을 채우는 건 잠(chrono.js: 기력 SLEEP_BELOW 20 이하면 자러 감). 예전(80까지 서서 +2.0/초 · 벤치 +3.0/초 최대 30초)엔
+// 30~50 사이에서 쉬기가 기력을 다시 채워 잠 문턱 20까지 거의 안 내려갔음(시뮬: 기력 회복의 68~76%가 쉬기, 잠은 11~18% → 지금 쉬기 18~20%, 잠 65~68%). 숫자 근거는 커밋 글.
+export const REST_BELOW = 50, TIRED = 30, REST_GAIN = 0.2, BENCH_GAIN = 0.6, BREATH_EVERY = 20;
+/** 서서 숨 돌리기(초) */
+export const breathSecs = rnd => 2 + rnd() * 3;
+/** 벤치에 앉아 쉬기(초) */
+export const benchSecs = rnd => 6 + rnd() * 6;
 /** 잠·건물 안 기력 회복(초당 전체 값, 침대 > 건물 안 > 밖): out = 밖에서 잠 · inside = 건물 안(자든 깨어 있든: 집 구경·몸 녹이기·앓기도) · bed = 집 침대에서(건물 안 값 포함).
  *  잠은 기력이 가득(chrono.js WAKE_AT)하거나 배고파야 깸. 예전(밖 6 · 안 3 · 침대 6)엔 한 번 잠이 약 25초라 밤에 자는 갈매미가 거의 안 보였음 →
  *  밖 기준 1/75로 낮춤: 기력 25 → 99.5(74.5)에 밖 931초 · 안 621초 · 침대 466초. 넓은 섬 초반(음식이 모자람)엔 대개 배고파서 먼저 깨고(한 번 약 90초),

@@ -22,7 +22,7 @@ function farHome(seed = 3) {
 
 test("집 있는 갈매미: 밤에 지쳐 자는 잠도 멀어도(14칸 넘게) 내 집에서, 곁의 카페·남의 집에는 안 들어감", () => {
   const { w, u, h, cafe } = farHome(); assert.ok(dist(u, h) > 14, `집이 멂(${dist(u, h).toFixed(1)}칸)`); assert.ok(dist(u, cafe) < 14, "카페는 가까움");
-  w.isNight = true; u.state = "Idle"; u.timer = 0; u.needs.energy = 25; const went = new Set(); let outSleep = 0, slept = false;   // 아침형의 밤: 기력 30 아래면 잠
+  w.isNight = true; u.state = "Idle"; u.timer = 0; u.needs.energy = 19.5; const went = new Set(); let outSleep = 0, slept = false;   // 기력 20 이하면 잠(밤낮·체질 상관없이)
   for (let t = 0; t < 240 && !slept; t += 0.1) { for (const o of w.units) o.full = 90; w.update(0.1); if (u.insideBuildingId) went.add(u.insideBuildingId); if (u.state === "Sleep") outSleep += 0.1; if (u.insideBuildingId === h.id && u.insideAct === "sleep") slept = true; }
   assert.ok(slept, "내 집에서 잠"); assert.deepEqual([...went], [h.id], "들어간 건물은 내 집뿐");
   assert.equal(outSleep, 0, "밖에서 자지 않음");
