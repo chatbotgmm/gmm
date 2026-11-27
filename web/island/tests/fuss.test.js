@@ -5,7 +5,7 @@ import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import { UNITS } from "../src/data/catalog.js";
 import { updateUnit } from "../src/units/unitBrain.js";
-import { Fuss, FUSS_DAILY, FUSS_FIRST, FUSS_GAP, FUSS_LIFE, DIZZY_SECS, rockTop, fussAwake, shakeStep } from "../src/units/fuss.js";
+import { Fuss, FUSS_DAILY, FUSS_FIRST, FUSS_SEE, FUSS_GAP, FUSS_LIFE, DIZZY_SECS, rockTop, fussAwake, shakeStep } from "../src/units/fuss.js";
 import { SLEEP_BELOW } from "../src/units/chrono.js";
 
 const fresh = (seed = 3) => { const w = World.create(7, seededRandom(seed), { wild: true, firstGull: true }); w.instantBuild = true; w.isNight = false; return w; };
@@ -113,4 +113,12 @@ test("흔들기 판정(shakeStep): 쭉 끌기·작은 손떨림은 아님, 0.6 m
   assert.equal(run(Array.from({ length: 60 }, (_, i) => [i / 30, (i % 2) * 0.3])), false, "0.3 m 손떨림");
   assert.equal(run(Array.from({ length: 6 }, (_, i) => [i / 4, i % 2 ? 0.6 : 0])), true, "0.6 m씩 왔다 갔다 · 0.25초마다");
   assert.equal(run([[0, 0], [0.25, 0.6], [1.2, 0], [2.2, 0.6], [3.2, 0]]), false, "천천히 몇 번 옮긴 것(창 1.5초 밖)");
+});
+
+test("화면 중심(near)에서 FUSS_SEE칸 넘게 떨어진 갈매미는 소동 안 함 · 소동 중 톡은 🆘 말풍선만(nudge)", () => {
+  const w = fresh(), u = w.units[0]; u.name = "불씨"; const f = new Fuss(w, 5); f.rnd = () => 0; w.time += FUSS_FIRST; awake(u);
+  f.near = () => ({ x: u.x + FUSS_SEE + 1, z: u.z }); assert.equal(f.roll(), null, "화면 밖");
+  f.near = () => ({ x: u.x + FUSS_SEE - 1, z: u.z }); assert.ok(f.roll(), "화면 안");
+  assert.equal(f.nudge(w.units.find(o => o !== u) || {}), false);
+  u.emoteText = ""; assert.equal(f.nudge(u), true); assert.match(u.emoteText, /🆘/);
 });

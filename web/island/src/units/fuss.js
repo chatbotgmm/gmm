@@ -28,6 +28,7 @@ export const FUSS_LIFE = 120;       // 이 초 안에 못 풀면 혼자 풀림
 export const FUSS_AWAKE = 15;       // 기력이 잠 문턱보다 이만큼 넘어야 시작
 export const FUSS_FULL = 40;        // 포만감이 이보다 많아야 시작(배고프면 먹기가 먼저)
 export const FUSS_RANGE = 6;        // 미니↔자이언트, 미니↔바위 거리(칸)
+export const FUSS_SEE = 12;         // near()(화면 중심)가 있으면 이 칸 안의 갈매미만 소동 — 화면 밖에서 나면 🆘가 안 보인 채 혼자 풀리고 하루 상한만 씀
 // 해변 바위 꼭대기 높이(m, 모양 variant 0·1·2 = rock_smallA·B·C). 화면에서 잰 메시 꼭대기 0.504·0.466·0.323 m 그대로 —
 // 꼭대기가 뾰족해서 조금만 낮춰도 작은 미니 몸통이 바위 옆면에 묻혀 보임(390×844에서 확인)
 export const ROCK_TOPS = [0.504, 0.466, 0.323];
@@ -109,6 +110,8 @@ export class Fuss {
     } else if (!u.insideBuildingId) emote(u, FUSS_LINES[c.kind].self, 2.2);
     this.onEnd?.(u, c.kind, solved);
   }
+  /** 소동 중인 갈매미를 짧게 톡: 톡 반응(폴짝·도망·"화르륵!") 대신 지금 소동의 🆘 말풍선을 다시(조는데 "화르륵!"은 어색함) */
+  nudge(u) { const c = this.cur; if (!c || c.u !== u) return false; const L = FUSS_LINES[c.kind].sos; emote(u, L[c.k++ % L.length], 3); c.sayT = 3.6; return true; }
   nearLand(u) { const g = this.world.grid, x0 = Math.floor(u.x), z0 = Math.floor(u.z);
     for (let r = 1; r <= 3; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (g.isWalkable(x0 + dx, z0 + dz)) return [x0 + dx, z0 + dz]; return null; }
 
@@ -117,9 +120,9 @@ export class Fuss {
     const w = this.world, day = newsDay(w.time); if (day !== this.day) { this.day = day; this.n = 0; }
     if (this.cur || this.n >= FUSS_DAILY || w.time - this.from < FUSS_FIRST || w.time - this.lastEnd < FUSS_GAP) return null;
     if (this.rnd() >= FUSS_CHANCE) return null;
-    const cands = [];
+    const cands = [], at = this.near?.();                                        // 화면 중심(격자 좌표, main.js) — 없으면(시험) 섬 전체
     for (const u of w.units) {
-      if (!fussAwake(u, w)) continue; const p = PERSONA[u.name] || {};
+      if (!fussAwake(u, w) || (at && Math.hypot(u.x - at.x, u.z - at.z) > FUSS_SEE)) continue; const p = PERSONA[u.name] || {};
       if (p.timid && w.units.some(o => o !== u && !o.insideBuildingId && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < FUSS_RANGE) && perchRock(w, u, u)) cands.push(["perch", u]);
       if (isNocturnal(u) && w.isNight === false) cands.push(["doze", u]);
     }

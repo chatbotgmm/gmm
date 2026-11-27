@@ -373,10 +373,11 @@ unitControl.onTapFirst = e => {
 };
 // 👉 톡: 성격별 반응(units/poke.js). 정·돈은 안 바뀜 · 소리만 반응 종류마다
 const POKE_SFX = { poke: [784, 988], sleep: [392, 330], sulk: [440, 370], sulkStart: [523, 440, 370], zoom: [659, 880, 1175] };
-unitControl.onPoke = u => { if (fuss?.of(u)) hud.status(`🆘 ${josa(u.name, "을", "를")} 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" }); const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
+unitControl.onPoke = u => { if (fuss?.nudge(u)) { hud.status(`🆘 ${josa(u.name, "을", "를")} 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" }); return; } const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
 // 🆘 깜짝 소동(units/fuss.js): 시작하면 알림 줄 · 풀면 소리 · 내려놓은 곳이 눈·모래면 쿵 자국(footprints.thud)
 function makeFuss(w) {
   const f = new Fuss(w, 91), at = u => ({ pos: { x: toWorldX(u.x), z: toWorldZ(u.z) } });
+  f.near = () => ({ x: toGridX(controls.target.x), z: toGridZ(controls.target.z) });   // 화면 중심 가까이에서만 소동(FUSS_SEE칸) — 안 보이는 곳의 🆘는 하루 상한만 씀
   f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요 · 꾹 눌러 들어서 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요 · 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" });
   world.on("fussSolved", ({ u }) => { hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 알림 줄에 직접 연결(newsAlerts 표 밖)
   f.onLand = u => { const k = footprints.thud(world, u); if (k) sfx.play("step", { ...at(u), vol: 0.6, rate: k === "snow" ? 0.5 : 0.6 }); return k; };
