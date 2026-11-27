@@ -11,14 +11,14 @@ import { sumHead, moreBox, valueRows, fmtNum } from "./hudParts.js";
 
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 들어온 돈 몫 이름(장부 칸 → 글자). 'other' = returned − 몫 합(주문 장식 자재값 등) */
-export const IN_NAMES = { tax: "🧾 세금", house: "🏠 집값(계약금)", repay: "💳 대출 상환", clinic: "🏥 진료·약", clothes: "🧣 옷", shop: "☕ 코코아·저장고·가구", lodging: "🛏 숙박(빈 집 손님)", other: "📦 그 밖(주문 자재값 등)", seig: "🖨 발행 수수료(중앙은행)", refunds: "↩️ 설계비 환불(공사 취소)" };
-export const OUT_NAMES = { fees: "📐 설계비", wages: "🔨 품삯", custom: "🌳 섬 꾸미기" };
+export const IN_NAMES = { tax: "🧾 세금", house: "🏠 집값(계약금)", repay: "💳 대출 상환", clinic: "🏥 진료·약", clothes: "🧣 옷", shop: "☕ 코코아·저장고·가구", lodging: "🛏 숙박(빈 집 손님)", evening: "🧺 저녁 장보기(은행 가게)", other: "📦 그 밖(주문 자재값 등)", seig: "🖨 발행 수수료(옛 규칙)", printed: "🖨 찍어 낸 새 돈", refunds: "↩️ 설계비 환불(공사 취소)" };
+export const OUT_NAMES = { fees: "📐 설계비", wages: "🔨 품삯", custom: "🌳 섬 꾸미기", buy: "🧺 가공품·저장고·소지품 매입", interest: "🐷 예금 이자", grant: "🎁 축하금·창업 자금" };
 
 /** 하루 장부 → { inRows, outRows, inSum, outSum, lent }. 꾸미기 환불이 쓴 돈보다 많아 custom이 음수면 들어온 돈 쪽으로 */
 export function dayFlow(e) {
   const d = e || BK.ledgerDay(0), parts = BK.LEDGER_PARTS.reduce((s, k) => s + (d[k] || 0), 0);
-  const inV = { tax: d.tax || 0, ...Object.fromEntries(BK.LEDGER_PARTS.map(k => [k, d[k] || 0])), other: Math.max(0, (d.returned || 0) - parts), seig: d.seig || 0, refunds: d.refunds || 0 };   // seig: 가공품 매입 수수료도 금고로 들어온 돈(날 끝 금고 거꾸로 셈이 맞게)
-  const outV = { fees: d.fees || 0, wages: d.wages || 0, custom: Math.max(0, d.custom || 0) };
+  const inV = { tax: d.tax || 0, ...Object.fromEntries(BK.LEDGER_PARTS.map(k => [k, d[k] || 0])), other: Math.max(0, (d.returned || 0) - parts), seig: d.seig || 0, printed: d.printed || 0, refunds: d.refunds || 0 };   // seig: 가공품 매입 수수료도 금고로 들어온 돈(날 끝 금고 거꾸로 셈이 맞게)
+  const outV = { fees: d.fees || 0, wages: d.wages || 0, custom: Math.max(0, d.custom || 0), buy: d.buy || 0, interest: d.interest || 0, grant: d.grant || 0 };   // buy·interest·grant: 중앙은행이 금고에서 낸 돈(MON-5)
   if ((d.custom || 0) < 0) inV.customBack = -d.custom;
   const inRows = Object.entries(inV).map(([k, v]) => [k === "customBack" ? "🌳 꾸미기 되돌려 받음" : IN_NAMES[k], v]);
   const outRows = Object.entries(outV).map(([k, v]) => [OUT_NAMES[k], v]);
@@ -72,7 +72,7 @@ export function bankHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o)) {
 
   const r = w.res || {}, rk = RANKS[pi.rank];
   const goods = `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.PROCESSED_NAME[k]}</td><td>창고 ${r[k] || 0}개 · 🪙${E.BANK_PROCESSED[k]}</td></tr>`).join("")}</table>` +
-    `<p class="dim">상인이 가공품을 가져오면 은행이 사요(새로 찍는 돈). 창고의 가공품은 공사 재료로 써요.</p>` +
+    `<p class="dim">상인이 가공품을 가져오면 은행이 금고 돈으로 사요(새로 찍지 않아요). 창고의 가공품은 공사 재료로 써요.</p>` +
     `<h4>📈 물가 ×${pi.mult.toFixed(2)}</h4><p class="dim">1 + ${esc(rk?.name ?? "마을")} ${pi.rankPart} + 집·시설 ${pi.n}채 ${pi.buildPart}${pi.nextAt ? ` · 다음 오름 ${pi.nextAt}채째` : " · 최대"}. 설계비와 집값에 곱해요.</p>`;
 
   return head + sub +

@@ -58,5 +58,5 @@ test("은행 앱: 최근 7일 — 날 끝 금고를 지금 금고에서 거꾸�
   const html = bankHtml(w);
   assert.ok(html.indexOf(`<td>${a.name}</td><td>🪙50`) < html.indexOf(`<td>${b.name}</td><td>🪙7`), "많은 순");
   assert.ok(html.includes(`마을에 도는 돈 <b>${w.moneySupply()}</b>`));
-  assert.equal(BK.LEDGER_PARTS.length, 6);
+  assert.equal(BK.LEDGER_PARTS.length, 7);
 });

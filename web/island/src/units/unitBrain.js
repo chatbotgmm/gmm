@@ -689,7 +689,7 @@ function chooseNext(u, world, rnd) {
     if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
     const n = E.total(E.rawOf(u));
     if (!u.committed && (n >= E.CARRY || (n >= 2 && rnd() < 0.2)) && startActivity(u, "sell", world, rnd)) return;   // 원자재가 모이면 시장(상인)에 팖
-    if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀)
+    if (!u.committed && E.total(stashSellable(u)) >= STASH_SELL_AT && (world.stashCanSell?.(u) ?? true) && startActivity(u, "peddle", world, rnd)) return;   // 팔 소지품이 모이면 시장에 팖(좋아하는 건 하나씩 간직, 난수 안 씀). 은행이 못 사는 날은 안 감(헛걸음 되풀이 방지)
     if (!u.home && world.marketB()) {                                            // 집이 없고 돈이 모이면 시장에서 집을 삼(단짝 옆집이 있으면 그 집부터, 다음은 싼 집)
       const pal = M.bestieOf(u, world.units), palHome = pal?.home ? world.buildings.get(pal.home) : null, nearPal = b => areNeighbors(b, palHome) ? 1 : 0;
       const deals = world.housesForSale(u).map(b => [b, world.houseDeal(u, b)]);   // 집값을 다 가졌거나, 계약금이 있고 금고가 빌려줄 수 있으면(bank.js)

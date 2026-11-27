@@ -12,7 +12,7 @@ export const RANKS = [
   { name: "항구 마을", icon: "⚓", need: 140, unlock: ["shop", "post", "aquarium", "hospital"] },   // 종합병원은 다 지은 일반병원을 업그레이드해서만(unlockName)
   { name: "섬 도시", icon: "🏙", need: 240, unlock: ["manor"] },
 ];
-export const RANK_REWARD = 5;                                                     // 등급이 오르면 갈매미마다 축하금(새 돈)
+export const RANK_REWARD = 5;                                                     // 등급이 오르면 갈매미마다 축하금(중앙은행이 켜진 섬은 금고에서, World.issue)
 const FACILITY = d => d.market || d.field || d.dock || d.storehouse || d.power || ["cafe", "shop", "post", "aquarium", "clinic", "hospital"].includes(d.id);
 
 /** 점수와 그 내역(화면에 보여 줄 줄들). 계산식: 갈매미 ×10, 주인 있는 집 ×10, 빈 집 ×4, 시설 ×8(일반병원·종합병원 포함), 계단 ×2(최대 10점), 장식 ×2(최대 10점), 집 아늑함(놓인 가구 comfort 합, 최대 30점), 이룬 소원 ×6, 단짝 쌍 ×3(최대 15점), 수족관 기증 종류 ×2, 평균 포만감 50 이상 +10 */

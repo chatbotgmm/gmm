@@ -111,13 +111,13 @@ test("수족관: 처음 낚은 종류는 바로 기증, 수족관 전에 낚아 
   assert.ok(N.length > 0); assert.equal(N[0].u, u2); assert.ok(!N[0].kept);
 });
 
-test("팔기: 갈매미가 소지품을 시장에서 스스로 팖 — 조개는 주인에게, 상인 몫 1개에 1, 좋아하는 건 하나 간직, 가구는 안 팖, 은행이 새 돈", () => {
+test("팔기: 갈매미가 소지품을 시장에서 스스로 팖 — 조개는 주인에게, 상인 몫 1개에 1, 좋아하는 건 하나 간직, 가구는 안 팖, 은행이 금고 돈으로 삼(MON-5)", () => {
   const { w, gold, fisher } = econ();
-  fisher.stash = { tuna: 2, bottle: 1, chair: 1 }; const f0 = fisher.coins || 0, g0 = gold.coins, issued = w.bank.issued, ev = []; w.on("stashSale", e => ev.push(e));
+  fisher.stash = { tuna: 2, bottle: 1, chair: 1 }; const f0 = fisher.coins || 0, g0 = gold.coins, issued = w.bank.issued, v0 = w.bank.vault, ev = []; w.on("stashSale", e => ev.push(e));
   assert.deepEqual(Be.stashSellable(fisher), { tuna: 1, bottle: 1 }, "물방울은 물고기를 좋아해서 참치 하나는 간직");
   const r = w.sellStash(fisher);
   assert.equal(r.n, 2); assert.equal(r.coins, 25 + 4); assert.equal(r.cut, 2); assert.deepEqual(r.items, [{ id: "tuna", n: 1 }, { id: "bottle", n: 1 }]);
-  assert.equal(fisher.coins, f0 + 27); assert.equal(gold.coins, g0 + 2); assert.equal(w.bank.issued, issued + 29); assert.deepEqual(fisher.stash, { tuna: 1, chair: 1 });
+  assert.equal(fisher.coins, f0 + 27); assert.equal(gold.coins, g0 + 2); assert.equal(w.bank.issued, issued, "새로 찍지 않음"); assert.equal(w.bank.vault, v0 - 29, "금고에서 29"); assert.deepEqual(fisher.stash, { tuna: 1, chair: 1 });
   assert.equal(ev.length, 1); assert.equal(ev[0].u, fisher);
   assert.equal(w.sellStash(fisher).n, 0, "남은 건 간직하는 것과 가구뿐");
   // 상인 자신이 팔 때는 몫 없음

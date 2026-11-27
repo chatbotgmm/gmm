@@ -243,7 +243,7 @@ export class World {
     s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     s.clothes = []; s.wear = CLO.emptyWear();                                   // 가진 옷 · 입은 옷(clothes.js)
-    if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(은행)
+    if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(중앙은행이 켜진 섬은 금고에서, issue)
     if (this.profiles) this.applyProfile(s);
     this.units.push(s); return s;
   }
@@ -320,7 +320,24 @@ export class World {
     if (this.economy && u && u.inv) { u.inv[item] = (u.inv[item] || 0) + n; if (n > 0 && MON.MADE_VAL[item] && this.bank.mon) this.bank.mon.made += MON.MADE_VAL[item] * n; }   // 만든 물건(물가 식의 분모, monetary.js)
     else this.res[item] = (this.res[item] || 0) + n;
   }
-  issue(u, coins) { u.coins = (u.coins || 0) + coins; this.bank.issued += coins; }
+  /** 은행이 갈매미에게 주는 돈. 중앙은행이 켜진 섬은 새로 찍지 않고 금고에서(있는 만큼, 장부 grant), 꺼진 예전 규칙만 새 돈. 실제로 준 돈을 돌려줌 */
+  issue(u, coins) {
+    if (this.monOn()) return this.payOut(u, coins, "grant");
+    u.coins = (u.coins || 0) + coins; this.bank.issued += coins; return coins;
+  }
+  /** 금고 → 갈매미. key: 장부 칸 "buy"(물건을 사 줌) | "grant"(축하금 등). keep: 금고에 품삯·설계비 몫(BUY_KEEP × P)을 남기고 그 위로만(플레이어가 누르는 🎁 나눠주기만 false). 실제로 낸 돈 */
+  payOut(u, coins, key = "grant", keep = true) {
+    const bk = this.bank, n = Math.max(0, Math.min(Math.floor(coins || 0), Math.floor(bk.vault - (keep ? this.vaultKeep() : 0)))); if (!(n > 0)) return 0;
+    bk.vault -= n; if (key === "buy") bk.bought += n; else bk.granted += n; this.led(key, n); u.coins = (u.coins || 0) + n; this.checkLow(); return n;
+  }
+  /** 설계비 내기(b.fee): 금고에서. 중앙은행이 켜진 섬은 지을 갈매미(feeTaker)에게 가서 마을로 돎(MON-5: 없어지면 찍지 않는 섬의 돈이 줄기만 함). 꺼진 예전 규칙은 그냥 나감 */
+  payFee(b) {
+    if (!b?.fee) return; const bk = this.bank; bk.vault -= b.fee; bk.fees += b.fee; this.led("fees", b.fee);
+    const t = this.monOn() ? this.feeTaker(b.defId) : null; if (t) t.coins = (t.coins || 0) + b.fee;
+    this.emit("fee", { b, fee: b.fee }); this.checkLow();
+  }
+  /** 설계비를 받는 갈매미: 그 건물을 짓는 직업(builtBy) → 건축가·목수 → 첫 갈매미 */
+  feeTaker(defId) { const job = BUILDINGS[defId]?.builtBy || "builder"; return this.units.find(u => u.job === job) || this.units.find(u => u.job === "builder" || u.job === "carpenter") || this.units[0] || null; }
   merchantU() { return this.units.find(u => u.job === "merchant") || null; }
   /** 시장: 원자재(나무·돌·철)를 상인에게 팖. 상인 돈이 허락하는 만큼. */
   sellToMarket(u) {
@@ -342,26 +359,27 @@ export class World {
     if (coins) this.issue(m, coins);
     this.emit("bank", { u: m, items, coins }); return { items, coins };
   }
-  /** 중앙은행 판 가공품 매입: 오늘 남은 한도 안에서만(한도로 못 사는 가공품은 상인 가방에 남아 다음 날 팖) + 발행 수수료(찍은 돈의 SEIG → 금고, 새 돈) */
+  /** 중앙은행 판 가공품 매입(금고에서 냄, 새로 찍지 않음): 오늘 남은 예산과 금고 여윳돈(금고 − BUY_KEEP × P) 안에서만. 못 사는 가공품은 상인 가방에 남아 다음 날 팖 */
   sellProcessedMon(m) {
-    const mon = this.bank.mon, items = { wood: 0, stone: 0, iron: 0 }; let left = this.monLeft(), coins = 0;
+    const mon = this.bank.mon, items = { wood: 0, stone: 0, iron: 0 }, left0 = this.monLeft(); let left = this.buyLeft(), coins = 0;
     for (const k of E.RAW) {
       const n = m.goods[k] || 0, price = this.procPrice(k), can = Math.min(n, Math.floor(left / price)); if (!(can > 0)) continue;
       items[k] = can; coins += can * price; left -= can * price; this.res[k] = (this.res[k] || 0) + can; m.goods[k] -= can;
     }
-    mon.left = left; mon.used += coins;
-    if (coins) {
-      this.issue(m, coins); const sg = Math.floor(coins * MON.SEIG);
-      if (sg > 0) { this.bank.vault += sg; this.bank.issued += sg; this.bank.seig += sg; this.led("seig", sg); if (this.bank.vault >= BK.VAULT_REARM) this.bank.low = 0; this.settleOwed(); }
-    }
+    mon.left = left0 - coins; mon.used += coins;
+    if (coins) this.payOut(m, coins, "buy");
     if (!mon.flags.cap && left < Math.min(...E.RAW.map(k => this.procPrice(k)))) { mon.flags.cap = 1; this.emit("capFull", { cap: mon.cap }); }
     this.emit("bank", { u: m, items, coins }); return { items, coins };
   }
-  /** 상인 AI(unitBrain chooseNext): 은행에 가도 될까 = 가방의 가공품 중 오늘 남은 한도로 1개라도 살 수 있는 게 있음(없으면 헛걸음하지 않고 다음 날 팖) */
+  /** 상인 AI(unitBrain chooseNext): 은행에 가도 될까 = 가방의 가공품 중 오늘 남은 예산·금고 여윳돈으로 1개라도 살 수 있는 게 있음(없으면 헛걸음하지 않고 다음 날 팖) */
   bankCanBuy(u) {
     if (!(E.total(u?.goods) > 0)) return false; if (!this.monOn()) return true;
-    const left = this.monLeft(); return E.RAW.some(k => (u.goods[k] || 0) > 0 && this.procPrice(k) <= left);
+    const left = this.buyLeft(); return E.RAW.some(k => (u.goods[k] || 0) > 0 && this.procPrice(k) <= left);
   }
+  /** 금고가 저절로 나가는 돈(매입·이자·축하금)을 내고도 남기는 돈 = BUY_KEEP × P(중앙은행이 꺼졌으면 0) */
+  vaultKeep() { return this.monOn() ? MON.BUY_KEEP * this.bank.mon.P : 0; }
+  /** 지금 가공품을 살 수 있는 돈 = min(오늘 남은 예산, 금고 − BUY_KEEP × P) */
+  buyLeft() { return MON.payableOf(this.monLeft(), this.bank.vault, this.bank.mon.P); }
   /** 농부·어부에게서 음식 1개 사기(파는 쪽은 먹을 것 FOOD_KEEP개는 남김) */
   buyFoodFrom(buyer, seller) {
     const price = this.foodPrice();
@@ -547,23 +565,24 @@ export class World {
     const usedShare = mon.cap > 0 ? mon.used / mon.cap : 1;                        // 어제 한도 중 쓴 몫(자동 와인드업 방지)
     let jl = 0; for (const u of this.units) { if ((u.jlSecs || 0) > MON.JOBLESS_SECS) { u.jlDay = d; jl++; } u.jlSecs = 0; }
     mon.jlShare = jl / Math.max(1, n);
-    // 예금: 이자(새 돈, 한 마리 ICAP × P까지) → 목표 쪽으로 하루에 절반씩
+    // 예금: 이자(금고에서, 한 마리 ICAP × P까지. 금고 여윳돈이 모자라면 같은 비율로 줄임) → 목표 쪽으로 하루에 절반씩
+    const want = this.units.map(u => MON.interestOf(u.saved, r, P)), wantSum = want.reduce((a, x) => a + x, 0), pay = MON.payableOf(wantSum, bk.vault, P);
     let interest = 0;
-    for (const u of this.units) {
-      const it = MON.interestOf(u.saved, r, P); if (it > 0) { u.saved = (u.saved || 0) + it; interest += it; u.intDay = d; }
+    this.units.forEach((u, i) => {
+      const it = wantSum > 0 ? Math.floor(want[i] * pay / wantSum) : 0; if (it > 0) { u.saved = (u.saved || 0) + it; interest += it; u.intDay = d; }
       const mv = MON.saveMove(u.coins, u.saved, r, P, u.job === "merchant"); if (mv) { u.saved = (u.saved || 0) + mv; u.coins -= mv; }
-    }
-    if (interest) { bk.issued += interest; bk.interest += interest; this.led("interest", interest); }
-    // 저녁 장보기: 여윳돈의 SHOP. 그중 SHOP_MERCHANT는 상인에게, 나머지는 은행 가게(창고 가공품을 WARE_KEEP개 넘게 있으면 그것부터)에서 써서 없어짐
-    let retired = 0;
+    });
+    if (interest) { bk.vault -= interest; bk.interest += interest; this.led("interest", interest); this.checkLow(); }
+    // 저녁 장보기: 여윳돈의 SHOP. 그중 SHOP_MERCHANT는 상인에게, 나머지는 은행 가게(창고 가공품을 WARE_KEEP개 넘게 있으면 그것부터)에서 → 금고(장부 evening)
+    let toVault = 0;
     for (const u of this.units) {
       const s = MON.shopOf(u.coins, P, u.job === "merchant", !!m && m !== u); if (!(s.x > 0)) continue;
       let rest = s.rest, burn = 0;
       for (const k of ["wood", "stone"]) { const price = this.procPrice(k), can = Math.min(Math.floor(rest / price), Math.max(0, (this.res[k] || 0) - MON.WARE_KEEP)); if (can > 0) { this.res[k] -= can; burn += can * price; rest -= can * price; } }
       burn += rest; if (s.toM) m.coins = (m.coins || 0) + s.toM;
-      u.coins -= s.toM + burn; retired += burn; u.shopDay = d;
+      u.coins -= s.toM + burn; toVault += burn; u.shopDay = d;
     }
-    if (retired) { bk.issued -= retired; bk.retired += retired; this.led("retired", retired); }
+    this.deposit(toVault, "returned", "evening");
     // 물가: 주머니 돈 ÷ (RREF × 만든 물건)을 천천히 따라감(적응 기간엔 그대로)
     const A = this.moneySupply(); mon.Yd.push(mon.made); mon.made = 0; while (mon.Yd.length > 3) mon.Yd.shift();
     const Ybar = Math.max(1, mon.Yd.reduce((a, x) => a + x, 0) / mon.Yd.length);
@@ -576,7 +595,7 @@ export class World {
       const i = Math.max(0, MON.STEPS.indexOf(mon.step)), k = MON.autoStep(i, mon.pi, mon.P, mon.jlShare, usedShare);
       if (k !== i) { this.emit("monAuto", { from: mon.step, to: MON.STEPS[k], up: k > i }); mon.step = MON.STEPS[k]; }
     }
-    mon.cap = MON.capOf(mon.step, n); mon.left = mon.cap; mon.used = 0; mon.flags.cap = 0;
+    mon.cap = MON.capOf(mon.step, n); mon.left = mon.cap; mon.used = 0; mon.flags.cap = 0; mon.printed = 0;
     // 소식(사태마다 한 번)
     const f = mon.flags;
     if (mon.pi > MON.PRICEUP_AT) { if (!f.infl) { f.infl = 1; this.emit("inflation", { pi: mon.pi, P: mon.P }); } } else if (mon.pi <= MON.STABLE_PI) f.infl = 0;
@@ -599,17 +618,30 @@ export class World {
   }
   /** 🤖 자동 모드 켜기·끄기 */
   setAuto(on) { if (!this.monOn()) return false; this.bank.mon.auto = !!on; return true; }
-  /** 🎁 축하 나눠주기(하루 한 번): 모든 갈매미에게 round(GIFT_PER × P) 새 돈. 나눠 준 합계(못 하면 0) */
+  /** 🎁 축하 나눠주기(하루 한 번): 모든 갈매미에게 round(GIFT_PER × P)씩 금고에서(새로 찍지 않음). 금고가 모자라면 안 함. 나눠 준 합계(못 하면 0) */
   giftAll() {
     const mon = this.bank.mon, d = newsDay(this.time); if (!this.monOn() || mon.giftDay === d || !this.units.length) return 0;
-    const per = MON.scaleP(MON.GIFT_PER, mon.P); for (const u of this.units) this.issue(u, per);
+    const per = MON.scaleP(MON.GIFT_PER, mon.P); if (this.bank.vault < per * this.units.length) return 0;
+    for (const u of this.units) this.payOut(u, per, "grant", false);
     mon.giftDay = d; this.emit("monGift", { per, n: this.units.length }); return per * this.units.length;
   }
+  /** 🖨 찍어내기(유일한 새 돈): n(PRINT_STEPS)만큼 금고에. 마을 하루 합 PRINT_DAY_MAX까지. 찍은 양(못 하면 0) */
+  print(n) {
+    const bk = this.bank, mon = bk?.mon, d = newsDay(this.time); if (!this.monOn()) return 0;
+    if (mon.printDay !== d) { mon.printDay = d; mon.printed = 0; }
+    if (!MON.canPrint(n, mon.printed)) return 0;
+    mon.printed += n; bk.vault += n; bk.issued += n; bk.printed += n; this.led("printed", n);
+    if (bk.vault >= BK.VAULT_REARM) bk.low = 0;
+    this.emit("monPrint", { n, today: mon.printed, left: MON.printLeftOf(mon.printed) }); this.settleOwed(); return n;
+  }
+  /** 오늘 더 찍을 수 있는 양 */
+  printLeft() { const mon = this.bank?.mon; if (!this.monOn()) return 0; return MON.printLeftOf(mon.printDay === newsDay(this.time) ? mon.printed : 0); }
   /** 화면용 중앙은행 숫자 */
   monInfo() {
     if (!this.monOn()) return null; const mon = this.bank.mon;
     return { P: mon.P, index: MON.priceIndex(mon.P), pi: mon.pi, Pstar: mon.Pstar, step: mon.step, rate: mon.rate, auto: mon.auto, cap: mon.cap, left: this.monLeft(), used: mon.used, adapt: mon.adapt,
-      pocket: this.moneySupply(), saved: this.units.reduce((a, u) => a + (u.saved || 0), 0), giftDone: mon.giftDay === newsDay(this.time), stable: mon.stableRun >= MON.STABLE_DAYS };
+      pocket: this.moneySupply(), saved: this.units.reduce((a, u) => a + (u.saved || 0), 0), giftDone: mon.giftDay === newsDay(this.time), stable: mon.stableRun >= MON.STABLE_DAYS,
+      buyLeft: this.buyLeft(), printLeft: this.printLeft(), printed: this.bank.printed };
   }
   canBuyFood() { return false; }                                                   // 음식은 이제 농부·어부에게서 삼(buyFoodFrom)
   buyFood(u) {
@@ -931,17 +963,21 @@ export class World {
   }
   /** 모든 갈매미가 아껴 둔 물고기를 기증(수족관이 다 지어졌을 때) */
   donateStashes() { for (const u of this.units) this.donateFromStash(u); }
+  /** 갈매미 AI: 시장에 소지품을 팔러 가도 될까. 중앙은행이 켜진 섬은 금고 − BUY_KEEP × P로 팔 것 하나라도 살 수 있을 때만(못 사는데 가면 0개 팔고 돌아와 또 가는 헛걸음이 되풀이되어 공사를 안 맡음. 60일 시뮬 찍지 않음 씨앗 3·5·7: 이 조건이 없으면 다 지은 건물 29·짓는 중 26·물가 2.20, 있으면 60·0.67·0.70) */
+  stashCanSell(u) { if (!this.monOn()) return true; const budget = this.bank.vault - this.vaultKeep(); return Object.keys(stashSellable(u)).some(id => stashPrice(id) <= budget); }
   /** 갈매미가 스스로 소지품을 팖: 먼저 수족관 기증, 그다음 팔 것(belongings.js stashSellable)을 카탈로그 값에 팖.
-   *  조개는 주인에게(상인 몫 STASH_CUT/개, 상인 자신이 팔 땐 없음). 경제 마을이면 은행이 사들여 새 돈을 찍음(물건은 마을 밖으로).
+   *  조개는 주인에게(상인 몫 STASH_CUT/개, 상인 자신이 팔 땐 없음). 경제 마을이면 은행이 사들임(중앙은행이 켜진 섬은 금고 돈으로, 금고가 허락하는 만큼; 꺼진 예전 규칙은 새 돈)(물건은 마을 밖으로).
    *  시장(경제가 없으면 가판대)이나 상인이 없으면 아무 일 없음. 돌려주는 값: { n 판 개수, coins 판 값, cut 상인 몫, items [{ id, n }], donated [물고기] } */
   sellStash(u) {
     const m = this.merchantU(), place = this.economy ? this.marketB() : this.stall;
     if (!u || !place || !m) return { n: 0, coins: 0, cut: 0, items: [], donated: [] };
     const donated = this.donateFromStash(u), items = []; let n = 0, coins = 0;
-    for (const [id, k] of Object.entries(stashSellable(u))) { coins += stashPrice(id) * k; n += k; if (!(u.stash[id] -= k)) delete u.stash[id]; items.push({ id, n: k }); }
+    const mon = this.monOn(); let budget = mon ? Math.max(0, Math.floor(this.bank.vault - this.vaultKeep())) : Infinity;   // 중앙은행: 은행이 금고 돈으로 사 줌(금고 − BUY_KEEP × P 만큼만, 나머지는 소지품에 남음)
+    for (const [id, k0] of Object.entries(stashSellable(u))) { const p = stashPrice(id), k = Math.min(k0, p > 0 ? Math.floor(budget / p) : k0); if (!(k > 0)) continue; budget -= p * k; coins += p * k; n += k; if (!(u.stash[id] -= k)) delete u.stash[id]; items.push({ id, n: k }); }
     const cut = m !== u ? Math.min(coins, STASH_CUT * n) : 0;
     if (cut) m.coins = (m.coins || 0) + cut;
-    u.coins = (u.coins || 0) + coins - cut; if (this.economy) this.bank.issued += coins;
+    if (mon) { const bk = this.bank; bk.vault -= coins; bk.bought += coins; if (coins) this.led("buy", coins); this.checkLow(); }
+    u.coins = (u.coins || 0) + coins - cut; if (this.economy && !mon) this.bank.issued += coins;
     if (n) this.emit("stashSale", { u, m, items, coins, cut });
     return { n, coins, cut, items, donated };
   }
@@ -964,12 +1000,13 @@ export class World {
 
   // ---- 저장고(겨울 대비): 은행이 남는 음식을 사서 쌓아 두고, 배고픈 갈매미에게 시세대로 팔거나(돈 없고 아주 배고프면) 나눠 줌
   granaryB() { for (const b of this.buildings.values()) if (BUILDINGS[b.defId].storehouse && this.isDone(b)) return b; return null; }
-  /** 농부·어부: 먹을 것 FOOD_KEEP+2개를 남기고 나머지를 저장고에 팖(1개 🪙GRANARY_BUY, 은행이 새로 찍음) */
+  /** 농부·어부: 먹을 것 FOOD_KEEP+2개를 남기고 나머지를 저장고에 팖(1개 🪙GRANARY_BUY, 중앙은행이 켜진 섬은 금고에서·꺼진 예전 규칙은 새로 찍음) */
   stockFood(u) {
-    let n = Math.min(E.meals(u) - (E.FOOD_KEEP + 2), E.GRANARY_MAX - this.granary); if (!this.granaryB() || n <= 0) return 0;
+    let n = Math.min(E.meals(u) - (E.FOOD_KEEP + 2), E.GRANARY_MAX - this.granary); if (this.monOn()) n = Math.min(n, Math.floor(Math.max(0, this.bank.vault - this.vaultKeep()) / E.GRANARY_BUY));   // 중앙은행: 금고 돈으로 삼(금고 − BUY_KEEP × P 만큼)
+    if (!this.granaryB() || n <= 0) return 0;
     const sold = n;
     for (const k of ["fish", "food"]) { const t = Math.min(u.inv[k], n); u.inv[k] -= t; n -= t; }
-    this.granary += sold; this.issue(u, sold * E.GRANARY_BUY); this.emit("granary", { u, kind: "stock", n: sold }); return sold;
+    this.granary += sold; if (this.monOn()) this.payOut(u, sold * E.GRANARY_BUY, "buy"); else this.issue(u, sold * E.GRANARY_BUY); this.emit("granary", { u, kind: "stock", n: sold }); return sold;
   }
   /** 저장고에서 음식 하나: 돈이 있으면 시세대로 사고(은행으로 돌아감), 없고 아주 배고프면(포만감 E.RATION_FULL 아래) 나눠 받음 */
   takeFood(u) {
@@ -1751,7 +1788,7 @@ export class World {
     b.ramp = r.ramp; if (b.ramp) b.hits = Math.min(b.hits, b.need);
     b.fee = hits === null ? r.fee || 0 : 0;
     b.order = null; if (hits === null && opt.order && this.economy) this.openOrder(b, opt.order.u, opt.order.cost);   // 갈매미 주문 공사: 품삯·자재값을 맡김
-    if (b.fee) { this.bank.vault -= b.fee; this.bank.fees += b.fee; this.led("fees", b.fee); this.emit("fee", { b, fee: b.fee }); this.checkLow(); }
+    this.payFee(b);
     this.grid.occupy(b.cells, b.id, { kind: "building", walkable: (!!b.ramp && this.isDone(b)) || !!def.field || (!!def.bridge && this.isDone(b)), surface: r.elevation, ramp: b.ramp });   // 밭은 처음부터 걸어 다님   // 길찾기 장애물로 반영(grid.version 증가). 계단은 다 지으면 걸을 수 있음
     if (!def.bridge) this.grid.reserveDoor(b.door.x, b.door.z, b.id);            // 다리는 문이 없음(줄로 이어 놓음)
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
@@ -1827,7 +1864,7 @@ export class World {
       return { ok: false, reason: put.reason };
     }
     const b = put.building; b.hits = Math.min(b.hits, b.need); b.doctor = keep.doctor; b.upFrom = from; b.fee = r.fee;
-    if (b.fee) { this.bank.vault -= b.fee; this.bank.fees += b.fee; this.led("fees", b.fee); this.emit("fee", { b, fee: b.fee }); this.checkLow(); }
+    this.payFee(b);
     this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
     this.emit("upgradeStart", { b, from, fee: b.fee });
     if (this.isDone(b)) this.builtNow(b);                                           // ⚡ 바로 완공
@@ -1862,7 +1899,10 @@ export class World {
   }
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
-    if (b.fee && !this.isDone(b)) { this.bank.vault += b.fee; this.bank.fees -= b.fee; this.led("refunds", b.fee); b.fee = 0; this.settleOwed(); }   // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로)
+    if (b.fee && !this.isDone(b)) {                                                // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로). 중앙은행: 받은 갈매미가 가진 만큼만 되돌려 받음(돈이 새로 생기지 않게)
+      const t = this.monOn() ? this.feeTaker(b.defId) : null, n = t ? Math.min(b.fee, Math.max(0, Math.floor(t.coins || 0))) : b.fee; if (t) t.coins -= n;
+      this.bank.vault += n; this.bank.fees -= n; this.led("refunds", n); b.fee = 0; this.settleOwed();
+    }
     if (b.order) this.settleOrder(b);                                              // 갈매미 주문 공사를 철거: 남은 맡긴 돈을 주문한 갈매미에게
     for (const u of this.units) if (u.insideBuildingId === id) exitBuilding(u, this, this.rnd);   // 안에 있던 갈매미는 문 앞으로
     for (const u of this.units) { if (u.focus === b) setIdle(u, this.rnd, this); if (u.committed === id) uncommit(u, this); }   // 짓던 갈매미는 그만(은행에서 꺼내 온 짐은 창고로)
