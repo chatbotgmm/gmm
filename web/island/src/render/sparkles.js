@@ -20,10 +20,25 @@ function glintTex() {                                                           
   g.fillStyle = fill; g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+// 🌙 밤 반짝이: 어두운 휴대폰 화면에서도 보이게 진한 테두리 대신 밝은 빛 테두리 + 넓은 빛무리(하얀 바탕 그림 → 종류마다 색을 곱함)
+function nightTex() {
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  const star = (R, r) => { g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, q = i % 2 ? r : R; g.lineTo(64 + Math.cos(a) * q, 64 + Math.sin(a) * q); } g.closePath(); };
+  const halo = g.createRadialGradient(64, 64, 0, 64, 64, 64); halo.addColorStop(0, "rgba(255,255,255,0.85)"); halo.addColorStop(0.45, "rgba(255,255,255,0.35)"); halo.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = halo; g.fillRect(0, 0, 128, 128);
+  star(54, 14); g.lineJoin = "round"; g.lineWidth = 9; g.strokeStyle = "rgba(255,255,255,0.95)"; g.stroke();   // 빛 테두리
+  g.lineWidth = 3; g.strokeStyle = "rgba(40,40,70,0.55)"; g.stroke();                                         // 가는 안쪽 선(밝은 모래·눈 위에서도 모양이 보이게)
+  const fill = g.createRadialGradient(64, 64, 0, 64, 64, 54); fill.addColorStop(0, "#ffffff"); fill.addColorStop(1, "#d8d8d8");
+  g.fillStyle = fill; g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+/** 밤 반짝이 종류마다 빛 색(그림에 곱함) */
+export const NIGHT_TINT = { fireflyJar: 0xe8ff7a, starNote: 0xffe9a8, moonShell: 0xbfe0ff, glowWeed: 0x7dffd8 };
 const _v = new THREE.Vector3();
 export class SparkleView {
   constructor(root) {
     this.root = root; this.tex = glintTex(); this.mat = new THREE.SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false, fog: false, toneMapped: false })   // 톤 매핑을 끄면 금빛이 하얗게 바래지 않음;
+    this.nTex = nightTex(); this.nMat = new THREE.SpriteMaterial({ map: this.nTex, transparent: true, depthWrite: false, fog: false, toneMapped: false });   // 밤 반짝이(빛 테두리)
     this.sprites = new Map(); this.pops = []; this.t = 0;                          // 반짝이 id → 스프라이트 · 떠오르는 중인 것
   }
   /** 화면 1px이 이 자리에서 몇 m인가(원근 카메라) */
@@ -32,11 +47,11 @@ export class SparkleView {
     this.t += dt; const seen = new Set();
     for (const s of world.sparkles || []) {
       seen.add(s.id); let sp = this.sprites.get(s.id);
-      if (!sp) { sp = new THREE.Sprite(this.mat.clone()); sp.userData.noToon = true; sp.userData.sparkleId = s.id; sp.renderOrder = 10; this.root.add(sp); this.sprites.set(s.id, sp); }   // 반투명(물 1·눈비 2)보다 나중에 그림
+      if (!sp) { const tint = NIGHT_TINT[s.k]; sp = new THREE.Sprite((tint ? this.nMat : this.mat).clone()); if (tint) { sp.material.color.setHex(tint); sp.userData.night = true; } sp.userData.noToon = true; sp.userData.sparkleId = s.id; sp.renderOrder = 10; this.root.add(sp); this.sprites.set(s.id, sp); }   // 반투명(물 1·눈비 2)보다 나중에 그림
       const ph = this.t * 3 + s.id * 1.7, ground = world.standHeight(s.x + 0.5, s.z + 0.5);
       sp.position.set(toWorldX(s.x + 0.5), ground + 0.3, toWorldZ(s.z + 0.5));
       const base = camera ? Math.min(MAX_SIZE, Math.max(0.36, MIN_PX * SparkleView.mPerPx(camera, sp.position, viewH))) : 0.36;
-      const k = base * (1 + 0.22 * Math.max(0, Math.sin(ph * 1.9))); sp.scale.set(k, k, 1);   // 깜빡일 때만 커짐(가장 작을 때가 MIN_PX)
+      const k = base * (sp.userData.night ? 1.25 + 0.3 * Math.max(0, Math.sin(ph * 1.3)) : 1 + 0.22 * Math.max(0, Math.sin(ph * 1.9))); sp.scale.set(k, k, 1);   // 밤 반짝이는 빛무리만큼 크게 · 느리게 숨 쉬듯   // 깜빡일 때만 커짐(가장 작을 때가 MIN_PX)
       sp.position.y = ground + 0.15 + k * 0.5 + Math.sin(ph) * 0.05 * k;           // 별 아래 끝이 땅에 묻히지 않게(크게 그려도 반쪽이 땅에 가려지지 않음)
       sp.material.opacity = Math.min(1, s.t / 20);   // 사라지기 20초 전부터 옅어짐(깜빡임은 크기로만: 투명하면 모래·물빛에 묻힘)
     }
@@ -67,6 +82,6 @@ export class SparkleView {
   dispose() {
     for (const sp of this.sprites.values()) { this.root.remove(sp); sp.material.dispose(); }
     for (const p of this.pops) { this.root.remove(p.sp); p.sp.material.dispose(); }
-    this.sprites.clear(); this.pops = []; this.mat.dispose(); this.tex.dispose();
+    this.sprites.clear(); this.pops = []; this.mat.dispose(); this.tex.dispose(); this.nMat.dispose(); this.nTex.dispose();
   }
 }

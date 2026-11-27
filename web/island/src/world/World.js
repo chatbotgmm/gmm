@@ -35,7 +35,7 @@ import * as CU from "./customize.js";
 import * as CLIM from "./climate.js";
 import * as CLO from "./clothes.js";
 import * as HL from "./health.js";
-import { SPARKLE_EVERY, SPARKLE_MAX, SPARKLE_LIFE, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave } from "./sparkles.js";
+import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk } from "./sparkles.js";
 
 /**
  * 새 넓은 섬에 공식은행을 놓음(예전 저장을 불러올 땐 쓰지 않음). 난수를 쓰지 않아 같은 섬 → 같은 자리.
@@ -1818,6 +1818,7 @@ export class World {
   // ---- ✨ 반짝이(sparkles.js): 하루 몇 번 생기고, 플레이어가 주우면 내 주머니로
   /** 수명이 다했거나 그 칸을 이제 못 쓰면(그사이 건물·물) 지우고, SPARKLE_EVERY초마다 한 회차 */
   stepSparkles(dt) {
+    sparkleDusk(this);   // 🌙 해 뜨면 밤 반짝이 옅어짐 · 해 지면 첫 밤 반짝이를 곧
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
       const s = this.sparkles[i]; if ((s.t -= dt) > 0 && sparkleCellFree(this, s.x, s.z)) continue;
       this.sparkles.splice(i, 1); this.emit("sparkleGone", s);
@@ -1826,8 +1827,8 @@ export class World {
   }
   /** 한 회차: 바닷가 1 + 마을 1(sparkRnd만 씀). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
   spawnSparkles() {
-    if (this.sparkles.length >= SPARKLE_MAX) return [];
-    const made = rollSparkles(sparkleCells(this), this.sparkles, this.season, this.sparkRnd).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: SPARKLE_LIFE }));
+    const night = this.isNight === true; if (sparkleRoom(this.sparkles, night) <= 0) return [];
+    const made = rollSparkles(sparkleCells(this), this.sparkles, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k) }));
     for (const s of made) { this.sparkles.push(s); this.emit("sparkleSpawn", s); }
     return made;
   }

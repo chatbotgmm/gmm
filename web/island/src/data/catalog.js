@@ -319,6 +319,11 @@ export const ITEMS = [
   { id: "acorn",    name: "도토리",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "autumn" },
   { id: "pinecone", name: "솔방울",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "winter" },
   { id: "icicle",   name: "고드름",             rarity: "common", gift: true, sparkle: "village", sparkleSeason: "winter" },
+  // 🌙 밤 반짝이(sparkleTime: "night"): 밤(기기 시계)에만 생기고, 전기가 들어오는 가로등 둘레에 먼저 생김. 해가 뜨면 사라짐(world/sparkles.js)
+  { id: "fireflyJar", name: "반딧불 병",  rarity: "common", gift: true, sparkle: "village", sparkleTime: "night" },
+  { id: "starNote",   name: "별빛 쪽지",  rarity: "common", gift: true, sparkle: "village", sparkleTime: "night" },
+  { id: "moonShell",  name: "달빛 조개",  rarity: "common", gift: true, sparkle: "beach",   sparkleTime: "night" },
+  { id: "glowWeed",   name: "야광 해초",  rarity: "common", gift: true, sparkle: "beach",   sparkleTime: "night" },
   // 도장 선물(stampGift = 도장 값: 도장 가게에서 사는 귀한 선물. 받으면 정이 두 배). stamp 키는 쓰지 않음(STAMP_SHOP은 가구만)
   { id: "goldLetter",   name: "금박 편지지",       rarity: "epic", gift: true, stampGift: 1 },
   { id: "starBrooch",   name: "별 브로치",         rarity: "epic", gift: true, stampGift: 1 },
