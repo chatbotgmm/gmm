@@ -26,11 +26,21 @@ export class Footprints {
     if (world.snow > 0.25 && c.elevation > -0.06) return "snow";
     return c.groundType === "Sand" ? "sand" : null;
   }
+  push(p) { if (this.prints.length < this.cap) this.prints.push(p); else { this.prints[this.next] = p; this.next = (this.next + 1) % this.cap; } }
+  /** 쿵 착지 자국(들었다 내려놓은 갈매미, units/fuss.js onLand): 두 발을 나란히 크게 + 둘레로 튄 자국 6개(같은 판 → 그리기 호출 그대로). 돌려줌: 'snow' | 'sand' | null */
+  thud(world, u) {
+    const kind = this.surface(world, u.x, u.z); if (!kind || !this.cap) return kind;
+    const s = u.scale || 1, h = u.heading || 0, y = world.standHeight(u.x, u.z) + 0.013;
+    for (const side of [-1, 1]) this.push({ x: u.x + Math.cos(h) * 0.07 * s * side, z: u.z - Math.sin(h) * 0.07 * s * side, y, h, s: 1.2 + 0.4 * s, t: LIFE, kind });
+    for (let i = 0; i < 6; i++) { const a = h + (i + 0.5) / 6 * Math.PI * 2, r = 0.26 * Math.sqrt(s);   // 바깥을 향한 튐 자국
+      this.push({ x: u.x + Math.sin(a) * r, z: u.z + Math.cos(a) * r, y: y + 0.001, h: a + Math.PI, s: 0.55 + 0.25 * s, t: LIFE, kind }); }
+    return kind;
+  }
   stamp(world, u, side) {
     const s = u.scale || 1, h = u.heading || 0, lx = Math.cos(h) * 0.065 * s * side, lz = -Math.sin(h) * 0.065 * s * side;   // 왼발·오른발 옆으로 벌림
     if (!this.cap) return; const x = u.x + lx, z = u.z + lz, kind = this.surface(world, x, z); if (!kind) return;
     const p = { x, z, y: world.standHeight(x, z) + 0.012, h, s: 0.8 + 0.4 * s, t: LIFE, kind };
-    if (this.prints.length < this.cap) this.prints.push(p); else { this.prints[this.next] = p; this.next = (this.next + 1) % this.cap; }
+    this.push(p);
   }
   update(dt, world) {
     if (!this.cap && !this.onStep) { this.mesh.count = 0; return; }

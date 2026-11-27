@@ -28,6 +28,8 @@ const NEWS_MAKERS = {
   medalGift: ({ item, gift }) => ({ icon: "🎁", text: `물고기 ${gift.label} 기념으로 ${josa(item.name, "을", "를")} 받았어요!`, weight: 6 }),
   donate: ({ u, fish, kept }) => ({ icon: "🐠", text: `${u ? `${josa(u.name, "이", "가")} ${kept ? "아껴 둔" : "처음 낚은"} ` : "아껴 둔 "}${josa(fish.name, "을", "를")} 수족관에 기증했어요!`, weight: 5 }),
   donateGift: ({ item, gift }) => ({ icon: "🎁", text: `수족관 기증 ${gift.label} 기념으로 ${josa(item.name, "을", "를")} 받았어요!`, weight: 6 }),
+  // 깜짝 소동(units/fuss.js)을 풀어 줌: 바위 위에서 못 내려오던 미니 · 길에서 꾸벅 졸던 야행성
+  fussSolved: ({ u, kind }) => ({ icon: "🆘", text: kind === "perch" ? `바위 위에서 못 내려오던 ${josa(u.name, "을", "를")} 내려 줬어요!` : `길에서 꾸벅 졸던 ${josa(u.name, "을", "를")} 옮겨 줬어요!`, weight: 2 }),
   // 갈매미 소지품: 스스로 시장에 판 것(알림 줄에만)
   stashSale: ({ u, items, coins, cut }) => ({ icon: "🐚", text: `${josa(u.name, "이", "가")} 소지품 ${items.reduce((s, x) => s + x.n, 0)}개를 팔았어요 🪙+${coins - cut}`, weight: 0 }),
   // ✨ 반짝이를 주움(알림 줄에만)

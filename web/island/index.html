@@ -9,7 +9,7 @@
   :root { color-scheme: only light; }   /* 색·크기 값은 맨 아래 디자인 토큰 블록에 */
   html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--c-sky); color: var(--c-ink);
     font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; }
-  canvas { display: block; touch-action: none; }
+  canvas { display: block; touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   [hidden] { display: none !important; }
   /* ---- 버튼: 기본(흰 바탕) · .go 주요 행동 · .on 켜짐 · .danger 위험 · .ghost 보조. 상태 = 올려 둠 / 누름 / 키보드 포커스 / 꺼짐 */
   button { border: 0; border-radius: var(--r-sm); padding: calc(7*var(--u)) calc(10*var(--u)); font: inherit; font-size: var(--fs-body); cursor: pointer;

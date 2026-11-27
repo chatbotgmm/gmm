@@ -51,6 +51,7 @@ import { SparkleView } from "./render/sparkles.js";
 import { DreamView } from "./render/dreamView.js";
 import { Dreams } from "./world/dreams.js";
 import { Poke } from "./units/poke.js";
+import { Fuss } from "./units/fuss.js";
 import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlerts.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { stepGridLines } from "./render/gridLines.js";
@@ -111,7 +112,7 @@ const overlay = document.getElementById("overlay");
 const spendFx = new SiteSpendFx({ camera, overlay, getWorld: () => world, getViews: () => buildingViews });   // 건축에서 금고 돈이 나감: 공사장 위 🪙−n·설계비·품삯 밀림 + 칩에서 날아가는 🪙
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
-let world, chunks, buildingViews, unitViews, lifeViews, sparkleView, dreams, dreamView, poke, worldRoot, waterDirty = false, lastWater = 0;
+let world, chunks, buildingViews, unitViews, lifeViews, sparkleView, dreams, dreamView, poke, fuss, fussMs = null, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
 // 효과음(Kenney RPG sounds CC0 + 합성). 화면 중심에서 가까운 일만 들림
 const sfx = new Sfx();
@@ -189,7 +190,7 @@ function mount(w) {
   lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
   sparkleView?.dispose(); sparkleView = new SparkleView(worldRoot);             // ✨ 반짝이(world.sparkles) · 주운 것은 위로 떠오르며 사라짐
   world.on("sparkleGone", s => { if (s.picked) sparkleView?.pop(s.id); });
-  dreams = new Dreams(world); poke = new Poke(world, 77);   // 👉 톡톡 콕 찌르기(units/poke.js: 성격별 반응·연타·삐침, 저장 안 함)
+  dreams = new Dreams(world); poke = new Poke(world, 77); fuss = makeFuss(world);   // 👉 톡톡 콕 찌르기(units/poke.js: 성격별 반응·연타·삐침, 저장 안 함) · 🆘 깜짝 소동·착지 반응(units/fuss.js)
   dreamView?.dispose(); dreamView = new DreamView(worldRoot, overlay, () => buildingViews);   // 💤 꿈방울(밤에 자는 갈매미 위 · 톡 터뜨리면 잠꼬대, world/dreams.js)
   decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정) + 꾸미기로 놓은 덤불·꽃(world.decor)
   // 나무·바위·광석·지형지물: 불러올 때 다 그리고, 꾸미기로 심기·치우기·옮기기·파기를 하면 그 하나만 만들고 뺌(다시 열지 않아도 보임)
@@ -372,7 +373,15 @@ unitControl.onTapFirst = e => {
 };
 // 👉 톡: 성격별 반응(units/poke.js). 정·돈은 안 바뀜 · 소리만 반응 종류마다
 const POKE_SFX = { poke: [784, 988], sleep: [392, 330], sulk: [440, 370], sulkStart: [523, 440, 370], zoom: [659, 880, 1175] };
-unitControl.onPoke = u => { const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
+unitControl.onPoke = u => { if (fuss?.of(u)) hud.status(`🆘 ${josa(u.name, "을", "를")} 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" }); const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
+// 🆘 깜짝 소동(units/fuss.js): 시작하면 알림 줄 · 풀면 소리 · 내려놓은 곳이 눈·모래면 쿵 자국(footprints.thud)
+function makeFuss(w) {
+  const f = new Fuss(w, 91), at = u => ({ pos: { x: toWorldX(u.x), z: toWorldZ(u.z) } });
+  f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요 · 꾹 눌러 들어서 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요 · 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" });
+  world.on("fussSolved", ({ u }) => { hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 알림 줄에 직접 연결(newsAlerts 표 밖)
+  f.onLand = u => { const k = footprints.thud(world, u); if (k) sfx.play("step", { ...at(u), vol: 0.6, rate: k === "snow" ? 0.5 : 0.6 }); return k; };
+  return f;
+}
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
@@ -473,6 +482,7 @@ function frameBody() {
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
+  { const ms = performance.now(); fuss.step(ready ? dt * steps : 0, fussMs == null ? dt : Math.min(0.25, (ms - fussMs) / 1000)); fussMs = ms; }   // 🆘 깜짝 소동(마을 시간)·흔들기·어질어질(실제 초)·착지 — 들고 있는 위치가 정해진 뒤
   hud.showTug(!roomView.isOpen && world.canTug(unitControl.follow), unitControl.follow?.fishT);   // 입질 동안만 당기기 버튼
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
@@ -520,7 +530,7 @@ hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { sfx, edition, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
+window.__island = { sfx, edition, footprints, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

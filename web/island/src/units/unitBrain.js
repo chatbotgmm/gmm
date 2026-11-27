@@ -794,6 +794,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   if (cold) u.eff *= CLIM.COLD_EFF;
   if (u.sick) u.eff *= HL.sickDef(u).eff;                                 // 감기: 능률 ×0.7
   if (u.state === US.Held) return;                                       // 들려 있는 동안은 입력이 위치를 정함
+  if (u.fuss?.pin) return;                                                // 깜짝 소동·어질어질(units/fuss.js)이 붙잡아 둔 동안도 그 모듈이 위치를 정함(욕구는 위에서 그대로 닳음)
   if (u.sailing) { sail(u, dt, world); return; }                          // 배 타는 중: 배가 닿을 때까지 다른 일은 안 함(닿으면 원래 하던 일의 길을 이어 감)
   if (!u.swimming && !u.insideBuildingId && world.grid.isWater(...cellOf(u)) && !world.grid.isWalkable(...cellOf(u))) {   // 헤엄 중이 아닌데 물에 있으면(헤엄을 그만둠 등) 가까운 땅으로(부두 위는 그대로)
     const spot = nearestWalkable(world.grid, ...cellOf(u)); if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; u.anim = null; emote(u, "푸하!"); }

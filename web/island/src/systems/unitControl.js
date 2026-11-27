@@ -1,12 +1,13 @@
 // 둘러보기 모드에서 갈매미 다루기.
 // - 갈매미를 눌렀다 떼면(거의 안 움직이고): 카메라가 그 갈매미를 따라가며 톡 반응(onPoke). 이미 따라가는 갈매미를 누르면 톡만. 빈 땅을 누르면 따라가기 끔.
-// - 갈매미를 누른 채 끌면: 들어 올려 옮기고, 떼면 그 칸에 내려놓음(건물 칸이면 건물로 들어감, 바다면 제자리).
+// - 갈매미를 길게 누르거나(LONG_MS) 누른 채 끌면: 들어 올려 옮기고, 떼면 그 칸에 내려놓음(건물 칸이면 건물로 들어감, 바다면 제자리).
 // 갈매미를 누르지 않은 드래그는 OrbitControls(시야 돌리기)가 그대로 받는다.
 import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 import { josa } from "../util.js";
 
 const DRAG_PX = 6;
+export const LONG_MS = 450;   // 이만큼 누르고 있으면 끌지 않아도 들어 올림(깜짝 소동 🆘 풀기 — units/fuss.js)
 
 // 물 칸인데 2칸 안에 걸을 수 있는 땅이 있으면(물가) 내려놓으면 헤엄침
 const nearLand = (g, x, z) => { for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (Math.hypot(dx, dz) <= 2.5 && g.isWalkable(x + dx, z + dz)) return true; return false; };
@@ -22,6 +23,7 @@ export class UnitControl {
     addEventListener("pointermove", e => this.move(e));
     addEventListener("pointerup", e => this.up(e));
     addEventListener("pointercancel", () => this.cancel());
+    dom.addEventListener("contextmenu", e => { if (this.press?.unit || this.held) e.preventDefault(); });   // 안드로이드 길게 누르기 메뉴가 들기를 끊지 않게
     dom.addEventListener("wheel", () => { this.zoom = null; }, { passive: true });                        // 브라우저가 손짓을 가져가면
   }
 
@@ -36,7 +38,7 @@ export class UnitControl {
   /** 갈매미 잡기를 취소: 들고 있었으면 원래 자리로, 시야 조작은 다시 켬. */
   cancel() {
     if (!this.press) return;
-    const u = this.held;
+    clearTimeout(this.press.lt); const u = this.held;
     if (u) { this.getWorld().dropUnit(u, Math.floor(u.heldFrom.x), Math.floor(u.heldFrom.z)); this.onStatus(""); }
     this.press = null; this.held = null; this.heldGoal = null; this.target = null; this.mark.visible = false; this.controls.enabled = true;
   }
@@ -47,10 +49,19 @@ export class UnitControl {
     if (this.tools.mode !== "view" || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     const u = this.unitAt(e.clientX, e.clientY);
     this.press = { x: e.clientX, y: e.clientY, unit: u };
-    if (u) this.controls.enabled = false;                       // 갈매미를 잡은 누름은 시야 돌리기에 안 씀
+    if (u) { this.controls.enabled = false; this.press.lt = setTimeout(() => this.longPress(), LONG_MS); }   // 갈매미를 잡은 누름은 시야 돌리기에 안 씀
+  }
+  /** 길게 누름: 끌지 않아도 들어 올림(손가락 아래 칸을 내려놓을 자리로) */
+  longPress() {
+    const p = this.press; if (!p || !p.unit || this.held || this.tools.mode !== "view") return;
+    if (!this.getWorld().pickUpUnit(p.unit)) return;
+    this.held = p.unit; p.long = true; try { navigator.vibrate?.(12); } catch {}
+    this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요 · 옮길 곳으로 끌어서 떼세요`);
+    this.move({ clientX: p.lx ?? p.x, clientY: p.ly ?? p.y, isPrimary: true });
   }
   move(e) {
     const p = this.press; if (!p || !e.isPrimary) return;
+    p.lx = e.clientX; p.ly = e.clientY;
     if (p.unit && !this.held && Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_PX) {
       if (this.getWorld().pickUpUnit(p.unit)) { this.held = p.unit; this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요 · 내려놓을 곳에서 떼세요`); }
     }
@@ -70,7 +81,7 @@ export class UnitControl {
   }
   up(e) {
     const p = this.press; if (!p || !e.isPrimary) return;
-    this.press = null; this.controls.enabled = true; this.mark.visible = false;
+    clearTimeout(p.lt); this.press = null; this.controls.enabled = true; this.mark.visible = false;
     const w = this.getWorld();
     if (this.held) {
       const u = this.held, c = this.target || { x: Math.floor(u.heldFrom.x), z: Math.floor(u.heldFrom.z) }; this.held = null; this.target = null;
