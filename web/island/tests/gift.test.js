@@ -20,7 +20,7 @@ const OLD_ITEM_IDS = ["bottle", "pearl", "chair", "table", "bookshelf", "bed", "
 const fishPos = (u, id, season) => { const m = J.skillMult(u, "fish"), ws = FISH.map(f => J.inSeason(f, season) ? f.weight * (f.rarity === "common" ? 1 : m) : 0), tot = ws.reduce((a, b) => a + b, 0);
   let acc = 0; for (let i = 0; i < FISH.length; i++) { if (FISH[i].id === id) return (acc + ws[i] / 2) / tot; acc += ws[i]; } throw new Error(id); };
 const itemPos = (u, id, season) => { const w = { common: 50, rare: 30, epic: 15, legend: 5 }, m = J.skillMult(u, "fish");
-  const ws = ITEMS.map(i => J.inSeason(i, season) && !i.sky && !i.fest && !i.stamp && !i.gift ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0), tot = ws.reduce((a, b) => a + b, 0);
+  const ws = ITEMS.map(i => J.inSeason(i, season) && !i.sky && !i.fest && !i.stamp && !i.medal && !i.gift ? w[i.rarity] * (i.rarity === "common" ? 1 : m) : 0), tot = ws.reduce((a, b) => a + b, 0);
   let acc = 0; for (let i = 0; i < ITEMS.length; i++) { if (ITEMS[i].id === id) return (acc + ws[i] / 2) / tot; acc += ws[i]; } throw new Error(id); };
 /** 정해 둔 물고기(+ 물건)를 낚게 함. 쓴 난수 수를 calls에 셈 */
 function land(w, u, fishId, itemId = null) {
@@ -41,7 +41,7 @@ function econ() {
 test("카탈로그: 반짝이 9 + 밤 반짝이 4 + 도장 선물 8은 플레이어 몫 선물거리, 기존 줄·도장 가구는 그대로, 갈매미마다 계절마다 좋아하는 반짝이가 있음", () => {
   const gifts = ITEMS.filter(i => i.gift);
   assert.equal(gifts.length, 21); assert.deepEqual(ITEMS.slice(0, OLD_ITEM_IDS.length).map(i => i.id), OLD_ITEM_IDS, "앞부분 순서 그대로");
-  assert.ok(ITEMS.slice(OLD_ITEM_IDS.length).every(i => i.gift), "새 줄은 모두 맨 뒤");
+  assert.ok(ITEMS.slice(OLD_ITEM_IDS.length).every(i => i.gift || i.medal), "새 줄은 모두 맨 뒤(선물거리·금메달 기념 가구)");
   for (const i of gifts) {
     assert.ok(!i.furniture && !i.price && !("season" in i) && !("stamp" in i) && !i.sky && !i.fest, i.id);
     const d = B.giftDef(i.id); assert.equal(d.kind, "item"); assert.ok(B.GIFT_CAT_NAME[d.cat], `${i.name} 갈래`);

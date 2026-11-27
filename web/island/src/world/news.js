@@ -7,6 +7,7 @@ import { wishText } from "./wishes.js";
 import { FRIEND_STAGES } from "../units/mind.js";
 import { josa } from "../util.js";
 import { BOND_STAGES, GIFT_TIERS } from "./bond.js";
+import { MEDALS } from "./medals.js";
 
 export const NEWS_DAY_SECS = 600;       // 마을 하루 = 마을 시간(world.time) 600초
 export const NEWS_KEEP_DAYS = 7;        // 소식지는 최근 7일치만
@@ -22,7 +23,9 @@ const builtWeight = d => d.house ? 3 : d.deco || d.stairs || d.bridge || d.pier 
 const NEWS_MAKERS = {
   fish: ({ u, fish }) => ({ icon: "🎣", text: `${josa(u.name, "이", "가")} ${fish.season ? "제철 " : ""}${josa(fish.name, "을", "를")} 낚았어요!`, weight: (FISH_WEIGHT[fish.rarity] ?? 0) + (fish.season ? 2 : 0) }),
   // 수족관: 크기 기록(알림 줄에만) · 기증 · 기증 기념 선물
-  fishRecord: ({ u, fish, size, first }) => ({ icon: "📏", text: `${josa(u.name, "이", "가")} 낚은 ${fish.name} ${size}cm! ${first ? "첫 기록이에요" : "새 기록이에요"}`, weight: 0 }),
+  // 메달(medals.js): 메달이 오르면 "🥇 금메달"을 붙이고, 금메달이 처음 되면 소식지에도 실음(은·동·같은 메달의 새 기록은 알림 줄에만)
+  fishRecord: ({ u, fish, size, first, medal = 0, up = false }) => ({ icon: "📏", text: `${josa(u.name, "이", "가")} 낚은 ${fish.name} ${size}cm! ${up && medal >= 2 ? `${MEDALS[medal].icon} ${MEDALS[medal].name}` : first ? "첫 기록이에요" : `새 기록이에요${medal ? ` ${MEDALS[medal].icon}` : ""}`}`, weight: up && medal >= 3 ? 5 : 0 }),
+  medalGift: ({ item, gift }) => ({ icon: "🎁", text: `물고기 ${gift.label} 기념으로 ${josa(item.name, "을", "를")} 받았어요!`, weight: 6 }),
   donate: ({ u, fish, kept }) => ({ icon: "🐠", text: `${u ? `${josa(u.name, "이", "가")} ${kept ? "아껴 둔" : "처음 낚은"} ` : "아껴 둔 "}${josa(fish.name, "을", "를")} 수족관에 기증했어요!`, weight: 5 }),
   donateGift: ({ item, gift }) => ({ icon: "🎁", text: `수족관 기증 ${gift.label} 기념으로 ${josa(item.name, "을", "를")} 받았어요!`, weight: 6 }),
   // 갈매미 소지품: 스스로 시장에 판 것(알림 줄에만)

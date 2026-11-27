@@ -240,7 +240,8 @@ function mount(w) {
   world.on("beachcomb", e => say("beachcomb", e, ` (${e.u.name}의 소지품)`));
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
   // 수족관: 크기 기록(흔한 물고기의 첫 기록은 조용히) · 기증 · 기념 선물
-  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common") say("fishRecord", e, " (📖 도감)"); });
+  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common" || (e.up && e.medal >= 2)) say("fishRecord", e, " (📖 도감)"); if (e.up && e.medal >= 3) sfx.chime([988, 1175, 1568], 0.09, 0.15); });
+  world.on("medalGift", e => { say("medalGift", e, " (🏠 집 꾸미기에서 놓아요)"); sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
   world.on("donate", e => { say("donate", e, " (📖 도감)"); sfx.chime([784, 988, 1319], 0.09, 0.16); });
   world.on("donateGift", e => say("donateGift", e, " (🏠 집 꾸미기에서 놓아요)"));
   // 선물 반응 · 하트 단계가 올라 받은 답례(답례가 뒤에 와서 알림 줄에 남음)
