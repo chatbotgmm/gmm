@@ -47,6 +47,8 @@ import { installKeys } from "./ui/keys.js";
 import { createEdition, simSteps } from "./systems/edition.js";
 import { Sfx } from "./audio/sfx.js";
 import { SparkleView } from "./render/sparkles.js";
+import { DreamView } from "./render/dreamView.js";
+import { Dreams } from "./world/dreams.js";
 import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlerts.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { stepGridLines } from "./render/gridLines.js";
@@ -107,7 +109,7 @@ const overlay = document.getElementById("overlay");
 const spendFx = new SiteSpendFx({ camera, overlay, getWorld: () => world, getViews: () => buildingViews });   // 건축에서 금고 돈이 나감: 공사장 위 🪙−n·설계비·품삯 밀림 + 칩에서 날아가는 🪙
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
-let world, chunks, buildingViews, unitViews, lifeViews, sparkleView, worldRoot, waterDirty = false, lastWater = 0;
+let world, chunks, buildingViews, unitViews, lifeViews, sparkleView, dreams, dreamView, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
 // 효과음(Kenney RPG sounds CC0 + 합성). 화면 중심에서 가까운 일만 들림
 const sfx = new Sfx();
@@ -185,6 +187,7 @@ function mount(w) {
   lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
   sparkleView?.dispose(); sparkleView = new SparkleView(worldRoot);             // ✨ 반짝이(world.sparkles) · 주운 것은 위로 떠오르며 사라짐
   world.on("sparkleGone", s => { if (s.picked) sparkleView?.pop(s.id); });
+  dreams = new Dreams(world); dreamView?.dispose(); dreamView = new DreamView(worldRoot, overlay, () => buildingViews);   // 💤 꿈방울(밤에 자는 갈매미 위 · 톡 터뜨리면 잠꼬대, world/dreams.js)
   decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정) + 꾸미기로 놓은 덤불·꽃(world.decor)
   // 나무·바위·광석·지형지물: 불러올 때 다 그리고, 꾸미기로 심기·치우기·옮기기·파기를 하면 그 하나만 만들고 뺌(다시 열지 않아도 보임)
   moduleViews?.dispose(); const mv = moduleViews = new ModuleViews(worldRoot, world), lv = lifeViews, mw = world; moduleObjs = mv.objs; lv.attachModules(moduleObjs);
@@ -354,6 +357,14 @@ unitControl.onTapGround = (c, e) => {
   if (s && world.pickSparkle(s.id)) { hud.houseCard(null); powerRange.tap(null); noPower.tap(null); return; }   // 빈 땅을 누른 것처럼 열린 카드는 닫음
   const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b || null); powerRange.tap(b || null, tools.ray.ray, c); noPower.tap(powerRange.sel ? null : b || null); };
 const noPower = new NoPowerBadges({ camera, overlay, getWorld: () => world, getViews: () => buildingViews, card: document.getElementById("houseCard") });   // 전기 범위 밖 가로등·등불 건물 위 「전기 없음」 말풍선
+// 첫 탭 규칙(갈매미·땅보다 먼저): 💤 꿈방울을 누르면 터뜨려 잠꼬대 → ✨ 반짝이를 누르면 줍기. 아니면 unitControl이 하던 대로(갈매미 따라가기·땅 누르기)
+unitControl.onTapFirst = e => {
+  const dom = renderer.domElement, id = dreamView?.hit(e.clientX, e.clientY, camera, dom), u = id != null && world.units.find(o => o.unitId === id), r = u && dreams.pop(u);
+  if (r) { dreamView.pop(id, r.talk); hud.status(r.line, { kind: "info" }); sfx.chime([523, 659, 784], 0.12, 0.08); return true; }
+  const s = sparkleView?.hit(e.clientX, e.clientY, camera, dom);
+  if (s && world.pickSparkle(s.id)) { hud.houseCard(null); powerRange.tap(null); noPower.tap(null); return true; }
+  return false;
+};
 hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u);
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
@@ -450,6 +461,7 @@ function frameBody() {
   buildingViews.updateConstruction(dt, controls.target);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
+  dreams.step(); dreamView.update(dt, world, dreams, camera, innerWidth, innerHeight);
   water.userData.tick(simT); clouds.userData.tick(dt);
   if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
   unitControl.update(dt);                           // 따라가기
@@ -502,5 +514,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, edition, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

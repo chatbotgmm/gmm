@@ -80,6 +80,7 @@ export class UnitControl {
       return;
     }
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_PX) return;   // 시야를 돌린 드래그
+    if (this.onTapFirst?.(e)) { this.lastTap = null; return; }            // 첫 탭 규칙: 꿈방울·반짝이를 누르면 그쪽 먼저(갈매미 따라가기·땅 누르기보다 앞, main.js)
     // 두 번 누르기(더블클릭·더블탭, 0.35초 안·30픽셀 안): 그곳을 가까이 보기. 갈매미면 따라가며 가까이.
     const now = performance.now(), last = this.lastTap;
     if (last && now - last.t < 350 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 30) {

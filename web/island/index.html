@@ -208,6 +208,7 @@
   .emote.icon { font-size: var(--fs-icon); padding: calc(2*var(--u)) calc(7*var(--u)); border-radius: 50%; min-width: calc(22*var(--u)); text-align: center; }
   .emote.think { border-radius: var(--r-lg); }
   .emote.think::after { border: 0; width: calc(8*var(--u)); height: calc(8*var(--u)); border-radius: 50%; background: #fffdf8; bottom: calc(-11*var(--u)); margin-left: calc(-10*var(--u)); box-shadow: calc(6*var(--u)) calc(7*var(--u)) 0 calc(-2*var(--u)) #fffdf8; }
+  .emote.dreamTalk { white-space: normal; width: max-content; max-width: min(calc(100vw - 24px), calc(260*var(--u))); text-align: center; background: #f4f0ff; border-color: #6a58a855; } .emote.dreamTalk::after { border-top-color: #f4f0ff; }   /* 💤 잠꼬대(render/dreamView.js): 긴 줄은 접어서 화면 안에 */
   .roomBubbles { position: fixed; inset: 0; pointer-events: none; z-index: var(--z-roombubble); }   /* 방 터치판 위, 방 화면 판 아래 */
   .emote.pop { animation: bubblePop .28s cubic-bezier(.3, 1.6, .5, 1); }
   @keyframes bubblePop { from { transform: translate(-50%, calc(-100% - calc(4*var(--u)))) scale(calc(var(--s) * .4)); } to { transform: translate(-50%, calc(-100% - calc(10*var(--u)))) scale(var(--s)); } }

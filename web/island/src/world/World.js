@@ -16,6 +16,7 @@ import { seededRandom, josa } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
 import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
+import { dreamWishId } from "./dreams.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
 import * as RD from "./roads.js";
@@ -956,10 +957,10 @@ export class World {
     if (this.wishes.filter(x => x.id !== "festival").length >= 2 || !this.units.length) return null;   // 축제 소원은 2개 제한에 세지 않음
     const free = this.units.filter(u => !this.wishOf(u));
     for (let k = 0; k < 6 && free.length; k++) {
-      const u = free[Math.floor(this.wrnd() * free.length)];
+      const ru = free[Math.floor(this.wrnd() * free.length)], u = (k === 0 && free.find(o => dreamWishId(o, this.time))) || ru;   // 꿈속 소원(dreams.js)을 본 갈매미가 먼저 · 난수 쓰는 순서는 그대로
       const cands = WISHES.filter(d => !this.wishes.some(x => x.id === d.id) && d.ok(this, u));
       if (!cands.length) continue;
-      const d = cands[Math.floor(this.wrnd() * cands.length)];
+      const rd = cands[Math.floor(this.wrnd() * cands.length)], d = cands.find(c => c.id === dreamWishId(u, this.time)) || rd; u.dreamWish = null;
       const wish = { id: d.id, unitId: u.unitId, base: d.base ? d.base(this, u) : this.units.length, age: 0 };
       this.wishes.push(wish); emote(u, `💭 ${d.icon}`, 3); this.emit("wish", { wish, u }); return wish;
     }
