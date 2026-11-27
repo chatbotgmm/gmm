@@ -71,7 +71,7 @@ test("밖에서 자다가 기력이 차서 깨면 추우니 녹이러 감 · 아
   let sheltered = null; for (let t = 0; t < 200 && !sheltered; t += 0.1) { u.full = 90; w.update(0.1); if (u.insideBuildingId) sheltered = w.buildings.get(u.insideBuildingId); }
   assert.ok(sheltered && sheltered.defId === "bank", "밖에서 자다가 깨어 은행으로");
   u.needs.energy = 10; let warmAt = -1, leftAt = -1, eLeft = 0;                // 녹이는 동안 지친 채
-  for (let t = 0; t < 200 && leftAt < 0; t += 0.1) { u.full = 90; w.update(0.1); if (warmAt < 0 && u.bodyT >= CLIM.WARM_DONE) warmAt = t; if (!u.insideBuildingId) { leftAt = t; eLeft = u.needs.energy; } }
+  for (let t = 0; t < 900 && leftAt < 0; t += 0.1) { u.full = 90; w.update(0.1); if (warmAt < 0 && u.bodyT >= CLIM.WARM_DONE) warmAt = t; if (!u.insideBuildingId) { leftAt = t; eLeft = u.needs.energy; } }
   assert.ok(warmAt >= 0 && leftAt > warmAt, `몸이 녹은 뒤(${warmAt.toFixed(1)}초)에도 더 쉬다 나옴(${leftAt.toFixed(1)}초)`);
   assert.ok(eLeft >= CH.WAKE_AT, `기력이 가득 차서 나옴(${eLeft.toFixed(1)})`); assert.equal(w.isNight, true, "밤인데도");
 });
@@ -87,11 +87,11 @@ test("검토 수정: 집 문까지 길이 끊긴 갈매미도 추우면 가까�
 test("검토 수정: 녹일 곳이 하나도 없으면 밖에서 자던 갈매미가 두 프레임마다 깼다 잤다 하지 않고 그대로 잠", () => {
   const { w, u } = winterVillage(9, "clear", 0); w.instantBuild = false;
   for (const b of w.buildings.values()) { b.owner = null; b.hits = 0; } u.home = null;   // 다 지은 집·공공건물이 없는 겨울 마을
-  w.isNight = true; u.state = "Sleep"; u.timer = 15; u.bodyT = 38.95; u.needs.energy = 15;
-  let slept = 0, eWake = -1;                                                   // 기력이 가득 찰 때까지(밖 잠 초당 +6 → 15→99.5에 약 14초) 한 번도 깨지 않음
-  for (let t = 0; t < 60 && eWake < 0; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sleep") slept += 0.1; else eWake = u.needs.energy; }
+  w.isNight = true; u.state = "Sleep"; u.timer = 15; u.bodyT = 38.95; u.needs.energy = 95;
+  let slept = 0, eWake = -1;                                                   // 기력이 가득 찰 때까지(밖 잠 초당 +0.08 → 95→99.5에 약 56초) 한 번도 깨지 않음
+  for (let t = 0; t < 120 && eWake < 0; t += 0.1) { u.full = 90; w.update(0.1); if (u.state === "Sleep") slept += 0.1; else eWake = u.needs.energy; }
   assert.ok(u.bodyT <= CLIM.COLD_AT, `추운 채로(${u.bodyT.toFixed(2)})`);
-  assert.ok(eWake >= CH.WAKE_AT, `기력이 가득 차서야 깸(${eWake.toFixed(1)})`); assert.ok(slept > (CH.WAKE_AT - 15) / 6 - 1, `잔 시간 ${slept.toFixed(1)}초`);
+  assert.ok(eWake >= CH.WAKE_AT, `기력이 가득 차서야 깸(${eWake.toFixed(1)})`); assert.ok(slept > (CH.WAKE_AT - 95) / 0.08 - 1, `잔 시간 ${slept.toFixed(1)}초`);
 });
 
 test("저장·불러오기: 체온·추웠던 횟수 · 예전 저장(칸 없음)은 40.0 · 0", () => {

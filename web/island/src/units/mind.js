@@ -19,6 +19,11 @@ export function initMind(u, rnd) {
 // 쉬기는 피곤할 때만: 기력이 REST_BELOW 아래로 내려가야 쉬기를 고를 수 있고(낮을수록 자주), TIRED 아래면 바로 쉼. 한 번 쉬면 REST_UNTIL까지 차면 일어남.
 // 쉬기로 고른 쉼은 그냥 서 있을 때(+0.6/초)보다 빨리 참: 서서 +REST_GAIN, 벤치 +BENCH_GAIN(초당, 더해지는 값).
 export const REST_BELOW = 50, TIRED = 30, REST_UNTIL = 80, REST_GAIN = 1.4, BENCH_GAIN = 2.4;
+/** 잠·건물 안 기력 회복(초당 전체 값, 침대 > 건물 안 > 밖): out = 밖에서 잠 · inside = 건물 안(자든 깨어 있든: 집 구경·몸 녹이기·앓기도) · bed = 집 침대에서(건물 안 값 포함).
+ *  잠은 기력이 가득(chrono.js WAKE_AT)하거나 배고파야 깸. 예전(밖 6 · 안 3 · 침대 6)엔 한 번 잠이 약 25초라 밤에 자는 갈매미가 거의 안 보였음 →
+ *  밖 기준 1/75로 낮춤: 기력 25 → 99.5(74.5)에 밖 931초 · 안 621초 · 침대 466초. 넓은 섬 초반(음식이 모자람)엔 대개 배고파서 먼저 깨고(한 번 약 90초),
+ *  먹고 다시 잠. 시뮬(넓은 섬 3 × 난수 3, 낮1h·밤1h ×2, 기본·불씨·그림자): 아침형의 밤 잠 1.5% → 18.2%, 야행성의 낮 4.1% → 35.0%, 맞는 시간 잠 1.5% 아래 */
+export const SLEEP_GAIN = Object.freeze({ out: 0.08, inside: 0.12, bed: 0.16 });
 /** 일 사이 숨 고르기(초): 일을 마치거나 끊긴 뒤 다음 일을 고르기 전의 짧은 멈춤. 예전 1~4초 → 0.3~1초 */
 export const pauseSecs = rnd => 0.3 + rnd() * 0.7;
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
@@ -28,7 +33,7 @@ export function tickNeeds(u, dt, state, inside) {
   const n = u.needs; if (!n) return;
   // 기력(= 100 − 피로도): 일하면 피로가 쌓이고(기력 −0.55/초), 앉아 쉬거나 자면 풀림(벤치·침대는 unitBrain에서 더)
   const working = ["Chop", "Mine", "Build", "Farm", "Trade", "Fish", "Improve"].includes(state), resting = state === "Idle" || state === "Sleep" || state === "Sit";
-  n.energy = clamp(n.energy + dt * (state === "Sleep" ? 6 : inside ? 3 : resting ? 0.6 : working ? -0.55 : -0.15));
+  n.energy = clamp(n.energy + dt * (state === "Sleep" ? SLEEP_GAIN.out : inside ? SLEEP_GAIN.inside : resting ? 0.6 : working ? -0.55 : -0.15));
   n.social = clamp(n.social + dt * (inside ? 0.8 : -0.12));
   n.fun = clamp(n.fun + dt * (state === "Zoomies" || state === "Swim" ? 4 : state === "Fish" ? 0.8 : -0.1));
 }
