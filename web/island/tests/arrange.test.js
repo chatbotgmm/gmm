@@ -90,3 +90,12 @@ test("방 안 갈매미 쓰기와 맞음: 책장 앞 칸(서서 읽는 자리)·
     }
   }
 });
+
+test("원룸: 갈매미가 사는 가구 10가지는 어느 차례로 사도 모두 놓임(깔개 전 탁자가 가운데를 막아 스탠드·책장이 창고로 가던 것)", () => {
+  for (let s = 1; s <= 40; s++) {
+    const order = ["chair", "table", ...shuffle(F.WANT_ORDER.filter(x => x !== "chair" && x !== "table"), lcg(s * 977 + 5))];
+    const { b, left } = furnish("house", order);
+    assert.equal(left, 0, `원룸 ${order.join(",")}: 못 놓은 가구 ${left}`);
+    checkLevel(F.levels(b)[0], `원룸/${order.join(",")}`);
+  }
+});

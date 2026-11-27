@@ -110,6 +110,14 @@ function levelOrder(ls, id) {
   const k = arrKind(id), want = L => k === "bed" || k === "wardrobe" ? L.role === "bedroom" : k === "oven" ? isKitchen(L) : false;
   return ls.map((L, i) => i).sort((a, c) => want(ls[c]) - want(ls[a]) || a - c);
 }
+/** 층 L의 자동 배치 가구를 모두 다시 놓아 봄(하나라도 못 놓으면 원래대로 두고 false). 깔개가 아직 없으면 탁자가 방 한가운데로 나와 좁은 방이 막히므로
+ *  깔개 자리를 잡아 둔 셈 치고 한 번 더(다 산 방과 같은 꼴 — 원룸에서 차례 탓에 스탠드·책장이 창고로 가던 것) */
+function relayAll(L, auto) {
+  if (!arrRelayout(L, auto, { keepIfFail: true }).length) return true;
+  if (L.furniture.some(x => FURNITURE[x.id].layer === "floor")) return false;
+  const ghost = { id: "rug", x: 0, z: 0, rot: 0 }; L.furniture.push(ghost);
+  const ok = !arrRelayout(L, [ghost, ...auto], { keepIfFail: true }).length; L.furniture = L.furniture.filter(x => x !== ghost); return ok;
+}
 /** 알아서 놓기(갈매미가 사 오거나 건진 가구): 층마다 자동 배치 가구를 새 가구와 함께 다시 생각해 놓아 보고(arrange.js — 벽을 등지고, 앞을 비우고,
  *  문에서 걸어갈 길을 남기고, 의자는 탁자를 봄), 안 되면 지금 배치에 새 가구 하나만 끼워 봄. 어느 층에도 자리가 없으면 false(호출한 쪽이 창고로) */
 export function autoPlace(world, b, id) {
@@ -118,7 +126,7 @@ export function autoPlace(world, b, id) {
   for (const li of levelOrder(ls, id)) {
     const L = ls[li], o = { id, x: 0, z: 0, rot: 0 };
     L.furniture.push(o);
-    if (!arrRelayout(L, L.furniture.filter(x => !x.hand), { keepIfFail: true }).length) { world?.emit?.("furniture", { b }); return true; }
+    if (relayAll(L, L.furniture.filter(x => !x.hand))) { world?.emit?.("furniture", { b }); return true; }
     L.furniture.pop();
     if (arrPlaceOne(L, o)) { world?.emit?.("furniture", { b }); return true; }
   }
@@ -139,7 +147,7 @@ export function relayout(world, b) {
   const auto = [...was.keys()], home = new Map(auto.map(o => [o, levelOrder(ls, o.id)[0]]));
   for (const L of ls) L.furniture = L.furniture.filter(o => o.hand);
   const left = [];
-  ls.forEach((L, li) => { const mine = auto.filter(o => home.get(o) === li); L.furniture.push(...mine); left.push(...arrRelayout(L, mine)); });
+  ls.forEach((L, li) => { const mine = auto.filter(o => home.get(o) === li); L.furniture.push(...mine); if (!relayAll(L, mine)) left.push(...arrRelayout(L, mine)); });
   for (const o of left) {
     const to = levelOrder(ls, o.id).filter(i => i !== home.get(o)).find(i => arrPlaceOne(ls[i], o));
     if (to === undefined) { stashed.push(o.id); it.stash[o.id] = (it.stash[o.id] || 0) + 1; for (const u of world?.units || []) if (u.useFurni === o) u.useFurni = null; }
