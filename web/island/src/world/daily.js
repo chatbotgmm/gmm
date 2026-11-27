@@ -7,10 +7,12 @@ import { seededRandom } from "../util.js";
 import { PAVED } from "./roads.js";
 import { giftables } from "./bond.js";
 import { rankNeed } from "./rank.js";
+import { available } from "./furniture.js";
 
 export const DAILY_COUNT = 3;            // 하루에 고르는 부탁 수
 
-const doneHouse = w => [...w.buildings.values()].some(b => BUILDINGS[b.defId].house && w.isDone(b));
+/** 손으로 놓을 가구가 있는 다 지은 집이 있나(그 집 창고 또는 마을 가방) — 없으면 「가구 놓기」 부탁은 못 들어주니 고르지 않음(편의성 점검 10번) */
+const furniReady = w => [...w.buildings.values()].some(b => BUILDINGS[b.defId].house && w.isDone(b) && Object.keys(available(w, b)).length > 0);
 const canFish = w => w.spots.length > 0 && w.units.some(u => u.job === "fisher");
 const seasonFish = w => FISH.filter(f => f.season && f.season === w.season);
 /** 지금 지을 수 있는 장식(건설 메뉴에 있고, 등급·계절이 맞고, 지어 줄 갈매미가 있음) */
@@ -29,7 +31,7 @@ export const DAILY_POOL = [
   { id: "deco", icon: "🏮", need: 1, text: w => `장식 하나 짓기(${decoNow(w).slice(0, 3).map(d => d.name).join("·")} 등)`,
     ok: w => decoNow(w).length > 0, hit: (ev, b, w) => (ev === "buildingDone" || (ev === "buildingAdded" && w.isDone(b))) && BUILDINGS[b?.defId]?.deco ? 1 : 0 },
   { id: "furniture", icon: "🛋", need: 1, text: () => "아무 집에나 가구 하나 놓기",
-    ok: doneHouse, hit: (ev, e) => ev === "furniture" && e?.kind === "place" ? 1 : 0 },
+    ok: furniReady, hit: (ev, e) => ev === "furniture" && e?.kind === "place" ? 1 : 0 },
   { id: "summon", icon: "🥚", need: 1, text: () => "새 갈매미 한 마리 부르기",
     ok: w => w.units.length < Math.min(4, UNITS.length) && (w.summonInfo?.().can ?? true), hit: ev => ev === "unitAdded" ? 1 : 0 },
   { id: "seasonFish", icon: "🎣", need: 1, group: "fish", text: w => `제철 물고기 한 마리 낚기(${seasonFish(w).map(f => f.name).join("·")})`,

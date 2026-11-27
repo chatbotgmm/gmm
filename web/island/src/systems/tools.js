@@ -10,6 +10,7 @@ import { terrainHeight } from "../world/terrain.js";
 import { findPath } from "../world/pathfinding.js";
 import { frontCells } from "../world/customize.js";
 import { pressKind, tapTool } from "./pressKind.js";
+import { nearestSpot, PREPLACE_R, SNAP_R } from "./buildSpot.js";
 import { natureAction, natureHover, strokeText, undoText, redoText } from "../ui/natureView.js";
 const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
@@ -45,7 +46,7 @@ export class Tools {
       if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); return; }
       if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") { e.preventDefault(); this.redo(); return; }
       if (e.code === "KeyR") this.rotate(); if (e.code === "Enter" && this.plan) this.confirmBuild();
-      if (e.code === "Escape") { if (this.plan) this.clearPlan(); else this.setMode("view"); }   // Esc: 정해 둔 자리 취소 → 한 번 더 누르면 도구 끄기
+      if (e.code === "Escape") { if (this.plan && !this.plan.auto) this.clearPlan(); else this.setMode("view"); }   // Esc: 정해 둔 자리 취소 → 한 번 더 누르면 도구 끄기(미리 놓아 둔 고스트뿐이면 바로 끄기 — 나가기 Esc 한 번은 그대로)
       if (e.code === "BracketLeft") this.setBrush(this.brush - 2); if (e.code === "BracketRight") this.setBrush(this.brush + 2);
       if (e.code === "Space") { e.preventDefault(); if (!this.spaceHeld) { this.spaceHeld = true; this.cancelStroke(); this.applyControls(); } }   // 스페이스 누른 채 드래그 = 화면 돌리기
     });
@@ -55,13 +56,29 @@ export class Tools {
 
   setMode(mode, arg = null) {
     this.commitNature?.();
+    const near = this.mode === "build" && this.plan && !this.plan.bridge ? { x: this.plan.x, z: this.plan.z } : null;   // 건설 중 다른 건물로 바꾸면 정해 둔 자리 둘레에서 다시 찾음
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null; this.plan = null;
     this.heightOp = mode === "height" ? (arg || "raise") : null; this.shapeStart = null; this.commitStroke?.();
     this.natArg = mode === "nature" ? (arg || "auto") : null; this.natLast = null;
     const na = this.natAct; if (na?.kind === "move") this.rot = this.world.landmark(na.what)?.rot || 0;   // 옮기기: 지금 방향에서 시작(↻·R로 돌림)
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
-    this.onStatus(""); this.refresh(); this.onMode?.(mode, arg);
+    this.onStatus(""); if (mode === "build") this.prePlace(near); this.refresh(); this.onMode?.(mode, arg);
+  }
+  /** 지금 건물을 (x, z)를 누른 칸으로 놓을 수 있나 */
+  spotOk(x, z) { const def = BUILDINGS[this.buildId]; if (!def || !this.world.grid.inBounds(x, z)) return false; const a = anchorFor(def, x, z, this.rot); return this.world.check(this.buildId, a.x, a.z, this.rot).ok; }
+  /** 처음 고스트(편의성 점검 4번): 화면 가운데(보는 점 = controls.target)에서 가장 가까운 빈 자리에 미리 놓음 → 땅을 안 눌러도 🔨 건설.
+   *  near = 건물만 바꿨을 때 앞서 정한 자리. 다리(두 칸을 눌러 정함)·빈 자리가 없으면 예전처럼 비워 둠 */
+  prePlace(near = null) {
+    const def = BUILDINGS[this.buildId]; if (!def || def.bridge) return;
+    const t = this.controls?.target, c = near || (t ? { x: Math.floor(toGridX(t.x)), z: Math.floor(toGridZ(t.z)) } : null); if (!c) return;
+    const s = nearestSpot((x, z) => this.spotOk(x, z), c.x, c.z, PREPLACE_R); if (s) this.plan = { x: s.x, z: s.z, auto: true };
+  }
+  /** 고스트 가운데의 화면 좌표(CSS px) — 확인 카드가 고스트를 가리는지 볼 때(hud.js). 안 보이면 null */
+  planScreen() {
+    if (!this.ghost.visible) return null; const r = this.dom.getBoundingClientRect(), p = this.ghost.position.clone(); p.y += this.ghostBox.position.y;
+    p.project(this.camera); if (p.z > 1) return null;
+    return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height };
   }
   /** 도구가 손가락·왼쪽 버튼을 쓰는지(✋ 화면 이동이나 스페이스를 누르면 잠시 화면 조작). */
   get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld && !this.cross; }   // 십자선 모드: 한 손가락은 화면 옮기기, 칠하기는 버튼으로
@@ -314,7 +331,14 @@ export class Tools {
         else { if (Math.abs(h.x - p.x) >= Math.abs(h.z - p.z)) { p.x1 = h.x; p.z1 = p.z; } else { p.x1 = p.x; p.z1 = h.z; } p.done = true; }
         this.refresh(); return;
       }
-      this.plan = { x: h.x, z: h.z }; this.refresh(); return;
+      // 못 짓는 자리(나무·건물·물 위)를 누름: 2칸 안의 빈 자리로 살짝 옮겨 줌(헛탭 줄이기) · 없으면 빨간 고스트 + 까닭 크게 + 카드 흔들기(편의성 점검 4번)
+      if (this.spotOk(h.x, h.z)) { this.plan = { x: h.x, z: h.z }; this.refresh(); return; }
+      const s = nearestSpot((x, z) => this.spotOk(x, z), h.x, h.z, SNAP_R);
+      if (s) { this.plan = { x: s.x, z: s.z, snapped: true }; this.refresh(); this.buzz(); return; }
+      this.plan = { x: h.x, z: h.z }; this.refresh();
+      const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot); this.onBadSpot?.(this.world.check(this.buildId, a.x, a.z, this.rot).reason);
+      if (TOOLS_TOUCH && navigator.vibrate && document.documentElement.dataset.vibe !== "off") navigator.vibrate([18, 50, 18]);
+      return;
     } else if (this.mode === "nature") {
       const a = this.natAct;
       if (a.kind === "move") { this.plan = { x: h.x, z: h.z, move: a.what }; this.natLast = null; this.refresh(); return; }   // 옮기기는 자리만 정함 → 🚚 옮기기(또는 Enter)
@@ -394,7 +418,9 @@ export class Tools {
       this.ghostFloor.scale.set(def.footprint.w, def.footprint.d, 1); this.ghostFloor.position.y = 0.04;
       this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
       this.doorMark.visible = true; this.doorMark.position.set(toWorldX(r.door.x + 0.5), y + 0.35, toWorldZ(r.door.z + 0.5));
-      this.onStatus(!r.ok ? r.reason : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 톡 누르면 옮김 · 끌면 화면 이동 · ↻ 돌리기)` : `${def.name} · 톡 눌러서 자리 정하기 · 끌면 화면 이동 · R 돌리기`);
+      this.onStatus(!r.ok ? r.reason : plan?.auto ? `${def.name}: 화면 가운데 가까운 빈 자리에 놓아 봤어요 · 🔨 건설을 누르면 지어요 (다른 곳을 톡 누르면 옮김 · ↻ 돌리기)`
+        : plan?.snapped ? `${def.name}: 누른 곳은 못 지어서 바로 옆 빈 자리로 옮겼어요 · 🔨 건설을 누르면 지어요`
+        : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 톡 누르면 옮김 · 끌면 화면 이동 · ↻ 돌리기)` : `${def.name} · 톡 눌러서 자리 정하기 · 끌면 화면 이동 · R 돌리기`);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);

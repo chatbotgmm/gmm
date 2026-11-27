@@ -19,6 +19,7 @@ import { medalCounts } from "../world/medals.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
 import { sumHead, moreBox, valueRows, factRow, fmtNum } from "./hudParts.js";
+import { wishBuildId, bldFinderRows, bldFinderHtml } from "./qolViews.js";
 
 const avEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const avMore = (k, t, h, o) => moreBox(k, t, h, o);
@@ -74,7 +75,9 @@ export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
       : `<p class="dim">저장고가 없어요. 🪚 목수가 있으면 🏠 건설에서 <b>저장고</b>를 지을 수 있어요.</p>`);
   const ranksH = `<table class="tbl">${RANKS.slice(1).map((r, i) => `<tr${w.rank >= i + 1 ? "" : ` class="zero"`}><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} (${r.need}점)</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
 
+  const finder = bldFinderRows(w);                                                 // 🔎 건물 찾기(편의성 점검 7번): 줄을 누르면 그 건물로 + 카드
   return head + facts +
+    more("town.find", "🔎 건물 찾기", bldFinderHtml(finder), { note: `${finder.length}채` }) +
     more("town.score", "📊 점수 내역", scoreH, { note: `${fmtNum(score)}점` }) +
     (nxt ? more("town.next", "🔓 다음 등급이 되면", nextH, { note: `${nxt.unlock.length + 1}가지` }) : "") +
     more("town.fest", "🎪 계절 축제", festH, { note: fNote }) +
@@ -125,7 +128,10 @@ export function dailyHead(w) {
 /** 갈매미의 소원 목록(짧게) + 들어주는 법(힌트·축하금)은 접기 */
 export function wishListHtml(w, { more = avMore } = {}) {
   const list = w.wishes.map(x => ({ d: WISH_BY_ID[x.id], u: w.units.find(o => o.unitId === x.unitId), x })).filter(r => r.d);
-  const rows = list.map(({ d, u, x }) => `<li><span class="ico">${d.icon}</span><span><b>${avEsc(u?.name ?? "")}</b>: ${avEsc(wishText(d, w, u, x))}</span></li>`).join("");
+  // 줄을 누르면 그 갈매미를 따라감(data-wu) · 건물을 바라는 소원이면 「🔨 지으러 가기」(data-wbuild: 그 건물을 고른 채 건설 모드) — 편의성 점검 6번
+  const rows = list.map(({ d, u, x }) => { const bid = wishBuildId(w, x);
+    return `<li${u ? ` class="wgo" data-wu="${u.unitId}" role="button" tabindex="0" aria-label="${avEsc(u.name)} 따라가기"` : ""}><span class="ico">${d.icon}</span><span><b>${avEsc(u?.name ?? "")}</b>: ${avEsc(wishText(d, w, u, x))}</span>` +
+      `${bid ? `<button class="wbuild" data-wbuild="${bid}">🔨 지으러 가기</button>` : ""}</li>`; }).join("");
   const hint = (list.length ? `<table class="tbl">${list.map(({ d, u }) => `<tr><td>${d.icon} ${avEsc(u?.name ?? "")}</td><td>${avEsc(d.hint)}</td></tr>`).join("")}</table>` : "") +
     `<p class="dim">갈매미가 가끔 마을에 바라는 것을 말해요. 들어주면 기뻐하고 ${w.economy ? `공식은행이 축하금 🪙${WISH_REWARD}을 줘요` : "배가 조금 불러요"}.</p>`;
   return `<h4 class="av-h">💭 갈매미의 소원 <span class="dim">이룬 소원 ${w.wishDone}개</span></h4>` +

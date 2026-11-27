@@ -789,6 +789,34 @@
   #cloudAsk .ca-mine { box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-accent-strong); } #cloudAsk .ca-gone { margin: var(--s-2) 0; font-size: var(--fs-title); font-weight: 700; color: var(--c-danger-ink); }
   #cloudAsk .ca-foot { margin: var(--s-2) 0 0; font-size: var(--fs-sm); color: var(--c-ink-2); }
   #cloudAsk .lbtns { display: flex; gap: var(--s-2); justify-content: flex-end; flex-wrap: wrap; margin-top: calc(14*var(--u)); } #cloudAsk .lbtns button { min-height: var(--hit); padding: calc(8*var(--u)) calc(14*var(--u)); }
+  /* ===== 편의성 점검 2묶음(4·5·6·7·10·11·12) ===== */
+  /* 4: 고스트가 아래 확인 카드에 가리면 카드를 위(칩 아래)로 · 못 짓는 자리를 누르면 카드를 한 번 흔듦 */
+  #confirm[data-side="top"] { bottom: auto; top: calc(var(--safe-t) + var(--chips-h) + calc(56*var(--u))); }   /* 칩 아래 + 알림 한 줄 자리(알림이 카드 단추를 덮지 않게) */
+  #confirm.shake { animation: cfShake .42s var(--ease) 1; } @keyframes cfShake { 20%, 60% { translate: calc(-6*var(--u)) 0; } 40%, 80% { translate: calc(6*var(--u)) 0; } }
+  @media (prefers-reduced-motion: reduce) { #confirm.shake { animation: none; box-shadow: 0 0 0 calc(3*var(--u)) var(--c-danger); } }
+  html[data-motion="reduce"] #confirm.shake { animation: none; box-shadow: 0 0 0 calc(3*var(--u)) var(--c-danger); }
+  /* 5: 대상이 있는 알림은 눌러서 그곳으로(›) */
+  #msg[data-go] { pointer-events: auto; cursor: pointer; } #msg[data-go] .t-txt::after { content: " ›"; font-weight: 700; color: var(--c-ink-2); }
+  .nlog li.go { cursor: pointer; } .nlog li.go:hover { background: rgba(0,0,0,.04); } .nlog .lgo { margin-left: auto; padding: 0 calc(6*var(--u)); font-style: normal; font-weight: 700; color: var(--c-ink-2); }
+  /* 6: 소원 줄 = 그 갈매미 따라가기 · 🔨 지으러 가기 */
+  .av-wish li.wgo { cursor: pointer; flex-wrap: wrap; border-radius: var(--r-sm); } .av-wish li.wgo:hover { background: rgba(0,0,0,.04); }
+  .av-wish li.wgo > span:nth-child(2)::after { content: " ›"; color: var(--c-ink-2); font-weight: 700; }
+  .av-wish .wbuild { margin-left: auto; min-height: var(--hit-sm); padding: calc(4*var(--u)) calc(10*var(--u)); font-size: var(--fs-sm); font-weight: 600; }
+  /* 7: 건물 찾기 */
+  .bf-h { margin: var(--s-2) 0 calc(2*var(--u)); font-size: var(--fs-sm); color: var(--c-ink-2); } .bf-list { display: flex; flex-direction: column; gap: calc(2*var(--u)); }
+  .bf-row { display: flex; gap: var(--s-2); align-items: center; justify-content: space-between; min-height: var(--hit-sm); text-align: left; padding: calc(4*var(--u)) calc(10*var(--u)); font-size: var(--fs-body); }
+  .bf-row { justify-content: flex-start; } .bf-row .nm { font-weight: 600; margin-right: auto; } .bf-row .act { color: var(--c-ink-2); font-size: var(--fs-cap); } .bf-row::after { content: "›"; color: var(--c-ink-2); font-weight: 700; }
+  /* 10: 가구 없는 집 카드 */
+  #houseCard .fg-line { font-size: var(--fs-sm); } #houseCard .fg-sub { font-size: var(--fs-cap); } #houseCard .fg-btns { display: flex; gap: var(--s-2); flex-wrap: wrap; } #houseCard .fg-btns button { min-height: var(--hit-sm); font-size: var(--fs-sm); }
+  /* 11: 화면 밖 ✨ 반짝이 방향 표시(가장자리) */
+  #sparkEdge { position: fixed; inset: 0; pointer-events: none; z-index: calc(var(--z-hud) - 1); } #sparkEdge[hidden] { display: none; }
+  #sparkEdge button { position: absolute; width: calc(40*var(--u)); height: calc(40*var(--u)); min-width: 0; min-height: 0; margin: calc(-20*var(--u)) 0 0 calc(-20*var(--u)); padding: 0; border-radius: 50%; pointer-events: auto; touch-action: manipulation;
+    background: rgba(255,248,220,.92); box-shadow: var(--e-1); font-size: calc(17*var(--u)); line-height: 1; display: grid; place-items: center; }
+  #sparkEdge button i { position: absolute; inset: 0; transform: rotate(var(--deg)); pointer-events: none; }
+  #sparkEdge button i::after { content: ""; position: absolute; right: calc(-7*var(--u)); top: 50%; margin-top: calc(-6*var(--u)); border: calc(6*var(--u)) solid transparent; border-left: calc(8*var(--u)) solid #c98a12; border-right: 0; }
+  body[data-mode="edit"] #sparkEdge, body.inroom #sparkEdge { display: none; }
+  /* 12: ☰ 메뉴 빠른 켜고 끄기 */
+  .mquick { display: flex; gap: var(--s-2); } .mquick button { flex: 1 1 0; text-align: center !important; }
 </style>
 </head>
 <body>
@@ -816,7 +844,7 @@
       <section class="agroup"><h5>🏘 마을 살림</h5><div class="agrid"><button data-app="town"><span>🏅</span>마을</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button><button data-app="build" hidden><span>🏠</span>건설</button></div></section>
       <section class="agroup"><h5>⚙ 갈매폰</h5><div class="agrid"><button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button></div></section>
     </div></div>
-    <div id="pageMenu" class="page" hidden><div class="mlist"><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="log">🔔 지난 알림</button><button data-go="overview">🏝 마을 전체 보기</button><button data-go="home">📱 갈매폰 열기</button></div></div>
+    <div id="pageMenu" class="page" hidden><div class="mlist"><div class="mquick" role="group" aria-label="빠른 켜고 끄기"><button id="qSound" aria-pressed="true">🔊 소리: 켬</button><button id="qSpeed" hidden>⏩ 배속 ×1</button></div><button data-go="close" class="go">▶ 계속하기</button><button data-go="settings">⚙ 설정</button><button data-go="files">💾 저장 · 불러오기</button><button data-go="help">❓ 도움말 · 단축키</button><button data-go="log">🔔 지난 알림</button><button data-go="overview">🏝 마을 전체 보기</button><button data-go="home">📱 갈매폰 열기</button></div></div>
     <div id="pageDex" class="page" hidden><div id="dexBody"></div></div>
     <div id="pageGulls" class="page" hidden><div id="units"></div></div>
     <div id="pageBank" class="page" hidden><div id="bankBody"></div></div>
@@ -870,6 +898,7 @@
 </div>
 <div id="confirm" hidden role="group" aria-label="건설 확인"><div id="cfInfo" aria-live="polite" tabindex="0" role="button" aria-expanded="false" aria-label="설계비·재료 자세히"></div><div class="cfBtns"><button id="cfCancel">✕ 취소</button><button id="cfRot">↻ 돌리기</button><button id="cfBuild" class="go">🔨 건설</button></div></div>
 <div id="overlay"></div>
+<div id="sparkEdge" hidden aria-label="화면 밖 반짝이"></div>
 <div id="minimap" hidden role="region" aria-label="미니맵: 누르거나 끌면 그곳으로"><canvas></canvas></div>
 <button id="homeBtn" hidden data-tip="마을 전체 보기: 따라가기를 풀고 처음처럼 섬 전체가 보이게">🏝 전체 보기</button><!-- 가까이 보거나 따라갈 때만 보임(main.js) -->
 <div id="cross" hidden></div><button id="crossGo" hidden>🖌 누르는 동안 칠하기</button>
