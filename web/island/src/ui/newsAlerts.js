@@ -36,7 +36,7 @@ export const ALERTS = {
   upgraded: { kind: "good", snd: "bell" },
 };
 /** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수는 소식지만 */
-export const SILENT = ["fee", "clinicVisit"];
+export const SILENT = ["fee", "clinicVisit", "monIssue", "monRate", "monGift", "inflation", "deflation", "priceStable", "capFull", "monAuto", "monStart"];   // 중앙은행 소식은 소식지에만(알림 줄 연결은 화면 단계에서)
 
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */
 export function batchText(ev, list) {

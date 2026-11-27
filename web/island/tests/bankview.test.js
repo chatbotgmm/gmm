@@ -13,6 +13,7 @@ function town() {
   for (const n of ["목수", "미니", "황금"]) w.addUnitByName(n);
   w.bank.vault = 1e6; const s = spotFor(w, "market"); assert.ok(w.placeBuilding("market", s[0], s[1], 0).ok); w.instantBuild = false;
   Object.assign(w.bank, { vault: 100, fees: 0, wages: 0, taxed: 0, returned: 0, ledger: [] });
+  w.setRate(0);                                                                     // 중앙은행 금리 0%: 계약금 비율 40%(예전 값)
   return w;
 }
 const details = html => [...html.matchAll(/<details class="more" data-more="([^"]+)"( open)?/g)].map(m => [m[1], !!m[2]]);

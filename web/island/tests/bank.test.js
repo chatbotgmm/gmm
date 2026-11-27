@@ -15,9 +15,9 @@ const spotFor = (w, d) => {
   finally { w.bank.vault = v; }
 };
 const place = (w, d) => { const s = spotFor(w, d); return w.placeBuilding(d, s[0], s[1], 0); };
-/** 넓은 섬 + 목수·미니(농부)·황금(상인) + 다 지은 시장. 금고는 vault로 맞춤 */
+/** 넓은 섬 + 목수·미니(농부)·황금(상인) + 다 지은 시장. 금고는 vault로 맞춤. 중앙은행(monetary.js)은 끈 '지금 규칙'(bank.mon = null) — 중앙은행 규칙은 tests/monetary.test.js */
 function town(vault = BK.VAULT_START) {
-  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true; w.bank.mon = null;
   for (const n of ["목수", "미니", "황금"]) w.addUnitByName(n);
   w.bank.vault = 1e6; assert.ok(place(w, "market").ok); w.instantBuild = false;
   Object.assign(w.bank, { vault, fees: 0, ledger: [] });
@@ -220,7 +220,8 @@ test("흐름: 넓은 섬 보통 놀이 3일 — 금고가 마르지 않고, 집�
   assert.ok(ends.length >= 2 && ends.every(e => e.vault > 0 && e.owed === 0), JSON.stringify(ends));
   assert.ok(w.units.filter(u => u.home).length >= 3, "집이 팔림");
   assert.ok(w.bank.taxed > 0 && w.bank.fees > 0 && w.bank.wages > 0);
-  assert.equal(Math.round(w.bank.vault), BK.VAULT_START + w.bank.taxed + w.bank.returned - w.bank.fees - w.bank.wages, "금고 = 시작 + 세금 + 돌아온 돈 − 설계비 − 품삯");
+  assert.equal(Math.round(w.bank.vault), BK.VAULT_START + w.bank.taxed + w.bank.returned + w.bank.seig - w.bank.fees - w.bank.wages, "금고 = 시작 + 세금 + 돌아온 돈 + 발행 수수료(중앙은행) − 설계비 − 품삯");
+  assert.ok(w.bank.seig > 0, "새 섬은 중앙은행이 켜져 있어 가공품 매입마다 수수료가 금고로");
   void E;
 });
 

@@ -272,7 +272,7 @@ test("계단 이어 놓기: 아래 계단 위쪽 칸에 같은 방향으로 놓�
 
 test("넓은 섬 경제: 원자재는 시장(상인)에 팔고, 상인은 가공해 은행에 팔고(새 돈), 음식은 농부·어부에게서 사고, 집은 시장에서", async () => {
   const E = await import("../src/world/economy.js");
-  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true;
+  const w = World.create(7, seededRandom(3), { wild: true, firstGull: true }); w.instantBuild = true; w.bank.mon = null;   // 중앙은행을 끈 '지금 규칙'(한도·수수료·물가는 tests/monetary.test.js)
   assert.deepEqual(w.units.map(u => u.name), ["기본"], "기본 한 마리로 시작");
   assert.ok(w.economy && w.bankB(), "가운데 공식은행"); assert.equal(w.seeds.length, 0, "씨앗 없음");
   const boss = w.units[0], c = w.center;

@@ -4,6 +4,7 @@ import { comfort } from "./furniture.js";
 import { linkedHouses } from "./roads.js";
 import { bestiePairs } from "../units/mind.js";
 import { donatedCount, DONATE_SCORE } from "./aquarium.js";
+import { STABLE_DAYS, STABLE_SCORE } from "./monetary.js";
 
 export const RANKS = [
   { name: "갯마을", icon: "🛖", need: 0, unlock: [] },
@@ -38,6 +39,8 @@ export function rankScore(w) {
     ["🐠 수족관에 기증한 물고기(종류)", gave, DONATE_SCORE, gave * DONATE_SCORE],
     ["😋 평균 포만감 50 이상", fed ? 1 : 0, 10, fed ? 10 : 0],
   ];
+  const mon = w.economy && w.bank?.mon;                                             // 중앙은행: 최근 3일 모두 물가 변화 1% 안쪽
+  if (mon) { const ok = (mon.stableRun || 0) >= STABLE_DAYS ? 1 : 0; parts.push([`📊 물가 안정(${STABLE_DAYS}일)`, ok, STABLE_SCORE, ok * STABLE_SCORE]); }
   return { score: parts.reduce((s, p) => s + p[3], 0), parts };
 }
 /** 등급 해금 목록에 보일 이름: 업그레이드로만 생기는 건물은 '종합병원(일반병원 업그레이드)' */

@@ -683,7 +683,7 @@ function chooseNext(u, world, rnd) {
   // 피곤하면(기력 TIRED 아래) 심부름(가공·은행·시장·저장고·장보기)을 새로 시작하지 않고 아래에서 먼저 쉼: 상인이 가공 → 은행을 쉬지 않고 이어 가다 기력이 바닥나지 않게
   if (world.economy && (u.needs?.energy ?? 100) >= M.TIRED) {
     if (u.job === "merchant") {                                                  // 상인: 가공품은 은행에, 원자재는 가공
-      if (E.total(u.goods) > 0 && startActivity(u, "deposit", world, rnd)) return;
+      if (E.total(u.goods) > 0 && (world.bankCanBuy?.(u) ?? true) && startActivity(u, "deposit", world, rnd)) return;   // 오늘 한도로 못 파는 가공품만 있으면 은행에 가지 않음(헛걸음 없음, 다음 날 팖)
       if (E.total(u.raw) >= 3 && startActivity(u, "process", world, rnd)) return;
     }
     if (E.isProducer(u) && world.granaryB() && E.meals(u) >= E.FOOD_KEEP + 5 && world.granary < E.GRANARY_MAX && startActivity(u, "stock", world, rnd)) return;   // 남는 음식은 저장고에
