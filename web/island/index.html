@@ -152,6 +152,10 @@
   /* 🏝 전체 보기(편의성 점검 9번): 미니맵 자리(오른쪽 위) — 미니맵을 켰으면 그 바로 밑. 가까이 보거나 따라갈 때만(main.js가 hidden을 바꿈) */
   #homeBtn { position: fixed; right: var(--safe-r); top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); z-index: var(--z-hud); min-height: var(--hit-sm); padding: calc(4*var(--u)) var(--s-2); background: var(--c-hud); font-size: var(--fs-sm); font-weight: 700; border-radius: var(--r-md); box-shadow: var(--e-1); touch-action: manipulation; }
   #homeBtn[hidden], body.inroom #homeBtn { display: none !important; }
+  /* 둘러보기 ⟲ ⟳(가까운 비스듬히 시점): 아래 🔨 건설 · 📱 줄 가운데 */
+  #turnBox { position: fixed; left: 50%; transform: translateX(-50%); bottom: var(--row-b); z-index: var(--z-hud); display: flex; gap: var(--s-2); }
+  #turnBox button { min-width: var(--hit); min-height: var(--hit); padding: 0 calc(6*var(--u)); font-size: max(22px, calc(24*var(--u))); line-height: 1; background: var(--c-hud); border-radius: var(--r-md); box-shadow: var(--e-1); display: inline-flex; align-items: center; justify-content: center; }
+  #turnBox[hidden], body.inroom #turnBox, body[data-mode="edit"] #turnBox { display: none !important; }
   body:has(#minimap:not([hidden])) #homeBtn { top: calc(var(--safe-t) + var(--chips-h) + var(--s-2) + var(--mm-w) + var(--s-2)); }
   html[data-form="portrait"] body:has(#giftPick:not([hidden])) #homeBtn { top: calc(var(--safe-t) + var(--chips-h) + var(--s-2)); }   /* 선물 판이 미니맵을 숨기면 그 자리로 */
   #roomTouch { position: fixed; inset: 0; z-index: var(--z-roomtouch); touch-action: none; }
@@ -957,6 +961,8 @@
         <div class="srow"><span id="uiScaleLab" class="slab">크기: 100%</span>
           <div class="urow"><button id="uiScaleDown" aria-label="작게">－</button><input id="uiScale" type="range" min="75" max="150" step="5" value="100" aria-label="글자·버튼 크기(%)"><button id="uiScaleUp" aria-label="크게">＋</button><button id="uiScaleReset">기본</button></div>
           <p id="uiScaleNote" class="dim">이 기기에만 기억해요(섬 저장과는 따로예요).</p></div>
+        <h4>시점</h4><div class="srow"><span class="slab">둘러볼 때 카메라</span><div class="seg" id="segCam" role="group" aria-label="시점 고르기"><button data-v="near">가까운 비스듬히(기본)</button><button data-v="free">자유 회전(예전)</button></div>
+          <p class="dim">가까운 비스듬히: 끌면 옮기고 ⟲ ⟳(Z·X)·두 손가락 비틀기로 90°씩 돌려요. 자유 회전: 끌어서 돌리고 기울여요.</p></div>
         <h4>보이기</h4><button id="zones" class="sw2" aria-pressed="true">구역 이름 보이기</button>
         <button id="motionBtn" class="sw2 off" aria-pressed="false">움직임 줄이기</button>
         <div class="srow"><span class="slab">키 힌트(버튼 옆 단축키 글자)</span><div class="seg" id="segKeyhint"><button data-v="auto">자동</button><button data-v="on">항상</button><button data-v="off">끔</button></div></div></div>

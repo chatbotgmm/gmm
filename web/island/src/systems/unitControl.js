@@ -136,7 +136,8 @@ export class UnitControl {
     if (!u) return;
     if (!this.held) {
       const len = this.camera.position.distanceTo(this.controls.target), to = followZoomLen(len);
-      this.backLen = followBackLen(this.backLen, len);
+      const back = followBackLen(this.backLen, len), rest = back != null && this.backLen == null ? this.restLen?.() : null;
+      this.backLen = rest ?? back;                                                 // restLen(main.js): 가까운 비스듬히는 그만두면 기본 거리로(멀리 보던 중이었어도)
       if (to != null) this.zoom = { to: null, len: to };
     }
     if (this.follow !== u) this.setFollow(u);
@@ -147,10 +148,11 @@ export class UnitControl {
     if (u) this.onStatus(`${josa(u.name, "을", "를")} 따라가요 · 빈 땅을 누르면 그만`);
     else if (this.backLen != null) { if (!this.held && !keepDist) this.zoom = { to: null, len: this.backLen }; this.backLen = null; }   // ✕·Esc·땅 누르기: 다가가기 전 거리로
   }
-  /** 🏝 마을 전체 보기(편의성 점검 9번): 따라가기를 풀고 처음 시점(높이·거리·중심)으로 부드럽게. 보던 가로 방향은 그대로 */
-  overview(portrait) {
+  /** 🏝 마을 전체 보기(편의성 점검 9번): 따라가기를 풀고 처음 시점(높이·거리·중심)으로 부드럽게. 보던 가로 방향은 그대로.
+   *  goal: 목표를 정하는 함수(없으면 camAssist.overviewGoal — 자유 회전의 처음 시점, 가까운 비스듬히는 main.js가 viewCam.overviewGoal을 넘김) */
+  overview(portrait, goal = overviewGoal) {
     this.backLen = null; if (this.follow) this.setFollow(null);
-    const g = overviewGoal(this.camera.position.clone().sub(this.controls.target), portrait);
+    const g = goal(this.camera.position.clone().sub(this.controls.target), portrait);
     this.zoom = { to: new THREE.Vector3(g.target.x, g.target.y, g.target.z), len: g.len, off: new THREE.Vector3(g.off.x, g.off.y, g.off.z) };
   }
 

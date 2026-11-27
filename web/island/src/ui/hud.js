@@ -112,6 +112,12 @@ export class Hud {
     // ⟲ ⟳: 건설 모드는 내려다보는 각도가 고정이라, 화면은 이 버튼(Z · X)으로 90°씩 돌려 봄
     this.viewBtns = [auxBtn("viewL", "⟲", "화면을 왼쪽으로 90° 돌리기", "화면을 왼쪽으로 90° 돌려요"), auxBtn("viewR", "⟳", "화면을 오른쪽으로 90° 돌리기", "화면을 오른쪽으로 90° 돌려요")];
     this.viewBtns[0].onclick = () => this.onViewTurn?.(-1); this.viewBtns[1].onclick = () => this.onViewTurn?.(1);
+    // 둘러보기의 ⟲ ⟳(가까운 비스듬히 시점일 때만): 아래 🔨·📱 줄 가운데 — 건설 모드의 것과 같은 onViewTurn(Z · X)
+    this.turnBox = el("div", ""); this.turnBox.id = "turnBox"; this.turnBox.hidden = true; this.turnBox.setAttribute("role", "group"); this.turnBox.setAttribute("aria-label", "화면 돌리기");
+    for (const [id, icon, dir, side] of [["turnL", "⟲", -1, "왼쪽"], ["turnR", "⟳", 1, "오른쪽"]]) {
+      const b = el("button", "", icon); b.id = id; b.setAttribute("aria-label", `화면을 ${side}으로 90° 돌리기`); b.dataset.tip = `화면을 ${side}으로 90° 돌려요 · 두 손가락으로 비틀어도 돼요`; b.onclick = () => this.onViewTurn?.(dir); this.turnBox.appendChild(b); }
+    document.body.appendChild(this.turnBox); this.camMode = "near";
+    document.getElementById("segCam")?.addEventListener("click", e => { const b = e.target.closest?.("button[data-v]"); if (b) this.setCamMode(this.onCamMode?.(b.dataset.v) ?? b.dataset.v); });
     ebar.append(this.ecats, this.ehint, aux);
     tools.onMode = (m, arg) => this.showMode(m, arg);
     // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
@@ -300,6 +306,12 @@ export class Hud {
     for (const b of $("segKeyhint").children) { const on = b.dataset.v === root.dataset.keyhint; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
     const sw = (id, on) => { const b = $(id); b.classList.toggle("off", !on); b.setAttribute("aria-pressed", String(on)); };
     sw("motionBtn", root.dataset.motion === "reduce"); sw("leftHand", root.dataset.hand === "left"); sw("vibeBtn", root.dataset.vibe !== "off");
+  }
+  /** 평소 시점(가까운 비스듬히 near · 자유 회전 free): 설정 칸의 ✓ · 둘러보기 ⟲ ⟳ 보이기 · html[data-cam] */
+  setCamMode(m) {
+    this.camMode = m === "free" ? "free" : "near"; document.documentElement.dataset.cam = this.camMode;
+    this.turnBox.hidden = this.tools.mode !== "view" || this.camMode !== "near";
+    const seg = document.getElementById("segCam"); if (seg) for (const b of seg.children) { const on = b.dataset.v === this.camMode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
   }
   /** 섬에서 건물을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기 · 갈매미 따라가기).
    *  다 지은 집은 예전 집 카드 그대로(🛋 들어가 꾸미기). 공사장·밭·의원·잡화점은 아래 칸(.hcx)에 핵심 요약 + 자세히 보기(bldView.js) — 5Hz로 바뀐 칸만 다시 그림.
@@ -712,7 +724,8 @@ export class Hud {
     if (tap && this.tools.hand) this.tools.setHand(false);
     this.handBtn.hidden = mode === "view" || tap;
     this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
-    for (const b of this.viewBtns) b.hidden = mode === "view";                      // 평소엔 Z·X 키도 쉬게
+    for (const b of this.viewBtns) b.hidden = mode === "view";                      // 건설 모드의 ⟲ ⟳ · 둘러보기는 turnBox(가까운 비스듬히일 때만)
+    this.turnBox.hidden = mode !== "view" || this.camMode !== "near";
     this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
     this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만
     // 트레이: 같은 도구 안에서 고르기만 했으면 밀어 둔 자리를 지킴

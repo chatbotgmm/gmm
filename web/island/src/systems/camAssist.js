@@ -46,8 +46,9 @@ export function overviewGoal(off, portrait) {
 /** 보는 점이 섬 가운데(HOME_TARGET)에서 이만큼(m) 넘게 떨어지면 「섬 밖 바다」로 봄 — 열린 세계(끝없는 바다)에서 길을 잃었을 때 돌아올 단추. 섬 격자 반폭(96 m) + 여유 */
 export const OVERVIEW_AWAY = 120;
 /** 🏝 전체 보기 단추를 보일까: 따라가는 중이거나 처음 시점보다 많이 가까이 봄(70% 미만)이거나 섬에서 멀리 나감(away m > OVERVIEW_AWAY) · 건설 모드·방 안에서는 숨김 */
-export function showOverviewBtn({ len, following, portrait, mode, inRoom, away = 0 }) {
+/** homeLen: 기준 거리(가까운 비스듬히 시점은 기본 거리 30 m·26 m — viewCam.viewHomeLen). 없으면 처음 시점 거리 */
+export function showOverviewBtn({ len, following, portrait, mode, inRoom, away = 0, homeLen = null }) {
   if (inRoom || (mode && mode !== "view")) return false;
   const h = portrait ? HOME_OFF.portrait : HOME_OFF.wide;
-  return !!following || len < Math.hypot(h.x, h.y, h.z) * 0.7 || away > OVERVIEW_AWAY;
+  return !!following || len < (homeLen ?? Math.hypot(h.x, h.y, h.z)) * 0.7 || away > OVERVIEW_AWAY;
 }

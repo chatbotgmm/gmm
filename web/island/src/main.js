@@ -50,6 +50,7 @@ import { RoomView } from "./render/room.js";
 import { ROOM_EXPOSURE } from "./render/roomLight.js";
 import { Minimap } from "./ui/minimap.js";
 import { HOME_OFF, HOME_TARGET, showOverviewBtn } from "./systems/camAssist.js";
+import { ViewCam, readViewPref, saveViewPref, viewFov, viewHomeLen } from "./systems/viewCam.js";
 import { installKeys } from "./ui/keys.js";
 import { createEdition, simSteps } from "./systems/edition.js";
 import { Sfx } from "./audio/sfx.js";
@@ -82,7 +83,8 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = skyBackground(); scene.fog = new THREE.Fog(0xdceff4, 110, 230);   // 위는 파랗고 수평선은 밝은 하늘, 안개는 멀리서만
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 260);   // 안개 너머(230 m)는 그리지 않음
 const portrait = () => innerWidth < innerHeight;
-function fitView() { camera.fov = portrait() ? 62 : 45; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }   // 세로 화면은 넓은 렌즈
+let viewCam = null; const viewPref = readViewPref(k => localStorage.getItem(k));   // 평소 시점: 가까운 비스듬히(기본) · 자유 회전(예전) — systems/viewCam.js
+function fitView() { camera.fov = viewFov(viewCam?.mode ?? viewPref, portrait()); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }   // 세로 화면은 넓은 렌즈(자유 회전 62°·45°, 가까운 비스듬히 50°·40°)
 fitView();
 { const h = portrait() ? HOME_OFF.portrait : HOME_OFF.wide; camera.position.set(HOME_TARGET.x + h.x, HOME_TARGET.y + h.y, HOME_TARGET.z + h.z); }   // 처음엔 섬 전체가 보이게 높고 넓게(참고 그림처럼 비스듬히)
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -331,8 +333,11 @@ addEventListener("pagehide", () => { if (ready) saveNow(); });
 tools = new Tools({ world, scene, camera, dom: renderer.domElement, controls, chunks, buildingViews, onStatus: (t, opt) => hud?.status(t, opt || undefined) });
 const twoFinger = new TwoFinger({ dom: renderer.domElement, camera, controls });   // 두 손가락: 비틀면 돌리기, 벌리면 확대
 const quarterCam = new QuarterCam({ camera, controls });                        // 건설 모드: 고정 쿼터뷰(⟲ ⟳ 로 90°씩), 끝내면 보던 각도로
+viewCam = new ViewCam({ camera, controls, quarterCam, mode: viewPref, portrait }); viewCam.init(); fitView();   // 가까운 비스듬히: 35°·30 m(가로 26 m)·90° 돌리기, 확대 9~55 m
+twoFinger.onTurn = dir => quarterCam.turn(dir) || viewCam.turn(dir);           // 잠긴 시점(건설 쿼터뷰·가까운 비스듬히)에서 두 손가락을 45° 넘게 비틀면 90° 돌리기
+const lockView = () => { tools.viewLock = twoFinger.lock = quarterCam.locked || viewCam.locked; tools.applyControls(); };
 const buildingThumbs = new BuildingThumbs(renderer);                            // 건설 갤러리의 건물 사진
-tools.applyControls();                              // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대)
+lockView();                                         // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대 · 가까운 비스듬히는 왼쪽 끌기도 옮기기)
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
   onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
@@ -340,10 +345,14 @@ hud = new Hud({ tools, world,
 });
 // 건설 모드에 들어가고 나올 때: 카메라 고정·풀기 + 조작 배치(돌리기 대신 옮기기). 화면(HUD)은 hud.showMode가 그대로 맡음
 { const showMode = tools.onMode; tools.onMode = (m, arg) => { showMode(m, arg); const on = m !== "view"; if (on === quarterCam.locked) return;
-  if (on) quarterCam.enter(); else quarterCam.exit(); tools.viewLock = twoFinger.lock = on; tools.applyControls(); }; }
-hud.onViewTurn = dir => quarterCam.turn(dir); hud.thumbs = buildingThumbs;
+  if (on) quarterCam.enter(); else quarterCam.exit(); lockView(); }; }
+hud.onViewTurn = dir => quarterCam.turn(dir) || viewCam.turn(dir); hud.thumbs = buildingThumbs;   // ⟲ ⟳ · Z X: 건설 모드는 쿼터뷰, 둘러보기는 가까운 비스듬히(90°)
+hud.onCamMode = m => { if (!viewCam.setMode(m)) return viewCam.mode; saveViewPref((k, v) => localStorage.setItem(k, v), m); fitView(); lockView(); hud.setCamMode(m);
+  hud.status(m === "near" ? "시점: 가까운 비스듬히 · ⟲ ⟳(Z·X)로 90°씩 돌려요" : "시점: 자유 회전 · 끌어서 돌리고 기울여요", { kind: "info" }); return m; };
+hud.setCamMode(viewCam.mode);
 const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls, tools, getWorld: () => world, getUnitViews: () => unitViews,
   onStatus: t => hud.status(t), onFollow: u => { hud.showFollow(u); world.watchId = u ? u.unitId : null; } });
+unitControl.restLen = () => viewCam.restLen(portrait());                        // 따라가기를 그만두면: 가까운 비스듬히는 기본 거리(30 m·26 m)로, 자유 회전은 다가가기 전 거리로
 // 찌 당기기(같이 낚시하기): 따라가는 갈매미에게 입질(❗)이 왔을 때 🎣 당기기! 버튼이나 스페이스 키
 const tugNow = () => { const u = unitControl.follow; if (!u || !world.tugFloat(u)) return false; hud.showTug(false); hud.status(`영차! ${josa(u.name, "과", "와")} 같이 당겼어요 · 귀한 물고기가 올 가능성이 커져요`); return true; };
 hud.onTug = tugNow;
@@ -423,7 +432,7 @@ hud.onUnitClick = u => unitControl.setFollow(unitControl.follow === u ? null : u
 hud.onUnitFollow = u => unitControl.followClose(u);                                   // 목록 줄·건물 카드 「따라가기」·배고픔 칩: 늘 따라가기 + 10 m로 가까이(편의성 점검 1·2번)
 // 🏝 마을 전체 보기(편의성 점검 9번): 오른쪽 위 단추(가까이 보거나 따라갈 때만 보임) · ☰ 메뉴. 처음 시점의 높이·거리·중심으로(보던 방향은 그대로)
 hud.onOverview = () => { if (tools.mode !== "view" || roomView.isOpen) { hud.status("🏝 전체 보기는 둘러보기에서 써요 · ✓ 완료를 누른 뒤 다시 눌러요", { kind: "info" }); return; }
-  hud.houseCard(null); unitControl.overview(portrait()); };
+  hud.houseCard(null); unitControl.overview(portrait(), viewCam.locked ? (off, p) => viewCam.overviewGoal(HOME_TARGET, p) : undefined); };   // 가까운 비스듬히: 55 m·58°(위에서 보는 쪽)
 const homeBtn = document.getElementById("homeBtn"); homeBtn.onclick = () => hud.onOverview();
 // 🏠 집 보기(따라가기 카드): 따라가기를 풀고 보던 각도 그대로 그 집으로 화면을 옮김 + 집 카드
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
@@ -553,10 +562,10 @@ function frameBody() {
   hud.showTug(!roomView.isOpen && world.canTug(unitControl.follow), unitControl.follow?.fishT);   // 입질 동안만 당기기 버튼
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
   const lim = SOFT - GRID_W; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);   // 섬 밖 바다로도 감(끝없는 세계). 아주 먼 곳(소프트 한계)만 막음
-  controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
+  controls.update(); quarterCam.tick(now); viewCam.tick(now);   // 건설 모드: 각도 고정 · 돌리는 중 / 가까운 비스듬히: 90° 방향·거리별 각도 지킴
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight); spendFx.update(innerWidth, innerHeight);
-  if (now - lastHud > 200) { const hb = showOverviewBtn({ len: camera.position.distanceTo(controls.target), following: !!unitControl.follow, portrait: portrait(), mode: tools.mode, inRoom: roomView.isOpen, away: Math.hypot(controls.target.x - HOME_TARGET.x, controls.target.z - HOME_TARGET.z) }); if (homeBtn.hidden === hb) homeBtn.hidden = !hb; }
+  if (now - lastHud > 200) { const hb = showOverviewBtn({ len: camera.position.distanceTo(controls.target), following: !!unitControl.follow, portrait: portrait(), homeLen: viewHomeLen(viewCam.mode, portrait()), mode: tools.mode, inRoom: roomView.isOpen, away: Math.hypot(controls.target.x - HOME_TARGET.x, controls.target.z - HOME_TARGET.z) }); if (homeBtn.hidden === hb) homeBtn.hidden = !hb; }
   if (now - lastHud > 200) { lastHud = now; hud.update({ count: chunks.meshes.size, rebuilt: chunks.rebuilt, fps: quality.fps, tris: chunks.triangles }); }   // 글자판은 1초에 5번만
   // 그림자 지도: 해·그림자 범위가 옮겨지면 바로, 그림자를 드리우는 것이 움직이면 설정 간격대로, 아무것도 안 움직이면 20프레임에 한 번만 다시 그림
   if (Math.abs(sun.position.x - sunAt.x) + Math.abs(sun.position.y - sunAt.y) + Math.abs(sun.position.z - sunAt.z) > 0.05) { sunAt.copy(sun.position); quality.kickShadow(); }
@@ -600,5 +609,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, edition, footprints, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get view() { return view; }, get stream() { return stream; }, get waterWin() { return waterWin; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get rewards() { return rewards; }, reward: (ev, arg) => { const r = rewardOf(ev, arg, world); if (r) rewards.push(r); return r; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get view() { return view; }, get stream() { return stream; }, get waterWin() { return waterWin; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get rewards() { return rewards; }, reward: (ev, arg) => { const r = rewardOf(ev, arg, world); if (r) rewards.push(r); return r; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, viewCam, twoFinger, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
