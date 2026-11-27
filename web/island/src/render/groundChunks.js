@@ -85,21 +85,21 @@ class Builder {
 
 // 한 번 다시 그릴 때 칸 꼭짓점 높이를 한 번씩만 계산(법선·벽·면이 같은 값을 여러 번 씀)
 let cornerCache = null, cacheGrid = null, pointCache = new Map(), flatCache = null;
-function resetCaches(grid) { cornerCache = new Map(); cacheGrid = grid; flatCache = new Uint8Array(grid.w * grid.h); }
+export function resetCaches(grid) { cornerCache = new Map(); cacheGrid = grid; flatCache = new Map(); }
 /** 둘레 3칸까지 높이가 모두 같은 칸인지(평평한 땅·바다 바닥). 그러면 법선은 똑바로 위, 구석 그늘은 0이라 점마다 높이를 20번씩 재지 않아도 됨.
  *  3칸: 구석 그늘이 1.4칸 밖까지 재고(2칸 옆 칸), 그 칸의 꼭짓점 높이는 다시 한 칸 옆과 평균이라서 */
 function flatAround(grid, x, z) {
-  const k = z * grid.w + x; let f = flatCache[k];
+  const k = grid.index(x, z); let f = flatCache.get(k);
   if (!f) {
     f = 1;
-    if (x < 3 || z < 3 || x >= grid.w - 3 || z >= grid.h - 3) f = 2;
-    else { const cells = grid.cells, w = grid.w, e = cells[k].elevation; for (let dz = -3; dz <= 3 && f === 1; dz++) for (let dx = -3; dx <= 3; dx++) if (cells[k + dz * w + dx].elevation !== e) { f = 2; break; } }
-    flatCache[k] = f;
+    if (!grid.inBounds(x - 3, z - 3) || !grid.inBounds(x + 3, z + 3)) f = 2;
+    else { const e = grid.get(x, z).elevation; for (let dz = -3; dz <= 3 && f === 1; dz++) for (let dx = -3; dx <= 3; dx++) if (grid.get(x + dx, z + dz).elevation !== e) { f = 2; break; } }
+    flatCache.set(k, f);
   }
   return f === 1;
 }
 function cachedCorners(grid, x, z) {
-  const k = z * grid.w + x; let c = cornerCache.get(k);
+  const k = grid.index(x, z); let c = cornerCache.get(k);
   if (!c) { c = cornersRaw(grid, x, z); cornerCache.set(k, c); }
   return c;
 }
@@ -158,7 +158,7 @@ function cellSurface(b, grid, x, z, c, sub) {
   const step = 1 / S, flat = flatAround(grid, x, z);
   for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
-      const u = a * step, v = d * step, gx = x + u, gz = z + v, k = ((z * S + d) * 4096 + (x * S + a)) * 16384 + z * grid.w + x;
+      const u = a * step, v = d * step, gx = x + u, gz = z + v, k = (((z & 15) * 16 + (x & 15)) * 9 + d) * 9 + a;   // 조각(16칸) 안 지역 좌표: 음수·먼 좌표에서도 겹치지 않음
       let pc = pointCache.get(k);                                           // 색·법선(칸마다: 절벽 위·아래가 다름)
       if (!pc) {
         const n = flat ? FLAT_N : normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color());
@@ -175,9 +175,9 @@ function cellSurface(b, grid, x, z, c, sub) {
 }
 
 /** 청크 하나 만들기를 여러 프레임에 나눠 할 수 있게: startBuild로 시작해 stepBuild(job, 마감 시각)를 끝날 때까지(true) 부름 */
-function startBuild(grid, cx, cz, sub) { return { grid, cx, cz, sub, b: new Builder(), points: new Map(), i: 0 }; }
-function stepBuild(job, deadline = Infinity) {
-  const { grid, cx, cz, sub, b } = job, n = grid.chunk, x0 = cx * n, z0 = cz * n, nx = Math.min(grid.w, x0 + n) - x0, nz = Math.min(grid.h, z0 + n) - z0;
+export function startBuild(grid, cx, cz, sub) { return { grid, cx, cz, sub, b: new Builder(), points: new Map(), i: 0 }; }
+export function stepBuild(job, deadline = Infinity) {
+  const { grid, cx, cz, sub, b } = job, n = grid.chunk, x0 = cx * n, z0 = cz * n, nx = n, nz = n;
   if (cacheGrid !== grid || !cornerCache) resetCaches(grid);
   pointCache = job.points;
   for (; job.i < nx * nz; job.i++) {
@@ -187,15 +187,15 @@ function stepBuild(job, deadline = Infinity) {
     cellSurface(b, grid, x, z, c, sub);
     // 네 변: 이웃 칸의 맞닿은 꼭짓점 높이보다 내 변이 높으면 그 사이를 벽(절벽)으로 메움. 이어진 칸끼리는 높이가 같아 벽이 생기지 않음
     const nb = (nx, nz, i, j) => { const k = cachedCorners(grid, nx, nz); return [k[i], k[j]]; };
-    if (x < grid.w - 1) edgeWall(b, grid, x, z, [c[1], c[3]], nb(x + 1, z, 0, 2), x + 1, z, x + 1, z + 1, [1, 0, 0]);
-    if (x > 0) edgeWall(b, grid, x, z, [c[0], c[2]], nb(x - 1, z, 1, 3), x, z, x, z + 1, [-1, 0, 0]);
-    if (z < grid.h - 1) edgeWall(b, grid, x, z, [c[2], c[3]], nb(x, z + 1, 0, 1), x, z + 1, x + 1, z + 1, [0, 0, 1]);
-    if (z > 0) edgeWall(b, grid, x, z, [c[0], c[1]], nb(x, z - 1, 2, 3), x, z, x + 1, z, [0, 0, -1]);
+    if (grid.inBounds(x + 1, z)) edgeWall(b, grid, x, z, [c[1], c[3]], nb(x + 1, z, 0, 2), x + 1, z, x + 1, z + 1, [1, 0, 0]);
+    if (grid.inBounds(x - 1, z)) edgeWall(b, grid, x, z, [c[0], c[2]], nb(x - 1, z, 1, 3), x, z, x, z + 1, [-1, 0, 0]);
+    if (grid.inBounds(x, z + 1)) edgeWall(b, grid, x, z, [c[2], c[3]], nb(x, z + 1, 0, 1), x, z + 1, x + 1, z + 1, [0, 0, 1]);
+    if (grid.inBounds(x, z - 1)) edgeWall(b, grid, x, z, [c[0], c[1]], nb(x, z - 1, 2, 3), x, z, x + 1, z, [0, 0, -1]);
     const out = [LOWEST, LOWEST];
-    if (x === grid.w - 1) edgeWall(b, grid, x, z, [c[1], c[3]], out, x + 1, z, x + 1, z + 1, [1, 0, 0]);
-    if (x === 0) edgeWall(b, grid, x, z, [c[0], c[2]], out, x, z, x, z + 1, [-1, 0, 0]);
-    if (z === grid.h - 1) edgeWall(b, grid, x, z, [c[2], c[3]], out, x, z + 1, x + 1, z + 1, [0, 0, 1]);
-    if (z === 0) edgeWall(b, grid, x, z, [c[0], c[1]], out, x, z, x + 1, z, [0, 0, -1]);
+    if (!grid.inBounds(x + 1, z)) edgeWall(b, grid, x, z, [c[1], c[3]], out, x + 1, z, x + 1, z + 1, [1, 0, 0]);
+    if (!grid.inBounds(x - 1, z)) edgeWall(b, grid, x, z, [c[0], c[2]], out, x, z, x, z + 1, [-1, 0, 0]);
+    if (!grid.inBounds(x, z + 1)) edgeWall(b, grid, x, z, [c[2], c[3]], out, x, z + 1, x + 1, z + 1, [0, 0, 1]);
+    if (!grid.inBounds(x, z - 1)) edgeWall(b, grid, x, z, [c[0], c[1]], out, x, z, x + 1, z, [0, 0, -1]);
   }
   return true;
 }

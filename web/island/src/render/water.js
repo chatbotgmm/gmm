@@ -9,7 +9,7 @@ export function createWater(size = 480) {
     transparent: true, fog: true, depthWrite: false,
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
       uTime: { value: 0 }, uLight: { value: 1 }, uDeep: { value: new THREE.Color(0x1d8fb0) }, uMid: { value: new THREE.Color(0x2fbfc4) }, uShallow: { value: new THREE.Color(0x8ff0de) },
-      uDepth: { value: depthTex }, uOrigin: { value: new THREE.Vector2(-48, -48) }, uSize: { value: new THREE.Vector2(96, 96) },
+      uDepth: { value: depthTex }, uOrigin: { value: new THREE.Vector2(-48, -48) }, uSize: { value: new THREE.Vector2(96, 96) }, uCenter: { value: new THREE.Vector2(0, 0) },
     }]),
     vertexShader: /* glsl */`
       varying vec3 vWorld;
@@ -21,12 +21,12 @@ export function createWater(size = 480) {
       }`,
     fragmentShader: /* glsl */`
       uniform float uTime; uniform float uLight; uniform vec3 uDeep; uniform vec3 uMid; uniform vec3 uShallow; varying vec3 vWorld;
-      uniform sampler2D uDepth; uniform vec2 uOrigin; uniform vec2 uSize;
+      uniform sampler2D uDepth; uniform vec2 uOrigin; uniform vec2 uSize; uniform vec2 uCenter;
       #include <fog_pars_fragment>
       void main() {
         vec2 p = vWorld.xz, uv = (p - uOrigin) / uSize;
         vec2 cuv = clamp(uv, vec2(0.0), vec2(1.0));
-        float far = max(0.0, max(abs(p.x), abs(p.y)) - (uSize.x * 0.5 - 6.0));             // 지도 끝 바깥으로 갈수록 깊게(지도 안은 섬 높이 텍스처가 정함)
+        float far = max(0.0, max(abs(p.x - uCenter.x), abs(p.y - uCenter.y)) - (uSize.x * 0.5 - 6.0));   // 깊이 창 끝 바깥으로 갈수록 깊게(창 안은 섬 높이 텍스처가 정함)
         float depth = texture2D(uDepth, cuv).r * 3.0 + far * 0.035;                       // 물 깊이(m): 섬 높이 + 먼 바다일수록 점점 깊게
         float w = sin(p.x * 0.9 + uTime * 0.8) * 0.5 + sin(p.y * 1.1 - uTime * 0.6) * 0.5 + sin((p.x + p.y) * 0.4 + uTime * 0.5);
         vec3 col = mix(uShallow, uMid, smoothstep(0.05, 0.45, depth));
@@ -40,7 +40,7 @@ export function createWater(size = 480) {
         float sparkle = smoothstep(1.6, 1.95, w) * smoothstep(0.4, 1.5, depth);        // 깊은 곳 물결 반짝임
         col = mix(col, vec3(1.0), sparkle * 0.3);
         col *= uLight;                                                                   // 밤에는 어둡게(daylight.js)
-        gl_FragColor = vec4(col, mix(0.62, 0.9, smoothstep(0.0, 1.0, depth)));
+        gl_FragColor = vec4(col, mix(mix(0.62, 0.9, smoothstep(0.0, 1.0, depth)), 1.0, smoothstep(1.3, 1.5, depth)));   // 깊은 곳(1.5 m 넘게)은 불투명: 바다뿐인 바깥 조각은 바닥 메쉬가 없어서
         #include <colorspace_fragment>
         #include <fog_fragment>
       }`,
@@ -66,7 +66,16 @@ export function createWater(size = 480) {
       tex.dispose(); tex = new THREE.DataTexture(data, W, H, THREE.RedFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; mat.uniforms.uDepth.value = tex;
     } else tex.image.data.set(data);
     tex.needsUpdate = true;
-    mat.uniforms.uOrigin.value.set(toWorldX(0), toWorldZ(0)); mat.uniforms.uSize.value.set(W, H);
+    mat.uniforms.uOrigin.value.set(toWorldX(0), toWorldZ(0)); mat.uniforms.uSize.value.set(W, H); mat.uniforms.uCenter.value.set(toWorldX(W / 2), toWorldZ(H / 2));
+  };
+  /** 보는 곳을 따라가는 깊이 창(render/waterWindow.js가 계산): data = W×W 깊이(0~3 m → 0~255), (ox, oz) = 창 왼위 월드 좌표. 물 판도 창 가운데로 옮김 */
+  mesh.userData.setWindow = (data, W, ox, oz) => {
+    let tex = mat.uniforms.uDepth.value;
+    if (tex.image.width !== W || tex.image.height !== W) { tex.dispose(); tex = new THREE.DataTexture(data, W, W, THREE.RedFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; mat.uniforms.uDepth.value = tex; }
+    else tex.image.data.set(data);
+    tex.needsUpdate = true;
+    mat.uniforms.uOrigin.value.set(ox, oz); mat.uniforms.uSize.value.set(W, W); mat.uniforms.uCenter.value.set(ox + W / 2, oz + W / 2);
+    mesh.position.x = ox + W / 2; mesh.position.z = oz + W / 2;
   };
   return mesh;
 }
