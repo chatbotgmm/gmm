@@ -3,11 +3,13 @@
 //    이웃 색과 섞여(모서리 꼭짓점이 네 칸을 1/4씩 섞음) 거의 사라졌다. 그래서 좁은 칠하기(가로·세로 3칸 이하 띠)와 그 둘레만
 //    상세도와 상관없이 EDGE_SUB 조각으로 그린다. 길 종류는 넓게 칠해도 테두리 칸을 촘촘히(테두리가 번지지 않고 또렷하게). 넓은 땅과 넓은 땅끼리의 경계는 그대로 거리별 상세도(넓은 섬에서 땅 칸의 약 10%만 촘촘해짐).
 //  · 겨울 눈: 길(돌길·나무 데크·흙길)은 갈매미가 다니며 쓸어서 눈이 덜 쌓인다(SNOW_CLEAR만큼 덜). 잔디·모래·바위는 자연 땅이라 그대로.
+//  · 또렷한 경계(hardPair): 길과 다른 종류가 맞닿은 곳은 색을 섞지 않고 칸 선에서 딱 끊는다(사람이 깐 길이라 흐리면 칠한 곳이 안 보임).
+//    자연 땅끼리(잔디·모래·바위)는 예전처럼 구불구불 부드럽게 섞음.
 import { GroundType } from "../data/types.js";
 
 export const EDGE_SUB = 4;
 /** 바닥 종류별로 눈을 얼마나 덜 쌓이게 할지(0 = 그대로, 1 = 안 쌓임) */
-export const SNOW_CLEAR = { [GroundType.Cobble]: 0.85, [GroundType.WoodDeck]: 0.85, [GroundType.Dirt]: 0.6 };   // 포장(돌·나무)은 거의 다 쓸고, 흙길은 반쯤
+export const SNOW_CLEAR = { [GroundType.Cobble]: 0.93, [GroundType.WoodDeck]: 0.93, [GroundType.Dirt]: 0.8 };   // 포장(돌·나무)은 거의 다 쓸고, 흙길도 대부분(눈 덮인 겨울에도 길이 보이게)
 export const snowClear = type => SNOW_CLEAR[type] || 0;
 
 const kind = (grid, x, z) => { const c = grid.get(x, z); return !c || grid.isWater(x, z) ? null : c.groundType; };   // 물·밖은 null(경계로 안 봄)
@@ -31,6 +33,15 @@ export function nearThin(grid, x, z) {
 }
 /** 길(돌길·나무 데크·흙길)과 다른 종류가 맞닿은 칸: 길은 사람이 깐 것이라 넓어도 테두리가 또렷해야 함(자연 섬에는 길 칸이 거의 없음) */
 const LOOK_PATHS = new Set([GroundType.Cobble, GroundType.WoodDeck, GroundType.Dirt]);   // autotile.js PATH_TYPES와 같음(그 파일은 한 파일 빌드에 안 들어가서 따로 둠)
+/** 두 바닥 종류 사이 경계를 섞지 않고 또렷하게 끊을지: 서로 다르고 한쪽이라도 길이면. 물·밖(null)은 늘 부드럽게 */
+export const hardPair = (a, b) => a !== b && a != null && b != null && (LOOK_PATHS.has(a) || LOOK_PATHS.has(b));
+/** 이 칸 둘레 8칸 중에 또렷하게 끊을 이웃이 있는지(있으면 이 칸 꼭짓점은 경계 비틀기 없이 칸 선에서 끊음) */
+export function hardCell(grid, x, z) {
+  const t = kind(grid, x, z); if (!t) return false;
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if ((dx || dz) && hardPair(t, kind(grid, x + dx, z + dz))) return true;
+  return false;
+}
+export const isPathType = t => LOOK_PATHS.has(t);
 export function pathEdge(grid, x, z) {
   const t = kind(grid, x, z); if (!t) return false;
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const u = kind(grid, x + dx, z + dz); if (u && u !== t && (LOOK_PATHS.has(u) || LOOK_PATHS.has(t))) return true; }

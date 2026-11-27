@@ -5,11 +5,12 @@
 import * as THREE from "three";
 import { seasonalGround } from "./seasons.js";
 import { gridGround } from "./gridLines.js";
+import { groundPattern } from "./groundPattern.js";
 import { CELL, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
 import { corners as cornersRaw, heightIn, joined } from "../world/terrain.js";
-import { cellSub, snowClear } from "../world/groundLook.js";
+import { cellSub, snowClear, hardPair, hardCell, isPathType } from "../world/groundLook.js";
 
 let SUB = 4;                                   // 가까운 땅의 칸당 조각(화질 낮음이면 2: 삼각형 1/4)
 // 거리별 상세도(오픈월드 지형의 LOD와 같은 생각): 보는 곳(화면 중심)에서 가까운 청크만 촘촘히, 멀수록 성기게.
@@ -37,41 +38,62 @@ function typeColor(type, gx, gz, out) {
   const n = fbm(gx, gz);
   out.copy(BASE[type]).lerp(ALT[type], n);
   if (type === GroundType.Grass) out.offsetHSL((noise(gx * 0.12, gz * 0.12) - 0.5) * 0.04, 0, (n - 0.5) * 0.06);
-  else if (type === GroundType.Cobble) out.multiplyScalar(0.9 + 0.2 * noise(gx * 3.1, gz * 3.1));          // 돌 알갱이
-  else if (type === GroundType.WoodDeck) out.multiplyScalar(0.88 + 0.12 * (Math.sin(gz * Math.PI * 4) > 0.7 ? 0 : 1));   // 널빤지 틈
-  else if (type === GroundType.Dirt) out.multiplyScalar(0.92 + 0.14 * noise(gx * 2.2, gz * 2.2));
+  else if (type === GroundType.Cobble) out.multiplyScalar(0.93 + 0.14 * noise(gx * 1.3, gz * 1.3));         // 큰 얼룩만(돌·틈은 셰이더 무늬, groundPattern.js)
+  else if (type === GroundType.WoodDeck) out.multiplyScalar(0.95 + 0.1 * noise(gx * 0.9, gz * 0.9));         // 널빤지·틈은 셰이더(예전 sin 줄무늬는 꼭짓점 위치에서 늘 0이라 안 보였음)
+  else if (type === GroundType.Dirt) out.multiplyScalar(0.92 + 0.14 * noise(gx * 1.6, gz * 1.6));
   else out.multiplyScalar(0.96 + 0.06 * noise(gx * 1.7, gz * 1.7));
   return out;
 }
 
-/** 격자 좌표 (gx, gz)에서의 바닥 색: 근처 칸들의 종류를 경계에서 둥글게 섞는다(위치만의 함수라 칸 사이 이음매가 없음). */
+/** 격자 좌표 (gx, gz)에서의 바닥 색: 근처 칸들의 종류를 경계에서 둥글게 섞는다(위치만의 함수라 칸 사이 이음매가 없음).
+ *  hard: 이 꼭짓점이 속한 칸(hx, hz)이 길과 맞닿아 있으면(hardCell) 비틀기 없이, 길과 맞닿은 쪽 이웃은 섞지 않음 → 칸 선에서 색이 딱 끊김
+ *  (꼭짓점은 칸마다 따로라 경계 위 꼭짓점이 양쪽 칸에서 각자 제 색을 가짐). 자연 땅끼리는 예전처럼 섞음. */
 let lastClear = 0;                               // groundColor가 같이 셈: 이 점의 눈 덜 쌓임(길은 쓸어서 덜, seasons.js aSnowClear)
-function groundColor(grid, rx, rz, out) {
-  // 경계를 칸 선에서 살짝 비틀어(도메인 워프) 계단 모양 대신 구불구불한 자연스러운 경계로
-  const gx = rx + (noise(rx * 0.8 + 3.1, rz * 0.8) - 0.5) * 0.4, gz = rz + (noise(rx * 0.8, rz * 0.8 - 5.7) - 0.5) * 0.4;
+const lastPath = [0, 0, 0];                      // 같이 셈: 돌길·데크·흙길 비율 → 꼭짓점 하나에 수 하나로(packPath, 셰이더 무늬 세기 groundPattern.js aPath)
+const PATH_SLOT = { [GroundType.Cobble]: 0, [GroundType.WoodDeck]: 1, [GroundType.Dirt]: 2 };
+function groundColor(grid, rx, rz, out, own = null, hard = false) {
+  // 경계를 칸 선에서 살짝 비틀어(도메인 워프) 계단 모양 대신 구불구불한 자연스러운 경계로(길 둘레 칸은 안 비틂)
+  const gx = hard ? rx : rx + (noise(rx * 0.8 + 3.1, rz * 0.8) - 0.5) * 0.4, gz = hard ? rz : rz + (noise(rx * 0.8, rz * 0.8 - 5.7) - 0.5) * 0.4;
   const x0 = Math.floor(gx), z0 = Math.floor(gz);
-  let tw = 0, cl = 0; out.setRGB(0, 0, 0);
+  let tw = 0, cl = 0; out.setRGB(0, 0, 0); lastPath[0] = lastPath[1] = lastPath[2] = 0;
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
     const x = x0 + dx, z = z0 + dz, c = grid.get(x, z); if (!c) continue;
+    const water = grid.isWater(x, z);
+    if (hard && !water && hardPair(own, c.groundType)) continue;          // 길 경계: 건너편 색을 끌어오지 않음
     const ddx = Math.max(x - gx, 0, gx - (x + 1)), ddz = Math.max(z - gz, 0, gz - (z + 1)), d = Math.hypot(ddx, ddz);
     if (d >= BLEND_R) continue;
     const w = (1 - d / BLEND_R) ** 2;
-    if (grid.isWater(x, z)) tmp2.copy(SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
-    out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w; if (!grid.isWater(x, z)) cl += snowClear(c.groundType) * w;
+    if (water) tmp2.copy(SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
+    out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w;
+    if (!water) { cl += snowClear(c.groundType) * w; const k = PATH_SLOT[c.groundType]; if (k !== undefined) lastPath[k] += w; }
   }
   lastClear = tw ? cl / tw : 0;
+  if (tw) for (let k = 0; k < 3; k++) lastPath[k] /= tw;
   return tw ? out.multiplyScalar(1 / tw) : out.copy(BASE[GroundType.Grass]);
+}
+/** 길 무늬 세기를 꼭짓점 수 하나로: 0 = 길 아님, 그 밖엔 1 + 종류(0·1·2) + 0.05 + 0.9 × 비율. 길 경계는 섞지 않아서(hardPair) 한 꼭짓점에 길 종류가 둘 섞이지 않음(물·같은 종류만 섞임) → 가장 큰 쪽 하나면 충분 */
+function packPath() {
+  let k = 0; if (lastPath[1] > lastPath[k]) k = 1; if (lastPath[2] > lastPath[k]) k = 2;
+  return lastPath[k] > 0.001 ? 1 + k + 0.05 + 0.9 * Math.min(1, lastPath[k]) : 0;   // 칸 안에서 보간돼도 정수를 안 넘게 0.05~0.95
+}
+/** 길 칸 테두리(다른 종류와 또렷하게 끊긴 변) 꼭짓점을 조금 어둡게: 길에 얕은 턱·그늘이 진 것처럼 윤곽이 생김 */
+const PATH_RIM = 0.84;
+function onHardRim(grid, x, z, t, u, v) {
+  const sx = u === 0 ? -1 : u === 1 ? 1 : 0, sz = v === 0 ? -1 : v === 1 ? 1 : 0;
+  if (!sx && !sz) return false;
+  const k = (dx, dz) => { const c = grid.get(x + dx, z + dz); return c && !grid.isWater(x + dx, z + dz) && hardPair(t, c.groundType); };
+  return (sx && k(sx, 0)) || (sz && k(0, sz)) || (sx && sz && k(sx, sz));
 }
 
 class Builder {
-  constructor() { this.pos = []; this.nor = []; this.col = []; this.clr = []; }
-  vert(p, n, c, s = 0) { this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); this.clr.push(s); }
+  constructor() { this.pos = []; this.nor = []; this.col = []; this.clr = []; this.pat = []; }
+  vert(p, n, c, s = 0, w = 0) { this.pos.push(p[0], p[1], p[2]); this.nor.push(n[0], n[1], n[2]); this.col.push(c.r, c.g, c.b); this.clr.push(s); this.pat.push(w); }
   /** 사각형 하나(a→b→c→d 둘레 순서). 각 꼭짓점에 법선·색. 위에서 볼 때 반시계가 앞면이 되게 맞춤. */
   quad(v) {
     const [a, b, c] = v, ab = [b.p[0] - a.p[0], b.p[1] - a.p[1], b.p[2] - a.p[2]], ac = [c.p[0] - a.p[0], c.p[1] - a.p[1], c.p[2] - a.p[2]];
     const cr = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
     const want = v[0].n; if (cr[0] * want[0] + cr[1] * want[1] + cr[2] * want[2] < 0) v = [v[0], v[3], v[2], v[1]];
-    for (const i of [0, 1, 2, 0, 2, 3]) this.vert(v[i].p, v[i].n, v[i].c, v[i].s);
+    for (const i of [0, 1, 2, 0, 2, 3]) this.vert(v[i].p, v[i].n, v[i].c, v[i].s, v[i].w);
   }
   geometry() {
     const g = new THREE.BufferGeometry();
@@ -79,6 +101,7 @@ class Builder {
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute("aSnowClear", new THREE.Float32BufferAttribute(this.clr, 1));
+    g.setAttribute("aPath", new THREE.Float32BufferAttribute(this.pat, 1));
     g.computeBoundingSphere(); return g;
   }
 }
@@ -155,20 +178,21 @@ function deepSea(grid, x, z) {
 }
 function cellSurface(b, grid, x, z, c, sub) {
   const e = grid.get(x, z).elevation, S = deepSea(grid, x, z) ? 1 : cellSub(grid, x, z, sub);   // 좁게 칠한 곳·길 테두리는 멀리서도 촘촘히(칠한 곳이 이웃 색에 묻히지 않게, groundLook.js)
-  const step = 1 / S, flat = flatAround(grid, x, z);
+  const step = 1 / S, flat = flatAround(grid, x, z), hard = hardCell(grid, x, z), t = grid.get(x, z).groundType, rim = hard && isPathType(t);
   for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
     const pts = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([a, d]) => {
       const u = a * step, v = d * step, gx = x + u, gz = z + v, k = ((z * S + d) * 4096 + (x * S + a)) * 16384 + z * grid.w + x;
       let pc = pointCache.get(k);                                           // 색·법선(칸마다: 절벽 위·아래가 다름)
       if (!pc) {
-        const n = flat ? FLAT_N : normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color());
-        if (flat) { pc = { n, c: col, s: lastClear }; pointCache.set(k, pc); return { p: toW(gx, heightIn(c, e, u, v), gz), n, c: col, s: pc.s }; }
+        const n = flat ? FLAT_N : normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color(), t, hard), w = packPath(), s = lastClear;
+        if (rim && onHardRim(grid, x, z, t, u, v)) col.multiplyScalar(PATH_RIM);
+        if (flat) { pc = { n, c: col, s, w }; pointCache.set(k, pc); return { p: toW(gx, heightIn(c, e, u, v), gz), n, c: col, s, w }; }
         const steep = Math.min(1, Math.max(0, (0.86 - n[1]) / 0.2));             // 가파를수록 흙·바위 빛
         if (steep > 0 && !grid.isWater(Math.floor(gx), Math.floor(gz))) col.lerp(cliffColor(grid, Math.floor(gx), Math.floor(gz), 0, gx, gz), steep * 0.85);
         if (!grid.isWater(Math.floor(gx), Math.floor(gz))) col.multiplyScalar(1 - occlusion(grid, gx, gz, heightIn(c, e, u, v)));   // 구석 그늘
-        pc = { n, c: col, s: lastClear }; pointCache.set(k, pc);
+        pc = { n, c: col, s, w }; pointCache.set(k, pc);
       }
-      return { p: toW(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c, s: pc.s };
+      return { p: toW(gx, heightIn(c, e, u, v), gz), n: pc.n, c: pc.c, s: pc.s, w: pc.w };
     });
     b.quad(pts);
   }
@@ -207,7 +231,7 @@ export function buildChunkGeometry(grid, cx, cz, sub = SUB) {
 export class GroundChunks {
   constructor(scene, grid) {
     this.scene = scene; this.grid = grid; this.meshes = new Map(); this.rebuilt = 0;
-    this.material = gridGround(seasonalGround(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide })));   // 계절(봄 연두·가을 누런 잔디·겨울 눈) + 건설 모드 격자선(gridLines.js)   // 어느 쪽에서 봐도 비치지 않게
+    this.material = gridGround(groundPattern(seasonalGround(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }))));   // 길 무늬(groundPattern.js) + 계절(봄 연두·가을 누런 잔디·겨울 눈) + 건설 모드 격자선(gridLines.js)   // 어느 쪽에서 봐도 비치지 않게
   }
   /** 이 청크가 보는 곳(focus, 월드 좌표)에서 얼마나 떨어졌는지에 따른 칸당 조각 수. cur: 지금 상세도(경계 여유용) */
   lodFor(cx, cz, focus, cur = null) {

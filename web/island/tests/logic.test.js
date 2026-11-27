@@ -1598,6 +1598,26 @@ test("바닥 그림: 좁게 칠한 곳(3칸 이하 띠)과 그 둘레만 상세�
   assert.equal(snowClear(GroundType.Grass) + snowClear(GroundType.Sand) + snowClear(GroundType.Rock), 0);                     // 자연 땅은 그대로
 });
 
+test("바닥 그림: 길(돌길·데크·흙길) 경계는 또렷하게 끊고 자연 땅끼리는 부드럽게, 길 색은 잔디·서로와 밝기부터 다름", async () => {
+  const { hardPair, hardCell, isPathType } = await import("../src/world/groundLook.js");
+  const { GROUND_STYLE } = await import("../src/data/catalog.js");
+  const G = GroundType;
+  assert.ok(hardPair(G.Cobble, G.Grass) && hardPair(G.Grass, G.WoodDeck) && hardPair(G.Dirt, G.Cobble) && hardPair(G.Dirt, G.Sand));
+  assert.ok(!hardPair(G.Grass, G.Sand) && !hardPair(G.Sand, G.Rock) && !hardPair(G.Cobble, G.Cobble) && !hardPair(G.Cobble, null));   // 자연 땅끼리·같은 종류·물(null)은 섞음
+  assert.ok(isPathType(G.Dirt) && !isPathType(G.Rock));
+  const g = new Grid(12, 12, 16);
+  for (let z = 0; z < 12; z++) for (let x = 0; x < 12; x++) { g.get(x, z).elevation = 0.15; g.get(x, z).groundType = G.Grass; }
+  for (let x = 2; x < 9; x++) g.get(x, 5).groundType = G.WoodDeck;
+  g.get(2, 9).groundType = G.Sand;
+  assert.ok(hardCell(g, 4, 5) && hardCell(g, 4, 4) && hardCell(g, 9, 6));          // 길 칸·바로 옆·대각선 옆 잔디
+  assert.ok(!hardCell(g, 4, 7) && !hardCell(g, 2, 9) && !hardCell(g, 3, 9));       // 길에서 먼 잔디·모래와 그 옆
+  // 밝기(L*): 잔디와 길 셋은 15 넘게, 길끼리는 7 넘게 차이(색맹도 밝기로 구분; 돌길·흙길은 푸른빛·노란빛으로도 갈림)
+  const L = hex => { const f = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    const Y = 0.2126 * f((hex >> 16) & 255) + 0.7152 * f((hex >> 8) & 255) + 0.0722 * f(hex & 255); return 116 * (Y > 0.008856 ? Math.cbrt(Y) : 7.787 * Y + 16 / 116) - 16; };
+  const ls = [G.Grass, G.Cobble, G.WoodDeck, G.Dirt].map(t => L(GROUND_STYLE[t].colors[0]));
+  for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) assert.ok(Math.abs(ls[i] - ls[j]) > (i === 0 ? 15 : 7), `L* ${ls[i].toFixed(1)} vs ${ls[j].toFixed(1)}`);
+});
+
 test("건설 모드 쿼터뷰: 방향은 가장 가까운 대각선으로, ⟲ ⟳ 는 90°씩, 돌 때는 짧은 쪽으로", async () => {
   const Q = await import("../src/systems/quarterView.js"), deg = r => Math.round(r * 180 / Math.PI * 1000) / 1000, rad = d => d * Math.PI / 180;
   assert.deepEqual(Q.QUARTER_YAWS_DEG, [45, 135, 225, 315]);
