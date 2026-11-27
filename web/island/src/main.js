@@ -4,6 +4,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { World, SPEED_BOOST } from "./world/World.js";
 import { GRID_W, toWorldX, toWorldZ, toGridX, toGridZ } from "./config.js";
 import { GroundChunks } from "./render/groundChunks.js";
+import { ViewGrid, SOFT } from "./render/viewGrid.js";
+import { ChunkStream } from "./render/chunkStream.js";
+import { WaterWindow } from "./render/waterWindow.js";
+import { terrainHeight } from "./world/terrain.js";
 import { createWater } from "./render/water.js";
 import { skyBackground, createClouds } from "./render/sky.js";
 import { Daylight } from "./render/daylight.js";
@@ -113,7 +117,7 @@ const overlay = document.getElementById("overlay");
 const spendFx = new SiteSpendFx({ camera, overlay, getWorld: () => world, getViews: () => buildingViews });   // 건축에서 금고 돈이 나감: 공사장 위 🪙−n·설계비·품삯 밀림 + 칩에서 날아가는 🪙
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
-let world, chunks, buildingViews, unitViews, lifeViews, sparkleView, dreams, dreamView, poke, fuss, fussMs = null, worldRoot, waterDirty = false, lastWater = 0;
+let world, view, stream, waterWin, chunks, buildingViews, unitViews, lifeViews, sparkleView, dreams, dreamView, poke, fuss, fussMs = null, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
 // 효과음(Kenney RPG sounds CC0 + 합성). 화면 중심에서 가까운 일만 들림
 const sfx = new Sfx();
@@ -145,11 +149,13 @@ function hookSounds(w) {
 function applyAssetTier(c) {
   PROP_LOD.level = c.lod ?? 0;                                                    // 소품 텍스처 단계(4k·2k·1k)
   PROP_LOD.aniso = Math.min(renderer.capabilities.getMaxAnisotropy(), [4, 4, 2, 1][c.lod ?? 0] ?? 1);   // 텍스처 이방성 필터(새로 받는 모델부터)
-  drawDist = c.drawDist ?? 200; lastCull = 0;   // 그리기 거리(보는 곳 둘레 반지름 = drawDist × 0.7), 끝은 안개로 가림(fitFog)
+  drawDist = c.drawDist ?? 200; lastCull = 0; waterWin?.setSize(waterSize());   // 그리기 거리(보는 곳 둘레 반지름 = drawDist × 0.7), 끝은 안개로 가림(fitFog)
 }
 // 그리기 거리: 0.3초마다 나무·바위·건물·소품을 카메라와의 거리로 보이기/숨기기(멀리 있는 것은 그리지도, 그림자도 만들지 않음).
 // 다른 코드가 쓰는 visible(쓰러진 나무 등)과 겹치지 않게 레이어로: 멀면 메쉬를 레이어 3으로 옮김(카메라·그림자는 레이어 0만 봄)
 let drawDist = 200, lastCull = 0;
+/** 물 깊이 창 크기(칸): 안개 끝(그리기 반지름 × 1.05)과 창 옮기는 단위(32칸)까지 덮게. 낮음 192 · 보통 256 · 높음 320 · 최고 448 */
+const waterSize = () => Math.max(192, Math.ceil(2 * (drawDist * 0.7 * 1.05 + 32) / 32) * 32);
 const farState = new WeakMap(), _cp = new THREE.Vector3();
 function setFar(obj, far) {                                                       // 바뀔 때만 그 아래 메쉬 전부(모델이 늦게 붙어도 됨)
   if ((farState.get(obj) ?? false) === far) return; farState.set(obj, far);
@@ -182,10 +188,11 @@ const quality = new Quality(renderer, sun, c => {
 });
 weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); festaView.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
 function mount(w) {
-  if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); poolFor(worldRoot).dispose(); overlay.innerHTML = ""; }
+  if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); stream.dispose(); poolFor(worldRoot).dispose(); overlay.innerHTML = ""; }
   world = w; world.animateShape = false; worldRoot = new THREE.Group(); scene.add(worldRoot);   // 높이는 누르는 대로 바로 바뀜(스르르 효과는 끔)
-  chunks = new GroundChunks(worldRoot, world.grid); chunks.sync();
-  water.userData.setGrid(world.grid); world.on("ground", () => { waterDirty = true; });   // 물 깊이(얕은 물빛·물거품)
+  view = new ViewGrid(world.grid, world.seed);                                  // 끝없는 보기 격자: 시작 섬 안은 world.grid 그대로, 밖은 씨앗으로 생성(시뮬은 world.grid만 봄)
+  chunks = new GroundChunks(worldRoot, view); chunks.sync(); stream = new ChunkStream(worldRoot, chunks, view);   // 바깥 땅 조각은 보는 곳 둘레만 올리고 내림
+  waterWin = new WaterWindow(water, view, waterSize()); waterWin.update(controls.target, true); world.on("ground", () => { waterDirty = true; });   // 물 깊이 창(얕은 물빛·물거품): 보는 곳을 따라감
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   unitViews = new UnitViews(worldRoot, world, charPool); unitViews.setShadowDist(quality.cfg.shadows ? quality.cfg.gullShadowDist : 0);
   lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
@@ -423,7 +430,7 @@ addEventListener("keyup", e => { keys.delete(WASD[e.code] || e.code); if (!e.shi
 addEventListener("blur", () => keys.clear());
 /** 카메라가 땅(또는 물) 아래로 내려가지 않게: 낮은 각도·가까운 거리에서 언덕 뒤로 돌아가도 땅을 뚫지 않음 */
 function keepCameraAboveGround() {
-  const p = camera.position, h = world?.standHeight?.(toGridX(p.x), toGridZ(p.z));
+  const p = camera.position, gx = toGridX(p.x), gz = toGridZ(p.z), h = world?.grid.inBounds(Math.floor(gx), Math.floor(gz)) || !view ? world?.standHeight?.(gx, gz) : terrainHeight(view, gx, gz);   // 섬 밖은 보기 격자 땅 높이
   const floor = (Number.isFinite(h) ? Math.max(0, h) : 0) + 0.35;
   if (p.y < floor) p.y = floor;
 }
@@ -465,6 +472,7 @@ function frameBody() {
   }
   // 바뀐 청크만 다시 만듦. 높이가 스르르 바뀌는 동안은 60 ms에 한 번만(매 프레임 다시 그리면 무거움)
   const now = performance.now(); if (!world.shaping.size || now - lastSync > 60) { chunks.sync(controls.target, 4, camera.position.distanceTo(controls.target)); lastSync = now; }   // + 거리별 상세도(프레임당 4 ms만큼만 나눠 만듦)
+  stream.update(controls.target, drawDist * 0.7, 3);                             // 바깥 땅: 그리기 반경 안 조각만(프레임당 3 ms만큼 나눠 만듦)
   // 해·그림자 범위가 화면 중심을 따라감(2 m 단위로 옮겨 그림자가 떨리지 않게)
   const sx = Math.round(controls.target.x / 2) * 2, sz = Math.round(controls.target.z / 2) * 2;
   cullFar(now);
@@ -485,13 +493,14 @@ function frameBody() {
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
   dreams.step(); poke.stepReal(performance.now()); dreamView.update(dt, world, dreams, camera, innerWidth, innerHeight);
-  water.userData.tick(simT); clouds.userData.tick(dt);
-  if (waterDirty && now - lastWater > 300) { water.userData.setGrid(world.grid); waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
+  water.userData.tick(simT); clouds.userData.tick(dt); clouds.position.set(controls.target.x, 0, controls.target.z);   // 구름은 보는 곳을 따라감
+  if (waterDirty && now - lastWater > 300) { waterWin.dirty = true; waterDirty = false; lastWater = now; }   // 땅을 바꾸면 물 깊이도 다시
+  waterWin.update(controls.target);                                              // 보는 곳이 32칸 넘게 옮겨지면 창을 옮김
   unitControl.update(dt);                           // 따라가기
   { const ms = performance.now(); fuss.step(ready ? dt * steps : 0, fussMs == null ? dt : Math.min(0.25, (ms - fussMs) / 1000)); fussMs = ms; }   // 🆘 깜짝 소동(마을 시간)·흔들기·어질어질(실제 초)·착지 — 들고 있는 위치가 정해진 뒤
   hud.showTug(!roomView.isOpen && world.canTug(unitControl.follow), unitControl.follow?.fishT);   // 입질 동안만 당기기 버튼
   minimap.update(dt); tools.tick();                  // 십자선 모드: 화면 가운데 칸
-  const lim = world.grid.w / 2 - 4; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);
+  const lim = SOFT - GRID_W; controls.target.x = THREE.MathUtils.clamp(controls.target.x, -lim, lim); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -lim, lim);   // 섬 밖 바다로도 감(끝없는 세계). 아주 먼 곳(소프트 한계)만 막음
   controls.update(); quarterCam.tick(now);           // 건설 모드: 각도 고정 · 돌리는 중
   keepCameraAboveGround();
   buildingViews.updateBadges(camera, innerWidth, innerHeight); noPower.update(innerWidth, innerHeight); spendFx.update(innerWidth, innerHeight);
@@ -538,5 +547,5 @@ requestAnimationFrame(frame);
 // 자동 시험용 손잡이
 window.__island = { sfx, edition, footprints, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
-  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
+  setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get view() { return view; }, get stream() { return stream; }, get waterWin() { return waterWin; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };
