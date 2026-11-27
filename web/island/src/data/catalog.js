@@ -173,7 +173,7 @@ export const MODULES = {
     lampShape: [[0.082, 0.776], [0.089, 0.82], [0.089, 0.845], [0.078, 0.86], [0.065, 0.88], [0.05, 0.903]] },
   cave:       { id: "cave", name: "동굴", asset: null, walkable: false },          // 산기슭 동굴 입구(둘레에 광석 바위)
   // 기존 Kenney Nature Kit 모델(web/village/assets, CC0)을 쓴다. 여러 개면 모듈마다 variant 번호로 고른다.
-  beachRock:  { id: "beachRock", name: "해변 바위", walkable: false,
+  beachRock:  { id: "beachRock", name: "해변 바위", walkable: false, stone: 0x8f7a64,   // stone: 모델 색을 따뜻한 돌빛 하나로(views.js)
                 assets: ["../village/assets/nk/rock_smallA.glb", "../village/assets/nk/rock_smallB.glb", "../village/assets/nk/rock_smallC.glb"] },
   // 광석 바위(갈매미가 곡괭이로 캠), 낚시터 소품. Kenney Survival Kit(CC0, web/village/assets/sk)
   ore:        { id: "ore", name: "광석 바위", walkable: false, viewSize: 0.8,
@@ -196,7 +196,7 @@ export const GROUND_STYLE = {
   [GroundType.WoodDeck]: { label: "나무 데크", colors: [0x935e38, 0x875533] },
   [GroundType.Dirt]:     { label: "흙길",     colors: [0xbd8b5c, 0xb28154] },
   [GroundType.Sand]:     { label: "모래",     colors: [0xf3e0a6, 0xecd496] },
-  [GroundType.Rock]:     { label: "바위",     colors: [0x8b9db5, 0x8093ab] },   // 푸른 회색(L*63, 따뜻한 햇빛 아래서도 푸른 기가 남게): 모래·흙과 섞여도 바위로 읽히게(예전 누런 회색은 바위 곶 윗면이 모래빛으로 뭉개졌음)
+  [GroundType.Rock]:     { label: "바위",     colors: [0xb39f82, 0xa69176] },   // 따뜻한 회갈색(황토 섞인 돌빛): 잔디·모래 사이에서 아늑하게, 모래보다 어둡게
 };
 
 // 갈매미 8종(web/village/models/chars.json의 이름). 1단계는 캡슐 도형, scale은 몸 크기.

@@ -143,8 +143,8 @@ test("공식은행이 없는 예전 섬은 예전 그대로(집 수와 상관없
   ready(w); ready(w); w.summon(); w.summon(); ready(w); assert.equal(w.units.length, 4); assert.equal(w.summonInfo().can, true); assert.equal(has(w), false, "4마리부터는 예전처럼 안 나옴");
 });
 
-test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(1·213821·944352)도 공식은행 + 첫 집 + 금고 60으로 시작하고 집 수 규칙이 켜짐", () => {
-  for (const seed of [1, 213821, 944352]) {
+test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(13·213821·944352)도 공식은행 + 첫 집 + 금고 60으로 시작하고 집 수 규칙이 켜짐", () => {
+  for (const seed of [13, 213821, 944352]) {
     const w = World.create(seed, seededRandom(3), { wild: true }), bk = w.bankB(), c = w.center;
     assert.ok(bk, `씨앗 ${seed}: 공식은행`); assert.equal(w.economy, true);
     const mid = { x: w.grid.w / 2, z: w.grid.h / 2 }, bx = Math.floor(mid.x) - Math.floor(BUILDINGS.bank.footprint.w / 2), bz = Math.floor(mid.z) - Math.floor(BUILDINGS.bank.footprint.d / 2);   // center는 이제 은행을 따라가므로 지도 한가운데 기준으로 잼

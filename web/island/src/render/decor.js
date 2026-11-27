@@ -1,4 +1,5 @@
-// 장식 소품(보기만, 길을 막지 않음): 덤불·꽃·자갈을 종류마다 InstancedMesh 하나로 한꺼번에 그림(그리기 호출 3번).
+// 장식 소품(보기만, 길을 막지 않음): 덤불·꽃·자갈·풀 덤불을 종류마다 InstancedMesh 하나로 한꺼번에 그림(그리기 호출 종류마다 1번).
+//  · 풀 덤불: 모래 둔덕 마루, 모래와 닿은 잔디 가장자리
 //  · 덤불: 숲 가장자리, 고지대 벽 밑, 단 위 가장자리, 모래사장과 맞닿은 잔디
 //  · 꽃: 잔디밭 곳곳에 무리 지어(노랑·하양·분홍·하늘색)
 //  · 자갈: 모래·바위 위
@@ -8,16 +9,26 @@ import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 import { seededRandom } from "../util.js";
 
-const BUSH_COLORS = [0x5aa845, 0x6bb84e, 0x4f9a3f], FLOWER_COLORS = [0xffe066, 0xffffff, 0xff9cc0, 0x9fd4ff], PEBBLE_COLORS = [0xb9b3a8, 0xa9a397, 0xc9c3b6];
+const TUFT_COLORS = [0x9cba5c, 0x88a94e, 0xb3c46a], BUSH_COLORS = [0x5aa845, 0x6bb84e, 0x4f9a3f], FLOWER_COLORS = [0xffe066, 0xffffff, 0xff9cc0, 0x9fd4ff], PEBBLE_COLORS = [0xb9b3a8, 0xa9a397, 0xc9c3b6];
 // 놓은 꽃: 노란 작은 공은 씨앗(🌻)처럼 보여서 분홍·하양·하늘·보라 꽃송이(조금 납작하게)를 초록 덤불 덩이 위에 다섯 송이
 const ADD_FLOWER_COLORS = [0xff8fb8, 0xfff6f0, 0x8fc8ff, 0xc39bff], ADD_CELLS = 800, BUSH_PER = 2, BLOSSOM_PER = 5;
+/** 풀 덤불(모래 둔덕 풀): 가는 세모 뿔 다섯 개를 바깥으로 기울여 한 덩이(뚫린 뿔 → 덩이당 15 삼각형, 단순 모양은 셋 → 9) */
+function tuftGeometry(blades) {
+  const pos = [], nor = [];
+  for (let k = 0; k < blades; k++) {
+    const g = new THREE.ConeGeometry(0.035, 0.42 - 0.06 * (k % 2), 3, 1, true).toNonIndexed();
+    g.translate(0, 0.2, 0); g.rotateZ(0.28 + 0.1 * (k % 3)); g.rotateY(k / blades * 6.283 + 0.4); g.translate(Math.cos(k * 2.4) * 0.05, 0, Math.sin(k * 2.4) * 0.05);
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); g.dispose();
+  }
+  const out = new THREE.BufferGeometry(); out.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); return out;
+}
 const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _dv = new THREE.Vector3(), _ds = new THREE.Vector3(), _dy = new THREE.Vector3(0, 1, 0), _dc = new THREE.Color();
 
 export class Decor {
   /** opt: { density: 0~1(양), simple: 단순한 모양(삼각형 1/4), bushShadow: 덤불 그림자 } — 그래픽 설정 */
   constructor(scene, world, opt = { density: 1, simple: false, bushShadow: true }) {
     this.world = world; this.scene = scene; const g = world.grid, rnd = seededRandom((world.seed ?? 7) * 31 + 5), keep = seededRandom((world.seed ?? 7) * 17 + 3);
-    const at = (x, z) => g.get(x, z), cells = { bush: [], flower: [], pebble: [] };
+    const at = (x, z) => g.get(x, z), cells = { bush: [], flower: [], pebble: [], tuft: [] }, tr = seededRandom((world.seed ?? 7) * 53 + 11);
     const treeNear = new Set(); for (const t of world.trees) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) treeNear.add(`${t.x + dx},${t.z + dz}`);
     const c0 = world.center;
     for (let z = 1; z < g.h - 1; z++) for (let x = 1; x < g.w - 1; x++) {
@@ -33,7 +44,11 @@ export class Decor {
         const patch = Math.sin(x * 0.37 + z * 0.21) * Math.cos(x * 0.13 - z * 0.29);
         if (((patch > 0.55 && rnd() < 0.5) || rnd() < 0.02) && kf) void 0;              // 꽃(작은 점)은 씨앗처럼 보여서 없앰(난수 순서는 그대로)
         void kp;
-      } else if (c.groundType === "Sand" && rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]);
+        let rimRock = false; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const o = at(x + dx, z + dz); if (o && o.groundType === "Rock" && o.elevation > 0.3 && !g.isWater(x + dx, z + dz)) rimRock = true; }
+        if (rimRock && tr() < 0.4 * opt.density) cells.bush.push([x, z]);           // 풀 언덕 곶: 바위 테두리 안쪽 잔디에 덤불
+        if (sandNear && tr() < 0.3 * opt.density) cells.tuft.push([x, z]);          // 모래와 닿은 잔디 가장자리 풀
+      } else if (c.groundType === "Sand" && c.elevation >= 0.14 && tr() < 0.75 * opt.density) { cells.tuft.push([x, z]); if (rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]); }   // 모래 둔덕 마루: 풀 덤불(바닷가 높낮이가 멀리서도 읽힘)
+      else if (c.groundType === "Sand" && rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]);
       else if (c.groundType === "Rock" && rnd() < 0.3 && keep() < opt.density) cells.pebble.push([x, z]);
     }
     // 덤불: 둥근 덩이(위·아래로 약간 눌림), 꽃: 작은 공 셋이 한 송이, 자갈: 깎은 돌
@@ -41,6 +56,7 @@ export class Decor {
       bush: { geo: new THREE.IcosahedronGeometry(0.3, opt.simple ? 0 : 1), per: 2, colors: BUSH_COLORS, size: [0.7, 1.25], squash: 0.78, shadow: !!opt.bushShadow },   // 단순: 80 → 20 삼각형
       flower: { geo: opt.simple ? new THREE.OctahedronGeometry(0.05, 0) : new THREE.SphereGeometry(0.045, 6, 4), per: 3, colors: FLOWER_COLORS, size: [0.8, 1.3], squash: 1, shadow: false },   // 단순: 48 → 8
       pebble: { geo: new THREE.DodecahedronGeometry(0.11, 0), per: 1, colors: PEBBLE_COLORS, size: [0.6, 1.6], squash: 0.6, shadow: false },
+      tuft: { geo: tuftGeometry(opt.simple ? 3 : 5), per: 3, colors: TUFT_COLORS, size: [1.0, 1.6], squash: 1, shadow: false },
     };
     this.items = [];                                                                 // { type, cell: "x,z", i(인스턴스 번호), gx, gz, s, rot, lift }
     this.meshes = {};
@@ -51,7 +67,7 @@ export class Decor {
       let i = 0; const col = new THREE.Color();
       for (const [x, z] of list) for (let k = 0; k < def.per; k++, i++) {
         const gx = x + 0.15 + rnd() * 0.7, gz = z + 0.15 + rnd() * 0.7, s = def.size[0] + rnd() * (def.size[1] - def.size[0]);
-        const it = { type, cell: `${x},${z}`, i, gx, gz, s, rot: rnd() * 6.28, lift: type === "flower" ? 0.14 + rnd() * 0.06 : type === "bush" ? 0.17 * s : 0.03 };
+        const it = { type, cell: `${x},${z}`, i, gx, gz, s, rot: rnd() * 6.28, lift: type === "flower" ? 0.14 + rnd() * 0.06 : type === "bush" ? 0.17 * s : type === "tuft" ? -0.02 : 0.03 };
         this.items.push(it); mesh.setColorAt(i, col.setHex(def.colors[Math.floor(rnd() * def.colors.length)]));
       }
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -113,12 +129,12 @@ export class Decor {
   seedAt(x, z) {
     const key = `${x},${z}`, list = this.byCell?.get(key), g = this.world.grid, c = g.get(x, z), dc = this.world.decor; if (!list || !c) return false;
     if (c.occupiedId || g.isWater(x, z) || dc?.off.has(key) || dc?.add.has(key)) return false;
-    return list.some(it => it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : c.groundType === "Grass");
+    return list.some(it => it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : it.type === "tuft" ? c.groundType === "Sand" || c.groundType === "Grass" : c.groundType === "Grass");
   }
   /** 소품 하나를 제자리에(칸에 건물이 있거나 맞지 않는 바닥이면 숨김) */
   place(it) {
     const g = this.world.grid, [x, z] = it.cell.split(",").map(Number), c = g.get(x, z), def = this.types[it.type], m = new THREE.Matrix4();
-    const dc = this.world.decor, ok = c && !c.occupiedId && !g.isWater(x, z) && (it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : c.groundType === "Grass")
+    const dc = this.world.decor, ok = c && !c.occupiedId && !g.isWater(x, z) && (it.type === "pebble" ? c.groundType === "Sand" || c.groundType === "Rock" : it.type === "tuft" ? c.groundType === "Sand" || c.groundType === "Grass" : c.groundType === "Grass")
       && !dc?.off.has(it.cell) && !dc?.add.has(it.cell);                             // 꾸미기로 치운 칸·덤불이나 꽃을 놓은 칸의 씨앗 소품은 숨김
     if (!ok) m.makeScale(0, 0, 0);
     else {
