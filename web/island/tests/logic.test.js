@@ -656,7 +656,7 @@ test("실내 꾸미기: 집마다 구조(방·문·계단), 놓기·옮기기·�
   assert.equal(F.fits(ls[0], "chair", 4, 0, 0), false, "계단 칸"); assert.equal(F.fits(ls[0], "chair", 5, 1, 0), false, "계단 앞 디딤 칸"); assert.equal(F.fits(ls[1], "chair", 5, 0, 0), false, "계단 구멍");
   assert.equal(F.autoPlace(w, c2, "bed"), true); assert.equal(ls[1].furniture.some(o => o.id === "bed"), true, "침대는 2층 침실에");
   assert.equal(F.autoPlace(w, c2, "sofa"), true); assert.equal(ls[0].furniture.some(o => o.id === "sofa"), true, "소파는 1층에");
-  c2.interior.stash.plant = 1; assert.equal(F.place(w, c2, "plant", 0, 4, 0, 1), true); assert.ok(ls[1].furniture.some(o => o.id === "plant"), "2층에 직접 놓기");
+  c2.interior.stash.plant = 1; const pc = [[0, 4], [5, 4], [0, 1]].find(([x, z]) => F.fits(ls[1], "plant", x, z, 0)); assert.equal(F.place(w, c2, "plant", pc[0], pc[1], 0, 1), true); assert.ok(ls[1].furniture.some(o => o.id === "plant"), "2층에 직접 놓기");
   // 문: 모든 방이 문(또는 계단)으로 이어지고, 밖으로 나가는 문은 첫 방에 하나. 문 앞 칸엔 못 놓음
   for (const [id, plan] of Object.entries(F.LAYOUTS)) {
     const exits = plan.flatMap(L => (L.doors || []).filter(d => d.to === "exit")); assert.equal(exits.length, 1, id + " 나가는 문 하나"); assert.ok(plan[0].doors.some(d => d.to === "exit"), id + " 첫 방에 현관");

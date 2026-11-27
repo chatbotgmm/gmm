@@ -4,20 +4,23 @@
 //    · stairs { x, z, w, d, dir: "up"|"down" }: 계단(아래층)·계단 구멍(위층) 칸 — 가구를 못 놓음
 //    · doors [{ wall, at, to }]: 문(아래 LAYOUTS 설명). 문 앞 칸은 비워 둠
 //    · walls [{ x, z0, z1, door: [z, z] }]: 세로 칸막이벽(지금 구조엔 안 씀. 방을 나눌 땐 문으로 잇는 방을 따로 둠)(x칸 경계, z0~z1), door 칸은 지나갈 수 있음. 가구가 벽을 걸치면 못 놓음
-//  · x, z: 가구가 차지하는 칸 중 왼쪽 위(작은 x·z) 칸. rot 0~3(90°씩). rot이 홀수면 가로·세로가 바뀜.
+//  · x, z: 가구가 차지하는 칸 중 왼쪽 위(작은 x·z) 칸. rot 0~3(90°씩). rot이 홀수면 가로·세로가 바뀜. 앞면: rot 0 = +z, 1 = −x, 2 = −z, 3 = +x(arrange.js)
+//  · hand: true = 플레이어가 손으로 놓거나 옮긴 가구(다시 정리할 때 안 건드림). 없으면 갈매미가 알아서 놓은 가구(옛 저장도 이것으로 봄)
 //  · stash: 그 집에 있지만 아직 안 놓은 가구(주인이 산 것, 치운 것). 마을 가방(world.items)의 낚시 가구도 아무 집에나 놓음
 import { FURNITURE, ITEMS } from "../data/catalog.js";
+import { arrRelayout, arrPlaceOne, arrKind, isKitchen } from "./arrange.js";
 
 // 집마다 구조. 방(levels)은 한 번에 하나씩 보이고, 문을 누르면 다른 방으로 가거나(to: 방 번호) 밖으로 나감(to: "exit").
 //  · doors [{ wall: "W"|"E"|"N"|"S", at, to }]: W = 왼쪽(−x) · E = 오른쪽 · N = 뒤(−z) · S = 앞. at = 벽을 따라 몇 번째 칸. 문 앞 칸엔 가구를 못 놓음
 //  · stairs.to: 계단을 누르면 갈 방
 export const LAYOUT_V = 2;
+export const ARRANGE_V = 1;   // 생각하는 배치: 이보다 옛 저장은 처음 열 때 자동 배치 가구만 한 번 다시 놓음(relayout)
 export const LAYOUTS = {
   house: [{ name: "원룸", w: 5, d: 4, doors: [{ wall: "W", at: 3, to: "exit" }] }],
   cottage: [
     { name: "1층 거실", w: 6, d: 5, stairs: { x: 4, z: 0, w: 2, d: 1, dir: "up", to: 1 }, doors: [{ wall: "W", at: 4, to: "exit" }, { wall: "E", at: 3, to: 2 }] },
     { name: "2층 침실", w: 6, d: 5, stairs: { x: 4, z: 0, w: 2, d: 1, dir: "down", to: 0 }, role: "bedroom", wallpaper: "pink", floor: "carpet" },
-    { name: "1층 부엌", w: 4, d: 4, doors: [{ wall: "W", at: 2, to: 0 }], floor: "tile" },
+    { name: "1층 부엌", w: 4, d: 4, doors: [{ wall: "W", at: 2, to: 0 }], floor: "tile", role: "kitchen" },
   ],
   giantHouse: [
     { name: "큰 방(천장 높음)", w: 8, d: 7, wallH: 3.6, doors: [{ wall: "W", at: 5, to: "exit" }, { wall: "E", at: 3, to: 1 }] },
@@ -26,7 +29,7 @@ export const LAYOUTS = {
   manor: [
     { name: "1층 거실", w: 7, d: 6, stairs: { x: 0, z: 0, w: 1, d: 2, dir: "up", to: 1 }, doors: [{ wall: "W", at: 4, to: "exit" }, { wall: "E", at: 2, to: 2 }], floor: "dark" },
     { name: "2층 큰 침실", w: 6, d: 5, stairs: { x: 0, z: 0, w: 1, d: 2, dir: "down", to: 0 }, doors: [{ wall: "E", at: 2, to: 3 }], role: "bedroom", wallpaper: "sky" },
-    { name: "1층 부엌", w: 5, d: 5, doors: [{ wall: "W", at: 2, to: 0 }], floor: "tile" },
+    { name: "1층 부엌", w: 5, d: 5, doors: [{ wall: "W", at: 2, to: 0 }], floor: "tile", role: "kitchen" },
     { name: "2층 작은 침실", w: 5, d: 4, doors: [{ wall: "W", at: 1, to: 1 }], role: "bedroom", wallpaper: "pink" },
   ],
 };
@@ -45,6 +48,7 @@ export function room(b) {
     delete it.furniture; delete it.floor; delete it.wallpaper; it.layoutV = LAYOUT_V;
     prev.forEach((P, i) => { for (const o of P.furniture || []) { const L = it.levels[i]; if (L && fits(L, o.id, o.x, o.z, o.rot)) L.furniture.push(o); else it.stash[o.id] = (it.stash[o.id] || 0) + 1; } });   // 같은 번째 방에 맞으면 그대로, 아니면 창고로
   }
+  if (it.arrangeV !== ARRANGE_V) { it.arrangeV = ARRANGE_V; if (it.levels.some(L => L.furniture.some(o => !o.hand))) relayout(null, b); }   // 옛 배치(벽·앞면·통로를 안 보던 것)를 한 번 정리
   return it;
 }
 export const levels = b => room(b).levels;
@@ -88,28 +92,60 @@ function take(world, b, id) {
 const lv = (b, li) => levels(b)[li] || levels(b)[0];
 export function place(world, b, id, x, z, rot = 0, li = 0) {
   const L = lv(b, li); if (!fits(L, id, x, z, rot) || !take(world, b, id)) return false;
-  L.furniture.push({ id, x, z, rot }); world.emit?.("furniture", { b, kind: "place" }); return true;   // kind "place": 내가 손으로 놓음(오늘의 부탁이 셈)
+  L.furniture.push({ id, x, z, rot, hand: true }); world.emit?.("furniture", { b, kind: "place" }); return true;   // kind "place": 내가 손으로 놓음(오늘의 부탁이 셈)
 }
 export function move(world, b, i, x, z, rot, li = 0) {
   const L = lv(b, li), o = L.furniture[i]; if (!o || !fits(L, o.id, x, z, rot, i)) return false;
-  Object.assign(o, { x, z, rot }); world.emit?.("furniture", { b }); return true;
+  Object.assign(o, { x, z, rot, hand: true }); world.emit?.("furniture", { b }); return true;
 }
 /** 치우기: 그 집 창고로 */
 export function stow(world, b, i, li = 0) {
   const L = lv(b, li), o = L.furniture[i]; if (!o) return false;
   L.furniture.splice(i, 1); const it = room(b); it.stash[o.id] = (it.stash[o.id] || 0) + 1; world.emit?.("furniture", { b }); return true;
 }
-/** 알아서 놓기: 침대는 침실 층부터, 나머지는 아래층부터. 벽 쪽부터 빈 자리. 놓았으면 true */
+/** 산 가구를 놓을 자리가 없을 때 갈매미 말풍선(가구는 집 창고로) */
+export const NO_ROOM_SAY = "자리가 없어… 창고에 둘게 📦";
+/** 가구를 놓아 볼 층 차례: 침대·옷장은 침실 층부터, 오븐은 부엌 층부터, 나머지는 아래층(앞 번호)부터 */
+function levelOrder(ls, id) {
+  const k = arrKind(id), want = L => k === "bed" || k === "wardrobe" ? L.role === "bedroom" : k === "oven" ? isKitchen(L) : false;
+  return ls.map((L, i) => i).sort((a, c) => want(ls[c]) - want(ls[a]) || a - c);
+}
+/** 알아서 놓기(갈매미가 사 오거나 건진 가구): 층마다 자동 배치 가구를 새 가구와 함께 다시 생각해 놓아 보고(arrange.js — 벽을 등지고, 앞을 비우고,
+ *  문에서 걸어갈 길을 남기고, 의자는 탁자를 봄), 안 되면 지금 배치에 새 가구 하나만 끼워 봄. 어느 층에도 자리가 없으면 false(호출한 쪽이 창고로) */
 export function autoPlace(world, b, id) {
-  const ls = levels(b), sleep = FURNITURE[id].use === "sleep";
-  const order = ls.map((L, i) => i).sort((a, c) => sleep ? (ls[c].role === "bedroom") - (ls[a].role === "bedroom") : a - c);
-  for (const li of order) {
-    const L = ls[li], spots = [];
-    for (let rot = 0; rot < 4; rot++) for (let z = 0; z < L.d; z++) for (let x = 0; x < L.w; x++) { const s = size(id, rot); spots.push([Math.min(z, x, L.w - (x + s.w)) * 10 + z + x * 0.1 + rot * 0.01, x, z, rot]); }
-    spots.sort((a, c) => a[0] - c[0]);
-    for (const [, x, z, rot] of spots) if (fits(L, id, x, z, rot)) { L.furniture.push({ id, x, z, rot }); world.emit?.("furniture", { b }); return true; }
+  if (!FURNITURE[id]) return false;
+  const ls = levels(b);
+  for (const li of levelOrder(ls, id)) {
+    const L = ls[li], o = { id, x: 0, z: 0, rot: 0 };
+    L.furniture.push(o);
+    if (!arrRelayout(L, L.furniture.filter(x => !x.hand), { keepIfFail: true }).length) { world?.emit?.("furniture", { b }); return true; }
+    L.furniture.pop();
+    if (arrPlaceOne(L, o)) { world?.emit?.("furniture", { b }); return true; }
+  }
+  if (FURNITURE[id].use === "sleep" && !allFurniture(b).some(x => FURNITURE[x.id].use === "sleep")) {   // 침대가 하나도 없으면 침대가 먼저: 덜 중요한 자동 배치 가구를 창고로 비켜 줌
+    const L = ls[levelOrder(ls, id)[0]], o = { id, x: 0, z: 0, rot: 0 }; L.furniture.push(o);
+    const left = arrRelayout(L, L.furniture.filter(x => !x.hand));
+    if (!left.includes(o)) { const it = room(b); for (const x of left) { it.stash[x.id] = (it.stash[x.id] || 0) + 1; for (const u of world?.units || []) if (u.useFurni === x) u.useFurni = null; } world?.emit?.("furniture", { b }); return true; }
+    L.furniture = L.furniture.filter(x => x !== o); for (const x of left) if (x !== o) arrPlaceOne(L, x) || (room(b).stash[x.id] = (room(b).stash[x.id] || 0) + 1);
   }
   return false;
+}
+/** 🪄 정리하기: 손으로 놓은 가구(hand)는 두고, 갈매미가 놓은 가구만 집 전체에서 다시 생각해 놓음 — 가구마다 맞는 층(침대·옷장 = 침실, 오븐 = 부엌, 나머지 = 아래층)에
+ *  먼저 놓고, 자리가 없으면 다른 층에, 그래도 없으면 창고로. 같은 가구 객체를 옮겨 씀(갈매미가 쓰던 가구 그대로).
+ *  돌려주는 값: { moved: 자리가 바뀐 가구 수, stashed: 창고로 간 가구 id 목록 } */
+export function relayout(world, b) {
+  const it = room(b), ls = it.levels, stashed = [];
+  const was = new Map(ls.flatMap((L, li) => L.furniture.filter(o => !o.hand).map(o => [o, `${li},${o.x},${o.z},${o.rot}`])));
+  const auto = [...was.keys()], home = new Map(auto.map(o => [o, levelOrder(ls, o.id)[0]]));
+  for (const L of ls) L.furniture = L.furniture.filter(o => o.hand);
+  const left = [];
+  ls.forEach((L, li) => { const mine = auto.filter(o => home.get(o) === li); L.furniture.push(...mine); left.push(...arrRelayout(L, mine)); });
+  for (const o of left) {
+    const to = levelOrder(ls, o.id).filter(i => i !== home.get(o)).find(i => arrPlaceOne(ls[i], o));
+    if (to === undefined) { stashed.push(o.id); it.stash[o.id] = (it.stash[o.id] || 0) + 1; for (const u of world?.units || []) if (u.useFurni === o) u.useFurni = null; }
+  }
+  let moved = 0; for (const [o, k] of was) { const li = ls.findIndex(L => L.furniture.includes(o)); if (li < 0 || `${li},${o.x},${o.z},${o.rot}` !== k) moved++; }
+  world?.emit?.("furniture", { b }); return { moved, stashed };
 }
 /** 집 아늑함: 모든 층에 놓인 가구 comfort 합 */
 export const comfort = b => allFurniture(b).reduce((s, o) => s + (FURNITURE[o.id]?.comfort || 0), 0);
