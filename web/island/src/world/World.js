@@ -773,7 +773,7 @@ export class World {
     const def = FURNITURE[id], home = u.home && this.buildings.get(u.home);
     if (!def?.price || !home || !this.shopB() || (u.coins || 0) < def.price) return false;
     u.coins -= def.price; this.deposit(def.price, "returned", "shop");
-    if (!F.autoPlace(this, home, id)) { const it = F.room(home); it.stash[id] = (it.stash[id] || 0) + 1; }
+    if (!F.autoPlace(this, home, id)) { const it = F.room(home); it.stash[id] = (it.stash[id] || 0) + 1; emote(u, F.NO_ROOM_SAY, 2.4); }   // 자리가 없으면 억지로 안 놓고 창고에
     this.emit("furnitureBought", { u, id, b: home }); return true;
   }
 
@@ -1041,7 +1041,7 @@ export class World {
   /** 낚시로 건진 물건을 그 갈매미가 챙김: 가구는 집이 있으면 그 집에 놓고(자리가 없으면 창고), 집이 없으면 들고 있다가 집을 사면 옮김. 나머지는 소지품 */
   keepCatch(u, item) {
     const home = item.furniture && u.home && this.buildings.get(u.home);
-    if (home) { if (!F.autoPlace(this, home, item.furniture)) { const it = F.room(home); it.stash[item.furniture] = (it.stash[item.furniture] || 0) + 1; } return; }
+    if (home) { if (!F.autoPlace(this, home, item.furniture)) { const it = F.room(home); it.stash[item.furniture] = (it.stash[item.furniture] || 0) + 1; emote(u, F.NO_ROOM_SAY, 2.4); } return; }
     stashAdd(u, item.id);
   }
   /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌. 마을을 돌리지 않고 딱 두 가지만:

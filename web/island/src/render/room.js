@@ -246,6 +246,11 @@ export class RoomView {
     if (!ok) return this.status("여기엔 놓을 수 없어요(벽 밖이거나 다른 가구와 겹쳐요)");
     this.onSound?.("furniture"); this.status(`${FURNITURE[g.id].name}을 놓았어요`); this.ghost = null; this.build(); this.refreshUI();
   }
+  /** 🪄 정리하기: 갈매미가 알아서 놓은 가구만 벽·앞면·길을 보고 다시 놓음(world/furniture.js relayout) */
+  tidy() {
+    const r = F.relayout(this.world, this.b); this.sel = null; this.ghost = null; this.build(); this.refreshUI(); this.onSound?.("furniture");
+    this.status(r.moved ? `가구 ${r.moved}개를 정리했어요${r.stashed.length ? ` · 자리가 없어 ${r.stashed.length}개는 창고에` : ""} (손으로 놓은 가구는 그대로)` : "이미 잘 정리돼 있어요");
+  }
   stow() { if (this.sel == null) return; const id = this.L.furniture[this.sel].id; F.stow(this.world, this.b, this.sel, this.li); this.sel = null; this.build(); this.refreshUI(); this.status(`${FURNITURE[id].name}을 집 창고에 넣었어요`); }
   cancel() { this.ghost = null; this.sel = null; this.build(); this.refreshUI(); this.status(""); }
   drawSel() {
@@ -287,6 +292,7 @@ export class RoomView {
     // 행동 줄: 치우기는 왼쪽 끝에 따로, 주요 행동(놓기·옮기기)은 오른쪽 끝(엄지 쪽)
     if (this.ghost) { add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("✅ 놓기", () => this.commit(), this.ghostOk ? "commit go" : "commit"); }
     else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("↔ 옮기기", () => this.startMove(), "go"); }
+    else if (F.allFurniture(b).some(o => !o.hand)) add("🪄 정리하기", () => this.tidy());   // 갈매미가 놓은 가구만 다시 놓음(손으로 놓은 건 그대로)
   }
   // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)
   /** 방 안 갈매미 모습: 처음에 받아 둔 메모리 캐시(this.chars = GullPool)의 모델을 복제(다시 받지 않음).
