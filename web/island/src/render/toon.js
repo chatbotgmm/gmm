@@ -20,21 +20,25 @@ function addSnow(sh) {
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.97, 1.0), clamp(uObjSnow * snowUp * (0.75 + 0.3 * snowN), 0.0, 1.0));`);
 }
 
-// 툰 그림자 보정(그늘 밝기 TOON_SHADE: 빛을 등진 면과 그림자 속이 같은 밝기). three.js 툰은 빛 반대쪽 면도 (N·L×0.5+0.5)로 42~62% 햇빛을 받는데, 그 면에 그림자 판정까지 곱해서
-// 판정이 0/1로 흔들리는 곳(빛을 등진 벽·스치는 면)에 가는 줄무늬가 생겼음. 그림자를 따로 받아 명암 단계 좌표에 넣음:
-// 빛을 등진 면은 판정 없이 그늘 밝기, 빛을 받는 면은 그림자 속이면 같은 그늘 밝기(이전엔 그림자 0·등진 면 0.42라 서로 달랐음).
-// 빛과 거의 나란한 면(N·L 0~0.08)은 판정을 서서히 빼서 스치는 각도의 줄무늬도 없앰.
-const TOON_SHADE = 0.15;
-const TOON_SHADOW_PARS = THREE.ShaderChunk.lights_toon_pars_fragment.replace("void RE_Direct_Toon", "float toonShadow = 1.0;\nvoid RE_Direct_Toon")
+// 툰 햇빛 명암(그림자 보정 + 단계). three.js 툰은 빛 반대쪽 면도 (N·L×0.5+0.5)로 42~62% 햇빛을 받고 그 면에 그림자 판정까지 곱해서
+// 판정이 0/1로 흔들리는 곳(빛을 등진 벽·스치는 면)에 가는 줄무늬가 생겼음 → 그림자를 따로 받아 명암 단계 좌표에 넣음:
+// 빛을 등진 면은 판정 없이 그늘색, 빛을 받는 면은 그림자 속이면 같은 그늘색. 빛과 거의 나란한 면(N·L 0~0.08)은 판정을 서서히 빼서 스치는 각도의 줄무늬도 없앰.
+// 햇빛 쪽 단계: 예전 4단계 그림(반-램버트)은 N·L 0.25만 넘으면 82~100%라 해를 15°로 받는 면과 60°로 받는 면이 거의 같은 밝기(정오에 언덕·벽·지붕이 납작해 보였음).
+//  이제 N·L 그대로 세 단계: 스치는 빛 62% → 비스듬한 빛 80% → 정면 빛 92%(툰은 코사인으로 어두워지지 않아 정면 단계를 100%로 두면 정오 잔디가 하얗게 날아감). 단계 경계와 명암 경계(터미네이터)는 좁게 번져서 부드러운 툰 느낌.
+// 그늘색(TOON_SHADE_COL): 햇빛의 밝기(휘도)에 하늘빛 색조를 입힌 것 — 햇빛은 따뜻하고 그늘은 하늘처럼 서늘함(노을 땐 보랏빛, 밤엔 푸른빛). daylight.js가 시간대마다 정함
+export const TOON_SHADE_COL = { value: new THREE.Color(0.14, 0.165, 0.2) };
+const TOON_SHADOW_PARS = THREE.ShaderChunk.lights_toon_pars_fragment.replace("void RE_Direct_Toon", "float toonShadow = 1.0;\nuniform vec3 uToonShade;\nvoid RE_Direct_Toon")
   .replace("vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;", `float tNL = dot( geometryNormal, directLight.direction );
-	float tLit = tNL > 0.0 ? mix( 1.0, toonShadow, smoothstep( 0.0, 0.08, tNL ) ) : 0.0;
-	vec3 irradiance = mix( vec3( ${TOON_SHADE.toFixed(2)} ), getGradientIrradiance( geometryNormal, directLight.direction ), tLit ) * directLight.color;
+	float tLit = smoothstep( -0.03, 0.06, tNL ) * mix( 1.0, toonShadow, smoothstep( 0.0, 0.08, tNL ) );
+	float tBand = 0.62 + 0.18 * smoothstep( 0.14, 0.22, tNL ) + 0.12 * smoothstep( 0.46, 0.56, tNL );
+	vec3 irradiance = mix( uToonShade * dot( directLight.color, vec3( 0.2126, 0.7152, 0.0722 ) ), tBand * directLight.color, tLit );
 	toonShadow = 1.0;`);
 const DIR_SHADOW = "directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ]";
 const TOON_LIGHTS_BEGIN = THREE.ShaderChunk.lights_fragment_begin.replace(DIR_SHADOW, "toonShadow = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ]");
 export const TOON_SHADOW_OK = TOON_SHADOW_PARS.includes("toonShadow = 1.0;\n") && TOON_LIGHTS_BEGIN !== THREE.ShaderChunk.lights_fragment_begin;   // three.js 판이 바뀌어 글자가 안 맞으면 보정 안 함
 export function addToonShadow(sh) {
   if (!TOON_SHADOW_OK) return;
+  sh.uniforms.uToonShade = TOON_SHADE_COL;
   sh.fragmentShader = sh.fragmentShader.replace("#include <lights_toon_pars_fragment>", TOON_SHADOW_PARS).replace("#include <lights_fragment_begin>", TOON_LIGHTS_BEGIN);
 }
 

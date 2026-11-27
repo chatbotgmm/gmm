@@ -3,7 +3,8 @@
 import * as THREE from "three";
 
 import { sunPosition } from "../world/sun.js";
-import { dayLook, moonMix, nightLook } from "./dayKeys.js";
+import { dayLook, moonMix, nightLook, lightElev, shadeTint } from "./dayKeys.js";
+import { TOON_SHADE_COL } from "./toon.js";
 const DEG = Math.PI / 180;
 const C = (h) => new THREE.Color(h);
 let HALO = null;                                                                  // 가운데가 밝고 가장자리로 사라지는 둥근 빛(한 번만 만듦)
@@ -48,12 +49,14 @@ export class Daylight {
     const elev = this.elev, azim = this.azim, k = dayLook(elev, azim, this.look), mk = moonMix(elev), wl = this.wl, dim = 1 - wl;
     this.wlShown = wl;
     // 해가 비추는 방향(해가 낮으면 높이 4°로 둠) → 밤에는 달(해 반대쪽 높이 40°). 해 높이 2° → -6° 동안 머리 위로 천천히 넘어감. 장면 좌표: +x 동, -z 북
-    const a = azim * DEG, e = Math.max(4, elev) * DEG, ce = Math.cos(e), cm = Math.cos(40 * DEG);
+    // 빛 높이는 30°부터 눌러 씀(lightElev: 한여름 정오 76° → 48°): 해가 머리 위에 있으면 위를 향한 면이 다 똑같이 밝고 그림자가 발밑에 숨어 섬이 납작해 보임
+    const a = azim * DEG, e = Math.max(4, lightElev(elev)) * DEG, ce = Math.cos(e), cm = Math.cos(40 * DEG);
     this.dir.set(Math.sin(a) * ce, Math.sin(e), -Math.cos(a) * ce);
     this.moonDir.set(-Math.sin(a) * cm, Math.sin(40 * DEG), Math.cos(a) * cm);
     this.dir.lerp(this.moonDir, mk).normalize();
     this.top.setRGB(k[0], k[1], k[2]).lerp(this.grey, dim * 0.8); this.hor.setRGB(k[3], k[4], k[5]).lerp(this.grey, dim * 0.7);   // 흐린 만큼 하늘·안개·구름을 회색으로
     this.sun.color.setRGB(k[6], k[7], k[8]).lerp(this.moonColor, mk); this.sun.intensity = k[15] * wl;
+    shadeTint(k, mk, TOON_SHADE_COL.value);                                         // 툰 그늘색: 하늘빛 색조(낮 서늘한 파랑 · 노을 보라 · 밤 푸름)
     this.hemi.color.setRGB(k[9], k[10], k[11]); this.hemi.groundColor.setRGB(k[12], k[13], k[14]); this.hemi.intensity = k[16] * (0.7 + 0.3 * wl);
     this.renderer.toneMappingExposure = k[18] * (0.55 + 0.45 * wl);                // 흐리면 화면 전체를 어둡게
     // 하늘 그라데이션·안개
