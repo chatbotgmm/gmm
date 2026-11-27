@@ -61,6 +61,7 @@
   #help { font-size: var(--fs-sm); line-height: 1.7; }
   #chips { position: fixed; top: var(--safe-t); right: var(--safe-r); z-index: var(--z-hud); max-width: min(calc(1040*var(--u)), 78vw);   /* 태블릿·PC: 금고·마을 돈 칸이 늘어 한 줄에 들어가게(예전 720px · 62vw) */
     display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--gap); }
+  #chips { pointer-events: none; } #chips > * { pointer-events: auto; }   /* 칩 사이·줄바꿈(.brk)으로 생긴 빈 칸은 섬 화면으로 통과(가로 폰에서 꿈방울·땅 탭이 빈 칩 영역에 막히던 것) */
   #chips .brk { flex: 0 0 100%; height: 0; }   /* 둘째 줄: 소원(트래커)·배고픔 알림 */
   #chips > span, #chips > button { min-height: var(--hit-sm); min-width: var(--hit-sm); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
   #chips > span { background: var(--c-hud); border-radius: var(--r-md); padding: calc(5*var(--u)) var(--s-2); font-size: var(--fs-body); box-shadow: var(--e-1); font-variant-numeric: tabular-nums; }
