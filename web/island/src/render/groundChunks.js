@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { seasonalGround } from "./seasons.js";
 import { gridGround } from "./gridLines.js";
 import { groundPattern } from "./groundPattern.js";
-import { CELL, toWorldX, toWorldZ } from "../config.js";
+import { CELL, WATER_Y, toWorldX, toWorldZ } from "../config.js";
 import { GroundType } from "../data/types.js";
 import { GROUND_STYLE } from "../data/catalog.js";
 import { corners as cornersRaw, heightIn, joined } from "../world/terrain.js";
@@ -20,6 +20,15 @@ const BLEND_R = 0.22, LOWEST = -1.6;   // 칸 경계 색 섞는 폭(작을수록
 let LOD_SCALE = 1, FAR_DROP = false;                                                 // 그래픽 설정: 상세도 거리 배율, 멀리서 볼 때 한 단계 낮추기
 export function setTerrainDetail(sub, lodScale = 1, farDrop = false) { const changed = SUB !== sub || LOD_SCALE !== lodScale || FAR_DROP !== farDrop; SUB = sub; LOD_SCALE = lodScale; FAR_DROP = farDrop; return changed; }
 const SEABED_COL = new THREE.Color(0xcdbb8a), CLIFF = new THREE.Color(0xa77a4f), CLIFF_SAND = new THREE.Color(0xcdb583), CLIFF_ROCK = new THREE.Color(0x8f8a82);
+const SEABED_ROCK = new THREE.Color(0x748590), CLIFF_SEA = new THREE.Color(0x637084), CLIFF_ROCK_COOL = new THREE.Color(0x8592a6);   // 물속 바위턱 · 바다로 떨어지는 바위 절벽 벽
+const SEA_TINT = new THREE.Color(0x2f8ea3);
+/** 물속 바닥 색(깊이 d = 물 표면 − 바닥, m): 깊을수록 조금 푸르고 어둡게(얕은 바위턱·물가 턱이 물빛 너머로 띠로 보임) +
+ *  물가 바로 밑(0~0.14 m)은 어두운 접촉 띠(땅과 물이 닿는 선이 또렷하게). 물 판이 1.5 m 넘게 깊으면 불투명이라 그 너머는 안 보임 */
+function seabedTint(col, d) {
+  if (d <= 0) return col;
+  const t = Math.min(1, d / 1.1), s = t * t * (3 - 2 * t), band = d < 0.14 ? Math.sin(Math.PI * d / 0.14) : 0;
+  return col.lerp(SEA_TINT, 0.32 * s).multiplyScalar((1 - 0.28 * s) * (1 - 0.22 * band));
+}
 const tmp = new THREE.Color(), tmp2 = new THREE.Color();
 const BASE = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[0])]));
 const ALT = Object.fromEntries(Object.entries(GROUND_STYLE).map(([k, v]) => [k, new THREE.Color(v.colors[1] ?? v.colors[0])]));
@@ -64,7 +73,7 @@ function groundColor(grid, rx, rz, out, own = null, hard = false) {
     const ddx = Math.max(x - gx, 0, gx - (x + 1)), ddz = Math.max(z - gz, 0, gz - (z + 1)), d = Math.hypot(ddx, ddz);
     if (d >= BLEND_R) continue;
     const w = (1 - d / BLEND_R) ** 2;
-    if (water) tmp2.copy(SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
+    if (water) tmp2.copy(c.groundType === GroundType.Rock ? SEABED_ROCK : SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
     out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w;
     if (!water) { cl += snowClear(c.groundType) * w; const k = PATH_SLOT[c.groundType]; if (k !== undefined) lastPath[k] += w; }
   }
@@ -145,7 +154,7 @@ const FLAT_N = [0, 1, 0];
 const toW = (gx, h, gz) => [toWorldX(gx), h, toWorldZ(gz)];
 
 function cliffColor(grid, x, z, y, gx, gz, tall = false) {
-  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : (c && c.groundType === GroundType.Rock) || tall ? CLIFF_ROCK : CLIFF;
+  const c = grid.get(x, z), base = c && c.groundType === GroundType.Sand ? CLIFF_SAND : c && c.groundType === GroundType.Rock ? CLIFF_ROCK_COOL : tall ? CLIFF_ROCK : CLIFF;   // 바위 칸 비탈·벽은 바위 윗면처럼 푸른 회색
   const strata = tall ? 0.9 + 0.12 * noise(gx * 0.7, y * 4.5) : 1;                 // 높은 절벽은 돌빛 + 가로 결
   return new THREE.Color().copy(base).multiplyScalar((0.82 + 0.18 * noise(gx * 2 + y * 3, gz * 2 - y * 3) + Math.max(-0.15, y * 0.1)) * strata);
 }
@@ -165,11 +174,39 @@ function occlusion(grid, gx, gz, h0) {
 function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
   const [ha, hb] = my, [la, lb] = nb;
   if (ha - la < 0.01 && hb - lb < 0.01) return;
+  if (grid.get(x, z)?.groundType === GroundType.Rock && grid.isWater(x + nrm[0], z + nrm[2]) && !grid.isWater(x, z) && Math.max(ha - la, hb - lb) > 0.3) return seaCliff(b, grid, x, z, ha, hb, la, lb, ax, az, bx, bz, nrm);
   const tall = Math.max(ha - la, hb - lb) > 0.55 && la > -0.3, foot = 0.68;          // 높은 벽은 돌빛, 벽 밑동은 그늘로 어둡게
   b.quad([
     { p: toW(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az, tall) }, { p: toW(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz, tall) },
     { p: toW(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz, tall).multiplyScalar(foot) }, { p: toW(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az, tall).multiplyScalar(foot) },
   ]);
+}
+
+/** 바다로 떨어지는 바위 절벽 벽: 변을 둘로, 높이를 셋(위·가운데·밑)으로 나눠 가운데·밑 줄을 위치만의 잡음으로 앞뒤·옆으로 밀어 깎은 돌 면처럼(면마다 제 법선 → 툰 명암 단계가 생김).
+ *  윗줄은 그대로(땅 윗면과 틈 없음). 미는 양은 위치만의 함수라 모서리에서 만나는 두 벽의 같은 점이 똑같이 움직여 틈이 없음. 밑동은 물 밑에서 어둡게 */
+const CLIFF_JIT = 0.24;
+function cliffPoint(gx, gz, y, k) {
+  const jx = (noise(gx * 1.9 + y * 2.3 + 5.1, gz * 1.9 - 3.7) - 0.5) * 2 * CLIFF_JIT * k, jz = (noise(gx * 1.9 - 8.3, gz * 1.9 + y * 2.3 + 1.7) - 0.5) * 2 * CLIFF_JIT * k;
+  return [gx + jx, y, gz + jz];
+}
+function seaCliff(b, grid, x, z, ha, hb, la, lb, ax, az, bx, bz, nrm) {
+  const lo = Math.min(la, lb, ha, hb) - 0.05, rows = [0, 0.45, 1], cols = [0, 0.34, 0.67, 1], P = [];
+  for (const r of rows) for (const t of cols) {
+    const gx = ax + (bx - ax) * t, gz = az + (bz - az) * t, top = ha + (hb - ha) * t, y = top + (lo - top) * r;
+    const p = r === 0 || t === 0 || t === 1 ? [gx, y, gz] : cliffPoint(gx, gz, y, r === 1 ? 0.7 : 1);   // 양 끝 기둥은 그대로(옆 칸의 다른 벽·턱과 틈 없게)
+    const col = new THREE.Color().copy(CLIFF_SEA).multiplyScalar((0.84 + 0.2 * noise(gx * 2.2 + y * 3, gz * 2.2 - y * 3)) * (0.84 + 0.24 * noise(gx * 0.5 + gz * 0.5, y * 6.5)));   // 얼룩 + 가로 결
+    if (y < WATER_Y + 0.12) col.multiplyScalar(0.62 + 0.38 * Math.max(0, Math.min(1, (y - WATER_Y + 0.25) / 0.37)));   // 물에 잠긴 밑동·물가 접촉선은 어둡게
+    else if (r === 0.45) col.multiplyScalar(0.85);                                                   // 벽 가운데 줄은 한 번 더 어둡게(윗면과 벽의 경계가 또렷하게)
+    P.push({ p, c: col });
+  }
+  for (let r = 0; r < 2; r++) for (let t = 0; t < 3; t++) {
+    const q = [P[r * 4 + t], P[r * 4 + t + 1], P[(r + 1) * 4 + t + 1], P[(r + 1) * 4 + t]];
+    const u = [q[1].p[0] - q[0].p[0], q[1].p[1] - q[0].p[1], q[1].p[2] - q[0].p[2]], v = [q[3].p[0] - q[0].p[0], q[3].p[1] - q[0].p[1], q[3].p[2] - q[0].p[2]];
+    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    if (n[0] * nrm[0] + n[2] * nrm[2] < 0) n = n.map(a => -a);
+    const l = Math.hypot(...n) || 1; n = n.map(a => a / l);
+    b.quad(q.map(o => ({ p: toW(o.p[0], o.p[1], o.p[2]), n, c: o.c })));
+  }
 }
 
 /** 깊은 바다(둘레 칸까지 모두 물이고 깊음)는 안 보이니 칸당 1조각. */
@@ -189,6 +226,7 @@ function cellSurface(b, grid, x, z, c, sub) {
       if (!pc) {
         const n = flat ? FLAT_N : normalAt(grid, gx, gz, x, z), col = groundColor(grid, gx, gz, new THREE.Color(), t, near && hardAt(grid, gx, gz)), w = packPath(), s = lastClear;
         if (rim && onHardRim(grid, x, z, t, u, v)) col.multiplyScalar(PATH_RIM);
+        seabedTint(col, WATER_Y - heightIn(c, e, u, v));
         if (flat) { pc = { n, c: col, s, w }; pointCache.set(k, pc); return { p: toW(gx, heightIn(c, e, u, v), gz), n, c: col, s, w }; }
         const steep = Math.min(1, Math.max(0, (0.86 - n[1]) / 0.2));             // 가파를수록 흙·바위 빛
         if (steep > 0 && !grid.isWater(Math.floor(gx), Math.floor(gz))) col.lerp(cliffColor(grid, Math.floor(gx), Math.floor(gz), 0, gx, gz), steep * 0.85);

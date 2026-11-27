@@ -196,7 +196,7 @@ export const GROUND_STYLE = {
   [GroundType.WoodDeck]: { label: "나무 데크", colors: [0x935e38, 0x875533] },
   [GroundType.Dirt]:     { label: "흙길",     colors: [0xbd8b5c, 0xb28154] },
   [GroundType.Sand]:     { label: "모래",     colors: [0xf3e0a6, 0xecd496] },
-  [GroundType.Rock]:     { label: "바위",     colors: [0xa29c92, 0x948e85] },
+  [GroundType.Rock]:     { label: "바위",     colors: [0x8b9db5, 0x8093ab] },   // 푸른 회색(L*63, 따뜻한 햇빛 아래서도 푸른 기가 남게): 모래·흙과 섞여도 바위로 읽히게(예전 누런 회색은 바위 곶 윗면이 모래빛으로 뭉개졌음)
 };
 
 // 갈매미 8종(web/village/models/chars.json의 이름). 1단계는 캡슐 도형, scale은 몸 크기.

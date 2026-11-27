@@ -128,6 +128,53 @@ function makeNoise(seed) {
   return (x, z, oct = 3) => { let a = 0, f = 1, w = 0.5, t = 0; for (let o = 0; o < oct; o++) { a += w * n(x * f, z * f); t += w; f *= 2; w *= 0.5; } return a / t; };
 }
 
+/** 바위 곶(절벽 해안): 해안 몇 곳은 모래사장 대신 바다로 바로 떨어지는 바위 언덕(물가 0.5~1.5 m, 안쪽으로 낮아져 잔디와 이어짐)
+ *  + 앞바다 얕은 바위턱(물속, 맑은 물 너머로 보임) + 드문 바위섬. 부두 놓기 좋은 만 셋(0.05·0.42·0.72π)·북동 곶 등대(1.75π)는 피함.
+ *  남동(0.27π)·남(0.58π)은 처음 카메라(남쪽에서 봄) 쪽으로 벽이 보이고, 북서(1.22π, 고지대 앞)·서(1.02π)·북(1.52π)은 위에서 턱·그늘이 보임.
+ *  그림은 terrain.js joined(바위↔물 높이 차 > 0.6 m는 잇지 않음 → 수직 돌벽). 돌려줌: 바위 무리 놓을 칸들 */
+const HEADLANDS = [{ a: Math.PI * 0.27, wd: 0.06, hg: 1.0 }, { a: Math.PI * 0.58, wd: 0.045, hg: 0.8 }, { a: Math.PI * 1.02, wd: 0.05, hg: 0.9 },
+  { a: Math.PI * 1.22, wd: 0.075, hg: 1.05 }, { a: Math.PI * 1.52, wd: 0.05, hg: 0.85 }];
+function cliffCoasts(grid, noise, coast, cx, cz) {
+  const w = grid.w, h = grid.h, r2 = v => Math.round(v * 100) / 100, rocks = [];
+  for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+    const dx = x + 0.5 - cx, dz = z + 0.5 - cz, a = Math.atan2(dz, dx), r = Math.hypot(dx, dz) + (noise(x * 0.18, z * 0.18) - 0.5) * 3;
+    let hd = null, wgt = 0;
+    for (const o of HEADLANDS) { const da = Math.atan2(Math.sin(a - o.a), Math.cos(a - o.a)), k = Math.exp(-(da * da) / (2 * o.wd * o.wd)); if (k > wgt) { wgt = k; hd = o; } }
+    if (wgt < 0.3) continue;
+    const c = grid.get(x, z), n = noise(x * 0.35 + 40, z * 0.35), out = 1.6 * wgt, t = coast(a) - r + out;   // t: 곶 물가에서 안쪽으로 칸(곶은 원래 해안보다 1.6칸까지 내밂)
+    if (t >= 0 && t < BEACH + 4) {                                               // 땅: 물가에서 바로 솟은 바위, 안쪽 3칸에 걸쳐 잔디 높이(0)로 내려감
+      const hj = (((x * 2654435761) ^ (z * 40503)) >>> 0) % 1000 / 1000;           // 칸마다 울퉁불퉁(바위끼리는 비탈로 이어져 거친 바위 윗면)
+      const top = (0.5 + hd.hg * wgt * (0.55 + 0.45 * n)) * (0.82 + 0.36 * hj), inner = Math.min(1, (BEACH + 4 - t) / 3);
+      c.groundType = GroundType.Rock; c.elevation = r2(top * inner);
+      if (c.elevation < 0.3 && t > 1) { c.elevation = 0; c.groundType = GroundType.Grass; }    // 안쪽 낮은 끝은 잔디(뒤에 놓는 언덕·고지대가 평지로 보고 그대로 씀)
+    } else if (t < 0 && t > -3.6) {                                              // 앞바다: 얕은 바위턱(−0.28 ~ −0.7 m)
+      const d = -t; c.groundType = GroundType.Rock; c.elevation = r2(Math.min(-0.26, -0.28 - 0.12 * d + 0.1 * (n - 0.5)));
+      const s = noise(x * 0.9 + 11, z * 0.9 - 7);                                 // 바위섬: 물가에서 1.5칸 넘게 떨어진 곳 드문드문
+      if (s > 0.7 && d > 1.5 && wgt > 0.55) c.elevation = r2(0.3 + 1.6 * (s - 0.7) + 0.3 * n);
+    }
+  }
+  // 톱니 줄이기: 바다와 두 면(ㄱ자)으로 닿은 바위 모서리 칸은 한 단 낮게(벽은 그대로 남되 높이가 층져서 칸 모서리 계단이 덜 고르게 보임)
+  const corner = [];
+  for (let z = 1; z < h - 1; z++) for (let x = 1; x < w - 1; x++) {
+    const c = grid.get(x, z); if (c.groundType !== GroundType.Rock || grid.isWater(x, z) || c.elevation < 0.3) continue;
+    const W4 = [[1, 0], [0, 1], [-1, 0], [0, -1]].map(([dx, dz]) => grid.isWater(x + dx, z + dz));
+    if ((W4[0] || W4[2]) && (W4[1] || W4[3])) corner.push(c);
+  }
+  for (const c of corner) c.elevation = r2(Math.max(0.62, c.elevation * 0.6));
+  // 바위 무리 자리: 절벽 위 가장자리(바다와 닿은 바위 땅) 3칸에 하나꼴, 절벽 밑 얕은 물(바위턱), 바위섬 옆
+  const isW = (x, z) => grid.isWater(x, z), rock = (x, z) => grid.get(x, z)?.groundType === GroundType.Rock;
+  const hsh = (x, z) => (((x * 73856093) ^ (z * 19349663)) >>> 0) % 7;
+  for (let z = 1; z < h - 1; z++) for (let x = 1; x < w - 1; x++) {
+    if (!rock(x, z)) continue;
+    const c = grid.get(x, z), wn = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => isW(x + dx, z + dz)).length;
+    if (!isW(x, z) && wn && c.elevation > 0.3 && hsh(x, z) < 2) rocks.push([x, z]);
+    else if (isW(x, z) && c.elevation > -0.42 && hsh(x, z) === 3) {           // 절벽 밑(바로 옆이 높은 바위 땅)
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => !isW(x + dx, z + dz) && rock(x + dx, z + dz) && grid.get(x + dx, z + dz).elevation > 0.4)) rocks.push([x, z]);
+    }
+  }
+  return rocks;
+}
+
 export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
   const rnd = seededRandom(seed), grid = new Grid(w, h), noise = makeNoise(seed);
   const cx = w / 2, cz = h / 2, ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
@@ -145,6 +192,7 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     else if (r < edge) { c.groundType = GroundType.Sand; c.elevation = -Math.round(15 * (r - (edge - BEACH)) / BEACH) / 100; }
     else { c.groundType = GroundType.Sand; c.elevation = Math.max(SEABED, -0.45 - 0.12 * (r - edge)); }
   }
+  const cliffRocks = cliffCoasts(grid, noise, coast, cx, cz);
   const modules = [], used = new Set(), key = (x, z) => `${x},${z}`, N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const near = (x, z, d) => [...used].some(k => { const [ux, uz] = k.split(",").map(Number); return Math.abs(ux - x) + Math.abs(uz - z) < d; });
   const freeGrass = (x, z) => grid.inBounds(x, z) && !grid.isWater(x, z) && grid.get(x, z).groundType === GroundType.Grass && !used.has(key(x, z));
@@ -305,6 +353,12 @@ export function generateWildIsland(seed = 7, w = WILD.size, h = WILD.size) {
     if (!wet) continue;
     modules.push({ id: `palm-${k + 1}`, defId: "palm", cells: [[x, z]], rot: Math.floor(rnd() * 4), variant: 0 }); used.add(key(x, z)); k++;
   }
+  // 바위 곶 바위 무리(cliffCoasts가 고른 자리: 절벽 위 가장자리·절벽 밑 얕은 물·바위섬). 난수는 따로(위의 자리·순서는 그대로)
+  { const r2 = seededRandom(seed * 31 + 5); let k = 0;
+    for (const [x, z] of cliffRocks) {
+      if (used.has(key(x, z)) || near(x, z, 2)) continue;
+      modules.push({ id: `rock-c${++k}`, defId: "beachRock", cells: [[x, z]], rot: Math.floor(r2() * 4), variant: k % 3 }); used.add(key(x, z));
+    } }
   const zones = [{ id: "highland", label: "⛰ 고지대", x: hl.x, z: hl.z }, { id: "cave", label: "🕳 동굴", x: caveAt.x, z: caveAt.z + 1 },
     ...forests.map((f, i) => ({ id: `forest${i}`, label: "🌲 숲", x: f.x, z: f.z })), { id: "bank", label: "🏦 공식은행", x: cx, z: cz - 3 }];
   if (typeof pondAt !== "undefined") zones.push({ id: "pond", label: "💧 연못", x: pondAt.x, z: pondAt.z });
