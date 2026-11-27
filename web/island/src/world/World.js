@@ -26,6 +26,7 @@ import { fishMedal, grantMedalGifts, medalGiftsFromSave } from "./medals.js";
 import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
+import { paintableUnder, matchGround } from "./groundMatch.js";
 import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost } from "./daily.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
@@ -1106,8 +1107,8 @@ export class World {
   /** 이 등급의 건물을 지을 수 있는 건축가가 있나(1등급은 누구나). */
   builderFor(def) { return this.units.find(u => J.canBuild(u, def)) || null; }   // 그 건물을 지을 직업의 갈매미가 있어야 함(집·계단 = 건축가, 시설 = 목수)
 
-  // ---- 바닥 칠하기(지시서 3-B): 땅 칸이고 건물·시설이 없을 때만
-  canPaint(x, z) { const c = this.grid.get(x, z); return !!c && !this.grid.isWater(x, z) && !c.occupiedId && !this.isPlot(x, z); }
+  // ---- 바닥 칠하기(지시서 3-B): 땅 칸이고 나무·바위·밭·계단이 없을 때. 건물 밑도 칠함(모델이 차지 칸보다 작아 바닥이 드러남 — 길 연결은 roads.isPaved가 건물 칸을 빼서 그대로)
+  canPaint(x, z) { const c = this.grid.get(x, z); return !!c && !this.grid.isWater(x, z) && paintableUnder(this, c.occupiedId) && !this.isPlot(x, z); }
   paint(x, z, type) { if (!this.canPaint(x, z)) return false; const ok = this.grid.setGround(x, z, type); if (ok) this.emit("ground", { x, z, type }); return ok; }
 
   // ---- 높이(층·경사·계단·연못): 한 단 = MAX_STEP(0.25 m). 한 단 차이는 걸어 다니는 경사, 두 단 이상은 절벽. 올리기 한 번 = heightStep(0.5 m = 두 단).
@@ -1636,6 +1637,7 @@ export class World {
     if (b.ramp) this.grid.reserveDoor(b.ramp.bx, b.ramp.bz, b.id);              // 계단 위쪽 칸도 비워 둠(다른 건물·높이 바꾸기 못 함)
     this.buildings.set(b.id, b); this.powerRev++; this.emit("buildingAdded", b); if (hits === null) this.notice(b.door.x + 0.5, b.door.z + 0.5, "site");
     this.dropDecor(b.cells);                                                     // 지은 칸의 놓은 덤불·꽃은 지움(돈은 안 돌려줌)
+    if (hits === null) matchGround(this, b);                                     // 둘레가 거의 한 가지 길이면 건물 밑 잔디도 그 바닥으로(groundMatch.js, 불러오기는 아님)
     if (this.isDone(b)) { this.completed(b); if (hits === null) this.builtNow(b); if (b.order) this.settleOrder(b); }   // ⚡ 바로 완공도 다 지은 것(불러오기·시험 받침은 hits를 넘김 → 아님)
     return { ok: true, building: b };
   }
