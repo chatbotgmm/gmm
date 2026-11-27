@@ -708,7 +708,7 @@ function chooseNext(u, world, rnd) {
   if (festAwake(u, world) && !u.committed && rnd() < FESTIVAL_JOIN_CHANCE && startGather(u, world, rnd)) return;
   // (예전 '밤이면 무조건 잠'은 없음: 밤에도 기력이 남아 있으면 일함. 잠은 아래 '지치면 잠'(기력 CH.SLEEP_BELOW 이하) 하나)
   if (startDoctor(u, world)) return;                                               // 당번 의사: 맡은 의원에 환자가 있으면 진료하러(난수 안 씀)
-  if (u.committed && startActivity(u, "build", world, rnd)) return;          // 맡은 공사가 먼저
+  if (u.committed && !(u.needs && u.needs.energy <= CH.SLEEP_BELOW) && startActivity(u, "build", world, rnd)) return;   // 맡은 공사가 먼저(지쳤으면 아래에서 잠부터 — 공사는 맡은 채)
   // 피곤하면(기력 TIRED 아래) 심부름(가공·은행·시장·저장고·장보기)을 새로 시작하지 않고 아래에서 먼저 쉼: 상인이 가공 → 은행을 쉬지 않고 이어 가다 기력이 바닥나지 않게
   if (world.economy && (u.needs?.energy ?? 100) >= M.TIRED) {
     if (u.job === "merchant") {                                                  // 상인: 가공품은 은행에, 원자재는 가공
@@ -843,8 +843,11 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
   }
   // 지치면(기력 20 이하) 하던 일·놀이를 한 동작 끝에 멈추고 자러 감(맡은 공사는 유지): 일 한 바퀴·산책이 길어 20을 한참 지나 잠자리로 나서면
   //  가는 길(넓은 섬에서 평균 31초, 기력 −6)에 쓰러지기 쉬움. 먹으러·몸 녹이러·아파서 가는 길은 그대로
-  if (u.needs && u.needs.energy <= CH.SLEEP_BELOW && SLEEP_STOPS.has(u.state) && !u.once) {
-    emote(u, "🥱 졸려…"); setIdle(u, rnd, world, 0); return settle(u, dt, world);
+  //  배가 고파(포만감 SLEEP_EAT_FIRST 아래) 먹을 것을 사러·찾으러 가는 길이면 멈추지 않음(chooseNext가 먹기를 먼저 골라 멈추면 다시 그 길로 — 매 프레임 되풀이)
+  if (u.needs && u.needs.energy <= CH.SLEEP_BELOW && SLEEP_STOPS.has(u.state) && !u.once && (u.full ?? 80) >= SLEEP_EAT_FIRST) {
+    emote(u, "🥱 졸려…"); setIdle(u, rnd, world, 0);   // 곧장 잠자리로(아프면 병원·집, 추우면 몸 녹이러가 먼저 — chooseNext 순서). chooseNext에 맡기면 그 사이 서서 차는 기력(+0.06/프레임)으로
+    if (!(u.sick && startSickRest(u, world)) && !(CLIM.isCold(u.bodyT) && startWarm(u, world))) startActivity(u, "sleep", world, rnd);   //  20을 막 넘어 일을 다시 고르고, 일하며 20 아래로 → 또 멈춤(0.1~0.3초마다 되풀이)
+    return settle(u, dt, world);
   }
   // 반사 행동
   if (p.timid && visible(u) && ![US.Flee, US.Fish, US.GoFish, US.Inside, US.GoToBuilding, US.Swim, US.Faint].includes(u.state)) {

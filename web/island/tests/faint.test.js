@@ -115,3 +115,30 @@ test("지치면(기력 20 이하) 하던 일을 한 동작 끝에 멈추고 자�
     assert.equal(got, want, `포만감 ${full}: ${want === "sleep" ? "잠부터" : "먹기부터"}`);
   }
 });
+
+/** 상태가 바뀐 횟수(깜빡임 확인) */
+const runCount = (w, u, secs, each = () => {}) => { let prev = u.state, n = 0; for (let t = 0; t < secs; t += 0.1) { each(); w.update(0.1); if (u.state !== prev) { n++; prev = u.state; } } return n; };
+
+test("지친 갈매미가 잠 문턱 20 언저리에서 일 ↔ 멈춤을 되풀이하지 않음(깜빡임 없음): 멈추면 곧장 잠자리로", () => {
+  const { w, u } = isle(); u.state = "Wander"; u.timer = 30; u.path = null; u.needs.energy = 20; u.full = 90;
+  const n = runCount(w, u, 10, () => { u.full = 90; });
+  assert.ok(n <= 3, `10초에 상태 바뀜 ${n}번`); assert.ok(u.state === "Sleep" || u.insideAct === "sleep" || (u.state === "GoToBuilding" && u.sleepy), `잠자리로(${u.state})`);
+});
+
+test("맡은 공사가 있어도 지치면 잠부터(공사는 맡은 채) — 공사장 ↔ 멈춤 되풀이 없음", () => {
+  const { w, u } = isle(); w.instantBuild = false;
+  const site = placeAt(w, "house", u.x + 8, u.z, 4); site.hits = 0; site.busy = u.unitId; u.committed = site.id;
+  u.state = "Idle"; u.timer = 0; u.needs.energy = 15; u.full = 90;
+  let slept = -1, prev = u.state, n = 0;
+  for (let t = 0; t < 30 && slept < 0; t += 0.1) { u.full = 90; w.update(0.1); if (u.state !== prev) { n++; prev = u.state; } if (u.state === "Sleep" || u.insideAct === "sleep") slept = t; }
+  assert.ok(slept >= 0, "잠듦"); assert.ok(n <= 4, `상태 바뀜 ${n}번`); assert.equal(u.committed, site.id, "공사는 맡은 채");
+});
+
+test("지쳤어도 배가 아주 고프면(포만감 25 아래) 음식 사러 가는 길을 멈추지 않음 — 사서 먹음", () => {
+  const { w, u } = isle(); const h = w.addUnitByName("목수");
+  h.job = "fisher"; h.inv.fish = 30; h.x = u.x + 6; h.z = u.z;
+  u.inv.food = 0; u.inv.fish = 0; u.coins = 50; u.needs.energy = 15; u.full = 22; u.state = "Idle"; u.timer = 0;
+  let ate = false, f0 = u.full, n = 0, prev = u.state;
+  for (let t = 0; t < 60 && !ate; t += 0.1) { h.state = "Sleep"; h.timer = 1e9; w.update(0.1); if (u.full > f0 + 1) ate = true; f0 = u.full; if (u.state !== prev) { n++; prev = u.state; } }
+  assert.ok(ate, "먹음"); assert.ok(n <= 8, `상태 바뀜 ${n}번`);
+});
