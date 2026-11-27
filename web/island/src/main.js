@@ -43,7 +43,7 @@ import { Hud } from "./ui/hud.js";
 import { tempNote } from "./ui/hudParts.js";
 import { indoorTemp } from "./world/climate.js";
 import { Quality } from "./render/quality.js";
-import { shadowRadius, snapToTexels, needsRecenter } from "./render/sunShadow.js";
+import { shadowRadius, snapToTexels, needsRecenter, ahead } from "./render/sunShadow.js";
 import { PROP_LOD } from "./render/assets.js";
 import { poolFor } from "./render/instances.js";
 import { RoomView } from "./render/room.js";
@@ -447,7 +447,7 @@ function keyCamera(dt) {
 }
 // 한 프레임에서 오류가 나도 게임이 통째로 멈추지 않게: 오류는 기록하고(같은 오류는 5초에 한 번) 다음 프레임을 이어 감
 let frameErrAt = 0, frameErrMsg = "";
-// 해 그림자 범위가 보는 곳을 따라감(sunShadow.js): 반경은 카메라 거리에 맞춰(±18 ~ 36 m. 높음에서 ±48 m는 원경 프레임이 2배로 느려져서 36 m까지만), 중심은 보는 곳이 반경의 8%(2 m 이상) 넘게
+// 해 그림자 범위가 보는 곳을 따라감(sunShadow.js): 반경은 카메라 거리에 맞춰(±26 ~ 36 m, 중심은 시선 쪽으로 반경의 30%까지 앞당김. 높음에서 ±48 m는 원경 프레임이 2배로 느려져서 36 m까지만), 중심은 보는 곳이 반경의 8%(2 m 이상) 넘게
 // 벗어날 때만 옮기고 그림자 지도 한 칸 단위로 맞춤 → 옮겨도 그림자 가장자리가 떨리지 않음. 텍셀이 커지면 법선 밀기(normalBias)도 같이 키워 줄무늬(그림자 여드름)를 막음
 let shadowR = SHADOW_R, shadowC = null;
 const _sd = [0, 0, 0], _st = [0, 0, 0];
@@ -458,7 +458,7 @@ function followSun() {
     Object.assign(sc, { left: -R, right: R, top: R, bottom: -R, far: back * 2 + 20 }); sc.updateProjectionMatrix(); quality.kickShadow();
   }
   sun.shadow.normalBias = Math.max(0.04, texel * 1.5);
-  _st[0] = controls.target.x; _st[2] = controls.target.z;
+  const t = controls.target, cp = camera.position; ahead([t.x, t.y, t.z], [cp.x, cp.y, cp.z], R, 0.3, _st);   // 비스듬히 볼수록 중심을 화면 위쪽(먼 쪽)으로
   if (needsRecenter(shadowC, _st, Math.max(2, R * 0.08))) shadowC = [_st[0], 0, _st[2]];
   const d = daylight.dir; _sd[0] = d.x; _sd[1] = d.y; _sd[2] = d.z;
   const p = snapToTexels(shadowC, _sd, texel);
