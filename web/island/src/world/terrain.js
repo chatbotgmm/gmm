@@ -10,10 +10,12 @@ const BUMP = 0.55;                 // 칸 가운데 볼록의 세기(1이면 칸
 export function joined(grid, a, b, ax, az, bx, bz) {
   if (!a || !b) return false;
   const d = Math.abs(a.elevation - b.elevation);
+  if (d > CLIFF_DROP && (a.groundType === "Rock" || b.groundType === "Rock") && grid.isWater(ax, az) !== grid.isWater(bx, bz)
+    && (grid.isWater(ax, az) ? b : a).groundType === "Rock") return false;            // 바위 곶·바위섬: 바다로 바로 떨어지는 절벽(비탈로 잇지 않음 → 그림은 수직 돌벽)
   if ((a.groundType === "Rock" || b.groundType === "Rock") && d <= ROCK_JOIN) return true;   // 바위산은 가팔라도 매끈한 비탈로 그림(걷기는 grid.canStep이 따로 막음)
   return d <= MAX_STEP + EPS || grid.isWater(ax, az) || grid.isWater(bx, bz);
 }
-const ROCK_JOIN = 1.6;
+const ROCK_JOIN = 1.6, CLIFF_DROP = 0.6;
 
 /** 칸 (x,z)의 꼭짓점 높이. cx, cz는 0(왼쪽·위) 또는 1(오른쪽·아래). 꼭짓점을 둘러싼 칸 중 이 칸과 이어진 칸들의 평균. */
 export function cornerHeight(grid, x, z, cx, cz) {

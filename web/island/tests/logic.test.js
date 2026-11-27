@@ -695,7 +695,9 @@ test("넓은 지도: 본섬 + 작은 섬 5개, 다리로 가까운 섬과 이어
   const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수");
   assert.equal(w.grid.w, 192); assert.equal(w.zones.filter(z => z.id.startsWith("islet-")).length, 5);
   const c = w.center, home = w.compAt(Math.floor(c.x), Math.floor(c.z) + 6);
-  const zone = id => w.zones.find(z => z.id === id), compOf = z => w.compAt(Math.floor(z.x), Math.floor(z.z));
+  const zone = id => w.zones.find(z => z.id === id);
+  // 섬 가운데 칸에 나무가 서 있을 수 있어(생성 난수 순서가 지형에 따라 바뀜) 가운데에서 가장 가까운 걸을 수 있는 칸의 덩어리로 봄
+  const compOf = z => { for (let r = 0; r < 6; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) { const k = w.compAt(Math.floor(z.x) + dx, Math.floor(z.z) + dz); if (k >= 0) return k; } return -1; };
   const forest = zone("islet-forest"), palm = zone("islet-palm");
   assert.notEqual(compOf(forest), home, "처음엔 숲섬이 따로 떨어져 있음");
   // 본섬 땅 → 숲섬 땅 사이 곧은 물길(가로·세로) 중 가장 짧은 것에 다리

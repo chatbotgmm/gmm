@@ -284,6 +284,14 @@ export function placeLandmark(obj, world, m) {
   if (m.defId === "cave") t.rotation.y = (m.rot || 0) * Math.PI / 2;
   return true;
 }
+/** 돌 색 덮어쓰기(바닷가 바위 모델의 복숭아·청록빛 → 바위 곶 돌벽과 같은 따뜻한 회갈색). 원래 재질마다 복제 하나를 같이 써서 묶어 그리기(instances.js)가 그대로 묶음 */
+const STONE_MATS = new Map();
+function stoneTint(obj, hex) {
+  obj.traverse(o => { if (!o.isMesh) return; o.material = [].concat(o.material).map(m => {
+    const k = m.uuid + hex; let c = STONE_MATS.get(k);
+    if (!c) { c = m.clone(); if (c.map) c.map = null; c.color.setHex(hex); c.needsUpdate = true; STONE_MATS.set(k, c); }
+    return c; }).reduce((a, m, i, arr) => arr.length === 1 ? m : arr, null); });
+}
 /** 모듈 하나의 그림(장면에는 아직 안 붙임). 나무·야자수·바위·광석 = 모델 하나(칸 가운데·칸 높이), 지형지물 = 칸으로 그리는 임시 도형(+ 등대 모델).
  *  지형지물 물체는 userData.landmark = true(묶어 그리기·거리 숨기기에 넣지 않음 — 등대 불빛은 멀리서도 보여야 함) */
 export async function makeModuleView(world, m) {
@@ -298,6 +306,7 @@ export async function makeModuleView(world, m) {
   // 모델 하나짜리(1칸) 모듈: 칸 가운데, 그 칸 높이에 둔다
   const [x, z] = m.cells[0], obj = await modelFor({ footprint: { w: def.viewSize ?? 1, d: def.viewSize ?? 1 } }, () => modulePlaceholder(m.defId, [[0, 0]], 0), asset);
   obj.position.set(cellsWorld[0][0], terrainHeight(world.grid, x + 0.5, z + 0.5), cellsWorld[0][1]); obj.rotation.y = m.rot * Math.PI / 2;
+  if (def.stone) stoneTint(obj, def.stone);
   if (def.vary) { const h = Math.abs(((x * 73856093) ^ (z * 19349663)) >>> 0) / 4294967295; obj.scale.multiplyScalar(0.85 + h * 0.4); obj.rotation.y = h * 6.283 * 7; }   // 나무: 칸마다 크기 0.85~1.25배·방향 제각각
   obj.name = m.id; return obj;
 }

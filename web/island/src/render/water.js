@@ -90,13 +90,17 @@ export function createWater(size = 480) {
         // 바위·절벽 해안: 마루가 닿을 때 흰 물보라가 튐
         float burst = smoothstep(0.4, 0.5, u) * (1.0 - smoothstep(0.52, 0.75, u)) * (1.0 - smoothstep(0.0, 0.7 + 0.5 * k, s)) * power * (1.0 - beach);
         foam = max(foam, burst * smoothstep(0.42, 0.48, fn + 0.2));
-        foam = max(foam, (1.0 - smoothstep(0.0, 0.06, depth)) * (0.45 + 0.35 * (1.0 - power)));   // 물가 얇은 테두리(연못은 이것만)
+        float rimF = 1.0 - smoothstep(0.0, 0.09, depth);
+        foam = max(foam, rimF * (0.62 + 0.3 * (1.0 - power)));                            // 물가 얇은 거품 테두리(연못은 이것만): 땅과 물이 닿는 선을 또렷하게
+        col *= 1.0 - 0.16 * smoothstep(0.05, 0.16, depth) * (1.0 - smoothstep(0.2, 0.5, depth));   // 테두리 바로 바깥 얇은 어두운 띠(접촉선)
         col = mix(col, vec3(1.0), clamp(foam, 0.0, 1.0) * 0.9);
         float sparkle = smoothstep(1.6, 1.95, w) * smoothstep(0.4, 1.5, depth);           // 깊은 곳 물결 반짝임
         col = mix(col, vec3(1.0), sparkle * 0.25);
       #ifndef WATER_LITE
         // 각진 잔물결 반짝임 + 해·달 빛길: 칸마다 기울어진 작은 면(로우폴리 물결)이 해 쪽으로 빛을 튕김
-        vec2 fc = floor(p * 1.7), fr = fract(p * 1.7);
+        // 가까이 볼수록 세모를 잘게(카메라 높이에 따라 2배씩 — 위치마다 바꾸면 무늬가 휘어서 화면 전체에 한 값). 가까이서 0.6 m 세모가 종이 조각처럼 떠 보였음
+        float gs = 1.7 * exp2(clamp(floor(log2(18.0 / max(cameraPosition.y + 0.18, 1.0))), 0.0, 2.0));
+        vec2 fc = floor(p * gs), fr = fract(p * gs);
         float ph = hash12(fc) * 6.283 + uTime * (0.8 + hash12(fc + 7.0) * 0.6);
         vec3 N = normalize(vec3(sin(ph) * 0.22, 1.0, cos(ph * 1.3) * 0.22));
         float spec = pow(max(dot(reflect(-V, N), normalize(uSunDir)), 0.0), 90.0) * step(0.06, fr.y - fr.x) * step(0.06, min(fr.x, 1.0 - fr.y));   // 칸을 대각선으로 자른 세모 면만
@@ -113,7 +117,7 @@ export function createWater(size = 480) {
         col = mix(col, uHor * 1.05, fres * 0.55 * smoothstep(0.6, 2.0, depth));
         col = mix(col, col * vec3(0.42, 0.52, 0.92), uNight * 0.85);
         col *= uLight;                                                                   // 밤에는 어둡게(daylight.js)
-        gl_FragColor = vec4(col, min(1.0, mix(mix(0.62, 0.9, smoothstep(0.0, 1.0, depth)), 1.0, smoothstep(1.3, 1.5, depth)) + foam * 0.1));   // 깊은 곳(1.5 m 넘게)은 불투명: 바다뿐인 바깥 조각은 바닥 메쉬가 없어서
+        gl_FragColor = vec4(col, min(1.0, mix(mix(0.5, 0.9, smoothstep(0.0, 1.1, depth)), 1.0, smoothstep(1.3, 1.5, depth)) + foam * 0.35));   // 깊은 곳(1.5 m 넘게)은 불투명: 바다뿐인 바깥 조각은 바닥 메쉬가 없어서
         #include <colorspace_fragment>
         #include <fog_fragment>
       }`,
