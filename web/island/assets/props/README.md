@@ -112,7 +112,7 @@ Kenney building-type-d·b와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/
 ## 풍차 발전소(windmill_4k / 2k / 1k) · 수족관(aquarium_4k / 2k / 1k), 2026-11-28
 사용자가 컨셉 그림으로 만든 Tripo 모델 두 개. 같은 방법(면 그대로, 기본색만 4096 / 2048 / 1024px JPEG 92, metallic 0.1·roughness 0.8, KHR_mesh_quantization —
 위치 float · 노멀 int8 · UV float · 인덱스 u16, 노멀·금속도 텍스처 없음·doubleSided 뺌). 만든 스크립트: `tools/import_windmill_aquarium.py`(수족관은 meshopt를 먼저 풀어 넣음) → 그다음 glow_mask.py.
-- 파일: windmill_4k 4,153,096 / 2k 2,358,908 / 1k 1,707,864 bytes · aquarium_4k 3,459,064 / 2k 1,821,568 / 1k 1,303,492 bytes(발광 마스크 포함)
+- 파일: windmill_4k 4,153,056 / 2k 2,358,868 / 1k 1,707,824 bytes · aquarium_4k 3,425,024 / 2k 1,787,528 / 1k 1,269,452 bytes(발광 마스크 포함)
 - 풍차: 원본 windmill_3d_model.glb(받은 파일 393b8a1c-…, 압축 없음, 메시 54개 tripo_part_0~53 · 텍스처 1장 4096px, 44,733면 · 44,155 정점). 바닥판 없음(가장 넓은 조각 part_12도 탑 몸통).
   - 메시 둘로 합침: 몸통(windmillBody, 재질 lanternGlow — 등불) + 날개(**windBlades** 노드, 재질 windBladesMat — 등불 빛 번짐이 날개를 따라 돌지 않게 재질을 나눔).
   - 날개 조각(조각마다 중심·각도를 재서 고름): part 1(날개 틀 4개 + 오른쪽 아래 돛) · 8 · 9 · 10(돛 3장) · 11(허브) · 25 · 30 · 31 · 32 · 33 · 38 · 39 · 40(안쪽 금빛 마개 8) ·
