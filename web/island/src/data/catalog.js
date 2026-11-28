@@ -350,6 +350,21 @@ export const ITEMS = [
   { id: "medalShelf", name: "메달 진열장",    rarity: "epic", furniture: "trophyShelf", medal: 12 },
   // 🗝 메인 스토리 엔딩 선물(story: 낚시·반짝이·가게로는 안 나옴. 맨 뒤에 붙여 기존 줄 순서가 그대로)
   { id: "bormChair",  name: "보름의 흔들의자", rarity: "legend", furniture: "bormChair", story: true },
+  // 🌟 드문 반짝이(rareOf = 바탕 반짝이 id): 반짝이가 생길 때 낮은 확률로 이 모습이 됨(world/sparkles.js SPARKLE_RARE). sparkle 키가 없어 따로 생기지 않음.
+  //  선물 갈래는 바탕 반짝이와 같음(bond.js giftDef). 맨 뒤에 붙여 기존 줄 순서가 그대로
+  { id: "pinkShell",     name: "분홍 조개껍데기",   rarity: "rare", gift: true, rareOf: "shell" },
+  { id: "heartGlass",    name: "하트 바다 유리",     rarity: "rare", gift: true, rareOf: "seaglass" },
+  { id: "rainbowGoby",   name: "무지개 망둥어",      rarity: "rare", gift: true, rareOf: "goby" },
+  { id: "farPostcard",   name: "먼 섬에서 온 엽서",  rarity: "rare", gift: true, rareOf: "postcard" },
+  { id: "doubleBlossom", name: "겹벚꽃 가지",        rarity: "rare", gift: true, rareOf: "blossom" },
+  { id: "fiveClover",    name: "다섯잎클로버",       rarity: "rare", gift: true, rareOf: "clover" },
+  { id: "goldAcorn",     name: "황금 도토리",        rarity: "rare", gift: true, rareOf: "acorn" },
+  { id: "snowCone",      name: "눈꽃 솔방울",        rarity: "rare", gift: true, rareOf: "pinecone" },
+  { id: "starIcicle",    name: "별 모양 고드름",     rarity: "rare", gift: true, rareOf: "icicle" },
+  { id: "blueFirefly",   name: "푸른 반딧불 병",     rarity: "rare", gift: true, rareOf: "fireflyJar", sparkleTime: "night" },
+  { id: "wishNote",      name: "소원 별빛 쪽지",     rarity: "rare", gift: true, rareOf: "starNote",   sparkleTime: "night" },
+  { id: "crescentShell", name: "초승달 조개",        rarity: "rare", gift: true, rareOf: "moonShell",  sparkleTime: "night" },
+  { id: "rainbowWeed",   name: "무지개 야광 해초",   rarity: "rare", gift: true, rareOf: "glowWeed",   sparkleTime: "night" },
 ];
 // 시장 시세(동전 🪙). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

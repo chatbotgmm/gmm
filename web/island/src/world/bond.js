@@ -37,7 +37,7 @@ export const GIFT_TIERS = [
 ];
 /** 선물할 수 있는 것의 정의: 가구가 아닌 가방 물건 또는 보물 물고기(희귀 이상). 아니면 null. 음식은 선물하지 않음(먹거리 살림을 건드리지 않게) */
 export function giftDef(id) {
-  const it = ITEMS.find(i => i.id === id && !i.furniture); if (it) return { ...it, kind: "item", cat: GIFT_CATS[id] || null };
+  const it = ITEMS.find(i => i.id === id && !i.furniture); if (it) return { ...it, kind: "item", cat: GIFT_CATS[id] || GIFT_CATS[it.rareOf] || null };   // 드문 반짝이(rareOf)는 바탕 반짝이와 같은 갈래
   const f = FISH.find(f => f.id === id && f.rarity !== "common"); return f ? { ...f, kind: "fish", cat: "fish" } : null;
 }
 /** 지금 선물할 수 있는 것들: [{ id, name, kind, cat, n }] (내 가방 world.items의 선물거리 → 예전 저장에 남은 보물 물고기 world.treasures 순서).
@@ -65,11 +65,20 @@ export const petsLeft = (u, day) => Math.max(0, PET_DAILY - (u.petDay === day ? 
 // 답례: 하트 단계(1~3)에 처음 닿았을 때 한 번. item = 마을 가방에 들어가는 물건(ITEMS의 id),
 // furniture = 그 갈매미 집 창고에 들어가는 가구(집이 없으면 대신 item을 마을 가방에)
 export const BOND_THANKS = [null, { item: "bottle" }, { furniture: "plant", item: "chair" }, { item: "pearl" }];
-/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지) */
-export function thanksFor(stage, hasHome) {
+// 취향 답례: 아는 사이(1)·소중한 사이(3)의 물건 답례는 그 갈매미가 좋아하는 갈래(PERSONA likes)에서 고름. 모르는 모습이면 BOND_THANKS 그대로.
+//  좋아하는 갈래가 둘이면 아는 사이는 첫째, 소중한 사이는 둘째(likes[floor(단계 / 2) % 개수]) → 같은 날 여러 마리가 아는 사이가 돼도 답례가 저마다 다름
+export const THANKS_BY_TASTE = {
+  1: { letter: "bottle", plant: "petal", sea: "conch", shiny: "seaglass", fish: "goby", ice: "icicle" },
+  3: { letter: "goldLetter", plant: "bouquet", sea: "rainbowShell", shiny: "pearl", fish: "fishTin", ice: "snowGlobe" },
+};
+/** 갈매미의 모습(성격·취향 표 PERSONA의 열쇠). 모습과 이름이 갈라지면 u.form, 아니면 지금처럼 u.name */
+export const gullForm = u => u?.form ?? u?.name;
+/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지 · form: 갈매미 모습, 주면 취향 답례) */
+export function thanksFor(stage, hasHome, form) {
   const t = BOND_THANKS[stage]; if (!t) return null;
   if (t.furniture && hasHome && FURNITURE[t.furniture]) return { kind: "furniture", id: t.furniture, name: FURNITURE[t.furniture].name };
-  const it = ITEMS.find(i => i.id === t.item); return it ? { kind: "item", id: it.id, name: it.name } : null;
+  const likes = PERSONA[form]?.likes || [], cat = likes.length ? likes[Math.floor(stage / 2) % likes.length] : null, id = THANKS_BY_TASTE[stage]?.[cat] || t.item;
+  const it = ITEMS.find(i => i.id === id); return it ? { kind: "item", id: it.id, name: it.name } : null;
 }
 /** 저장에서 읽은 간직하기 표시(예전 저장엔 없음 → 빈 것). 선물할 수 있는 것만 */
 export const keepFromSave = j => Object.fromEntries(Object.keys(j && typeof j === "object" ? j : {}).filter(id => j[id] && giftDef(id)).map(id => [id, true]));

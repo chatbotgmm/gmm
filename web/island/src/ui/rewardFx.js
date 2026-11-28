@@ -20,6 +20,9 @@ export const RF_SUM_MS = 1200;      // small: 같은 곳으로 가는 +N은 이 
 export const RF_FLY_MS = 1500;      // small: 떠올랐다 금고 칩까지 날아가는 시간
 export const RF_MAX_Q = 6;          // 기다리는 띠·카드 상한
 export const RF_STORY_MS = 9000;    // 🗝 이야기 카드(조각 글을 읽을 시간)
+export const RF_RARE_MS = 3800;     // 🌟 드문 반짝이 띠(보통 띠보다 조금 오래·크게)
+export const RF_MERGE_MS = 1400;    // 보이는 띠·카드에 같은 갈래가 더 붙으면 적어도 이만큼 더 보임
+export const RF_LIST_MAX = 3;       // 모은 띠·카드에 이름을 늘어놓는 수(나머지는 "외 n개")
 export const TIER_RANK = { small: 0, medium: 1, big: 2 };
 
 /** 물건 아이콘(ITEMS에는 아이콘이 없어 여기서). 모르는 것은 🎁 */
@@ -28,6 +31,8 @@ export const REWARD_ITEM_ICON = {
   festSpring: "🌸", festSummer: "🌊", festAutumn: "🏮", festWinter: "🛋️", stampRug: "🧶", stampLamp: "🪔", stampShelf: "📚", stampBed: "🛏️",
   shell: "🐚", seaglass: "💎", goby: "🐟", postcard: "📮", blossom: "🌸", clover: "🍀", acorn: "🌰", pinecone: "🌲", icicle: "🧊",
   fireflyJar: "✨", starNote: "⭐", moonShell: "🌙", glowWeed: "🌿",
+  pinkShell: "🐚", heartGlass: "💗", rainbowGoby: "🐠", farPostcard: "💌", doubleBlossom: "🌸", fiveClover: "🍀", goldAcorn: "🌰", snowCone: "❄️", starIcicle: "🌟",
+  blueFirefly: "💫", wishNote: "🌠", crescentShell: "🌙", rainbowWeed: "🌈",
   goldLetter: "💌", starBrooch: "⭐", bouquet: "💐", rainbowShell: "🌈", snowGlobe: "❄️", fishTin: "🥫", crownCookie: "👑", knitScarf: "🧣",
   medalRug: "🏅", medalLamp: "🎣", medalShelf: "🏆", plant: "🪴", bormChair: "🪑",
 };
@@ -41,8 +46,9 @@ const FURNI_LINE = "🏠 집 꾸미기에서 놓아요";
 export function rewardOf(ev, a, world) {
   a = a || {};
   switch (ev) {
-    case "sparkle": { const it = a.item; if (!it) return null;   // 직접 주운 반짝이 → 내 주머니
-      return { tier: it.rarity && it.rarity !== "common" ? "big" : "medium", icon: itemIcon(it), title: got(nameOf(it)), line: "🎁 내 주머니에 쏙!", to: "bag", snd: "glint", key: "sparkle" }; }
+    case "sparkle": { const it = a.item; if (!it) return null;   // 직접 주운 반짝이 → 내 주머니. 같은 때 여러 개면 한 띠로(group)
+      if (it.rareOf) return { tier: "medium", rare: true, icon: itemIcon(it), title: got(nameOf(it)), line: `🌟 드문 반짝이! ${nameOf(ITEMS.find(i => i.id === it.rareOf))}의 귀한 모습`, to: "bag", snd: "glint", key: `sparkleRare:${it.id}`, ms: RF_RARE_MS };   // 🌟 드문 반짝이: 조금 더 큰 띠, 따로 보임
+      return { tier: it.rarity && it.rarity !== "common" ? "big" : "medium", icon: itemIcon(it), title: got(nameOf(it)), line: "🎁 내 주머니에 쏙!", to: "bag", snd: "glint", key: `sparkle:${it.id}`, group: "sparkle", gift: { id: it.id, name: nameOf(it) } }; }
     case "greet": { const it = a.item, u = a.u; if (!it || !u) return null;   // 오늘의 첫 인사: 실제 날짜마다 한 번 갈매미가 문 앞으로 달려와 준 작은 물건
       return { tier: "medium", icon: itemIcon(it), title: got(nameOf(it)), line: `💛 ${u.name}의 오늘의 첫 인사 · 🎁 내 주머니로`, to: "bag", snd: "glint", key: "greet" }; }
     case "stampBuy": { const it = a.item; if (!it) return null;   // 도장 가게: 도장으로 바꾼 한정 가구·귀한 선물
@@ -59,12 +65,12 @@ export function rewardOf(ev, a, world) {
       if (a.all) return { tier: "big", icon: "💮", title: "도장 획득!", line: a.coins > 0 ? `📋 모은 도장 ${a.stamps ?? 1}개 · 금고에 🪙${a.coins}` : `📋 오늘의 부탁 모두 완료 · 모은 도장 ${a.stamps ?? 1}개`, to: "bag", snd: "fanfare", key: "dailyAll" };
       return { tier: "medium", icon: a.req?.icon || "📋", title: "오늘의 부탁 완료!", line: `${a.req?.text ?? ""}${a.left ? ` · ${a.left}개 남음` : ""}`.trim(), to: null, snd: "chime", key: `daily:${a.req?.id ?? ""}` }; }
     case "bondStage": { const u = a.u, g = a.gift, st = BOND_STAGES[a.stage]; if (!u || !st) return null;
-      const title = `${josa(u.name, "과", "와")} ${st.name}!`;
-      if (!g) return { tier: "medium", icon: "💝", title, line: "♥ 정이 깊어졌어요", to: null, snd: "chime", key: `bond:${u.name}:${a.stage}` };
+      const title = `${josa(u.name, "과", "와")} ${st.name}!`, key = `bond:${u.unitId ?? u.name}:${a.stage}`, group = `bond:${a.stage}`;   // 같은 단계에 같은 때 닿은 갈매미들은 한 장으로(group)
+      if (!g) return { tier: "medium", icon: "💝", title, line: "♥ 정이 깊어졌어요", to: null, snd: "chime", key, group, stage: a.stage };
       const furni = g.kind === "furniture";
-      return { tier: furni || a.stage >= 3 ? "big" : "medium", icon: itemIcon(g.id), title: got(g.name), line: `💝 ${title} 답례 · ${furni ? `${u.name}네 ${g.where ?? "집"}에 들여놨어요` : "🎁 내 주머니로"}`, to: furni ? null : "bag", snd: furni || a.stage >= 3 ? "fanfare" : "chime", key: `bond:${u.name}:${a.stage}` }; }
+      return { tier: furni || a.stage >= 3 ? "big" : "medium", icon: itemIcon(g.id), title: got(g.name), line: `💝 ${title} 답례 · ${furni ? `${u.name}네 ${g.where ?? "집"}에 들여놨어요` : "🎁 내 주머니로"}`, to: furni ? null : "bag", snd: furni || a.stage >= 3 ? "fanfare" : "chime", key, group, stage: a.stage, gift: { id: g.id, name: g.name, furni } }; }
     case "wishDone": { const u = a.u; if (!u) return null;
-      return { tier: "medium", icon: "💖", title: "소원 성취!", line: a.rescue > 0 ? `${u.name}의 소원이 이루어져 금고에 🪙${a.rescue}` : `${u.name}의 소원이 이루어졌어요`, to: a.rescue > 0 ? "vault" : null, snd: a.rescue > 0 ? "coins" : "chime", key: `wish:${u.name}` }; }
+      return { tier: "medium", icon: "💖", title: "소원 성취!", line: a.rescue > 0 ? `${u.name}의 소원이 이루어져 금고에 🪙${a.rescue}` : `${u.name}의 소원이 이루어졌어요`, to: a.rescue > 0 ? "vault" : null, snd: a.rescue > 0 ? "coins" : "chime", key: `wish:${u.unitId ?? u.name}`, group: "wish", who: u.name, coins: Math.max(0, a.rescue || 0) }; }
     case "fussSolved": { const u = a.u; if (!u) return null;
       return { tier: "medium", icon: "💕", title: `${josa(u.name, "이", "가")} 고마워해요!`, line: a.kind === "perch" ? "바위에서 내려 줬어요" : "포근한 곳으로 옮겨 줬어요", to: null, snd: "chime", key: `fuss:${u.name}` }; }
     case "donate": { const f = a.fish; if (!f) return null;
@@ -102,17 +108,44 @@ export function makeSmallSum(win = RF_SUM_MS) {
 }
 export const smallText = n => `+${Math.max(0, Math.round(n || 0))}`;
 
-/** 띠·카드 차례. push(r) · step(now, { hold }) → { show: r | null, end: r | null }
+/** 모은 보상(같은 key ×n 또는 같은 group 여럿)을 화면에 쓸 글로: { icon, title, line }.
+ *  · 같은 key만 모였으면 예전처럼 「제목 ×n」
+ *  · 정 단계(group bond:N): 「5마리와 아는 사이가 됐어요!」 + 답례 물건 이름(앞 RF_LIST_MAX개, 나머지 외 n개)
+ *  · 반짝이(group sparkle): 두 가지면 「도토리와 바다 유리 획득!」, 셋 넘으면 「반짝이 3개 획득!」 + 주운 것 이름
+ *  · 소원(group wish): 「소원 2개 성취!」 + 누구의 소원인지와 축하금 합 */
+export function rewardText(r) {
+  const ms = r?.members || [], n = ms.length || 1;
+  if (n < 2 || ms.every(m => m.key === ms[0].key)) return { icon: r.icon, title: r.title + (n > 1 ? ` ×${n}` : ""), line: r.line || "" };
+  const names = [], icons = [];
+  for (const m of ms) { if (m.gift && !names.includes(m.gift.name)) names.push(m.gift.name); if (m.icon && !icons.includes(m.icon)) icons.push(m.icon); }
+  const list = names.length ? names.slice(0, RF_LIST_MAX).join(", ") + (names.length > RF_LIST_MAX ? ` 외 ${names.length - RF_LIST_MAX}개` : "") : "";
+  const icon = icons[0] || r.icon;                                                // 동그라미 안에는 그림 하나(첫 것)
+  if (r.group?.startsWith("bond:")) { const st = BOND_STAGES[r.stage] || BOND_STAGES[1], furni = ms.every(m => m.gift?.furni);
+    return { icon: "💝", title: `${n}마리와 ${josa(st.name, "이", "가")} 됐어요!`,
+      line: !names.length ? "♥ 정이 깊어졌어요" : furni ? `💝 답례로 ${josa(list, "을", "를")} 저마다 집에 들여놨어요` : `💝 답례로 ${josa(list, "을", "를")} 받았어요` }; }
+  if (r.group === "sparkle") return { icon, title: n === 2 && names.length === 2 ? `${josa(names[0], "과", "와")} ${names[1]} 획득!` : `반짝이 ${n}개 획득!`, line: `🎁 ${josa(list, "이", "가")} 내 주머니에 쏙!` };   // 두 가지면 이름으로(같은 「반짝이 2개」가 되풀이되지 않게)
+  if (r.group === "wish") { const who = [...new Set(ms.map(m => m.who).filter(Boolean))], coins = ms.reduce((t, m) => t + (m.coins || 0), 0);
+    const wl = who.slice(0, RF_LIST_MAX).join(", ") + (who.length > RF_LIST_MAX ? ` 외 ${who.length - RF_LIST_MAX}마리` : "");
+    return { icon: "💖", title: `소원 ${n}개 성취!`, line: coins > 0 ? `${wl}의 소원이 이루어져 금고에 🪙${coins}` : `${wl}의 소원이 이루어졌어요` }; }
+  return { icon: r.icon, title: `${r.title} 외 ${n - 1}개`, line: r.line || "" };
+}
+
+/** 띠·카드 차례. push(r, now) · step(now, { hold }) → { show: r | null, end: r | null }
+ *  같은 key나 같은 group(같은 단계)이면 기다리는 것에 합침(members). 이미 보이는 띠·카드(cur)도 아직 떠 있으면 거기에 합치고 조금 더 보임
+ *  → push가 "cur"를 돌려주면 화면은 보이는 글을 rewardText로 다시 씀(5마리가 한꺼번에 아는 사이가 돼도 띠 한 장)
  *  hold = 큰 카드를 지금 띄우면 안 됨(건설 모드·방 안·편지). 띄운 것은 cur, 끝나는 때는 cur.until(큰 카드는 collect로 앞당김) */
 export function makeRewardQueue({ mediumMs = RF_MEDIUM_MS, bigMs = RF_BIG_MS, bigMin = RF_BIG_MIN_MS, gap = RF_GAP_MS, maxQ = RF_MAX_Q } = {}) {
   const q = []; let cur = null, freeAt = 0;
   const api = {
     get cur() { return cur; }, get q() { return q; },
-    push(r) {
+    push(r, now) {
       if (!r || r.tier === "small") return false;
-      const same = r.key && q.find(x => x.key === r.key && x.tier === r.tier);   // 같은 보상이 이어서 오면 하나로(×2)
-      if (same) { same.count = (same.count || 1) + 1; return true; }
-      q.push({ ...r, count: 1 });
+      const fits = x => x && x.tier === r.tier && ((r.key && x.key === r.key) || (r.group && x.group === r.group));   // 같은 보상(×2) 또는 같은 갈래(여러 마리·여러 개)
+      const join = x => { x.members.push(r); x.count = x.members.length; };
+      if (fits(cur) && now != null && now < cur.until) { join(cur); cur.until = Math.max(cur.until, now + RF_MERGE_MS); return "cur"; }   // 보이는 것에 붙음
+      const same = q.find(fits);
+      if (same) { join(same); return true; }
+      q.push({ ...r, count: 1, members: [r] });
       q.sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier]);                    // 큰 카드가 먼저(같은 단계는 온 차례 — sort는 안정적)
       while (q.length > maxQ) { let i = q.map(x => x.tier).lastIndexOf("medium"); if (i < 0) i = q.length - 1; q.splice(i, 1); }   // 넘치면 맨 뒤 띠부터 버림
       return true;

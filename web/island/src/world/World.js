@@ -31,7 +31,7 @@ import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, 
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
 import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText, STAMP_COINS, DAILY_COUNT, DAILY_GROUP, DAILY_POOL } from "./daily.js";
-import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
+import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, gullForm, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import { undoBlock, feeUndoLedger } from "./buildUndo.js";
@@ -45,7 +45,7 @@ import * as CLO from "./clothes.js";
 import * as HL from "./health.js";
 import * as ST from "./story.js";
 import { STORY_PIECES, STORY_CHAPTERS, STORY_CHAIR } from "../data/story.js";
-import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk, sparkleKinds } from "./sparkles.js";
+import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk, sparkleKinds, rareSparkleOf } from "./sparkles.js";
 
 /**
  * 새 넓은 섬에 공식은행을 놓음(예전 저장을 불러올 땐 쓰지 않음). 난수를 쓰지 않아 같은 섬 → 같은 자리.
@@ -1128,7 +1128,7 @@ export class World {
   addBond(u, amt) {
     u.bond = Math.min(BOND_MAX, (u.bond || 0) + amt); const got = [];
     for (const top = bondStage(u.bond); (u.bondGifts || 0) < top;) {
-      const stage = u.bondGifts = (u.bondGifts || 0) + 1, home = u.home && this.buildings.get(u.home), gift = thanksFor(stage, !!home);
+      const stage = u.bondGifts = (u.bondGifts || 0) + 1, home = u.home && this.buildings.get(u.home), gift = thanksFor(stage, !!home, gullForm(u));
       if (gift?.kind === "furniture") { const it = F.room(home); it.stash[gift.id] = (it.stash[gift.id] || 0) + 1; gift.where = BUILDINGS[home.defId].name; }
       else if (gift) { this.items[gift.id] = (this.items[gift.id] || 0) + 1; if (giftDef(gift.id)) this.keep[gift.id] = true; }   // 답례로 받은 물건은 팔리지 않게 간직
       got.push({ stage, gift }); this.emit("bondStage", { u, stage, gift });
@@ -2242,7 +2242,7 @@ export class World {
   /** 한 회차: 바닷가 1 + 마을 1(sparkRnd만 씀). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
   spawnSparkles() {
     const night = this.isNight === true, plain = this.sparkles.filter(s => !s.story); if (sparkleRoom(plain, night) <= 0) return [];   // 이야기 반짝이는 세지 않음(보통 반짝이가 이야기와 상관없이 똑같이 생김)
-    const made = rollSparkles(sparkleCells(this), plain, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k) }));
+    const made = rollSparkles(sparkleCells(this), plain, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k), ...(s.rare ? { rare: true } : {}) }));   // rare: 🌟 드문 반짝이(주우면 rareSparkleOf)
     for (const s of made) { this.sparkles.push(s); this.emit("sparkleSpawn", s); }
     return made;
   }
@@ -2251,7 +2251,7 @@ export class World {
   pickSparkle(id) {
     const i = this.sparkles.findIndex(s => s.id === id); if (i < 0) return null;
     const s = this.sparkles[i]; if (s.story) return this.pickStory(i, s);
-    const item = ITEMS.find(it => it.id === s.k); this.sparkles.splice(i, 1);
+    const item = (s.rare && rareSparkleOf(s.k)) || ITEMS.find(it => it.id === s.k); this.sparkles.splice(i, 1);   // 🌟 드문 반짝이는 드문 물건으로
     if (!item) return null;
     this.items[item.id] = (this.items[item.id] || 0) + 1;
     this.emit("sparkleGone", { ...s, picked: true }); this.emit("sparkle", { item, s }); return item;
@@ -2433,7 +2433,7 @@ export class World {
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought, greetDay: this.greetDay,
-      sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock, story: ST.storyToSave(this.story),
+      sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t, rare }) => rare ? { k, x, z, t, r: 1 } : { k, x, z, t }), sparkClock: this.sparkClock, story: ST.storyToSave(this.story),
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, ...(b.mates?.length ? { mates: b.mates } : {}), fee: b.fee || 0, ...(b.feeHeld ? { feeHeld: 1 } : {}), ...(b.feeTo ? { feeTo: b.feeTo } : {}), order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
   /** 저장의 격자: version 3 = 바뀐 칸만(ChunkGrid) · 넓은 섬 예전 저장(192칸 격자 전체) = 그 격자를 시작 섬 기준으로 옮김 · 옛 작은 섬 = Grid 그대로 */

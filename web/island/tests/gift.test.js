@@ -40,14 +40,14 @@ function econ() {
 
 test("카탈로그: 반짝이 9 + 밤 반짝이 4 + 도장 선물 8은 플레이어 몫 선물거리, 기존 줄·도장 가구는 그대로, 갈매미마다 계절마다 좋아하는 반짝이가 있음", () => {
   const gifts = ITEMS.filter(i => i.gift);
-  assert.equal(gifts.length, 21); assert.deepEqual(ITEMS.slice(0, OLD_ITEM_IDS.length).map(i => i.id), OLD_ITEM_IDS, "앞부분 순서 그대로");
+  assert.equal(gifts.length, 34, "반짝이 13 + 도장 선물 8 + 드문 반짝이 13"); assert.deepEqual(ITEMS.slice(0, OLD_ITEM_IDS.length).map(i => i.id), OLD_ITEM_IDS, "앞부분 순서 그대로");
   assert.ok(ITEMS.slice(OLD_ITEM_IDS.length).every(i => i.gift || i.medal || i.story), "새 줄은 모두 맨 뒤(선물거리·금메달 기념 가구·이야기 엔딩 가구)");
   for (const i of gifts) {
     assert.ok(!i.furniture && !i.price && !("season" in i) && !("stamp" in i) && !i.sky && !i.fest, i.id);
     const d = B.giftDef(i.id); assert.equal(d.kind, "item"); assert.ok(B.GIFT_CAT_NAME[d.cat], `${i.name} 갈래`);
     assert.equal(Be.stashDef(i.id), null, "플레이어 몫은 소지품이 될 수 없음");
   }
-  assert.equal(gifts.filter(i => i.sparkle).length, 13); assert.equal(gifts.filter(i => i.sparkleTime === "night").length, 4); assert.ok(gifts.filter(i => i.sparkle).every(i => ["beach", "village"].includes(i.sparkle)));
+  assert.equal(gifts.filter(i => i.sparkle).length, 13); assert.equal(gifts.filter(i => i.sparkle && i.sparkleTime === "night").length, 4); assert.ok(gifts.filter(i => i.sparkle).every(i => ["beach", "village"].includes(i.sparkle)));
   assert.equal(D.STAMP_SHOP.length, 4); assert.ok(D.STAMP_SHOP.every(s => FURNITURE[s.furniture]), "도장 가게 가구는 예전 그대로(화면이 FURNITURE로 읽음)");
   assert.equal(D.STAMP_GIFTS.length, 8); assert.deepEqual([...new Set(D.STAMP_GIFTS.map(i => B.giftDef(i.id).cat))].sort(), ["best", "fish", "ice", "letter", "plant", "sea", "shiny", "warm"]);   // warm: 손뜨개 목도리(옷 선물)
   assert.ok(D.STAMP_GIFTS.every(i => D.stampCost(i) > 0)); assert.equal(D.stampCost(ITEMS.find(i => i.id === "crownCookie")), 2); assert.equal(D.stampCost(null), 0);

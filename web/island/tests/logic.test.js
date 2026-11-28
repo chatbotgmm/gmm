@@ -1209,9 +1209,9 @@ test("정(월드): 간직한 것은 안 팔고, 선물하면 하나 줄고 정·
   assert.equal(JSON.stringify(w.res), res0, "선물은 마을 창고(음식·돈)를 건드리지 않음");
   // 단계에 처음 닿으면 답례 한 번(가방에 들어가고 간직 표시) + 소식지
   ev.length = 0; w.items.pearl = 1; const news0 = w.newsLog.length; r = w.giveGift(gold, "pearl");
-  assert.equal(B.bondStage(gold.bond), 1); assert.equal(r.thanks.length, 1); assert.equal(r.thanks[0].gift.id, "bottle"); assert.equal(w.items.bottle, 1); assert.equal(w.keep.bottle, true); assert.equal(gold.bondGifts, 1);
-  assert.deepEqual(ev, [["gift", "황금", "pearl", 2], ["stage", "황금", 1, "bottle"]]);
-  assert.equal(w.newsLog.length, news0 + 1); assert.match(w.newsLog.at(-1).text, /황금과 아는 사이가 됐어요! 답례로 유리병 편지를 받았어요/);
+  assert.equal(B.bondStage(gold.bond), 1); assert.equal(r.thanks.length, 1); assert.equal(r.thanks[0].gift.id, "seaglass", "황금은 반짝이는 것을 좋아해서 바다 유리"); assert.equal(w.items.seaglass, 1); assert.equal(w.keep.seaglass, true); assert.equal(gold.bondGifts, 1);
+  assert.deepEqual(ev, [["gift", "황금", "pearl", 2], ["stage", "황금", 1, "seaglass"]]);
+  assert.equal(w.newsLog.length, news0 + 1); assert.match(w.newsLog.at(-1).text, /황금과 아는 사이가 됐어요! 답례로 바다 유리를 받았어요/);
   // 들어 올릴 때 반응: 처음 만난 사이는 예전 그대로 "!?", 친해지면 덜 놀람
   assert.ok(w.pickUpUnit(shadow)); assert.equal(shadow.emoteText, "!?"); w.dropUnit(shadow, Math.floor(shadow.heldFrom.x), Math.floor(shadow.heldFrom.z));
   assert.ok(w.pickUpUnit(gold)); assert.equal(gold.emoteText, B.BOND_STAGES[1].held); assert.deepEqual(w.pet(gold), { ok: false, reason: "away" }, "들고 있는 동안은 못 쓰다듬음");
@@ -1248,7 +1248,7 @@ test("정(월드): 간직하던 것의 마지막 하나를 선물하면 간직 �
   w.giveGift(u, "pearl"); assert.equal(w.keep.pearl, true, "하나 남았으면 그대로");
   w.giveGift(u, "pearl"); w.giveGift(u, "tuna"); assert.equal(w.keep.pearl, undefined); assert.equal(w.keep.tuna, undefined);
   // 답례로 받은 유리병 편지(자동으로 간직)를 다시 선물해 버렸다면, 그 뒤에 주운 편지는 예전처럼 상인이 팖
-  const v = w.units[1]; w.items.bottle = 0; delete w.keep.bottle;
+  const v = w.units.find(o => o.name === "그림자"); w.items.bottle = 0; delete w.keep.bottle;   // 편지를 좋아하는 갈매미의 아는 사이 답례
   const got = w.addBond(v, 5); assert.equal(got[0].gift.id, "bottle"); assert.equal(w.keep.bottle, true); assert.equal(w.items.bottle, 1);
   w.giveGift(v, "bottle"); assert.equal(w.keep.bottle, undefined);
   w.items.bottle = 3; w.trade(merchant); assert.equal(w.items.bottle, 0);

@@ -37,7 +37,7 @@ const NEWS_MAKERS = {
   // 갈매미 소지품: 스스로 시장에 판 것(알림 줄에만)
   stashSale: ({ u, items, coins, cut }) => ({ icon: "🎒", text: `${josa(u.name, "이", "가")} 소지품 ${items.reduce((s, x) => s + x.n, 0)}개를 팔았어요 🪙+${coins - cut}`, weight: 0 }),
   // ✨ 반짝이를 주움(알림 줄에만)
-  sparkle: ({ item }) => ({ icon: "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
+  sparkle: ({ item }) => ({ icon: item.rareOf ? "🌟" : "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
   // 해변 줍기: 마을에서 처음 주운 물건만 소식지에(같은 물건을 또 주운 것은 말풍선으로 충분)
   beachcomb: ({ u, item, first }) => ({ icon: "✨", text: `${josa(u.name, "이", "가")} 바닷가에서 ${josa(item.name, "을", "를")} 주웠어요`, weight: first ? 2 : 0 }),
   wishDone: ({ wish, u, def }, w) => ({ icon: "♥", text: `${u.name}의 소원 "${wishText(def, w, u, wish)}"이 이루어졌어요!`, weight: 5 }),

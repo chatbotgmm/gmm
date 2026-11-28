@@ -15,7 +15,7 @@ const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z));
 const town = () => { const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); w.instantBuild = true; return w; };
 
 test("밤 반짝이 4종: ITEMS sparkleTime night, 낮/밤 거르기, 선물 갈래(그림자 편지·불씨 반짝이)", () => {
-  const night = ITEMS.filter(i => i.sparkleTime === "night");
+  const night = ITEMS.filter(i => i.sparkle && i.sparkleTime === "night");   // 드문 모습(rareOf)은 sparkle 키가 없어 따로 셈
   assert.deepEqual(night.map(i => i.id), NIGHT);
   assert.ok(night.every(i => i.gift && ["beach", "village"].includes(i.sparkle) && !i.price && !i.sparkleSeason), "값 없는 플레이어 몫 선물거리(돈을 찍지 않음)");
   for (const season of ["spring", "summer", "autumn", "winter", null]) {

@@ -4,7 +4,7 @@
 //  · small: 큰 「+N 🪙」이 떠올라 금고 칩으로 날아가고, 닿으면 칩 숫자가 올라감(hud.vaultSpent + count). 날아가는 동안 칩은 예전 값(hud.holdVault)
 //  · 움직임 줄이기(html[data-motion="reduce"]): 색종이·빛살·튐·날기 없이 나타났다 사라지기만(CSS + 여기서 날기 건너뜀)
 //  · 건설 모드·방 안·편지·불러오기 화면에서는 큰 카드를 미뤘다가(hold) 돌아오면 보여 줌
-import { makeRewardQueue, makeSmallSum, smallText, confetti, RF_FLY_MS, RF_BIG_MS } from "./rewardFx.js";
+import { makeRewardQueue, makeSmallSum, smallText, confetti, rewardText, RF_FLY_MS, RF_BIG_MS } from "./rewardFx.js";
 
 const rwEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const BIG_NOTES = [1047, 1319, 1568, 2093], MED_NOTES = [784, 988, 1319], GLINT = [1319, 1760, 2093];
@@ -39,7 +39,13 @@ export class RewardView {
   push(r) {
     if (!r) return;
     if (r.tier === "small") { const a = this.small.add(r, performance.now()); if (r.to === "vault") this.hud?.holdVault?.(a.p.n, RF_FLY_MS + 1600); return; }
-    this.queue.push(r); this.tick();
+    if (this.queue.push(r, performance.now()) === "cur") this.refresh(); else this.tick();   // 보이는 띠·카드에 같은 갈래가 붙으면 글만 다시 씀(「5마리와 아는 사이가 됐어요!」)
+  }
+  /** 보이는 띠·카드의 글을 모은 수에 맞게 다시 씀(소리·색종이는 다시 안 냄) */
+  refresh() {
+    const c = this.queue.cur; if (!c) return; const t = rewardText(c);
+    if (c.tier === "big") { this.ico.textContent = t.icon; this.title.textContent = t.title; this.line.textContent = t.line; this.box.setAttribute("aria-label", `${t.title}. ${t.line} 누르면 받아요`); }
+    else { this.banIco.textContent = t.icon; this.banTitle.textContent = t.title; this.banLine.textContent = t.line; this.banLine.hidden = !t.line; }
   }
   collect() { if (this.queue.collect(performance.now())) this.tick(); }
   tick() {
@@ -57,8 +63,10 @@ export class RewardView {
     else s.chime(r.snd === "glint" ? GLINT : MED_NOTES, r.snd === "glint" ? 0.05 : 0.08, 0.16);
   }
   showBan(r) {
-    this.banIco.textContent = r.icon; this.banTitle.textContent = r.title + (r.count > 1 ? ` ×${r.count}` : ""); this.banLine.textContent = r.line || ""; this.banLine.hidden = !r.line;
-    this.banSpark.textContent = ""; if (!this.calm) for (const p of confetti(10, ++this.seed, 70)) { const i = rwEl("i"); i.style.cssText = `--dx:${p.dx}px;--dy:${p.dy}px;--r:${p.rot}deg;--d:${p.delay}ms;--h:${p.hue}`; this.banSpark.appendChild(i); }
+    const t = rewardText(r); this.ban.classList.toggle("rare", !!r.rare);           // 🌟 드문 반짝이: 조금 더 큰 분홍빛 띠
+    this.ban.classList.toggle("wrap", !!r.rare || !!r.group);                       // 모으는 띠·드문 띠는 덧말이 두 줄까지(이름 목록이 잘리지 않게)
+    this.banIco.textContent = t.icon; this.banTitle.textContent = t.title; this.banLine.textContent = t.line; this.banLine.hidden = !t.line;
+    this.banSpark.textContent = ""; if (!this.calm) for (const p of confetti(r.rare ? 18 : 10, ++this.seed, r.rare ? 110 : 70)) { const i = rwEl("i"); i.style.cssText = `--dx:${p.dx}px;--dy:${p.dy}px;--r:${p.rot}deg;--d:${p.delay}ms;--h:${p.hue}`; this.banSpark.appendChild(i); }
     this.ban.hidden = false; this.ban.classList.remove("on", "off"); void this.ban.offsetWidth; this.ban.classList.add("on");
     this.sound(r, false); if (r.to) this.bump(r.to, 600);
   }
@@ -66,10 +74,10 @@ export class RewardView {
   showBig(r) {
     this.kick.textContent = r.kick || (r.key?.startsWith("rank") ? "🎊 축하해요! 🎊" : "✨ 보상 획득 ✨");
     this.card.classList.toggle("story", !!r.story);                                // 🗝 이야기 카드: 밤하늘 색 + 긴 글
-    this.ico.textContent = r.icon; this.title.textContent = r.title + (r.count > 1 ? ` ×${r.count}` : ""); this.line.textContent = r.line || "";
+    const t = rewardText(r); this.ico.textContent = t.icon; this.title.textContent = t.title; this.line.textContent = t.line;
     this.conf.textContent = ""; if (!this.calm) for (const p of confetti(28, ++this.seed, Math.min(260, innerWidth * 0.42))) { const i = rwEl("i"); i.style.cssText = `--dx:${p.dx}px;--dy:${p.dy}px;--r:${p.rot}deg;--d:${p.delay}ms;--h:${p.hue}`; this.conf.appendChild(i); }
     this.box.style.transform = ""; this.box.style.opacity = ""; this.card.classList.remove("on", "out"); this.card.hidden = false; void this.card.offsetWidth; this.card.classList.add("on");
-    this.box.setAttribute("aria-label", `${r.title}. ${r.line || ""} 누르면 받아요`); this.bar.style.transform = "scaleX(1)";
+    this.box.setAttribute("aria-label", `${t.title}. ${t.line} 누르면 받아요`); this.bar.style.transform = "scaleX(1)";
     this.sound(r, true);
   }
   endBig(r) {
