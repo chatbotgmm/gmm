@@ -18,6 +18,7 @@ import { DONATE_KINDS, donatedCount } from "../world/aquarium.js";
 import { medalCounts } from "../world/medals.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/news.js";
+import { josa } from "../util.js";
 import { sumHead, moreBox, valueRows, factRow, fmtNum } from "./hudParts.js";
 import { wishBuildId, bldFinderRows, bldFinderHtml } from "./qolViews.js";
 
@@ -58,14 +59,14 @@ export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
 
   const scoreH = valueRows(parts.map(([name, n, per, pts]) => [name, pts, `${n} × ${per} = ${pts}`])) +
     `<p class="dim">갈매미와 집, 시설이 늘고 소원을 들어줄수록 점수가 올라요.</p>`;
-  const nextH = nxt ? `<p>${nxt.need}점을 넘어 ${nxt.icon} <b>${avEsc(nxt.name)}</b>이 되면</p><ul class="av-list">${nxt.unlock.map(u => `<li>🔓 ${avEsc(BN(u))} 건설</li>`).join("")}<li>🪙 갈매미마다 축하금 ${RANK_REWARD}</li></ul>` : "";
+  const nextH = nxt ? `<p>${nxt.need}점을 넘어 ${nxt.icon} <b>${avEsc(nxt.name)}</b>${josa(nxt.name, "이", "가").slice(nxt.name.length)} 되면</p><ul class="av-list">${nxt.unlock.map(u => `<li>🔓 ${avEsc(BN(u))} 건설</li>`).join("")}<li>🪙 갈매미마다 축하금 ${RANK_REWARD}</li></ul>` : "";
 
   const stamps = festivalStamps(w.festivals);
   const fLine = fOn ? `<b>${fOn.def.icon} ${fOn.def.name}</b>가 열리고 있어요! 남은 시간 <b>${Math.max(0, Math.ceil(w.festival.t))}초</b> · 함께한 갈매미 ${w.festival.who.length}마리`
     : !fNow ? `<span class="dim">축제 달력을 읽는 중이에요.</span>`
     : w.festivals[fNow.key] ? `올해 <b>${fNow.def.icon} ${fNow.def.name}</b>는 잘 치렀어요. 다음 계절에 또 만나요!`
     : w.rank < FESTIVAL_RANK ? `<span class="dim">🔒 마을 등급이 ${RANKS[FESTIVAL_RANK].icon} ${RANKS[FESTIVAL_RANK].name}이 되면 계절마다 축제를 열 수 있어요.</span>`
-    : `<b>${fNow.def.icon} ${fNow.def.name}</b> 준비 중 · 광장 장식 <b>${Math.min(plaza.n, FESTIVAL_NEED)} / ${FESTIVAL_NEED}</b><br><span class="dim">🏠 건설에서 축제 장식을 ${FESTIVAL_RADIUS}칸 안에 ${FESTIVAL_NEED}개 모으면 "축제 하자!" 소원이 이루어져요${plaza.ok ? " · 광장은 다 모였어요! 새 장식을 하나만 더 놓으면 열려요" : ""}${fGift ? ` · 끝나면 🎁 ${fGift.name}` : ""}</span>`;
+    : `<b>${fNow.def.icon} ${fNow.def.name}</b> 준비 중 · 광장 장식 <b>${Math.min(plaza.n, FESTIVAL_NEED)} / ${FESTIVAL_NEED}</b><br><span class="dim">🏠 건설에서 ${Object.values(BUILDINGS).filter(d => d.festive).map(d => d.name).join(", ")} 같은 축제 장식을 ${FESTIVAL_RADIUS}칸 안에 ${FESTIVAL_NEED}개 모으면 "축제 하자!" 소원이 이루어져요${plaza.ok ? " · 광장은 다 모였어요! 새 장식을 하나만 더 놓으면 열려요" : ""}${fGift ? ` · 끝나면 🎁 ${fGift.name}` : ""}</span>`;
   const festH = `<p id="festNow">${fLine}</p><div class="stamps" id="festStamps">${stamps.map(x => `<span class="stamp" data-fest="${x.key}">${x.def.icon}<small>${x.year} ${SEASONS[x.season].name}</small></span>`).join("") || `<span class="dim">아직 찍은 축제 도장이 없어요.</span>`}</div>`;
   const fNote = fOn ? "열리는 중" : !fNow || w.rank < FESTIVAL_RANK ? "🔒" : w.festivals[fNow.key] ? "올해 끝" : `${Math.min(plaza.n, FESTIVAL_NEED)}/${FESTIVAL_NEED}`;
 

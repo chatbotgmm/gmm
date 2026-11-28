@@ -724,7 +724,7 @@ export class Hud {
     if (why) { meta.textContent = why; b.dataset.why = why; } else { meta.innerHTML = m.html; meta.dataset.html = m.html; b.classList.toggle("short", m.short); }
     b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), meta); if (locked) b.append(el("span", "block", "🔒"));
     b.setAttribute("aria-label", why ? `${def.name}, ${size}칸, 재료 ${cost}, ${locked ? "잠김: " : ""}${why}` : `${def.name}, ${size}칸, ${m.text}`);
-    b.dataset.tip = `${def.name} ${size}칸 · ${w.economy ? `설계비 🪙${m.fee} · ` : ""}재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${w.economy ? w.housePrice(def.id) : def.price}에 팔려요` : ""}${rankLock ? ` · 🏅 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}이 되면 열려요` : locked ? " · 지금은 못 지어요" : ""}`;
+    b.dataset.tip = `${def.name} ${size}칸 · ${w.economy ? `설계비 🪙${m.fee} · ` : ""}재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${w.economy ? w.housePrice(def.id) : def.price}에 팔려요` : ""}${rankLock ? ` · 🏅 ${RANKS[def.rank].icon} ${josa(RANKS[def.rank].name, "이", "가")} 되면 열려요` : locked ? " · 지금은 못 지어요" : ""}`;
     b.onclick = upFrom ? () => this.status(`${def.name}은 바로 못 지어요 · 다 지은 ${upFrom.name}을 눌러 업그레이드해요${rankLock ? ` (${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : ""}`, { kind: "info" }) : () => this.tools.setMode("build", def.id); return b;
   }
   /** 건물 갤러리: 잠금·계절이 바뀔 때만 카드를 다시 만들고, 고르기만 했으면 표시만 바꿈(사진이 깜빡이지 않고 밀어 둔 자리도 그대로) */

@@ -827,7 +827,7 @@ export class World {
     const key = this.stayKey(); if (u.lodgeNight === key) return -1; u.lodgeNight = key;
     const fee = Math.min(BK.LODGING_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee, "returned", "lodging"); }
     const t = this.lodgeTally?.key === key ? this.lodgeTally : (this.lodgeTally = { key, n: 0, free: 0, coins: 0 }); t.n++; t.coins += fee; if (!fee) t.free++;
-    // 말풍선: 건설 모드(showNumbers)에서만 숫자 · 평소엔 나올 때 기분 한마디(들어갈 땐 "신세 질게요"를 이미 말함)
+    // 말풍선: 건설 모드(showNumbers)에서만 숫자 · 평소엔 나올 때 기분 한마디(들어갈 땐 "신세 좀 질게"를 이미 말함)
     if (this.showNumbers) { u.lodgeSay = fee ? `🏠 숙박비 🪙${fee}` : "🏠 숙박비 공짜"; emote(u, u.lodgeSay, 2.4); }
     else u.lodgeSay = fee ? "잘 잤다, 고마워" : "공짜로 재워 줬다 ♪";
     return fee;

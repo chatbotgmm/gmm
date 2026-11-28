@@ -45,6 +45,6 @@ export function summonInfoFor(units, done, gated = true) {
   const count = !gated ? absent.length : Math.max(Math.min(free, ordAbsent), rescue ? 1 : 0) + specialNow;   // 지금 부를 수 있는 수(한 마리씩 부를 때마다 하나씩 줄어듦)
   const needHouse = gated && !can && absent.some(n => !SPECIAL_HOME[n]);                 // 보통 갈매미가 남았는데 집 자리가 없음
   const needGiantHouse = gated && absent.some(n => SPECIAL_HOME[n] && !specialFree(n));  // 자이언트가 아직 안 왔고 빈 자이언트의 집이 없음
-  const reason = can ? "" : !absent.length ? REASON_ALL : needHouse ? `${REASON_HOUSE} 집 ${homes}채${homes !== houses ? `, 자리 ${houses}` : ""} · 갈매미 ${gulls}마리` : REASON_GIANT;
+  const reason = can ? "" : !absent.length ? REASON_ALL : needHouse ? `${REASON_HOUSE}. 지금 집 ${homes}채${homes !== houses ? `, 자리 ${houses}` : ""} · 갈매미 ${gulls}마리` : REASON_GIANT;
   return { can, count, reason, houses, homes, gulls, free, left: absent.length, next, candidates, needHouse, needGiantHouse, gated };
 }

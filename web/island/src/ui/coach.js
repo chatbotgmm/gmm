@@ -15,7 +15,7 @@ const COACH_APP_HINTS = {
 };
 /** 화면에서 처음 만나는 상호작용(말풍선으로) */
 const COACH_MOMENT_HINTS = {
-  room: { touch: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. 끌면 방이 돌아가요.", mouse: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. R로 가구를 돌리고, 다 꾸몄으면 Esc." },
+  room: { touch: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. 끌면 방이 돌아가요. 다 꾸몄으면 🚪 나가기.", mouse: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. R로 가구를 돌리고, 다 꾸몄으면 Esc." },
   tug: { touch: "❗ 입질이 오면 🎣 당기기!를 눌러요. 같이 당기면 귀한 물고기가 잘 걸려요.", mouse: "❗ 입질이 오면 스페이스나 🎣 당기기! 같이 당기면 귀한 물고기가 잘 걸려요." },
   gift: { touch: "🎁 주머니에 모은 ✨ 반짝이를 골라 건네요. 정이 조금 들면 좋아하는 걸 ♥로 알려 줘요.", mouse: "🎁 주머니에 모은 ✨ 반짝이를 골라 건네요. 정이 조금 들면 좋아하는 걸 ♥로 알려 줘요." },
 };
@@ -102,7 +102,7 @@ export class CoachMarks {
         want = this.stepView();
       }
     }
-    if (!want && this.done && !blocked && !inRoom) want = { kind: "done", text: "🔨 첫 공사장이 섰어요. 갈매미들이 나무를 날라 오면 망치질이 시작돼요." };
+    if (!want && this.done && !blocked && !inRoom) want = { kind: "done", text: "🔨 첫 공사장이 섰어요. 갈매미들이 나무를 날라 오면 망치질이 시작돼요. 더 궁금하면 📱 ❓ 도움말을 봐요." };
     this.show(want);
     if (!want && !this.step && !this.done && !this.moments.length && this.timer) { clearInterval(this.timer); this.timer = 0; }
   }

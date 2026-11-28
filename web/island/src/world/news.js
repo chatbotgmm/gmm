@@ -58,7 +58,7 @@ const NEWS_MAKERS = {
   festivalEnd: ({ def, item, n }) => ({ icon: "🎁", text: `${josa(def.name, "이", "가")} 끝났어요. ${n ? `갈매미 ${n}마리가 즐겼고, ` : ""}기념으로 ${item ? josa(item.name, "을", "를") : "추억을"} 받았어요!`, weight: 7 }),
   buildingDone: b => { const d = BUILDINGS[b.defId]; return d ? { icon: d.house ? "🏠" : "🔨", text: `${josa(d.name, "이", "가")} 다 지어졌어요`, weight: builtWeight(d) } : null; },
   // 은행 금고(bank.js): 바닥 사태 시작·끝은 사태마다 한 번 · 세금·숙박비 영수증은 소식지에만(알림 줄엔 안 띄움, 금고 칩 +N) · 얼마 안 남음·설계비·품삯은 알림 줄에만
-  vaultShort: ({ kind }) => ({ icon: "🏦", text: kind === "loan" ? "은행 금고가 바닥나 가서 집 대출이 멈췄어요" : "은행 금고가 바닥났어요. 품삯이 밀려요", weight: 6 }),
+  vaultShort: ({ kind }) => ({ icon: "🏦", text: kind === "loan" ? "은행 금고가 바닥나 가서 집 대출이 멈췄어요" : "은행 금고가 바닥났어요. 품삯이 밀리고 집 대출도 멈췄어요", weight: 6 }),
   vaultOk: () => ({ icon: "🏦", text: "금고가 다시 찼어요. 밀린 품삯을 모두 치렀어요", weight: 4 }),
   vaultLow: ({ vault }) => ({ icon: "🏦", text: `금고에 동전이 🪙${vault}밖에 안 남았어요`, weight: 0 }),
   // 인구 = 집 수: 집이 모자라 소환이 막힘(알림 줄에만. reason = population.js의 글)
@@ -90,7 +90,7 @@ const NEWS_MAKERS = {
   // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄에만 · 같은 갈매미 하루 한 번은 ALERTS가 거름)
   roadAsk: ({ u, label }) => ({ icon: "🛣", text: askNotice(u.name, label), weight: 0 }),
   // 중앙은행(monetary.js): 손잡이(찍어내기·매입 예산·금리·축하) · 물가 사태(사태마다 한 번) · 예산 참·자동(알림 줄에만)
-  monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 가공품을 하루에 '${stepName(to)}' 사들이기로 ${to > from ? "늘렸어요" : to < from ? "줄였어요" : "정했어요"}`, weight: 3 }),
+  monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 하루에 사들이는 가공품을 '${stepName(to)}'${to > from ? "으로 늘렸어요" : to < from ? "으로 줄였어요" : "으로 정했어요"}`, weight: 3 }),
   monRate: ({ from, to }) => ({ icon: "🏦", text: `금리를 ${from}% → ${to}%로 ${to > from ? "올렸어요. 갈매미들이 저금을 늘려요" : "내렸어요. 갈매미들이 저금을 덜 해요"}`, weight: 4 }),
   monGift: ({ per }) => ({ icon: "🎁", text: `은행이 금고에서 모두에게 🪙${per}씩 축하금을 나눠 줬어요`, weight: 3 }),
   inflation: ({ pi, P }) => ({ icon: "📈", text: `값이 하루 새 ${Math.round(pi * 1000) / 10}% 올랐어요. 물가 ${Math.round(P * 100)}`, weight: 6 }),

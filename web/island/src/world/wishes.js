@@ -59,7 +59,7 @@ export const WISHES = [
     lost: (w, u, wish) => { const f = wishPal(w, wish); return !f || (!!u.home && !!f.home && !nearHome(homeB(w, u), homeB(w, f))); } },
   // 계절 축제의 날: 제비뽑기로는 안 나오고(ok 없음) 월드가 계절마다 한 번 직접 올림(World.stepFestival). base = 축제 열쇠(해-계절), had = 빌 때 있던 축제 장식 수.
   // 광장(축제 장식 FESTIVAL_NEED개가 FESTIVAL_RADIUS칸 안)이 있고, 빈 뒤에 장식을 하나라도 새로 놓았으면 이루어짐. 계절이 넘어가면 접음.
-  { id: "festival", icon: "🎉", text: "축제 하자!", hint: `🔨 축제 장식 ${FESTIVAL_NEED}개를 ${FESTIVAL_RADIUS}칸 안에 모아 광장을 꾸며요. 새 장식이 하나는 있어야 해요`,
+  { id: "festival", icon: "🎉", text: "축제 하자!", hint: `🔨 깃발 줄, 축제 등불, 계절 장식, 눈사람 같은 축제 장식 ${FESTIVAL_NEED}개를 ${FESTIVAL_RADIUS}칸 안에 모아 광장을 꾸며요. 새 장식이 하나는 있어야 해요`,
     ok: () => false, done: (w, u, wish) => festivalPlaza(w).ok && festiveCount(w) > (wish.had ?? -1),
     lost: (w, u, wish) => !!w.festKey && wish.base !== w.festKey },
 ];
