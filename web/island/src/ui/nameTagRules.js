@@ -29,8 +29,8 @@ export const tagText = u => typeof u?.name === "string" ? u.name.trim().slice(0,
 
 /** 누구를 띄울지 고름(자리를 새로 만들지 않음 — 부르는 쪽이 배열을 한 번 만들어 계속 씀).
  *  n개 후보: x·y = 이름표 아래 가운데(px), w·h = 크기(px, 배율 적용), d = 거리, focus = 1이면 따라가는 갈매미.
- *  order(길이 ≥ n)는 정렬에 쓰는 일감 배열. 결과는 show[i] = 1/0. 띄운 수를 돌려줌 */
-export function pickTags(n, x, y, w, h, d, focus, cap, order, show) {
+ *  order(길이 ≥ n)는 정렬에 쓰는 일감 배열. skip[i] = 1이면 이번엔 안 띄움(남의 말풍선 밑 — 수·겹침 자리도 차지하지 않음). 결과는 show[i] = 1/0. 띄운 수를 돌려줌 */
+export function pickTags(n, x, y, w, h, d, focus, cap, order, show, skip = null) {
   for (let i = 0; i < n; i++) { order[i] = i; show[i] = 0; }
   for (let i = 1; i < n; i++) {                                                // 끼워 넣기 정렬(후보는 수십 개 이하): 따라가는 것 먼저, 그다음 가까운 순
     const k = order[i]; let j = i - 1;
@@ -39,7 +39,7 @@ export function pickTags(n, x, y, w, h, d, focus, cap, order, show) {
   }
   let shown = 0;
   for (let a = 0; a < n && shown < cap; a++) {
-    const i = order[a]; let hit = false;
+    const i = order[a]; let hit = false; if (skip && skip[i]) continue;
     if (!focus[i]) for (let b = 0; b < a; b++) {
       const j = order[b]; if (!show[j]) continue;
       if (Math.abs(x[i] - x[j]) * 2 < w[i] + w[j] + TAG_GAP * 2 && y[i] - h[i] < y[j] + TAG_GAP && y[j] - h[j] < y[i] + TAG_GAP) { hit = true; break; }

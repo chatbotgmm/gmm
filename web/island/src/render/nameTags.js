@@ -20,7 +20,7 @@ export class HeadTags {
   grow(k) {                                                                     // 후보 칸(후보가 늘 때만 다시 만듦)
     this.size = k; this.cand = new Array(k).fill(null);
     for (const f of ["x", "y", "w", "h", "d", "a"]) this[f] = new Float32Array(k);
-    this.focus = new Uint8Array(k); this.show = new Uint8Array(k); this.order = new Int32Array(k);
+    this.focus = new Uint8Array(k); this.hid = new Uint8Array(k); this.show = new Uint8Array(k); this.order = new Int32Array(k);
   }
   rec(key) {
     let r = this.recs.get(key); if (r) return r;
@@ -53,14 +53,14 @@ export class HeadTags {
     if (!r.w) { showEl(r.el, true); r.w = r.el.offsetWidth; r.h = r.el.offsetHeight; if (!r.w) return; }   // 크기는 글이 바뀔 때만 잼(숨어 있었으면 0 → 다음에 다시)
     if (this.n >= this.size) this.grow(this.size * 2);
     const s = tagScale(d), sx = (_tagP.x * 0.5 + 0.5) * this.vw, sy = (-_tagP.y * 0.5 + 0.5) * this.vh, b = this.blk[0];
-    if (!focus && b.n && blockedBy(sx, sy, r.w * s, r.h * s, typeof key === "number" ? key : -1, b.n, b.x0, b.y0, b.x1, b.y1, b.own)) return;   // 남의 말풍선 밑: 옅어짐
+    const hid = !focus && b.n > 0 && blockedBy(sx, sy, r.w * s, r.h * s, typeof key === "number" ? key : -1, b.n, b.x0, b.y0, b.x1, b.y1, b.own);   // 남의 말풍선 밑: 옅어짐(자리는 계속 따라감 — 화면을 끌어도 옛 자리에 남지 않게)
     const i = this.n++; r.seen = true;
-    this.cand[i] = r; this.x[i] = sx; this.y[i] = sy;
+    this.cand[i] = r; this.x[i] = sx; this.y[i] = sy; this.hid[i] = hid ? 1 : 0;
     this.w[i] = r.w * s; this.h[i] = r.h * s; this.d[i] = d; this.a[i] = a; this.focus[i] = focus ? 1 : 0; r.s = s;
   }
   /** 프레임 끝: 고르고(수·겹침) 놓고 옅게·짙게. dt: 초 */
   end(dt) {
-    const n = this.n; pickTags(n, this.x, this.y, this.w, this.h, this.d, this.focus, this.cap, this.order, this.show);
+    const n = this.n; pickTags(n, this.x, this.y, this.w, this.h, this.d, this.focus, this.cap, this.order, this.show, this.hid);
     const k = this.mode === "off" ? 1 : Math.min(1, dt * TAG_EASE);                // 끄기: 바로 숨김
     for (let i = 0; i < n; i++) {
       const r = this.cand[i]; this.cand[i] = null; r.live = true;

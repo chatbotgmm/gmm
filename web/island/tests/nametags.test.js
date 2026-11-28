@@ -67,3 +67,10 @@ test("남의 말풍선 밑의 이름표는 옅어짐(말풍선이 이김) · 제
   assert.equal(blockedBy(100, 240, 50, 16, 1, 1, x0, y0, x1, y1, own), false, "아래");
   assert.equal(blockedBy(100, 185, 50, 16, 1, 0, x0, y0, x1, y1, own), false, "가림 칸 없음");
 });
+
+test("남의 말풍선 밑이라 쉬는 이름표(skip)는 안 띄우고, 수·겹침 자리도 차지하지 않음", () => {
+  const n = 3, F = a => Float32Array.from(a), order = new Int32Array(n), show = new Uint8Array(n);
+  // 0: 가장 가깝지만 가려짐 · 1: 0과 겹침 · 2: 떨어져 있음 · cap 1
+  const shown = pickTags(n, F([100, 110, 400]), F([200, 200, 200]), F([60, 60, 60]), F([18, 18, 18]), F([10, 20, 30]), new Uint8Array(n), 1, order, show, Uint8Array.from([1, 0, 0]));
+  assert.equal(shown, 1); assert.deepEqual([...show], [0, 1, 0], "가린 0 대신 겹치던 1이 뜸(cap도 0이 먹지 않음)");
+});
