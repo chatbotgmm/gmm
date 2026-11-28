@@ -2,6 +2,7 @@
 // 덤불 색, 그리고 봄 꽃잎·가을 낙엽이 흩날리는 입자. 계절은 world.season(기기 날짜 또는 설정에서 고른 값).
 import * as THREE from "three";
 import { OBJ_SNOW } from "./toon.js";
+import { LAMP_POOL_U, LAMP_POOL_PARS, lampPoolFrag } from "./lampPool.js";
 
 // 나무 잎 계절 색(텍스처 한 장에 줄기·잎이 같이 있는 모델): 초록빛이 강한 곳만 바꿈. 봄 연두(가끔 벚꽃) · 가을 단풍(나무마다 주황~노랑) · 겨울 눈
 const TREE_U = { uTSpr: { value: 0 }, uTAut: { value: 0 }, uTWin: { value: 0 } };
@@ -37,17 +38,17 @@ const BUSH = { spring: [0xffffff, 0x000000], summer: [0xf0f0dc, 0x000000], autum
 /** 땅 재질에 계절 셰이더를 붙임(툰으로 바뀌어도 toon.js가 그대로 옮김) */
 export function seasonalGround(mat) {
   mat.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, U);
+    Object.assign(sh.uniforms, U, LAMP_POOL_U);
     // aSnowClear(꼭짓점마다, groundChunks.js): 길은 쓸어서 눈이 덜 쌓임. 속성이 없는 메쉬는 0으로 읽혀 그대로 눈
     sh.vertexShader = "attribute float aSnowClear; varying float vSnowClear; varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + sh.vertexShader.replace("#include <begin_vertex>",
       "#include <begin_vertex>\n vSnowClear = aSnowClear; vSeasonW = (modelMatrix * vec4(transformed, 1.0)).xyz; vSeasonN = normalize(mat3(modelMatrix) * objectNormal);");
-    sh.fragmentShader = "uniform float uSnow; uniform float uAutumn; uniform float uSpring; varying float vSnowClear; varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+    sh.fragmentShader = "uniform float uSnow; uniform float uAutumn; uniform float uSpring; varying float vSnowClear; varying vec3 vSeasonW; varying vec3 vSeasonN;\n" + LAMP_POOL_PARS + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
       float green = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 5.0, 0.0, 1.0);          // 잔디처럼 초록인 곳
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.92, 1.1, 0.82), uSpring * green);   // 봄: 연두
       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.32, 0.98, 0.5), uAutumn * green);   // 가을: 누런 잔디
       float up = smoothstep(0.55, 0.85, vSeasonN.y), land = smoothstep(-0.07, -0.015, vSeasonW.y);   // 바닷가 모래(0보다 낮은 비탈)엔 눈이 안 쌓임
       float n = fract(sin(dot(floor(vSeasonW.xz * 1.7), vec2(12.9898, 78.233))) * 43758.5453);              // 칸마다 조금씩 다르게(얼룩진 눈)
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.97, 1.0), clamp(uSnow * up * land * (0.9 + 0.12 * n) * (1.0 - vSnowClear), 0.0, 1.0));`);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.97, 1.0), clamp(uSnow * up * land * (0.9 + 0.12 * n) * (1.0 - vSnowClear), 0.0, 1.0));${lampPoolFrag("vSeasonW")}`);   // 가로등 발밑 빛 웅덩이(lampPool.js): 계절·눈까지 칠한 땅 색 위에
   };
   mat.customProgramCacheKey = () => "seasonGround"; mat.userData.noSnow = true;   // 땅은 자체 눈
   return mat;
