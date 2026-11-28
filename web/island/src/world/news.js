@@ -8,7 +8,7 @@ import { FRIEND_STAGES } from "../units/mind.js";
 import { josa } from "../util.js";
 import { BOND_STAGES, GIFT_TIERS } from "./bond.js";
 import { MEDALS } from "./medals.js";
-import { askNotice } from "./roadAsk.js";
+import { askNotice, askNoticeMany, roadWant } from "./roadAsk.js";
 import { STEPS, STEP_NAME } from "./monetary.js";
 
 const stepName = v => STEP_NAME[STEPS.indexOf(v)] ?? `${v}`;
@@ -37,7 +37,7 @@ const NEWS_MAKERS = {
   // 갈매미 소지품: 스스로 시장에 판 것(알림 줄에만)
   stashSale: ({ u, items, coins, cut }) => ({ icon: "🎒", text: `${josa(u.name, "이", "가")} 소지품 ${items.reduce((s, x) => s + x.n, 0)}개를 팔았어요 🪙+${coins - cut}`, weight: 0 }),
   // ✨ 반짝이를 주움(알림 줄에만)
-  sparkle: ({ item }) => ({ icon: "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
+  sparkle: ({ item }) => ({ icon: item.rareOf ? "🌟" : "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
   // 해변 줍기: 마을에서 처음 주운 물건만 소식지에(같은 물건을 또 주운 것은 말풍선으로 충분)
   beachcomb: ({ u, item, first }) => ({ icon: "✨", text: `${josa(u.name, "이", "가")} 바닷가에서 ${josa(item.name, "을", "를")} 주웠어요`, weight: first ? 2 : 0 }),
   evolve: ({ u, to, stayed }) => ({ icon: stayed ? "🪨" : "🌟", text: stayed ? `${josa(u.name, "은", "는")} 변신하지 않고 든든한 기본 갈매미가 됐어요` : `${josa(u.name, "이", "가")} ${to} 갈매미가 됐어요!`, weight: 5 }),
@@ -91,8 +91,9 @@ const NEWS_MAKERS = {
   // 건물 업그레이드(World.startUpgrade): 시작 · 완료
   upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? `. 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },
   upgraded: ({ b, from }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏥", text: `${josa(f.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!${d.beds ? ` 침대 ${d.beds}개` : ""}`, weight: 6 } : null; },
-  // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄에만 · 같은 갈매미 하루 한 번은 ALERTS가 거름)
-  roadAsk: ({ u, label }) => ({ icon: "🛣", text: askNotice(u.name, label), weight: 0 }),
+  // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄은 마을 하루 한 번 — ALERTS가 거름. 바라는 갈매미가 여럿이면 "갈매미 N마리가…" 한 줄)
+  roadAsk: ({ u, label }, w) => { const n = w?.units ? w.units.filter(o => roadWant(w, o)).length : 1;   // 여러 마리가 같은 길을 바라면 한 줄로(알림 줄은 마을 하루에 한 번)
+    return { icon: "🛣", text: n >= 2 ? askNoticeMany(n, label) : askNotice(u.name, label), weight: 0 }; },
   // 중앙은행(monetary.js): 손잡이(찍어내기·매입 예산·금리·축하) · 물가 사태(사태마다 한 번) · 예산 참·자동(알림 줄에만)
   monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 하루에 사들이는 가공품을 '${stepName(to)}'${to > from ? "으로 늘렸어요" : to < from ? "으로 줄였어요" : "으로 정했어요"}`, weight: 3 }),
   monRate: ({ from, to }) => ({ icon: "🏦", text: `금리를 ${from}% → ${to}%로 ${to > from ? "올렸어요. 갈매미들이 저금을 늘려요" : "내렸어요. 갈매미들이 저금을 덜 해요"}`, weight: 4 }),
@@ -100,7 +101,7 @@ const NEWS_MAKERS = {
   inflation: ({ pi, P }) => ({ icon: "📈", text: `값이 하루 새 ${Math.round(pi * 1000) / 10}% 올랐어요. 물가 ${Math.round(P * 100)}`, weight: 6 }),
   deflation: () => ({ icon: "🧊", text: "값이 계속 내려가요. 재료를 못 파는 갈매미가 생길지도 몰라요", weight: 5 }),
   priceStable: () => ({ icon: "📊", text: "사흘째 값이 그대로예요. 마을 점수가 올랐어요", weight: 5 }),
-  capFull: () => ({ icon: "🏦", text: "은행이 오늘 살 만큼 다 샀어요. 상인은 내일 팔아요", weight: 0 }),
+  capFull: () => ({ icon: "🏦", text: "은행이 오늘 살 만큼 다 샀어요. 상인은 조금 쉬었다 또 팔아요", weight: 0 }),
   monAuto: ({ from, to, up }) => ({ icon: "🏛", text: `은행장이 ${up ? "값이 내려서" : "값이 올라서"} 가공품을 '${stepName(to)}' 사기로 했어요`, weight: 0 }),
   monPrint: ({ n, left }) => ({ icon: "🖨", text: `은행이 새 동전 🪙${n}을 찍어 금고에 넣었어요. 동전이 늘면 값도 올라요`, weight: 3 }),
   monStart: () => ({ icon: "🏛", text: "은행에 중앙은행 창구가 열렸어요. 처음엔 은행장이 알아서 맡아요", weight: 5 }),
@@ -151,6 +152,21 @@ export function awayHours(ms) {
 }
 /** 그동안 낚싯대를 던진 횟수: 1번 + 한 시간에 1번, 많아야 AWAY_FISH_CAP번 */
 export const awayCasts = hours => hours > 0 ? Math.min(AWAY_FISH_CAP, 1 + Math.floor(hours)) : 0;
+// 다녀온 사이에 갈매미들이 한 일(World.applyAway): 공사 · 세금과 숙박비 · 문 앞 선물 · 문 앞에서 기다리는 갈매미
+export const AWAY_BUILD_PER_HOUR = 2;          // 짓는 갈매미 한 마리가 한 시간에 하는 공사 바퀴(망치질 3번 = 한 바퀴, 재료를 모아야 하면 바퀴 둘 몫)
+export const AWAY_DUES_MAX = 3;                // 세금·집값 갚기를 걷는 마을 날 수: 3시간마다 하루, 많아야 3일(켜 두고 노는 날의 1/3쯤 — 8시간은 마을 하루 48번)
+export const AWAY_GIFT_MIN = 2, AWAY_GIFT_MAX = 4;   // 문 앞에 두고 간 반짝이 선물: 2개 + 3시간·6시간 넘게 비우면 하나씩 더
+/** 그동안 한 공사 바퀴(짓는 갈매미 한 마리 몫): 반올림, 적어도 1 */
+export const awayBuildCycles = hours => hours > 0 ? Math.max(1, Math.round(hours * AWAY_BUILD_PER_HOUR)) : 0;
+/** 그동안 지난 마을 날(세금을 걷는 날) 수 */
+export const awayDuesDays = hours => hours > 0 ? Math.min(AWAY_DUES_MAX, 1 + Math.floor(hours / 3)) : 0;
+/** 문 앞 선물 수 */
+export const awayGiftCount = hours => hours > 0 ? Math.min(AWAY_GIFT_MAX, AWAY_GIFT_MIN + (hours >= 3) + (hours >= 6)) : 0;
+/** 같은 이름은 묶어 "조개껍데기 2개, 도토리" 같은 글로 */
+export function countNames(names) {
+  const m = new Map(); for (const n of names) m.set(n, (m.get(n) || 0) + 1);
+  return [...m].map(([n, k]) => k > 1 ? `${n} ${k}개` : n).join(", ");
+}
 /** "3시간 20분" 같은 글 */
 export function awaySpan(ms) {
   const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
@@ -160,11 +176,23 @@ export function awaySpan(ms) {
  *  돌려주는 값: { title, lines: [글 줄], sign } */
 export function awayLetter(report, { post = false, news = [], wishes = [] } = {}) {
   const { ms, hours, ripened, catches } = report, lines = [`${awaySpan(ms)} 만이에요.`];
-  if (ms / 3600000 > hours) lines.push(`오래 비운 날도 ${AWAY_CAP_HOURS}시간 치만 일해요.`);
+  const built = report.built || [], money = report.money || {}, gifts = report.gifts || [], waiter = report.waiter || null;
+  if (ms / 3600000 > hours) lines.push(`너무 오래 비운 날은 ${AWAY_CAP_HOURS}시간 동안 한 일까지만 적어요.`);
+  for (const b of built) lines.push(b.done ? `🔨 ${josa(b.who, "이", "가")} ${josa(b.name, "을", "를")} 다 지었어요.` : `🔨 ${josa(b.who, "이", "가")} ${b.name} 공사를 ${b.from}%에서 ${b.to}%까지 해 뒀어요.`);
+  if (report.buildStop) lines.push("🏦 금고가 모자라 품삯을 못 줘서 공사는 쉬고 있어요.");
+  const inc = (money.tax || 0) + (money.repay || 0) + (money.lodging || 0);
+  if (inc) { const src = [money.tax && "세금", money.repay && "집값", money.lodging && "숙박비"].filter(Boolean), txt = src.length === 2 ? `${josa(src[0], "과", "와")} ${src[1]}` : src.join(", ");
+    lines.push(`🏦 금고에 🪙+${inc} 들어왔어요. ${josa(txt, "이에요", "예요")}.`); }
+  if (money.wages) lines.push(`🔨 품삯으로 금고에서 🪙${money.wages} 나갔어요.`);
   if (ripened) lines.push(`🌾 밭 ${ripened}칸이 다 익어서 거두기만 기다려요.`);
   if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
-  if (!ripened && !catches.length) lines.push("별일 없이 조용한 시간이었어요.");
-  for (const l of report.story || []) lines.push(l);                            // 🗝 이야기: 우체통에 낀 엽서 · 수평선 깜빡임 소식
+  const door = gifts.filter(g => !g.pocket), pocket = gifts.filter(g => g.pocket);
+  if (door.length) lines.push(`🎁 누군가 문 앞에 ${josa(countNames(door.map(g => g.name)), "을", "를")} 두고 갔어요. 톡 눌러 주워요.`);
+  if (pocket.length) lines.push(`🎁 문 앞이 꽉 차서 ${josa(countNames(pocket.map(g => g.name)), "은", "는")} 주머니에 넣어 뒀어요.`);
+  if (waiter) lines.push(`🏦 은행 앞에서 ${josa(waiter.who, "이", "가")} 기다려요. "${waiter.say}"`);
+  const story = report.story || [];
+  if (!ripened && !catches.length && !built.length && !inc && !money.wages && !gifts.length && !waiter && !story.length) lines.push("별일 없이 조용한 시간이었어요.");
+  for (const l of story) lines.push(l);                                        // 🗝 이야기: 우체통에 낀 엽서 · 수평선 깜빡임 소식
   if (post) {
     for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? `, ${RARITY[c.fish.rarity]?.name ?? ""}!` : ""}${c.item ? ` + ${c.item.name}` : ""}${c.donated ? ", 수족관에 기증" : ""}`);
     if (news.length) { lines.push("📰 떠나기 전 마을 소식"); for (const n of news) lines.push(`· ${n.icon} ${n.text}`); }

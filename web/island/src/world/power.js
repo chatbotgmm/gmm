@@ -39,3 +39,9 @@ export function unpowered(world) {
   const list = []; for (const b of world.buildings.values()) if (lacksPower(world, b)) list.push(b);
   world._unpowered = { rev: world.powerRev, n: world.buildings.size, list }; return list;
 }
+/** 「전기 없음」을 알려도 되나: 풍차를 이 마을 등급에서 지을 수 있거나(🏘 어촌부터) 이미 놓은 풍차가 있음. 그 전에는 고칠 길이 없으니 배지·까닭 글을 숨김 */
+export function powerOpen(world) {
+  if (Object.values(BUILDINGS).some(d => d.power && (d.rank || 0) <= (world.rank || 0))) return true;
+  for (const b of world.buildings.values()) if (BUILDINGS[b.defId]?.power) return true;
+  return false;
+}

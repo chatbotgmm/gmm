@@ -989,8 +989,10 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   const farmer = w.units.find(u => u.job === "farmer"), fisher = w.units.find(u => u.job === "fisher");
   w.farmPlot(w.plots[0], farmer); w.farmPlot(w.plots[1], farmer); assert.equal(w.plots.filter(p => p.stage === "growing").length, 2);
   const snap = () => JSON.stringify([w.bank, w.prices, w.priceHist, w.units.map(u => u.coins), w.res.coins, w.time, w.weather, w.granary]);
-  const before = snap(), fish0 = fisher.inv.fish, seen0 = Object.values(w.collection).reduce((a, b) => a + b, 0);
+  const snap2 = () => JSON.stringify([w.prices, w.priceHist, w.res.coins, w.time, w.weather, w.granary]), cash = () => Math.round(w.bank.vault + w.units.reduce((a, u) => a + (u.coins || 0), 0));
+  const before = snap(), before2 = snap2(), cash0 = cash(), issued0 = w.bank.issued, fish0 = fisher.inv.fish, seen0 = Object.values(w.collection).reduce((a, b) => a + b, 0);
   assert.equal(w.applyAway(5 * 60000, seededRandom(5)), null, "5분은 아무 일 없음"); assert.equal(w.applyAway(-H, seededRandom(5)), null);
+  assert.equal(snap(), before, "10분 안쪽은 은행·돈도 그대로");
   assert.equal(w.plots.filter(p => p.stage === "growing").length, 2);
   const r = w.applyAway(100 * H, seededRandom(5));
   assert.equal(r.hours, 8); assert.equal(r.ripened, 2); assert.equal(w.plots.filter(p => p.stage === "ripe").length, 2);
@@ -998,7 +1000,9 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   assert.ok(r.catches.every(x => x.who === fisher.name && x.fish.name));
   assert.equal(Object.values(w.collection).reduce((a, b) => a + b, 0) - seen0, r.catches.length, "도감에 기록");
   assert.equal(fisher.inv.fish - fish0, r.catches.filter(x => x.fish.rarity === "common").length, "흔한 물고기는 어부 가방에");
-  assert.equal(snap(), before, "은행·시세·돈·마을 시간은 그대로");
+  assert.equal(snap2(), before2, "시세·마을 시간·창고 돈은 그대로");
+  assert.equal(cash(), cash0, "금고와 갈매미 돈은 서로 옮겨질 뿐 새로 생기지 않음");
+  assert.equal(w.bank.issued, issued0, "새 돈 발행 없음");
   assert.match(w.newsLog.at(-1).text, /^다녀온 사이에 밭 2칸이 익고 물고기 \d마리를 낚았어요$/);
   assert.deepEqual(w.applyAway(100 * H, seededRandom(5)).ripened, 0, "익을 밭이 더 없음");
   // 같은 난수면 같은 결과(월드는 시계를 읽지 않음), 어부가 없으면 낚시 없음
@@ -1011,7 +1015,7 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   // 편지: 우체국이 있으면 더 길게
   const rep = { ms: 100 * H, hours: 8, ripened: 2, catches: [{ who: "물방울", fish: { name: "참치", rarity: "epic" }, item: null }, { who: "물방울", fish: { name: "멸치", rarity: "common" }, item: { name: "유리병" } }] };
   const short = N.awayLetter(rep), long = N.awayLetter(rep, { post: true, news: [{ icon: "🏅", text: "마을 등급이 올랐어요: 🏘 어촌!" }], wishes: [{ who: "기본", text: "시장이 있으면 좋겠어요" }] });
-  assert.ok(long.lines.length > short.lines.length); assert.match(short.lines[0], /^4일 4시간 만이에요/); assert.ok(short.lines.some(l => /8시간 치만/.test(l)));
+  assert.ok(long.lines.length > short.lines.length); assert.match(short.lines[0], /^4일 4시간 만이에요/); assert.ok(short.lines.some(l => /8시간 동안 한 일까지만/.test(l)));
   assert.ok(short.lines.some(l => /밭 2칸/.test(l)) && short.lines.some(l => /물고기 2마리/.test(l)));
   assert.ok(long.lines.some(l => /참치, 영웅!/.test(l)) && long.lines.some(l => /멸치 \+ 유리병/.test(l)) && long.lines.some(l => /어촌/.test(l)) && long.lines.some(l => /시장이 있으면/.test(l)));
   assert.ok(N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [] }).lines.some(l => /조용한/.test(l)));
@@ -1206,9 +1210,9 @@ test("정(월드): 간직한 것은 안 팔고, 선물하면 하나 줄고 정·
   assert.equal(JSON.stringify(w.res), res0, "선물은 마을 창고(음식·돈)를 건드리지 않음");
   // 단계에 처음 닿으면 답례 한 번(가방에 들어가고 간직 표시) + 소식지
   ev.length = 0; w.items.pearl = 1; const news0 = w.newsLog.length; r = w.giveGift(gold, "pearl");
-  assert.equal(B.bondStage(gold.bond), 1); assert.equal(r.thanks.length, 1); assert.equal(r.thanks[0].gift.id, "bottle"); assert.equal(w.items.bottle, 1); assert.equal(w.keep.bottle, true); assert.equal(gold.bondGifts, 1);
-  assert.deepEqual(ev, [["gift", "황금", "pearl", 2], ["stage", "황금", 1, "bottle"]]);
-  assert.equal(w.newsLog.length, news0 + 1); assert.match(w.newsLog.at(-1).text, /황금과 아는 사이가 됐어요! 답례로 유리병 편지를 받았어요/);
+  assert.equal(B.bondStage(gold.bond), 1); assert.equal(r.thanks.length, 1); assert.equal(r.thanks[0].gift.id, "seaglass", "황금은 반짝이는 것을 좋아해서 바다 유리"); assert.equal(w.items.seaglass, 1); assert.equal(w.keep.seaglass, true); assert.equal(gold.bondGifts, 1);
+  assert.deepEqual(ev, [["gift", "황금", "pearl", 2], ["stage", "황금", 1, "seaglass"]]);
+  assert.equal(w.newsLog.length, news0 + 1); assert.match(w.newsLog.at(-1).text, /황금과 아는 사이가 됐어요! 답례로 바다 유리를 받았어요/);
   // 들어 올릴 때 반응: 처음 만난 사이는 예전 그대로 "!?", 친해지면 덜 놀람
   assert.ok(w.pickUpUnit(shadow)); assert.equal(shadow.emoteText, "!?"); w.dropUnit(shadow, Math.floor(shadow.heldFrom.x), Math.floor(shadow.heldFrom.z));
   assert.ok(w.pickUpUnit(gold)); assert.equal(gold.emoteText, B.BOND_STAGES[1].held); assert.deepEqual(w.pet(gold), { ok: false, reason: "away" }, "들고 있는 동안은 못 쓰다듬음");
@@ -1245,7 +1249,7 @@ test("정(월드): 간직하던 것의 마지막 하나를 선물하면 간직 �
   w.giveGift(u, "pearl"); assert.equal(w.keep.pearl, true, "하나 남았으면 그대로");
   w.giveGift(u, "pearl"); w.giveGift(u, "tuna"); assert.equal(w.keep.pearl, undefined); assert.equal(w.keep.tuna, undefined);
   // 답례로 받은 유리병 편지(자동으로 간직)를 다시 선물해 버렸다면, 그 뒤에 주운 편지는 예전처럼 상인이 팖
-  const v = w.units[1]; w.items.bottle = 0; delete w.keep.bottle;
+  const v = w.units.find(o => o.name === "그림자"); w.items.bottle = 0; delete w.keep.bottle;   // 편지를 좋아하는 갈매미의 아는 사이 답례
   const got = w.addBond(v, 5); assert.equal(got[0].gift.id, "bottle"); assert.equal(w.keep.bottle, true); assert.equal(w.items.bottle, 1);
   w.giveGift(v, "bottle"); assert.equal(w.keep.bottle, undefined);
   w.items.bottle = 3; w.trade(merchant); assert.equal(w.items.bottle, 0);
@@ -1465,7 +1469,7 @@ test("오늘의 부탁: 날짜 열쇠로만 고르고(월드 난수 안 씀), �
   assert.ok(D.rollDaily("2026-11-25", w).reqs.every(x => x.id !== "seasonFish" || /전어|꽃게/.test(x.text)), "제철 물고기 이름이 글에 들어감");
   // 갈매미가 없는 섬: 할 수 있는 것만(3개가 안 될 수도 있음), 낚시·쓰다듬기·장식은 없음
   const none = World.create(7, seededRandom(3), { empty: true });
-  for (let d = 1; d <= 20; d++) { const r = D.rollDaily(`2027-03-${d}`, none); assert.ok(r.reqs.length >= 1 && r.reqs.every(x => ["road", "summon"].includes(x.id)), r.reqs.map(x => x.id).join()); }
+  for (let d = 1; d <= 20; d++) { const r = D.rollDaily(`2027-03-${d}`, none); assert.ok(r.reqs.length >= 1 && r.reqs.every(x => ["road"].includes(x.id)), r.reqs.map(x => x.id).join()); }   // 「새 갈매미 부르기」도 없음: 첫 갈매미는 처음 안내에서 부름
   // 조건이 생기면 나옴: 가방에 진주 → 선물, 소원이 걸려 있음 → 소원
   w.items.pearl = 1; w.wishes.push({ id: "bench", unitId: w.units[0].unitId, base: 0, age: 0 });
   const later = new Set(); for (let d = 1; d <= 28; d++) for (const x of D.rollDaily(`2027-05-${d}`, w).reqs) later.add(x.id);
@@ -1544,7 +1548,7 @@ test("도장 가게·저장: 도장으로 한정 가구를 사고, 날짜·나�
 });
 
 test("여덟 가지 함께: 친구·소식지·찌 당기기·수족관·선물·하늘·축제·오늘의 부탁을 한 마을에서 겪고 저장 → 불러와도 그대로(등급 점수 같고, 도장·답례·기증·축제를 또 받지 않음)", async () => {
-  const { FISH } = await import("../src/data/catalog.js"); const { friendStage, affinity } = await import("../src/units/mind.js");
+  const { FISH } = await import("../src/data/catalog.js"); const { friendStage, affinity } = await import("../src/units/mind.js"); const B = await import("../src/world/bond.js");
   const { w, spots } = festTown(); w.addUnitByName("목수"); w.rank = 3; w.festKey = "2026-autumn"; w.winterYear = 2026; w.setSeason("autumn"); w.setDay("2026-11-25");
   const c = w.center; let aq = null; for (let x = Math.floor(c.x) - 14; x < c.x + 14 && !aq; x++) for (let z = Math.floor(c.z) - 14; z < c.z + 14 && !aq; z++) if (w.check("aquarium", x, z, 0).ok) aq = w.placeBuilding("aquarium", x, z, 0).building;
   assert.ok(aq && w.aquariumB(), "수족관");
@@ -1552,7 +1556,7 @@ test("여덟 가지 함께: 친구·소식지·찌 당기기·수족관·선물�
   w.befriend(a, b, 99); assert.equal(friendStage(affinity(a, b)), 2, "단짝");
   const rare = FISH.find(f => f.rarity === "rare" && !f.season); assert.deepEqual(w.donateFish(rare), []); w.tellDonation(fisher, rare, []);
   w.treasures[rare.id] = 2; w.daily = { key: "2026-11-25", reqs: [{ id: "gift", icon: "🎁", text: "선물", need: 1, have: 0 }, { id: "pet", icon: "♥", text: "쓰다듬기", need: 3, have: 0 }, { id: "deco", icon: "🏮", text: "장식", need: 1, have: 0 }], stamped: false };
-  for (let i = 0; i < 4; i++) assert.ok(w.giveGift(a, rare.id) || i >= 2, "보물 두 마리를 선물"); a.bond = 4.5; for (let i = 0; i < 3; i++) assert.equal(w.pet(a).ok, true);
+  for (let i = 0; i < 4; i++) assert.ok(w.giveGift(a, rare.id) || i >= 2, "보물 두 마리를 선물"); a.bond = 4.5; for (let i = 0; i < 3; i++) assert.equal(w.pet(a).ok, true); for (let i = 3; i < B.PET_DAILY; i++) w.pet(a);
   assert.equal(a.bondGifts, 1, "아는 사이 답례 한 번"); assert.equal(seen.bondStage, 1);
   fisher.state = UnitState.Fish; fisher.fishT = 1; fisher.bite = true; assert.equal(w.tugFloat(fisher), true); fisher.state = UnitState.Idle; fisher.fishT = undefined; fisher.bite = fisher.tugged = false;
   assert.equal(w.startSky("rainbow", true), true); assert.ok(w.fx.item > 1);

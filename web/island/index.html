@@ -857,6 +857,11 @@
     background: radial-gradient(circle, #fff 30%, #ffe08a 100%); box-shadow: 0 0 calc(16*var(--u)) rgba(255,196,60,.8); }
   .rwBanTxt { display: flex; flex-direction: column; min-width: 0; } .rwBanTitle { font-size: calc(21*var(--u)); font-weight: 800; letter-spacing: -.01em; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rwBanLine { font-size: calc(13.5*var(--u)); color: var(--c-ink-2); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rwBan.rare { padding: calc(14*var(--u)) calc(26*var(--u)) calc(14*var(--u)) calc(14*var(--u)); background: linear-gradient(180deg, #fff6fb, #ffd9ef); box-shadow: 0 0 0 calc(4*var(--u)) #ff8fd8, 0 0 calc(28*var(--u)) rgba(255,120,200,.55), var(--e-3); }
+  .rwBan.rare .rwBanIco { width: calc(68*var(--u)); height: calc(68*var(--u)); font-size: calc(44*var(--u)); background: radial-gradient(circle, #fff 30%, #ffb3e6 100%); box-shadow: 0 0 calc(22*var(--u)) rgba(255,120,200,.85); }
+  .rwBan.rare .rwBanTitle { font-size: calc(23*var(--u)); }
+  .rwBan.wrap { width: max-content; }   /* left 50%라 그냥 두면 줄바꿈 띠가 화면 반 폭으로 줄어듦 → 글 길이만큼 넓히고 max-width에서 꺾음 */
+  .rwBan.wrap .rwBanLine { white-space: normal; word-break: keep-all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } .rwBan .rwBanLine[hidden] { display: none; }
   .rwBan.on { animation: rwBanIn .5s cubic-bezier(.2,1.6,.4,1) both; } .rwBan.off { animation: rwBanOut .25s ease-in both; }
   .rwBan.on .rwBanIco { animation: rwWiggle .7s .15s ease-out both; }
   @keyframes rwBanIn { from { opacity: 0; transform: translateX(-50%) translateY(calc(-14*var(--u))) scale(.6); } to { opacity: 1; transform: translateX(-50%); } }

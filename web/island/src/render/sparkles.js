@@ -35,6 +35,8 @@ function nightTex() {
 /** 밤 반짝이 종류마다 빛 색(그림에 곱함) */
 /** 🗝 이야기 반짝이(world/story.js): 밤 반짝이처럼 빛 테두리 + 푸른 별빛, 조금 더 크게(보통 반짝이와 한눈에 구별) */
 export const STORY_TINT = 0xa8d4ff;
+/** 🌟 드문 반짝이(world/sparkles.js SPARKLE_RARE): 빛 테두리 + 분홍빛, 조금 더 크게(보통 금빛 별과 한눈에 다름) */
+export const RARE_TINT = 0xff8fd8;
 export const NIGHT_TINT = { fireflyJar: 0xe8ff7a, starNote: 0xffe9a8, moonShell: 0xbfe0ff, glowWeed: 0x7dffd8 };
 const _v = new THREE.Vector3();
 export class SparkleView {
@@ -49,11 +51,11 @@ export class SparkleView {
     this.t += dt; const seen = new Set();
     for (const s of world.sparkles || []) {
       seen.add(s.id); let sp = this.sprites.get(s.id);
-      if (!sp) { const tint = NIGHT_TINT[s.k] ?? (s.story ? STORY_TINT : null); sp = new THREE.Sprite((tint ? this.nMat : this.mat).clone()); if (tint) { sp.material.color.setHex(tint); sp.userData.night = true; } if (s.story) sp.userData.story = true; sp.userData.noToon = true; sp.userData.sparkleId = s.id; sp.renderOrder = 10; this.root.add(sp); this.sprites.set(s.id, sp); }   // 반투명(물 1·눈비 2)보다 나중에 그림
+      if (!sp) { const tint = s.rare ? RARE_TINT : NIGHT_TINT[s.k] ?? (s.story ? STORY_TINT : null); sp = new THREE.Sprite((tint ? this.nMat : this.mat).clone()); if (tint) { sp.material.color.setHex(tint); sp.userData.night = true; } if (s.story) sp.userData.story = true; if (s.rare) sp.userData.rare = true; sp.userData.noToon = true; sp.userData.sparkleId = s.id; sp.renderOrder = 10; this.root.add(sp); this.sprites.set(s.id, sp); }   // 반투명(물 1·눈비 2)보다 나중에 그림
       const ph = this.t * 3 + s.id * 1.7, ground = world.standHeight(s.x + 0.5, s.z + 0.5);
       sp.position.set(toWorldX(s.x + 0.5), ground + 0.3, toWorldZ(s.z + 0.5));
       const base = camera ? Math.min(MAX_SIZE, Math.max(0.36, MIN_PX * SparkleView.mPerPx(camera, sp.position, viewH))) : 0.36;
-      const k = base * (sp.userData.story ? 1.35 : 1) * (sp.userData.night ? 1.25 + 0.3 * Math.max(0, Math.sin(ph * 1.3)) : 1 + 0.22 * Math.max(0, Math.sin(ph * 1.9))); sp.scale.set(k, k, 1);   // 밤 반짝이는 빛무리만큼 크게 · 느리게 숨 쉬듯   // 깜빡일 때만 커짐(가장 작을 때가 MIN_PX)
+      const k = base * (sp.userData.story ? 1.35 : sp.userData.rare ? 1.25 : 1) * (sp.userData.night ? 1.25 + 0.3 * Math.max(0, Math.sin(ph * 1.3)) : 1 + 0.22 * Math.max(0, Math.sin(ph * 1.9))); sp.scale.set(k, k, 1);   // 밤 반짝이는 빛무리만큼 크게 · 느리게 숨 쉬듯   // 깜빡일 때만 커짐(가장 작을 때가 MIN_PX)
       sp.position.y = ground + 0.15 + k * 0.5 + Math.sin(ph) * 0.05 * k;           // 별 아래 끝이 땅에 묻히지 않게(크게 그려도 반쪽이 땅에 가려지지 않음)
       sp.material.opacity = Math.min(1, s.t / 20);   // 사라지기 20초 전부터 옅어짐(깜빡임은 크기로만: 투명하면 모래·물빛에 묻힘)
     }

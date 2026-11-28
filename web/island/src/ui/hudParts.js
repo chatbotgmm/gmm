@@ -4,6 +4,7 @@
 //  · valueRows: 값 표(큰 값 먼저, 0인 줄은 .zero로 흐리게).
 //  · vaultChipOf · townChipOf · tempChipOf: 위쪽 상태 줄의 🏦 내 금고 · 🪙 마을 돈 · 🌡 기온 글자와 색 상태(화면 꼴마다 길이가 다름).
 import { COMFORT_LO, COMFORT_HI } from "../world/climate.js";
+import { BUILDINGS } from "../data/catalog.js";
 
 const partEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 천 단위 쉼표(정수로 내림): 1234 → "1,234" */
@@ -78,3 +79,12 @@ export function factRow(items) {
   return `<div class="facts">${list.map(f => { const t = f.tone && TONE_ICON[f.tone] ? f.tone : null, mark = t && t !== "ok" ? `${TONE_ICON[t]} ` : "";
     return `<span class="fact"${t ? ` data-tone="${t}"` : ""}>${mark}${f.icon ? `${partEsc(f.icon)} ` : ""}${partEsc(f.text)}</span>`; }).join("")}</div>`;
 }
+
+/** 배고파요 칩 글: 손쓸 일 하나만(시장을 지으면 갈매미가 거기서 먹음) */
+export const HUNGER_CHIP = "😣 시장을 지으면 배불러요";
+/** 배고파요 칩을 띄울 갈매미(가장 배고픈 한 마리) 또는 null. 다 지은 시장·저장고가 있으면 띄우지 않음: 갈매미가 알아서 먹으러 가니 고칠 일이 없는 경고 */
+export function hungerCall(w, limit) {
+  for (const b of w.buildings.values()) { const d = BUILDINGS[b.defId]; if ((d?.market || d?.storehouse) && w.isDone(b)) return null; }
+  return w.units.filter(u => (u.full ?? 80) < limit).sort((a, b) => a.full - b.full)[0] || null;
+}
+

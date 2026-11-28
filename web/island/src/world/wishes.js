@@ -22,6 +22,7 @@ export const inGiantHouse = (w, u) => { const b = homeB(w, u); return !!b && BUI
 /** 소원 글(단짝 이름이 들어가는 소원은 함수) */
 export const wishText = (d, w, u, wish) => typeof d.text === "function" ? d.text(w, u, wish) : d.text;
 export const WISH_REWARD = 10;                                                    // 축하금(중앙은행이 켜진 섬은 금고에서, World.issue)
+export const WISH_RESCUE = 20;                                                    // 금고가 VAULT_LOW 아래일 때 소원이 이루어지면 금고에도 넣는 축하금(World.vaultBonus — 구제 장치)
 export const WISHES = [
   { id: "market", icon: "🛒", text: "장 볼 데가 없네. 시장 하나 있으면 딱인데", hint: "🪚 목수가 시장을 지어요",
     ok: w => !builtAny(w, d => d.market), done: w => builtAny(w, d => d.market) },
