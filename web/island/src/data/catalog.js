@@ -149,6 +149,8 @@ export const FURNITURE = {
   // 물고기 금메달 기념 가구(금메달 종류 수가 4·8·12에 닿으면 하나씩. ITEMS의 medal, world/medals.js)
   scaleRug:   { id: "scaleRug", name: "금빛 비늘 깔개", footprint: { w: 2, d: 2 }, height: 0.02, comfort: 3, layer: "floor", shape: "rug", colors: [0xe2b33c, 0xfff4d6] },
   floatLamp:  { id: "floatLamp", name: "찌 모양 스탠드", footprint: { w: 1, d: 1 }, height: 1.5, comfort: 3, shape: "floorLamp", colors: [0x2f5d7a, 0xff7a5c], light: true },
+  // 🗝 메인 스토리 엔딩 선물(보름의 답장을 받으면 하나, world/story.js)
+  bormChair:  { id: "bormChair", name: "보름의 흔들의자", footprint: { w: 1, d: 1 }, height: 0.9, comfort: 5, use: "sit", useLabel: "흔들의자에서 바다 생각", shape: "chair", colors: [0x8a5a3a] },
   trophyShelf: { id: "trophyShelf", name: "메달 진열장", footprint: { w: 2, d: 1 }, height: 1.5, comfort: 5, use: "read", useLabel: "메달 진열장 구경하기", shape: "bookshelf", colors: [0xd9a441] },
 };
 // 옷(clothes.js): 갈매미가 잡화점에서 자기 돈으로 사거나(낸 돈은 금고로) 도장 가게 선물 "손뜨개 목도리"로 받음. slot: 입는 자리 · warmth: 체감 보온(°C) ·
@@ -342,6 +344,8 @@ export const ITEMS = [
   { id: "medalRug",   name: "금빛 비늘 깔개", rarity: "rare", furniture: "scaleRug",    medal: 4 },
   { id: "medalLamp",  name: "찌 모양 스탠드", rarity: "epic", furniture: "floatLamp",   medal: 8 },
   { id: "medalShelf", name: "메달 진열장",    rarity: "epic", furniture: "trophyShelf", medal: 12 },
+  // 🗝 메인 스토리 엔딩 선물(story: 낚시·반짝이·가게로는 안 나옴. 맨 뒤에 붙여 기존 줄 순서가 그대로)
+  { id: "bormChair",  name: "보름의 흔들의자", rarity: "legend", furniture: "bormChair", story: true },
 ];
 // 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

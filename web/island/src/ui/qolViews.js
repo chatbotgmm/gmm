@@ -22,11 +22,14 @@ export function noteTarget(arg) {
   if (qvIsBld(arg)) return { b: arg.id };
   for (const k of ["u", "a", "buyer", "seller"]) if (qvIsUnit(arg[k])) return { u: arg[k].unitId };
   if (qvIsBld(arg.b)) return { b: arg.b.id };
+  if (arg.s?.k === "story" && Number.isInteger(arg.x) && Number.isInteger(arg.z)) return { x: arg.x, z: arg.z };   // 🗝 이야기 반짝이: 누르면 그 칸으로
+  if (arg.go && Number.isFinite(arg.go.x) && Number.isFinite(arg.go.z)) return { x: Math.round(arg.go.x), z: Math.round(arg.go.z) };   // 🗝 이야기 장소(등대·동굴)
   return null;
 }
 /** 알림 대상 → 글자 열쇠("u:3" · "b:12")와 그 반대(지난 알림 줄의 data-at) */
-export const atKey = at => at ? (at.u != null ? `u:${at.u}` : at.b != null ? `b:${at.b}` : "") : "";
+export const atKey = at => at ? (at.u != null ? `u:${at.u}` : at.b != null ? `b:${at.b}` : at.x != null ? `p:${at.x},${at.z}` : "") : "";
 export function atParse(s) {
+  const p = /^p:(-?\d+),(-?\d+)$/.exec(String(s || "")); if (p) return { x: +p[1], z: +p[2] };   // 칸 자리(이야기 반짝이)
   const m = /^([ub]):(.+)$/.exec(String(s || "")); if (!m) return null;
   const v = /^\d+$/.test(m[2]) ? +m[2] : m[2]; return m[1] === "u" ? { u: v } : { b: v };
 }
@@ -34,6 +37,7 @@ export function atParse(s) {
 export function atLabel(w, at) {
   if (at?.u != null) { const u = w.units.find(o => o.unitId === at.u); return u ? `${u.name} 따라가기` : ""; }
   if (at?.b != null) { const b = w.buildings.get(at.b); if (!b) return ""; const n = BUILDINGS[b.defId]?.name ?? "건물"; return `${n}${qvRo(n)} 가기`; }
+  if (at?.x != null) return "그곳으로 가기";
   return "";
 }
 

@@ -872,6 +872,39 @@
   .rwTake { margin-top: calc(8*var(--u)); padding: calc(10*var(--u)) calc(26*var(--u)); border-radius: var(--r-pill, 999px); background: var(--c-accent-strong); color: var(--c-on-accent); font-weight: 800; font-size: calc(17*var(--u)); box-shadow: var(--e-2); }
   .rwCard.on .rwTake { animation: tugPulse .7s .8s ease-in-out infinite alternate; }
   .rwBar { position: absolute; left: 0; right: 0; bottom: 0; height: calc(4*var(--u)); background: #f6c453; transform-origin: left; }
+  /* 🗝 비밀 수첩(ui/storyView.js): 표지(등대가 장마다 밝아짐) · 장 · 조각 칸(잠김 ??? · 덤 점선) · 고칠 곳 */
+  .st-cover { display: grid; justify-items: center; gap: var(--s-1); padding: var(--s-3) var(--s-2); border-radius: var(--r-md); background: linear-gradient(180deg, #1f2a55, #3a4a86); color: #fff6e0; text-align: center; }
+  .st-cover .dim { color: #cfd6f2; }
+  .st-lh { font-size: calc(56*var(--u)); line-height: 1; filter: grayscale(.85) brightness(.7); transition: filter .4s; }
+  .st-lh.lv1 { filter: grayscale(.5) brightness(.85); } .st-lh.lv2 { filter: grayscale(.25) brightness(.95); }
+  .st-lh.lv3, .st-lh.lv4 { filter: drop-shadow(0 0 calc(14*var(--u)) rgba(255,214,120,.95)); }
+  .st-title { font-size: var(--fs-lg, calc(20*var(--u))); letter-spacing: -.01em; } .st-count b { color: #ffd27a; font-size: 1.2em; }
+  .st-stamp { display: inline-block; padding: calc(4*var(--u)) calc(12*var(--u)); border: calc(2*var(--u)) solid #ff9a6a; border-radius: var(--r-sm, 8px); color: #ffb48a; font-weight: 800; transform: rotate(-4deg); }
+  .st-ch { margin-top: var(--s-3); } .st-ch h4 { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-1); margin: 0 0 var(--s-1); }
+  .st-ch h4 em { font-style: normal; font-size: var(--fs-sm); color: var(--c-ink-2); } .st-ch.fog { opacity: .65; } .st-ch.fog h4 { color: var(--c-ink-2); }
+  .st-learn { margin: 0 0 var(--s-1); padding: calc(6*var(--u)) calc(10*var(--u)); border-radius: var(--r-sm, 8px); background: #fff4d8; }
+  .st-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-1); }
+  .st-slot { display: grid; grid-template-columns: calc(40*var(--u)) 1fr; gap: var(--s-1); align-items: start; padding: calc(8*var(--u)) calc(10*var(--u)); border-radius: var(--r-md); background: #fff; box-shadow: var(--e-1); }
+  .st-slot p { margin: calc(2*var(--u)) 0; line-height: 1.45; word-break: keep-all; } .st-slot small { color: var(--c-ink-2); }
+  .st-slot.off { background: #eef0f4; box-shadow: none; color: var(--c-ink-2); } .st-slot.off .st-ico { filter: grayscale(1); opacity: .6; }
+  .st-slot.bonus { outline: calc(2*var(--u)) dashed #c9b27a; outline-offset: calc(-2*var(--u)); }
+  .st-ico { font-size: calc(28*var(--u)); line-height: 1.2; text-align: center; }
+  .st-tag, .st-new { display: inline-block; margin-left: calc(6*var(--u)); padding: 0 calc(6*var(--u)); border-radius: var(--r-pill); font-size: var(--fs-xs, 11px); font-style: normal; vertical-align: middle; }
+  .st-tag { background: #f3e6bf; color: #7a5a12; } .st-new { background: var(--c-accent); color: #fff; font-weight: 700; }
+  .st-hint { font-size: var(--fs-sm); } .st-seeds { font-style: normal; margin-left: calc(6*var(--u)); color: #a8650a; font-weight: 700; }
+  .st-fix { margin-top: var(--s-1); padding: calc(10*var(--u)); border-radius: var(--r-md); background: #fff8ea; border: calc(1.5*var(--u)) solid #f2d595; }
+  .st-fix ul { list-style: none; margin: calc(6*var(--u)) 0; padding: 0; } .st-fix li { padding: calc(2*var(--u)) 0; color: var(--c-ink-2); } .st-fix li.ok { color: var(--c-ink); }
+  .st-fix button { width: 100%; } .st-fix.done { background: #eef8ee; border-color: #a9d8a9; } .st-fix.lock { background: #f2f2f4; border-color: #ddd; }
+  .st-art { font-weight: 700; } .st-outro summary { cursor: pointer; color: var(--c-ink-2); }
+  .st-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--s-1); } .st-cards li { padding: calc(8*var(--u)); background: #fffaf0; border-radius: var(--r-md); box-shadow: var(--e-1); line-height: 1.45; }
+  .st-pic { font-size: calc(18*var(--u)); text-align: center; padding: var(--s-2); background: #fff4d8; border-radius: var(--r-md); }
+  #letter.story .card { background: linear-gradient(180deg, #fffaf0, #fff1d6); } #letter.story #letterBody p { line-height: 1.7; }
+  /* 🗝 이야기 카드(조각·고칠 곳·엔딩): 밤바다 색 + 등불빛 테두리, 긴 글은 왼쪽 정렬 없이 넉넉한 줄 간격 */
+  .rwCard.story { background: radial-gradient(circle at 50% 46%, rgba(255,214,120,.45), rgba(8,14,40,.55) 72%); }
+  .rwCard.story .rwRays { background: repeating-conic-gradient(from 0deg, rgba(255,214,130,.30) 0 8deg, rgba(255,214,130,0) 8deg 20deg); }
+  .rwCard.story .rwBox { background: linear-gradient(180deg, #1f2a55 0%, #33407a 100%); color: #fff6e0; box-shadow: 0 0 0 calc(4*var(--u)) #ffd27a, 0 0 calc(70*var(--u)) rgba(255,210,120,.7), var(--e-3); width: min(calc(380*var(--u)), calc(100vw - calc(32*var(--u)))); }
+  .rwCard.story .rwKick { color: #ffd27a; } .rwCard.story .rwLine { color: #f3ead2; font-size: calc(15.5*var(--u)); line-height: 1.55; }
+  .rwCard.story .rwIco { filter: drop-shadow(0 0 calc(18*var(--u)) rgba(255,214,120,.8)); } .rwCard.story .rwBar { background: #ffd27a; }
   .rwNum { position: absolute; left: 50%; top: max(calc(var(--safe-t) + var(--chips-h) + calc(40*var(--u))), 24vh); margin-left: calc(-80*var(--u)); width: calc(160*var(--u)); display: flex; flex-direction: column; align-items: center; color: #f7b500;
     text-shadow: 0 calc(2*var(--u)) 0 #8a5a00, 0 0 calc(14*var(--u)) rgba(255,210,80,.9), 0 calc(3*var(--u)) calc(6*var(--u)) rgba(0,0,0,.35); will-change: transform, opacity;
     padding: calc(8*var(--u)) 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(70,40,0,.42), rgba(70,40,0,0)); }
@@ -936,7 +969,7 @@
     <div class="sbody">
     <div id="pageHome" class="page"><div id="stats" class="dim"></div><div class="apps">
       <div class="dock" aria-label="자주 쓰는 앱"><button data-app="wish"><span>💭</span>소원·부탁</button><button data-app="gulls"><span>🐦</span>갈매미</button><button data-app="news"><span>📰</span>소식지</button><button data-app="dex"><span>📖</span>도감</button></div>
-      <section class="agroup"><h5>🐦 주민</h5><div class="agrid"><button data-app="rel"><span>💞</span>관계도</button><button data-app="summon"><span>🥚</span>소환</button><button data-app="decor"><span>🛋</span>꾸미기</button></div></section>
+      <section class="agroup"><h5>🐦 주민</h5><div class="agrid"><button data-app="rel"><span>💞</span>관계도</button><button data-app="summon"><span>🥚</span>소환</button><button data-app="decor"><span>🛋</span>꾸미기</button><button data-app="story" hidden><span>🗝</span>비밀</button></div></section>
       <section class="agroup"><h5>🏘 마을 살림</h5><div class="agrid"><button data-app="town"><span>🏅</span>마을</button><button data-app="bank"><span>🏦</span>은행</button><button data-app="market"><span>🐚</span>시장</button><button data-app="build" hidden><span>🏠</span>건설</button></div></section>
       <section class="agroup"><h5>⚙ 갈매폰</h5><div class="agrid"><button data-app="files"><span>💾</span>저장</button><button data-app="settings"><span>⚙</span>설정</button><button data-app="help"><span>❓</span>도움말</button></div></section>
     </div></div>
@@ -980,6 +1013,7 @@
     <div id="pageTown" class="page" hidden><div id="townBody"></div></div>
     <div id="pageWish" class="page" hidden><div id="dailyBody"></div><div id="wishBody"></div></div>
     <div id="pageRel" class="page" hidden><div id="relBody"></div></div>
+    <div id="pageStory" class="page" hidden><div id="storyBody"></div></div>
     <div id="pageNews" class="page" hidden><button id="logOpen" class="ghost">🔔 지난 알림 보기</button><div id="newsBody"></div></div>
     <div id="pageLog" class="page" hidden><p class="dim">이번에 켠 뒤로 지나간 알림을 최근 30개까지 모아 둬요(껐다 켜면 비워져요).</p><ul id="logBody" class="nlog"></ul></div>
     <div id="pageHelp" class="page" hidden><button id="coachAgain" class="ghost">🧭 처음 안내 다시 보기</button><div id="help">
@@ -988,6 +1022,7 @@
       <details class="hsec"><summary>🐦 갈매미</summary><p>갈매미: 누르기 = 따라가기, 끌기 = 옮기기(나무·광석·낚시터·공사장·밭·친구 가까이 놓으면 바로 그 일을 함)</p><p>💭 소원: 갈매미가 바라는 걸 들어주면 기뻐하고 축하금을 받아요.</p><p>📋 오늘의 부탁: 📱 소원 맨 위에 날마다(기기 날짜) 부탁 3개가 와요. 모두 들어주면 도장 하나를 받고, 도장은 같은 화면의 🏪 도장 가게에서 귀한 선물(손뜨개 목도리 포함)이나 한정 가구로 바꿔요. 날짜가 바뀌면 새 부탁으로 바뀌어요.</p><p>🌙 하루: 해가 지면 갈매미들은 집(없으면 그 자리)에 가서 자고, 야행성(그림자·불씨)은 밤에 일하고 낮에 자요. 일하면 피로도가 쌓이고 벤치·침대에서 쉬거나 자면 풀려요.</p><p>🔧 스스로 고치기: 만족도가 75 아래인 갈매미는 스스로 집 앞 마당을 문 높이로 고르고(땅 높이·낮추기, 고른 마당 +5), 시장·은행까지 돌길을 깔고(돌 1개로 3칸), 벤치·화단 공사를 주문해요.</p><p>🛋 집 꾸미기: 집을 누르거나 📱 → 🛋 꾸미기에서 들어가 가구를 놓아요(누르기 = 고르기·놓기, 끌기 = 방 돌리기, R = 돌리기). 집주인은 돈이 모이면 잡화점에서 가구를 사 와요.</p></details>
       <details class="hsec"><summary>🏘 마을 살림</summary><p>경제: 🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼·광부는 원자재를 🐚 시장의 상인에게 팔고, 상인은 가공(목재·석재·철괴)해서 은행에 팔아 돈을 벌어요. 번 돈으로 농부·어부에게서 음식을 사고, 시장에서 집을 사요. 돈이 없으면 물물교환해요. 값은 쌓인 양에 따라 오르내려요.</p><p>🏅 마을 등급: 갈매미·집·시설·소원이 늘면 등급이 올라 새 건물(카페·잡화점·우체국·큰 집)이 열려요.</p><p>🌷 장식·⚡ 전기: 벤치·화단·분수·눈사람(겨울)이 집 근처 6칸 안에 있으면 만족도 +2씩(최대 +10). 풍차 발전소(다 지은 것) 둘레 18칸에만 전기가 들어와요: 가로등과 건물 등불·집 창은 전기가 닿아야 밤에 켜지고(없으면 꺼진 채), 그 안의 집은 만족도 +8. 풍차를 누르면 전기 범위가 보여요. ☕ 카페가 가까우면 +5, 카페에 가면 재미·친구가 차올라요. ✉ 우체국이 있으면 소원이 더 자주 오고 축하금이 두 배.</p><p>🗺 넓은 지도: 본섬 둘레에 숲섬·바위섬·들판섬(가까움, 🪚 목수가 다리를 놓으면 걸어감)과 야자섬·조개섬(멀어서 선착장 두 곳을 지으면 배를 타고 감)이 있어요. 다리는 물 칸을 두 번 눌러 줄로 정해요.</p></details>
       <details class="hsec"><summary>⏩ 배속 · 🎟 판</summary><p>⏩ 배속(유료판): 위쪽 시간 칩을 누르거나 F 키 → ×1 → ×2 → ×3. 갈매미 걸음·일·공사·밭·소원 같은 마을 진행이 빨라지고, 하루의 빛·날짜·계절은 실제 시각 그대로예요. 건설 모드·집 꾸미기 중에도 그대로 유지돼요.</p><p>🎟 판: ⚙ 설정 맨 위에서 무료/유료를 골라요(지금은 시험용). 무료판에선 배속이 🔒이고, 무료로 바꾸면 ×1로 돌아가요. 나중에는 게임을 켤 때 계정 값으로 정해져요.</p></details>
+      <details class="hsec"><summary>🗝 갈매미섬의 비밀</summary><p>둘째 마을 날, 섬 끝 등대 발치에 🗝 이야기 반짝이가 생겨요. 주우면 📱 <b>🗝 비밀</b> 수첩이 생기고, 장마다 아무 조각 3개를 모아 고칠 곳을 고치면 다음 이야기가 열려요. 조각은 직접 줍는 반짝이·갈매미가 털어놓는 말·하늘·편지·수족관·작은 섬에서 나와요(갈매미 소지품은 단서가 아니에요). 이야기 반짝이는 줍기 전까지 사라지지 않고, 기한도 없어요. 막히면 수첩의 힌트가 이틀 뒤 더 자세해져요.</p></details>
       <details class="hsec"><summary>🍂 계절·수집</summary><p>계절·날씨: 계절은 기기 날짜를 따라요(봄 밭 빨리 · 가을 수확 +1 · 겨울 밭 느리고 배고픔·음식 값↑). 비는 밭·낚시에 좋고, 폭풍엔 낚시를 못 해요.</p><p>❄️ 눈: 겨울에 눈이 오면 점점 쌓이고(지붕·나무·바위 위에도) 봄·비에 녹아요. 눈과 모래 위엔 발자국이 남았다 사라져요.</p><p>❄️ 겨울 대비: 🏚 저장고를 지으면 남는 음식이 쌓이고 겨울에 배고픈 갈매미를 먹여요. 📖 도감엔 계절 한정 물고기·물건이 있어요.</p></details>
       <details class="hsec" id="keySec"><summary>⌨️ 단축키</summary><div id="keyHelp"></div></details></div></div>
     </div>

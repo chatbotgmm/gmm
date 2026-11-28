@@ -33,7 +33,7 @@ import { RANK_REWARD } from "./world/rank.js";
 import { newsFor, awayLetter, newsPages } from "./world/news.js";
 import { dailyKey } from "./world/daily.js";
 import { stampBuyText } from "./ui/gullView.js";
-import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES } from "./data/catalog.js";
+import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES, ITEMS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { josa } from "./util.js";
@@ -71,6 +71,7 @@ import { RewardView } from "./ui/rewardView.js";
 import { rewardOf, REWARD_EVENTS } from "./ui/rewardFx.js";
 import { noteTarget } from "./ui/qolViews.js";
 import { SparkleEdge } from "./render/sparkleEdge.js";
+import { StoryFx } from "./render/storyFx.js";
 
 const SAVE_KEY = "galmaemiman-island-v1";
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -106,7 +107,8 @@ const clouds = createClouds(18, 80, 150); scene.add(clouds);   // 넓은 지도(
 const daylight = new Daylight({ scene, renderer, sun, hemi, water, clouds, skyTex: scene.background });
 const toon = new Toon(scene); let lastToon = 0;
 // 계절·날씨: 계절은 기기 날짜(설정에서 바꿔 볼 수 있음), 날씨는 마을 안에서 바뀜 → 비·눈·번개·땅 색
-const weatherViews = new WeatherViews(scene, daylight), skyShow = new SkyShow(scene);   // + 드문 하늘(무지개·유성우)
+const weatherViews = new WeatherViews(scene, daylight), skyShow = new SkyShow(scene);
+const storyFx = new StoryFx({ scene, daylight, camera });                                  // 🗝 메인 스토리 장면: 등대 불(꺼짐·다시 켜짐) · 수평선 깜빡임 · 엔딩 연출(render/storyFx.js)   // + 드문 하늘(무지개·유성우)
 const festaView = new FestaView(scene);                                           // 축제 색종이
 let seasonPick = null;                                                            // null = 실제 날짜
 const seasonNow = () => seasonPick || seasonOf(daylight.now());
@@ -208,6 +210,7 @@ function mount(w) {
   lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
   sparkleView?.dispose(); sparkleView = new SparkleView(worldRoot);             // ✨ 반짝이(world.sparkles) · 주운 것은 위로 떠오르며 사라짐
   world.on("sparkleGone", s => { if (s.picked) sparkleView?.pop(s.id); });
+  storyFx.mount(world, worldRoot);
   dreams = new Dreams(world); poke = new Poke(world, 77); fuss = makeFuss(world);   // 👉 톡톡 콕 찌르기(units/poke.js: 성격별 반응·연타·삐침, 저장 안 함) · 🆘 깜짝 소동·착지 반응(units/fuss.js)
   dreamView?.dispose(); dreamView = new DreamView(worldRoot, overlay, () => buildingViews);   // 💤 꿈방울(밤에 자는 갈매미 위 · 톡 터뜨리면 잠꼬대, world/dreams.js)
   decor?.dispose(); decor = new Decor(worldRoot, world, quality.cfg.decor);   // 덤불·꽃·자갈(보기만, 양·모양은 그래픽 설정) + 꾸미기로 놓은 덤불·꽃(world.decor)
@@ -228,7 +231,9 @@ function mount(w) {
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
   // 플레이어 보상(ui/rewardFx.js rewardOf): 띠·큰 카드·+N이 크게 보여 주고 소리도 냄 → 알림 줄에는 안 띄우고 지난 알림에만(같은 소식 두 번 아님). small(세금·숙박비)은 알림 줄도 그대로
   rewards?.reset(); const mineR = world, big = (ev, arg) => !!rewards && !!hud && (rewardOf(ev, arg, world)?.tier ?? "small") !== "small";
-  for (const ev of REWARD_EVENTS) world.on(ev, arg => { if (world !== mineR || !rewards) return; const r = rewardOf(ev, arg, world); if (r) rewards.push(r); });
+  for (const ev of REWARD_EVENTS) world.on(ev, arg => { if (world !== mineR || !rewards) return;
+    if (ev === "storyEnd" || (ev === "storyPiece" && arg?.id === "c4_reply")) return;   // 🗝 엔딩: 등대 연출 → 보름의 답장 편지를 닫은 뒤 큰 카드 하나(storyFx.onLetter)
+    const r = rewardOf(ev, arg, world); if (r) rewards.push(r); });
   const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n && big(ev, arg)) { hud.logNote(`${n.icon} ${n.text}${tail}`, "good", noteTarget(arg)); return; } if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true, at: noteTarget(arg) }); };   // at: 누르면 그 갈매미·건물로(편의성 점검 5번)
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
   // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
@@ -263,6 +268,12 @@ function mount(w) {
   world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`, { kind: "warn", queue: true, at: noteTarget(u) }));
   world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", e => say("beachcomb", e, ` (${e.u.name}의 소지품)`));
+  // 🗝 메인 스토리: 이야기 반짝이(누르면 그곳으로) · 조각·별씨·고침·엔딩·엽서(보상 카드가 크게, 알림은 지난 알림에) · 깜빡이는 대답
+  world.on("storySpark", e => { say("storySpark", e, " · 누르면 그곳으로"); sfx.chime([988, 1319, 1760], 0.07, 0.14); });
+  world.on("storyPiece", e => say("storyPiece", e, " (📱 🗝 비밀)"));
+  world.on("storySeed", e => say("storySeed", e)); world.on("storyPostcard", e => say("storyPostcard", e, " (📱 🗝 비밀)"));
+  world.on("storyRestore", e => say("storyRestore", e)); world.on("storyEnd", e => say("storyEnd", e));
+  world.on("storyBlink", e => { if (e.first) say("storyBlink", e, e.scene ? "" : " (📰 소식지)"); });
   world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
   // 수족관: 크기 기록(흔한 물고기의 첫 기록은 조용히) · 기증 · 기념 선물
   world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common" || (e.up && e.medal >= 2)) say("fishRecord", e, " (📖 도감)"); if (e.up && e.medal >= 3 && !big("fishRecord", e)) sfx.chime([988, 1175, 1568], 0.09, 0.15); });
@@ -439,6 +450,16 @@ const homeBtn = document.getElementById("homeBtn"); homeBtn.onclick = () => hud.
 hud.onGoto = b => { const f = BUILDINGS[b.defId].footprint, tw = b.rot % 2 ? f.d : f.w, td = b.rot % 2 ? f.w : f.d, off = camera.position.clone().sub(controls.target);
   unitControl.setFollow(null, true); controls.target.set(toWorldX(b.x + tw / 2), controls.target.y, toWorldZ(b.z + td / 2)); camera.position.copy(controls.target).add(off);
   hud.houseCard(tools.mode === "view" ? b : null); };
+// 🗝 칸 자리로 화면 옮기기(이야기 반짝이·등대·동굴 알림을 누름) · 수첩 [고치기]·[고치러 가기]
+hud.onGotoXZ = (x, z) => { const off = camera.position.clone().sub(controls.target); unitControl.setFollow(null, true);
+  controls.target.set(toWorldX(x + 0.5), controls.target.y, toWorldZ(z + 0.5)); camera.position.copy(controls.target).add(off); hud.houseCard(null); };
+hud.onStoryRestore = n => { const r = world.storyRestore(n); if (!r.ok) hud.status(`🔧 ${r.reason}`, { kind: "warn" }); hud.drawBadges(); return r; };
+hud.onStoryGo = (where, build) => { const f = world.landmarkFront(where); if (!f) { hud.status("이 섬에서는 그곳을 못 찾았어요", { kind: "info" }); return; }
+  if (tools.mode !== "view") tools.setMode("view"); hud.onGotoXZ(f.x, f.z);
+  if (build) { tools.setMode("build", build); hud.status("💡 동굴 입구 6칸 안에 가로등 2개를 지어요", { kind: "info" }); } else hud.status(`📍 ${where === "cave" ? "동굴" : "등대"}에 왔어요`, { kind: "info" }); };
+storyFx.onGo = (x, z) => { hud.closePhone(); if (tools.mode !== "view") tools.setMode("view"); hud.onGotoXZ(x, z); };
+storyFx.onSound = () => sfx.chime([1319, 1568, 1319, 1568, 1976], 0.12, 0.14);
+storyFx.onLetter = () => { const w = world; hud.showStoryLetter(() => { if (world !== w || !rewards) return; rewards.push(rewardOf("storyEnd", { item: ITEMS.find(i => i.id === "bormChair") }, w)); }); };
 hud.onSummon = () => { if (world.summon()) return; const i = world.summonInfo(); if (!i.left) hud.status("모두 모였어요", { kind: "info" }); hud.setSummon(world); };   // 인구 = 집 수(population.js): 집이 모자라면 그 까닭은 summonBlocked 알림(ALERTS)이 바로 띄움
 hud.setSummon(world);
 hud.onZones = on => { lifeViews.showZones = on; };
@@ -528,7 +549,7 @@ function frameBody() {
   if (ready) for (let k = 0; k < steps; k++) world.update(dt);                    // 불러오는 동안은 멈춤(탭이 숨으면 프레임 자체가 멈춤 + dt 상한 0.05초)
   stepGridLines(dt, gridShown({ mode: tools?.mode, on: hud?.gridOn, room: roomView.isOpen }));   // 건설 모드 격자선(▦, 땅 셰이더 세기만)
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음
-    daylight.world = world; daylight.update(dt, performance.now()); tickClock();  // 방 안에서도 바깥 시간이 흐름(방 조명·갈매미 잠자기가 따라감)
+    daylight.world = world; storyFx.update(dt); daylight.update(dt, performance.now()); tickClock();  // 방 안에서도 바깥 시간이 흐름(방 조명·갈매미 잠자기가 따라감)
     roomView.update(dt); quality.frame(dt, performance.now());
     const ex = renderer.toneMappingExposure; renderer.toneMappingExposure = ROOM_EXPOSURE;   // 방 밝기는 방 조명이 정함(섬 노출과 따로)
     renderer.render(roomView.scene, roomView.camera); renderer.toneMappingExposure = ex; requestAnimationFrame(frame); return;
@@ -538,7 +559,7 @@ function frameBody() {
   world.grid.visit?.(Math.floor(toGridX(controls.target.x)) >> 5, Math.floor(toGridZ(controls.target.z)) >> 5);   // 지나온 청크(저장 visited — 미니맵 「가 본 곳」용, 시뮬에는 안 쓰임)
   stream.update(controls.target, drawDist * 0.7, 3);                             // 바깥 땅: 그리기 반경 안 조각만(프레임당 3 ms만큼 나눠 만듦)
   cullFar(now);
-  daylight.focus = controls.target; daylight.world = world; daylight.update(dt, now); powerRange.update(tools);   // world: 가로등·등불이 풍차 전기를 확인
+  daylight.focus = controls.target; daylight.world = world; storyFx.update(dt); daylight.update(dt, now); powerRange.update(tools);   // world: 가로등·등불이 풍차 전기를 확인
   world.winterYear = winterYearOf(daylight.now());                              // 첫눈은 겨울마다 한 번(어느 해 겨울인지는 화면이 알려 줌)
   skyShow.update(dt, world.sky, controls.target, camera);
   festaView.update(dt, world.festival, world.festival ? world.standHeight(world.festival.x, world.festival.z) : 0);
@@ -609,7 +630,7 @@ hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
 // 자동 시험용 손잡이
-window.__island = { sfx, edition, footprints, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
+window.__island = { storyFx, sfx, edition, footprints, roomView, festaView, daylight, toon, quality, weatherViews, seasonLook, skyShow,
   sky: kind => kind === "firstSnow" ? world.firstSnow(true) : world.startSky(kind, true),   // 드문 하늘을 바로 띄워 보기: "rainbow" | "meteor" | "firstSnow"
   setSeason: s => { seasonPick = s; world.setSeason(seasonNow()); }, get world() { return world; }, get chunks() { return chunks; }, get view() { return view; }, get stream() { return stream; }, get waterWin() { return waterWin; }, get tools() { return tools; }, get unitControl() { return unitControl; }, get sparkleView() { return sparkleView; }, get dreams() { return dreams; }, get dreamView() { return dreamView; }, get poke() { return poke; }, get fuss() { return fuss; }, get lifeViews() { return lifeViews; }, get moduleViews() { return moduleViews; }, get decor() { return decor; }, get unitViews() { return unitViews; }, get buildingViews() { return buildingViews; }, get hud() { return hud; }, get rewards() { return rewards; }, reward: (ev, arg) => { const r = rewardOf(ev, arg, world); if (r) rewards.push(r); return r; }, get cloud() { return cloud; }, camera, controls, renderer, scene, quarterCam, viewCam, twoFinger, thumbs: buildingThumbs,
   run(seconds) { for (let i = 0, n = Math.round(seconds * 30); i < n; i++) world.update(1 / 30); } };

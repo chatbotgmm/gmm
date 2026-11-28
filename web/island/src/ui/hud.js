@@ -32,6 +32,8 @@ import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, dec
 import { readGridPref, saveGridPref } from "./gridView.js";
 import { tapTool } from "../systems/pressKind.js";
 import { atKey, atParse, atLabel, furniGuideHtml, quickLabels } from "./qolViews.js";
+import { storyAppHtml, storyBadge } from "./storyView.js";
+import { STORY_LETTER } from "../data/story.js";
 import { cardSide } from "../systems/buildSpot.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
@@ -179,6 +181,11 @@ export class Hud {
         this.closePhone(); if (this.tools.mode !== "view") this.tools.setMode("view"); this.onUnitFollow?.(u); return true; };
       wb.addEventListener("click", go); wb.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("li[data-wu]") && go(e)) e.preventDefault(); }); }
     // 🔎 건물 찾기(마을 앱): 줄 → 그 건물로 + 카드(편의성 점검 7번)
+    // 🗝 비밀 수첩: [고치기] · [고치러 가기]/[등대 보기](그곳으로, 가로등이면 건설 모드) · 보름의 답장 다시 읽기
+    document.getElementById("storyBody").addEventListener("click", e => {
+      const fix = e.target.closest?.("[data-restore]"); if (fix) { this.onStoryRestore?.(+fix.dataset.restore); this.storyHtmlNow = null; this.drawStory(); return; }
+      const go = e.target.closest?.("[data-sgo]"); if (go) { this.closePhone(); this.onStoryGo?.(go.dataset.sgo, go.dataset.sbuild || null); return; }
+      if (e.target.closest?.("[data-sletter]")) { this.closePhone(); this.showStoryLetter(); } });
     document.getElementById("townBody").addEventListener("click", e => { const bt = e.target.closest?.("[data-goto]"); if (!bt) return;
       const b = [...this.world.buildings.values()].find(x => String(x.id) === bt.dataset.goto); if (!b) return; this.closePhone(); this.gotoAt({ b: b.id }); });
     // ☰ 메뉴 빠른 켜고 끄기: 🔊 소리 · ⏩ 배속(유료판일 때만)(편의성 점검 12번)
@@ -488,8 +495,8 @@ export class Hud {
   openApp(app, from = null) {
     if (app !== this.app && this.sbody) this.sbody.scrollTop = 0;                    // 다른 페이지로 가면 맨 위부터
     this.app = app; this.appFrom = app == null || app === "menu" ? null : from;
-    const pages = { null: "pageHome", menu: "pageMenu", log: "pageLog", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews", dex: "pageDex" };
-    const titles = { null: "📱 갈매폰", menu: "☰ 메뉴", log: "🔔 지난 알림", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지", dex: "📖 도감 · 가방" };
+    const pages = { null: "pageHome", menu: "pageMenu", log: "pageLog", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews", dex: "pageDex", story: "pageStory" };
+    const titles = { null: "📱 갈매폰", menu: "☰ 메뉴", log: "🔔 지난 알림", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지", dex: "📖 도감 · 가방", story: "🗝 비밀 수첩" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null || app === "menu";
@@ -499,6 +506,8 @@ export class Hud {
       for (const d of document.querySelectorAll("#help details[data-input]")) d.open = d.dataset.input === (touch ? "touch" : "mouse"); }
     this.coach?.appHint(app, document.getElementById(pages[app]));                 // 처음 여는 앱이면 맨 위에 짧은 안내 한 번
     if (this.seen && (app === "news" || app === "dex")) this.seen[app] = this.badgeNow()[app];   // 열면 점 배지 해제
+    if (app === "story" && this.appPrev !== "story") this.phoneOpenSeq = (this.phoneOpenSeq || 0) + 1;   // 🗝 수첩을 새로 열 때마다 「새 쪽」 표시를 다시 셈
+    this.appPrev = app;
     this.refreshApp(); this.drawBadges();
   }
   /** 화면 구역의 크기를 CSS 변수로: 도구 막대(--dock-h) · 칩 묶음(--chips-h/-w) · 따라가기 카드(--info-h).
@@ -541,6 +550,8 @@ export class Hud {
       this.drawRelations();
     } else if (this.app === "news") {
       this.drawNews();
+    } else if (this.app === "story") {
+      this.drawStory();
     } else if (this.app === "log") {
       this.drawLog();
     } else if (this.app === "files") {
@@ -566,14 +577,17 @@ export class Hud {
     const now = this.badgeNow(); if (!this.seen) this.seen = { news: now.news, dex: now.dex };
     if (!this.phone.hidden && (this.app === "news" || this.app === "dex")) this.seen[this.app] = now[this.app];   // 보는 중에 온 소식도 본 것으로
     const newNews = now.news !== this.seen.news && this.app !== "news", newDex = now.dex > this.seen.dex && this.app !== "dex";
-    const key = `${now.act}|${newNews}|${newDex}|${now.summon}`; if (key === this.badgeKey) return; this.badgeKey = key;
+    const story = storyBadge(this.world), started = !!this.world?.story?.chapter;   // 🗝 비밀 수첩: 이야기를 시작해야 앱이 보임 · 안 본 새 쪽 수
+    const key = `${now.act}|${newNews}|${newDex}|${now.summon}|${story}|${started}`; if (key === this.badgeKey) return; this.badgeKey = key;
     const cnt = this.phoneBtn.querySelector(".badge-count"), dot = this.phoneBtn.querySelector(".dot");
-    cnt.hidden = !now.act; cnt.textContent = now.act || ""; dot.hidden = !!now.act || !(newNews || newDex);
+    cnt.hidden = !now.act; cnt.textContent = now.act || ""; dot.hidden = !!now.act || !(newNews || newDex || story);
     this.phoneBtn.setAttribute("aria-label", `갈매폰${now.act ? ` · 쓸 수 있는 도장 ${now.act}개` : ""}${newNews || newDex ? " · 새 소식" : ""}`);
     const wb = this.appBtns?.wish; if (wb) for (const e of [wb, wb.firstElementChild]) { if (!e) continue; if (now.act) e.dataset.count = now.act; else delete e.dataset.count; }   // 숫자는 아이콘(span)의 ::after가 attr로 읽음
     const sb = this.appBtns?.summon; if (sb) { for (const e of [sb, sb.firstElementChild]) { if (!e) continue; if (now.summon) e.dataset.count = now.summon; else delete e.dataset.count; }   // 🥚 지금 부를 수 있는 마릿수
       sb.setAttribute("aria-label", now.summon ? `소환 · 지금 ${now.summon}마리 부를 수 있어요` : "소환"); }
     this.appBtns?.news?.classList.toggle("new", newNews); this.appBtns?.dex?.classList.toggle("new", newDex);
+    const stb = this.appBtns?.story; if (stb) { stb.hidden = !started; for (const e of [stb, stb.firstElementChild]) { if (!e) continue; if (story) e.dataset.count = story; else delete e.dataset.count; }
+      stb.setAttribute("aria-label", story ? `비밀 수첩 · 새 쪽 ${story}개` : "비밀 수첩"); }
   }
   /** 📱 소원 앱 맨 위 「오늘」: 오늘의 부탁(나아간 만큼 막대) · 모은 도장 · 도장 가게. 바뀐 게 없으면 다시 안 그림(가게 단추가 눌리게) */
   drawDaily() {
@@ -597,15 +611,28 @@ export class Hud {
     this.newsKey = key;
     body.innerHTML = newsAppHtml(w, { more: (k, t, h, o) => this.more(k, t, h, o) });   // 오늘 머리기사 크게 · 나머지·지난 날짜는 접기(appViews.js)
   }
+  /** 📱 🗝 비밀 수첩(ui/storyView.js): 바뀐 때만 다시 그림. 보고 있으면 새 쪽을 읽은 것으로(다음에 그릴 때 「새 쪽」 표시가 빠짐) */
+  drawStory() {
+    const w = this.world, body = document.getElementById("storyBody"); if (!w?.story) return;
+    if (this.storyFreshFor !== this.phoneOpenSeq) { this.storyFreshFor = this.phoneOpenSeq; this.storyFresh = new Set(); }   // 「새 쪽」은 앱을 다시 열 때까지 그대로(5Hz로 다시 그려도 바로 안 사라짐)
+    for (const id of Object.keys(w.story.found)) if (!w.story.read[id]) this.storyFresh.add(id);
+    const html = storyAppHtml(w, { fresh: this.storyFresh }); if (this.storyHtmlNow !== html) { const open = [...body.querySelectorAll("details[open]")].map(d => d.closest("[data-ch]")?.dataset.ch); this.storyHtmlNow = html; body.innerHTML = html;
+      for (const d of body.querySelectorAll("details")) if (open.includes(d.closest("[data-ch]")?.dataset.ch)) d.open = true; }
+    for (const id of Object.keys(w.story.found)) w.story.read[id] = true;
+    this.drawBadges();
+  }
+  /** 🗝 보름의 답장(엔딩 편지 · 수첩에서 다시 읽기) */
+  showStoryLetter(onClose) { this.showLetter({ ...STORY_LETTER, alt: { label: "🗝 비밀 수첩", app: "story" }, onClose }); }
   /** 💌 다녀온 사이 편지(없으면 아무것도 안 함) */
   showLetter(letter) {
     if (!letter) return;
     const box = document.getElementById("letter");
     document.getElementById("letterTitle").textContent = letter.title;
     document.getElementById("letterBody").innerHTML = letter.lines.map(l => `<p>${escHtml(l)}</p>`).join("") + `<p class="sign">${escHtml(letter.sign)}</p>`;
-    box.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 });
-    const close = () => { box.hidden = true; };
-    document.getElementById("letterClose").onclick = close; document.getElementById("letterNews").onclick = () => { close(); this.openPhone(); this.openApp("news"); };
+    box.hidden = false; this.sfx?.play("phoneOpen", { vol: 0.5 }); box.classList.toggle("story", !!letter.alt);
+    const close = () => { if (box.hidden) return; box.hidden = true; letter.onClose?.(); }, alt = letter.alt || { label: "📰 소식지 보기", app: "news" };   // alt: 두 번째 단추(엔딩 편지 = 🗝 비밀 수첩)
+    const nb = document.getElementById("letterNews"); nb.textContent = alt.label;
+    document.getElementById("letterClose").onclick = close; nb.onclick = () => { close(); this.openPhone(); this.openApp(alt.app); };
     let down = false; box.onpointerdown = e => { down = e.target === box; }; box.onclick = e => { if (e.target === box && down) close(); down = false; };   // 바깥 누르기: 뒤로 click이 새지 않게
   }
   /** 📱 관계도: 갈매미를 원 위에 놓고 친한 사이를 선으로(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로. */
@@ -938,6 +965,7 @@ export class Hud {
   /** 알림 대상으로 가기: 갈매미는 따라가기(+ 가까이), 건물은 그 건물로 + 카드. 건설 모드·방 안이면 먼저 둘러보기로. 이미 없으면 안내 */
   gotoAt(at) {
     const w = this.world; if (!at) return false;
+    if (at.x != null && at.z != null) { this.leaveRoom?.(); if (this.tools.mode !== "view") this.tools.setMode("view"); this.onGotoXZ?.(at.x, at.z); return true; }   // 🗝 칸 자리(이야기 반짝이·등대·동굴)
     const u = at.u != null ? w.units.find(o => o.unitId === at.u) : null, b = at.b != null ? w.buildings.get(at.b) : null;
     if (!u && !b) { this.status("그 갈매미·건물은 이제 없어요", { kind: "info" }); return false; }
     this.leaveRoom?.(); if (this.tools.mode !== "view") this.tools.setMode("view");

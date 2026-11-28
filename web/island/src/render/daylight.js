@@ -34,7 +34,7 @@ export class Daylight {
     if (this.mode === "fast") this.fastT = (this.fastT + dt / 60) % 24;
     if (this.mult > 1 && this.vMs != null) this.vMs += dt * 1000 * this.mult;
     const wlMoved = Math.abs(this.wl - this.wlShown) > 0.003;                       // 날씨 밝기가 움직이는 동안(1~2초)은 0.5초 간격을 안 기다림: 계단처럼 툭툭 어두워지지 않게
-    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) { if (wlMoved && this.elev != null) this.light(); this.beam(dt); return; }   // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
+    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) { if (wlMoved && this.elev != null) this.light(); this.beam(dt); if (this.lampBoost > 0 || this.lampBoostWas > 0 || this.lampLit !== this.lampLitWas) { this.lampBoostWas = this.lampBoost || 0; this.lampLitWas = this.lampLit; this.lamp(); } return; }   // 🗝 등불 켜는 연출 중엔 매 프레임   // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
     this.last = nowMs;
     const d = this.now(), { elev, azim } = sunPosition(d);
     this.elev = elev; this.azim = azim; this.time = d;
@@ -76,7 +76,7 @@ export class Daylight {
   /** 등대: 램프 발광(밤에 세게), 둘레를 비추는 불빛, 회전하는 빛줄기 */
   lamp() {
     const lamp = this.scene.getObjectByName("lighthouseLamp"); if (!lamp) return;
-    const n = this.glow ?? 0, v = 0.9 + 3.5 * n, m = lamp.material; m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
+    const n = this.lampGlow(), v = this.lampLit === false && !(this.lampBoost > 0) ? 0.12 : 0.9 + 3.5 * n, m = lamp.material;   // 🗝 이야기: 등불을 고치기 전엔 꺼진 유리 m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
     if (!this.beacon) this.beacon = new THREE.PointLight(0xffd27a, 0, 26, 1.6);
     if (this.beacon.parent !== lamp) lamp.add(this.beacon);                          // 새 섬·불러오기로 등대가 새로 생기면 불빛도 새 램프로 옮김
     this.beacon.intensity = 30 * n;
@@ -139,9 +139,11 @@ export class Daylight {
     const near = lamps.map(h => { h.getWorldPosition(p); return [p.clone(), p.distanceToSquared(c)]; }).sort((a, b) => a[1] - b[1]);
     L.forEach((l, i) => { const it = near[i]; if (it && n > 0.005) { l.position.copy(it[0]).y += 0.6; l.intensity = 1.1 * n; } else l.intensity = 0; });
   }
+  /** 등대 불빛 세기(0~1): 밤(glow) · 🗝 이야기 등불을 아직 안 고쳤으면(lampLit === false) 0 · 엔딩·불 켜는 연출(lampBoost)은 낮에도 */
+  lampGlow() { return Math.max(this.lampLit === false ? 0 : this.glow ?? 0, Math.min(1, this.lampBoost || 0)); }
   beam(dt) {
     const b = this.scene.getObjectByName("lighthouseBeam"); if (!b) return;
-    const n = this.glow ?? 0; b.rotation.y += dt * 0.9; b.visible = n > 0.005;
+    const n = this.lampGlow(); b.rotation.y += dt * 0.9; b.visible = n > 0.005;
     for (const m of b.children) m.material.uniforms.uOpacity.value = 0.75 * n;
   }
   label() {

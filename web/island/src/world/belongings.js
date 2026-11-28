@@ -11,7 +11,7 @@ export const STASH_KEEP_LIKED = 1;   // 좋아하는 갈래는 종류마다 이�
 export const STASH_CUT = 1;          // 한 개 팔릴 때 상인 몫(조개)
 
 /** 소지품이 될 수 있는 것의 정의: 희귀 이상 물고기 또는 플레이어 몫(gift)이 아닌 물건. 아니면 null */
-export const stashDef = id => FISH.find(f => f.id === id && f.rarity !== "common") || ITEMS.find(i => i.id === id && !i.gift) || null;
+export const stashDef = id => FISH.find(f => f.id === id && f.rarity !== "common") || ITEMS.find(i => i.id === id && !i.gift && !i.story) || null;
 /** 한 개 값(조개). 값 없는 것(가구)은 0 → 안 팖 */
 export const stashPrice = id => stashDef(id)?.price || 0;
 /** 소지품의 가구 id(FURNITURE의 id) 또는 null */
