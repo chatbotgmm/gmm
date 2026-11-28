@@ -22,7 +22,7 @@ export const NATURE_TOOLS = [
   { arg: "clear", group: "clear", icon: "🪓", name: "치우기", op: "remove", kind: "tree", verb: "치우기", tip: "누른 칸의 나무나 바위, 덤불을 치워요. 재료는 안 나와요" },
   { arg: "dig", group: "land", icon: "🕳", name: "파기", op: "dig", kind: "", verb: "파기", tip: "땅을 파서 연못이나 물길을 내요. 공짜예요" },
   { arg: "fill", group: "land", icon: "🏖", name: "메우기", op: "fill", kind: "", verb: "메우기", tip: "얕은 물을 모래땅으로 메워요. 공짜예요" },
-  { arg: "move:cave", group: "move", icon: "🦇", name: "동굴", op: "move", kind: "cave", verb: "옮기기", tip: "동굴을 다른 자리로 옮겨요. ↻로 입구 방향을 돌려요" },
+  { arg: "move:cave", group: "move", icon: "🦇", name: "동굴", op: "move", kind: "cave", verb: "옮기기", tip: "동굴을 다른 자리로 옮겨요. 돌리기로 입구 방향을 바꿔요" },
   { arg: "move:lighthouse", group: "move", icon: "🗼", name: "등대", op: "move", kind: "lighthouse", verb: "옮기기", tip: "등대를 바닷가 다른 자리로" },
   { arg: "move:pier", group: "move", icon: "🛶", name: "부두", op: "move", kind: "pier", verb: "옮기기", tip: "부두를 다른 바닷가로", onlyIf: true },
   { arg: "move:breakwater", group: "move", icon: "🌊", name: "방파제", op: "move", kind: "breakwater", verb: "옮기기", tip: "방파제를 다른 자리로", onlyIf: true },
@@ -105,6 +105,6 @@ export function moveHtml(info) {
   const main = `<b>${info.icon} ${nvEsc(info.name)} 옮기기</b>` + (info.eco ? ` · ${nw(`<b>${nvCoin(info.cost)}</b>`)} · ${nw(`금고 ${nvCoin(info.vault)}${info.ok ? ` → <b>${nvCoin(info.after)}</b>` : ""}`)}` : "");
   const why = info.moneyShort ? `금고가 ${nvCoin(info.cost - info.vault)} 모자라요` : nvEsc(info.reason);
   const bad = info.ok ? "" : `<div class="cf-bad"><b>🚫 못 옮겨요</b> · ${why}</div>`;
-  const sub = `${info.cave ? `${nw("↻ 돌리기로 입구 방향을 바꿔요")} · ` : ""}${nw(info.eco && info.cost ? "↶ 되돌리면 낸 값을 돌려받아요" : "↶ 되돌릴 수 있어요")}`;   // 구절째 다음 줄로(넓은 화면에서 「요」 한 글자만 둘째 줄에 남던 것)
+  const sub = `${info.cave ? `${nw("돌리기로 입구 방향을 바꿔요")} · ` : ""}${nw(info.eco && info.cost ? "↶ 되돌리면 낸 값을 돌려받아요" : "↶ 되돌릴 수 있어요")}`;   // 구절째 다음 줄로(넓은 화면에서 「요」 한 글자만 둘째 줄에 남던 것)
   return `<div class="cf-main">${main}</div>${bad}<div class="cf-sub">${sub}</div>`;
 }

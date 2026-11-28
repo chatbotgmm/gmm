@@ -23,6 +23,7 @@ export class BuildingViews {
     this.scene = scene; this.world = world; this.views = new Map(); this.overlay = overlay; this.economy = () => world.economy;
     world.on("buildingAdded", b => this.add(b));
     world.on("buildingRemoved", b => this.remove(b.id));
+    world.on("buildingMoved", e => { this.remove(e.b.id); this.add(e.b); });        // ↔ 옮기기(relocate.js): 새 자리에 다시 그림(모델은 받아 둔 것 — 진행률·불빛·벤치 좌판 높이도 새로)
     this.ready = Promise.allSettled([...world.buildings.values()].map(b => this.add(b)));   // 처음 있던 건물들을 다 그렸을 때
   }
   async add(b) {
@@ -79,6 +80,12 @@ export class BuildingViews {
         v.glow.scale.setScalar(Math.max(def.footprint.w, def.footprint.d) * 0.85); v.glow.position.set(0, Math.min(1.3, v.height * 0.5), def.footprint.d / 2 + 0.05); v.holder.add(v.glow); }
       if (v.glow) v.glow.userData.on = on;
     }
+  }
+  /** ↔ 옮기기 미리보기: 든 건물 모델을 p = { x, y, z, angle }(월드 좌표·라디안)로 띄워 옮겨 보임. null이면 제자리로(밑동 그늘도 다시) */
+  preview(id, p) {
+    const v = this.views.get(id); if (!v) return;
+    if (p) { v.home ||= { pos: v.holder.position.clone(), rot: v.holder.rotation.y }; v.holder.position.set(p.x, p.y, p.z); v.holder.rotation.y = p.angle; if (v.ground) v.ground.visible = false; return; }
+    if (!v.home) return; v.holder.position.copy(v.home.pos); v.holder.rotation.y = v.home.rot; v.home = null; if (v.ground) v.ground.visible = true;
   }
   remove(id) { const v = this.views.get(id); if (!v) return; this.scene.remove(v.holder); if (v.ground) this.scene.remove(v.ground); v.badge.remove(); this.views.delete(id); }
   setHighlight(id) {                                                              // 철거 도구가 가리키는 건물을 붉게

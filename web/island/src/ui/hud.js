@@ -39,6 +39,8 @@ import { storyAppHtml, storyBadge } from "./storyView.js";
 import { STORY_LETTER } from "../data/story.js";
 import { cardSide } from "../systems/buildSpot.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
+import { relocInfo, relocHtml } from "./moveView.js";
+import { camTurnSvg, compassSvg, objTurnSvg, northDeg, northLabel, rotChanged } from "./rotIcons.js";
 
 /** ⏩ 배속 설명은 여기 한 곳에만 둠(설정의 배속 줄 · 도움말 #speedHelp) */
 export const SPEED_NOTE = "갈매미 걸음과 일, 공사, 밭 일이 빨라져요. 해와 날짜는 실제 시각을 따라요.";
@@ -82,7 +84,7 @@ export class Hud {
     this.initUiPrefs();
     this.coach = new CoachMarks(this);                                               // 처음 안내(3단계 말풍선 · 처음 여는 앱 안내)
     // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]. 건설 모드에서만 보이고, 맨 앞 ✓ 완료(view)를 누르면 평소 화면으로
-    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"], ["nature", "🌳", "자연·지형", "자연"]];
+    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"], ["nature", "🌳", "자연·지형", "자연"], ["move", "↔", "건물 옮기기", "옮기기"]];
     this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn(m === "view" ? "done" : "", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : m === "nature" ? (this.lastNature || "auto") : null); return b; });
     this.modeBtns[0].setAttribute("aria-label", "완료 — 건설 모드 끝내기");
@@ -93,7 +95,7 @@ export class Hud {
     // 한 줄 건물 갤러리: 마우스 휠(세로)을 옆으로 밀기로 — 옆으로 넘칠 때만, 아래위로 넘치는 트레이(가로 폰 세로 열)는 그대로
     sub.addEventListener("wheel", e => { if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || sub.scrollWidth <= sub.clientWidth + 1 || sub.scrollHeight > sub.clientHeight + 1) return;
       sub.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 32 : 1); e.preventDefault(); }, { passive: false });
-    // ---- 보조 줄(#ebar): 분류 칩(건물 짓기) · 철거 안내 · 보조 버튼(✋ 화면 이동 · ↶ ↷ · 🎯 십자선 · ⟲ ⟳ 화면 돌리기). 한 번만 만들고 도구에 따라 보이기만 바꿈
+    // ---- 보조 줄(#ebar): 분류 칩(건물 짓기) · 철거 안내 · 보조 버튼(✋ 화면 이동 · ↶ ↷ · 🎯 십자선 · 화면 돌리기 알약). 한 번만 만들고 도구에 따라 보이기만 바꿈
     const ebar = document.getElementById("ebar"), aux = el("div", "eaux");
     const auxBtn = (id, icon, label, tip) => { const b = el("button", "abtn", icon); if (id) b.id = id; b.setAttribute("aria-label", label); b.dataset.tip = tip; aux.appendChild(b); return b; };
     this.buildCat = "all"; this.ecats = el("div", "ecats"); this.ecats.setAttribute("role", "group"); this.ecats.setAttribute("aria-label", "건물 분류");
@@ -112,28 +114,33 @@ export class Hud {
     // ▦ 격자: 건설 모드 땅 위 칸 경계선 켜기·끄기(G). 처음엔 켜짐, 고른 것은 기억(main.js가 gridOn을 읽어 땅 셰이더 세기만 바꿈)
     this.gridOn = readGridPref(k => localStorage.getItem(k));
     this.gridBtn = auxBtn("gridBtn", "▦", "격자 보기", "칸 경계 격자선 켜기·끄기"); this.gridBtn.classList.add("grid");
-    // 세로 폰: 보조 줄에 44px 칸 일곱 개(✋ ↶ ↷ 🎯 ▦ ⟲ ⟳)가 안 들어가(320px에서 ✋가 잘림) 같은 단추를 위 칩 줄(지도 옆)에 둠 — 어느 쪽이 보일지는 CSS(data-form)
+    // 세로 폰: 보조 줄에 44px 칸 일곱 개(✋ ↶ ↷ 🎯 ▦ + 화면 돌리기 두 칸)가 안 들어가(320px에서 ✋가 잘림) 같은 단추를 위 칩 줄(지도 옆)에 둠 — 어느 쪽이 보일지는 CSS(data-form)
     this.gridChip = el("button", "", "▦"); this.gridChip.id = "gridChip"; this.gridChip.setAttribute("aria-label", "격자 보기"); this.gridChip.dataset.tip = "칸 경계 격자선 켜기·끄기 (G)"; this.gridChip.hidden = true;
     document.getElementById("mapBtn")?.before(this.gridChip);
     const gridSync = () => { for (const b of [this.gridBtn, this.gridChip]) { b.classList.toggle("on", this.gridOn); b.setAttribute("aria-pressed", String(this.gridOn)); } };
     this.gridBtn.onclick = this.gridChip.onclick = () => { this.gridOn = !this.gridOn; gridSync(); saveGridPref((k, v) => localStorage.setItem(k, v), this.gridOn); };
     gridSync();
-    // ⟲ ⟳: 건설 모드에서도 둘러보기와 같은 시점 — 가까운 비스듬히면 이 버튼(Z · X)으로 90°씩 돌려 봄(자유 회전이면 숨김: 오른쪽 끌기·두 손가락으로 돌림)
-    this.viewBtns = [auxBtn("viewL", "⟲", "화면을 왼쪽으로 90° 돌리기", "화면을 왼쪽으로 90° 돌려요"), auxBtn("viewR", "⟳", "화면을 오른쪽으로 90° 돌리기", "화면을 오른쪽으로 90° 돌려요")];
-    this.viewBtns[0].onclick = () => this.onViewTurn?.(-1); this.viewBtns[1].onclick = () => this.onViewTurn?.(1);
-    // 둘러보기의 ⟲ ⟳(가까운 비스듬히 시점일 때만): 아래 🔨·📱 줄 가운데 — 건설 모드의 것과 같은 onViewTurn(Z · X), 같은 카메라
-    this.turnBox = el("div", ""); this.turnBox.id = "turnBox"; this.turnBox.hidden = true; this.turnBox.setAttribute("role", "group"); this.turnBox.setAttribute("aria-label", "화면 돌리기");
-    for (const [id, icon, dir, side] of [["turnL", "⟲", -1, "왼쪽"], ["turnR", "⟳", 1, "오른쪽"]]) {
-      const b = el("button", "", icon); b.id = id; b.setAttribute("aria-label", `화면을 ${side}으로 90° 돌리기`); b.dataset.tip = `화면을 ${side}으로 90° 돌려요 · 두 손가락으로 비틀어도 돼요`; b.onclick = () => this.onViewTurn?.(dir); this.turnBox.appendChild(b); }
-    document.body.appendChild(this.turnBox); this.camMode = "near";
+    // 화면 돌리기 알약(카메라): [왼쪽 | 나침반 | 오른쪽] 한 덩어리. 땅 위로 도는 화살표 + 빨간 끝이 북쪽인 나침반 — 건물 돌리기(주황 고리, 확인 카드)와 모양·색이 다름.
+    //  둘러보기는 아래 🔨·📱 줄 가운데(#turnBox), 건설 모드는 보조 줄 오른쪽 끝(#viewPill). 둘 다 가까운 비스듬히일 때만(자유 회전이면 숨김: 끌기·두 손가락으로 돌림). 같은 onViewTurn(Z · X)
+    const camPill = (pillId, [lId, rId], half) => {
+      const g = el("div", "camPill"); g.id = pillId; g.hidden = true; g.setAttribute("role", "group"); g.setAttribute("aria-label", "화면 돌리기");
+      const mk = (id, dir, side) => { const b = el("button", half); b.id = id; b.dataset.dir = dir; b.innerHTML = camTurnSvg(dir); b.setAttribute("aria-label", `화면을 ${side}으로 90° 돌리기`);
+        b.dataset.tip = `화면을 ${side}으로 90° 돌려요. 두 손가락으로 비틀어도 돼요`; b.onclick = () => { this.turnFx(dir); this.onViewTurn?.(dir); }; return b; };
+      const c = el("span", "cpCompass"); c.setAttribute("role", "img"); c.setAttribute("aria-label", northLabel(0)); c.dataset.tip = "나침반: 빨간 끝이 북쪽, 지도의 위쪽이에요"; c.innerHTML = compassSvg();
+      g.append(mk(lId, -1, "왼쪽"), c, mk(rId, 1, "오른쪽")); return g;
+    };
+    this.viewPill = camPill("viewPill", ["viewL", "viewR"], "abtn cpHalf"); aux.appendChild(this.viewPill);
+    this.turnBox = camPill("turnBox", ["turnL", "turnR"], "cpHalf"); document.body.appendChild(this.turnBox); this.camMode = "near";
+    this.camPills = [this.viewPill, this.turnBox]; this.compasses = this.camPills.map(g => g.querySelector(".cpCompass"));
     document.getElementById("segCam")?.addEventListener("click", e => { const b = e.target.closest?.("button[data-v]"); if (b) this.setCamMode(this.onCamMode?.(b.dataset.v) ?? b.dataset.v); });
     ebar.append(this.ecats, this.ehint, aux);
     tools.onMode = (m, arg) => this.showMode(m, arg);
-    // 건물 자리를 정하면 🔨 건설 / ↻ 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
+    // 건물 자리를 정하면 🔨 건설 / 돌리기 / ✕ 취소 막대(지을 수 없는 자리면 건설 버튼 꺼짐)
     const cf = document.getElementById("confirm"), cfBuild = document.getElementById("cfBuild");
     tools.onPlan = (on, ok, plan) => {
-      cf.hidden = !on; cfBuild.disabled = !ok;                                       // 자리: CSS(--dock-b, 세로 폰은 아래 도구 막대 바로 위)
+      const live = !cf.hidden && on; cf.hidden = !on; cfBuild.disabled = !ok;        // 자리: CSS(--dock-b, 세로 폰은 아래 도구 막대 바로 위)
       this.planNow = on ? plan || null : null; this.drawPlan();                      // 설계비·금고·재료 요약(금고가 바뀌면 update가 다시 셈)
+      if (rotChanged(live, this.rotSeen, tools.rot)) this.rotFx(); this.rotSeen = tools.rot;   // 단추 · R 키로 돌렸으면 고리가 한 번 휙
       queueMicrotask(() => this.placeConfirm());                                    // 고스트를 다 옮긴 뒤(refresh가 끝난 뒤) 카드 자리를 봄
     };
     // 못 짓는 자리를 눌렀는데 옆에도 빈 자리가 없음: 까닭을 주황 알림으로 + 확인 카드를 한 번 흔듦(그냥 날아가지 않게 · 편의성 점검 4번)
@@ -142,7 +149,9 @@ export class Hud {
     const cfInfo = document.getElementById("cfInfo");                                // 휴대폰: 둘째 줄(재료·짓는 이)은 한 줄로 줄여 두고 누르면 펼침
     cfInfo.onclick = () => { const open = cfInfo.dataset.open !== "1"; cfInfo.dataset.open = open ? "1" : "0"; cfInfo.setAttribute("aria-expanded", String(open)); };
     cfInfo.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cfInfo.onclick(); } };
-    document.getElementById("cfRot").onclick = () => tools.rotate();
+    // 건물 돌리기: 주황 고리 + 작은 집. 누를 때마다(R 키도) 시계 방향 90°, 고리가 한 번 휙 돎(rotFx)
+    this.cfRot = document.getElementById("cfRot"); this.cfRot.classList.add("rotObj"); this.cfRot.innerHTML = `${objTurnSvg()}<span class="rl">돌리기</span>`;
+    this.cfRot.setAttribute("aria-label", "건물 방향 돌리기"); this.cfRot.dataset.tip = "건물을 시계 방향으로 90° 돌려요"; this.cfRot.onclick = () => tools.rotate();
     document.getElementById("cfCancel").onclick = () => tools.clearPlan();
     tools.onBrush = n => this.brushBtns?.forEach(b => b.classList.toggle("on", +b.dataset.brush === n));
     this.instantBuild = false;
@@ -266,7 +275,7 @@ export class Hud {
     if (this.uiAuto !== auto) { this.uiAuto = auto; if (auto === 1) root.style.removeProperty("--ui-auto"); else root.style.setProperty("--ui-auto", String(auto)); }
     const f = hudFormNow(k); this.form = f; this.phoneForm = f === "portrait" || f === "landscape";
     if (root.dataset.form !== f) root.dataset.form = f;
-    root.toggleAttribute("data-narrow", f === "medium" && innerWidth / k < 900);   // 중간 화면 가운데 좁은 창(건설 판을 한 칸으로)
+    root.toggleAttribute("data-narrow", f === "medium" ? innerWidth / k < 1100 : f === "wide" && innerWidth / k < 1240);   // 도구 탭과 보조 줄이 한 줄에 다 안 들어가는 창: 중간 화면은 보조 줄을 탭 위 한 줄로, 넓은 화면 앞쪽은 탭을 짧은 이름으로(키 힌트까지 보이면 ✋ ↶ ↷와 화면 돌리기 알약이 탭을 덮던 것 — 1920 화면 반쪽 창 960px 등)
     root.toggleAttribute("data-short", !this.phoneForm && innerHeight / k < 1000);  // 키가 아주 크지 않은 태블릿·PC 창은 건물 갤러리를 한 줄로(건설 판이 화면 높이의 4분의 1을 넘지 않게)
   }
   // ---- 화면 맞춤 설정(글자·버튼 크기 · 키 힌트 · 왼손 배치 · 움직임 줄이기 · 진동)
@@ -334,11 +343,31 @@ export class Hud {
     this.bankHtmlNow = this.townHtmlNow = this.marketHtmlNow = this.wishHtmlNow = this.newsKey = this.infoMoreHtml = null; this.appsKey = null;
     if (this.world && this.phone) { this.drawApps(); if (!this.phone.hidden) this.refreshApp(); this.drawMoneyChips?.(); }
   }
-  /** 평소 시점(가까운 비스듬히 near · 자유 회전 free): 설정 칸의 ✓ · 둘러보기 ⟲ ⟳ 보이기 · html[data-cam] */
+  /** 화면 돌리기 알약: 둘러보기는 #turnBox, 건설 모드는 보조 줄의 #viewPill — 둘 다 가까운 비스듬히일 때만. 안의 단추도 hidden(키 Z · X는 보이는 단추만 누름) */
+  showCamPills(mode) {
+    const near = this.camMode === "near", vis = (g, on) => { g.hidden = !on; for (const b of g.querySelectorAll("button")) b.hidden = !on; };
+    vis(this.viewPill, near && mode !== "view"); vis(this.turnBox, near && mode === "view");
+  }
+  /** 화면을 돌릴 때 잠깐: 누른 쪽 화살표가 그 방향으로 살짝 돎(단추 · Z X · 두 손가락 비틀기). 움직임 줄이기면 CSS가 끔 */
+  turnFx(dir) {
+    for (const g of this.camPills) { const b = g.querySelector(`button[data-dir="${dir > 0 ? 1 : -1}"]`); if (!b) continue; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); }
+    clearTimeout(this.spinT); this.spinT = setTimeout(() => { for (const g of this.camPills) for (const b of g.querySelectorAll(".spin")) b.classList.remove("spin"); }, 450);
+  }
+  /** 매 프레임(main.js): 카메라 방위 → 나침반 바늘(--hd) · 읽어 주기. 거의 그대로면 아무것도 안 함(돌아가는 동안만 DOM을 고침) */
+  setHeading(yaw) {
+    const d = northDeg(yaw); if (this.hdNow != null && Math.abs(d - this.hdNow) < 0.3) return; this.hdNow = d;
+    for (const g of this.camPills) g.style.setProperty("--hd", `${d.toFixed(1)}deg`);
+    const lab = northLabel(yaw); if (lab !== this.hdLab) { this.hdLab = lab; for (const c of this.compasses) c.setAttribute("aria-label", lab); }
+  }
+  /** 건물을 돌렸을 때 잠깐: 확인 카드 돌리기 단추의 고리가 시계 방향으로 한 번 휙(움직임 줄이기면 CSS가 끔) */
+  rotFx() {
+    const b = this.cfRot; b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin");
+    clearTimeout(this.rotT); this.rotT = setTimeout(() => b.classList.remove("spin"), 450);
+  }
+  /** 평소 시점(가까운 비스듬히 near · 자유 회전 free): 설정 칸의 ✓ · 화면 돌리기 알약 보이기 · html[data-cam] */
   setCamMode(m) {
     this.camMode = m === "free" ? "free" : "near"; document.documentElement.dataset.cam = this.camMode;
-    this.turnBox.hidden = this.tools.mode !== "view" || this.camMode !== "near";
-    for (const b of this.viewBtns) b.hidden = this.tools.mode === "view" || this.camMode !== "near";
+    this.showCamPills(this.tools.mode);
     const seg = document.getElementById("segCam"); if (seg) for (const b of seg.children) { const on = b.dataset.v === this.camMode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
   }
   /** 섬에서 건물을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기 · 갈매미 따라가기).
@@ -347,7 +376,7 @@ export class Hud {
   houseCard(b) {
     const c = document.getElementById("houseCard"), x = c.querySelector(".hcx"), w = this.world, kind = b ? bldKindOf(b, w) : null;
     this.cardB = kind ? b : null; this.cardKind = kind; this.cardParts = [];
-    x.textContent = ""; if (!x.hidden) x.hidden = true;
+    x.textContent = ""; if (!x.hidden) x.hidden = true; this.moveBtnFor(kind ? b : null);
     if (kind === "clinic") mountUpgrade(c, this, w, b, x); else hideUpgrade(c);   // 병원: 종합병원 업그레이드 단추(ui/upgradeView.js) · 다른 카드엔 남지 않게
     if (!kind) { delete c.dataset.kind; c.hidden = true; return; }
     c.dataset.kind = kind; c.setAttribute("aria-label", BUILDINGS[b.defId].name);
@@ -360,6 +389,12 @@ export class Hud {
     }
     const card = this.bldCardOf(b, kind); c.querySelector("b").textContent = card.title; c.querySelector("span").textContent = card.sub;
     x.hidden = false; c.hidden = false; this.syncBldCard(card);
+  }
+  /** 건물 카드의 「↔ 옮기기」: 옮길 수 있는 건물이면 보이고, 누르면 카드를 닫고 건설 모드 ↔ 옮기기로 그 건물을 든 채 들어감(풍차 카드는 main.js가 powerRange 다음에 부름) */
+  moveBtnFor(b) {
+    const c = document.getElementById("houseCard"), mv = c.querySelector(".mv"); if (!mv) return;
+    const ok = !!b && !this.world.moveBlock(b); mv.hidden = !ok;
+    mv.onclick = ok ? () => { c.hidden = true; this.tools.setMode("move", b.id); } : null;
   }
   /** 🏵 도장 가게(소원 앱의 가게 접기를 펼친 채로): 건물 카드·가구 없는 방에서 */
   openStampShop() { this.openPhone(); this.openApp("wish"); const d = document.querySelector("#dailyBody details.sshop"); if (d) { d.open = true; d.scrollIntoView?.({ block: "nearest" }); } }
@@ -731,12 +766,14 @@ export class Hud {
     const p = this.planNow, box = document.getElementById("cfInfo"), w = this.world;
     if (!p || !box) { if (box && box.innerHTML) { box.innerHTML = ""; this.planHtmlNow = ""; } return; }
     let info;
-    if (p.move) info = moveInfo(w, p.move, w.moveLandmark(p.move, p.ax, p.az, p.rot, { dry: true }));   // 🚚 지형지물 옮기기(dry: 아무것도 안 바꿈)
+    if (p.relocate) info = relocInfo(w, w.buildings.get(p.relocate), w.moveBuilding(p.relocate, p.ax, p.az, p.rot, { dry: true }));   // ↔ 건물 옮기기(dry: 아무것도 안 바꿈)
+    else if (p.move) info = moveInfo(w, p.move, w.moveLandmark(p.move, p.ax, p.az, p.rot, { dry: true }));   // 🚚 지형지물 옮기기(dry: 아무것도 안 바꿈)
     else if (p.bridge) info = bridgeInfo(w, p.ok, p.water);
     else info = planInfo(w, p.defId, w.check(p.defId, p.ax, p.az, p.rot));
-    const html = p.move ? moveHtml(info) : planHtml(info);
-    const goText = p.move ? "🚚 옮기기" : "🔨 건설", cfGo = document.getElementById("cfBuild"); if (cfGo.firstChild?.nodeType === 3 && cfGo.firstChild.nodeValue !== goText) cfGo.firstChild.nodeValue = goText;   // 키 힌트(.kbd)는 그대로
+    const html = p.relocate ? relocHtml(info) : p.move ? moveHtml(info) : planHtml(info);
+    const goText = p.relocate ? "↔ 옮기기" : p.move ? "🚚 옮기기" : "🔨 건설", cfGo = document.getElementById("cfBuild"); if (cfGo.firstChild?.nodeType === 3 && cfGo.firstChild.nodeValue !== goText) cfGo.firstChild.nodeValue = goText;   // 키 힌트(.kbd)는 그대로
     if (html !== this.planHtmlNow) { this.planHtmlNow = html; box.innerHTML = html; }
+    const rl = p.move ? "방향 돌리기" : "건물 방향 돌리기"; if (this.cfRot.getAttribute("aria-label") !== rl) { this.cfRot.setAttribute("aria-label", rl); this.cfRot.dataset.tip = p.move ? "시계 방향으로 90° 돌려요" : "건물을 시계 방향으로 90° 돌려요"; }   // 지형지물(동굴·등대·선착장)은 그냥 방향(풍선 도움말도)
     const cfBuild = document.getElementById("cfBuild"); if (cfBuild.disabled !== !info.ok) cfBuild.disabled = !info.ok;
     box.parentElement.classList.toggle("bad", !info.ok);
   }
@@ -791,13 +828,13 @@ export class Hud {
     const terrain = mode === "paint" || mode === "height", nature = mode === "nature", sub = this.sub;
     if (!terrain && this.tools.cross) this.tools.setCross(false);                   // 십자선은 칠하기·높이에서만(켜 둔 채 짓기로 가면 누르기가 안 먹던 것)
     // 보조 줄: 도구에 맞는 것만
-    this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish"; this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
+    this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish" && mode !== "move";
+    if (!this.ehint.hidden) { this.ehint.textContent = mode === "move" ? "↔ 건물을 들고 자리를 눌러요" : "🧹 건물을 누르면 철거할지 한 번 더 물어요"; this.ehint.dataset.mode = mode; } this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
     const tap = tapTool(mode, nature ? natureAction(arg).kind : null);             // 톡 = 고르기 · 끌기 = 화면 옮기기 도구: ✋가 필요 없음(켜 둔 채 오면 끔 — 켜져 있으면 톡이 안 먹음)
     if (tap && this.tools.hand) this.tools.setHand(false);
     this.handBtn.hidden = mode === "view" || tap;
-    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
-    for (const b of this.viewBtns) b.hidden = mode === "view" || this.camMode !== "near";   // 건설 모드의 ⟲ ⟳ · 둘러보기는 turnBox(둘 다 가까운 비스듬히일 때만)
-    this.turnBox.hidden = mode !== "view" || this.camMode !== "near";
+    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build" && mode !== "move"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
+    this.showCamPills(mode);
     this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
     this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만
     // 트레이: 같은 도구 안에서 고르기만 했으면 밀어 둔 자리를 지킴
@@ -822,9 +859,10 @@ export class Hud {
     if (mode === "build") {
       this.lastBuild = arg;
       if (!this.world.units.some(u => u.job === "builder")) this.status("🔨 건축 갈매미가 있어야 지을 수 있어요 · 🥚 소환으로 불러 보세요");
-      this.drawBuildTray(arg);                                                      // ↻ 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
+      this.drawBuildTray(arg);                                                      // 건물 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
     }
     if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 철거할지 한 번 더 물어요 · 끌면 화면 이동 · 다 지은 건물은 되돌릴 수 없어요");
+    if (mode === "move" && !this.tools.lift) this.status("↔ 옮기기: 건물을 톡 눌러 들고, 놓을 자리를 톡 눌러요. 공짜고 ↶로 되돌려요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
     else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
     if (!keep && nature) { const c = this.natCards?.find(x => x.dataset.nat === arg); if (c && (c.offsetLeft + c.offsetWidth > sub.clientWidth || c.offsetTop + c.offsetHeight > sub.clientHeight)) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 도구가 보이게

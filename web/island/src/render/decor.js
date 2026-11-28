@@ -101,6 +101,7 @@ export class Decor {
     const again = () => this.later();
     world.on("buildingAdded", b => { this.refresh(b.cells); again(); });
     world.on("buildingRemoved", b => { this.refresh(b.cells); again(); });
+    world.on("buildingMoved", e => { this.refresh([...e.from.cells, ...e.b.cells]); again(); });
     world.on("ground", e => { this.refresh([[e.x, e.z]]); again(); });
     world.on("decorChanged", e => { this.refresh([[e.x, e.z]]); again(); });
     // 꾸미기로 나무·바위를 심거나 치우고 동굴·등대를 옮기면 그 칸(옮기기는 옛 칸도)의 씨앗 소품을 다시(새 칸은 숨기고 비운 칸은 다시 보임)

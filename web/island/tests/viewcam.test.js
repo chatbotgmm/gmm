@@ -80,7 +80,7 @@ test("main.js·viewCam.js: 건설 모드에 들어가고 나올 때 카메라를
   const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8"), vc = readFileSync(new URL("../src/systems/viewCam.js", import.meta.url), "utf8");
   assert.ok(!/QuarterCam|quarterCam/.test(main), "main.js에 쿼터뷰 없음"); assert.ok(!/quarterCam/.test(vc));
   assert.ok(!/tools\.onMode\s*=/.test(main), "모드 바꿀 때 카메라를 바꾸는 손잡이 없음");
-  assert.match(main, /hud\.onViewTurn = dir => viewCam\.turn\(dir\)/); assert.match(main, /twoFinger\.onTurn = dir => viewCam\.turn\(dir\)/);
+  assert.match(main, /hud\.onViewTurn = dir => viewCam\.turn\(dir\)/); assert.match(main, /twoFinger\.onTurn = dir => \{ if \(viewCam\.turn\(dir\)\) hud\?\.turnFx\(dir\); \}/);
 });
 
 test("설정 바꾸기: free → near는 기본 거리·35°·가까운 90°로 · near → free는 자리 그대로 회전 켬 · 다시 near면 회전 끔·9~55 m", () => {

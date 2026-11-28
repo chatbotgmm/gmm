@@ -15,6 +15,7 @@ import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
 import { formOf } from "../world/evolve.js";
 import { roomLight, ROOM_DARK_WHY } from "./roomLight.js";
+import { objTurnSvg } from "../ui/rotIcons.js";
 
 // 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
 const roomFurniSource = itemId => { const it = ITEMS.find(i => i.id === itemId); if (!it) return "마을 가방의 가구";
@@ -292,10 +293,11 @@ export class RoomView {
       for (const [id, d] of Object.entries(table)) { const bt = rel("button", it[key] === id ? "on" : "", d.name); const sw = rel("span", "sw"); sw.style.background = "#" + d.color.toString(16).padStart(6, "0"); bt.prepend(sw);
         bt.onclick = () => { it[key] = id; this.build(); this.refreshUI(); w.emit?.("furniture", { b }); }; list.appendChild(bt); }   // 바닥·벽지는 층마다
     }
-    const add = (label, fn, cls = "") => { const bt = rel("button", cls, label); bt.onclick = fn; act.appendChild(bt); };
+    const add = (label, fn, cls = "") => { const bt = rel("button", cls, label); bt.onclick = fn; act.appendChild(bt); return bt; };
+    const addRot = () => { const bt = add("", () => this.rotate(), "rotObj"); bt.innerHTML = `${objTurnSvg()}<span class="rl">돌리기</span>`; bt.setAttribute("aria-label", "가구 방향 돌리기"); bt.dataset.tip = "가구를 시계 방향으로 90° 돌려요. R 키로도 돼요"; };   // 섬의 건물 돌리기와 같은 주황 고리 그림
     // 행동 줄: 치우기는 왼쪽 끝에 따로, 주요 행동(놓기·옮기기)은 오른쪽 끝(엄지 쪽)
-    if (this.ghost) { add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("✅ 놓기", () => this.commit(), this.ghostOk ? "commit go" : "commit"); }
-    else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); add("↻ 돌리기", () => this.rotate()); add("↔ 옮기기", () => this.startMove(), "go"); }
+    if (this.ghost) { add("✕ 취소", () => this.cancel()); addRot(); add("✅ 놓기", () => this.commit(), this.ghostOk ? "commit go" : "commit"); }
+    else if (this.sel != null) { add("📦 치우기", () => this.stow(), "stow"); add("✕ 취소", () => this.cancel()); addRot(); add("↔ 옮기기", () => this.startMove(), "go"); }
     else if (F.allFurniture(b).some(o => !o.hand)) add("🪄 정리하기", () => this.tidy());   // 갈매미가 놓은 가구만 다시 놓음(손으로 놓은 건 그대로)
   }
   // ---- 방 안의 갈매미: 집에 들어온 갈매미를 그 층에 보여 주고 가구를 씀(침대 = 누워 자기, 의자·소파 = 앉기, 책장 = 앞에 서서 읽기, 없으면 방에 서 있기)

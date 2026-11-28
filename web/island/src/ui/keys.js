@@ -9,6 +9,7 @@ export const KEY_LIST = [
   { code: ["Digit4", "Numpad4"], key: "4", what: "🏠 건물 짓기", sel: '#tools [data-mode="build"]' },
   { code: ["Digit5", "Numpad5"], key: "5", what: "🧹 철거", sel: '#tools [data-mode="demolish"]' },
   { code: ["Digit6", "Numpad6"], key: "6", what: "🌳 자연·지형", sel: '#tools [data-mode="nature"]' },
+  { code: ["Digit7", "Numpad7"], key: "7", what: "↔ 건물 옮기기", sel: '#tools [data-mode="move"]' },
   { code: ["KeyP"], key: "P", what: "📱 갈매폰 열기·닫기", sel: "#phoneBtn" },
   { code: ["KeyM"], key: "M", what: "🗺 미니맵 켜기·끄기", sel: "#mapBtn" },
   { code: ["KeyJ"], key: "J", what: "💭 소원 · 오늘의 부탁", app: "wish" },
@@ -16,19 +17,19 @@ export const KEY_LIST = [
   { code: ["KeyK"], key: "K", what: "💞 관계도", app: "rel" },
   { code: ["KeyL"], key: "L", what: "📖 도감 · 가방", app: "dex" },
   { code: ["KeyH", "F1"], key: "H", what: "❓ 도움말 · 단축키", app: "help" },
-  { code: ["KeyZ"], key: "Z", what: "⟲ 화면을 왼쪽으로 90° 돌리기", sel: "#viewL:not([hidden]), #turnBox:not([hidden]) #turnL" },
-  { code: ["KeyX"], key: "X", what: "⟳ 화면을 오른쪽으로 90° 돌리기", sel: "#viewR:not([hidden]), #turnBox:not([hidden]) #turnR" },
+  { code: ["KeyZ"], key: "Z", what: "화면을 왼쪽으로 90° 돌리기", sel: "#viewL:not([hidden]), #turnBox:not([hidden]) #turnL" },
+  { code: ["KeyX"], key: "X", what: "화면을 오른쪽으로 90° 돌리기", sel: "#viewR:not([hidden]), #turnBox:not([hidden]) #turnR" },
   { code: ["KeyG"], key: "G", what: "▦ 건설 모드: 칸 격자선 켜기·끄기", sel: "#gridBtn" },
   { code: ["KeyF"], key: "F", what: "⏩ 배속 바꾸기, 유료 이용권", fn: "speed" },
 ];
 /** 원래 있던 키(뜻은 그대로) — 도움말 표에만 */
 const KEY_KEEP_LIST = [
   ["W A S D · 방향키", "화면 옮기기, Shift와 함께 누르면 빠르게"], ["Q / E", "카메라 내리기 · 올리기"], ["Space + 끌기", "화면 돌리기. 입질 ❗ 때 누르면 🎣 당기기"],
-  ["R", "건물·가구 돌리기"], ["Enter", "정한 자리에 건설"], ["[ ]", "붓 크기"], ["Ctrl+Z", "되돌리기"], ["Ctrl+Shift+Z · Ctrl+Y", "다시하기"],
+  ["R", "건물·가구를 시계 방향으로 돌리기"], ["Enter", "정한 자리에 건설"], ["[ ]", "붓 크기"], ["Ctrl+Z", "되돌리기"], ["Ctrl+Shift+Z · Ctrl+Y", "다시하기"],
   ["Esc", "열린 것을 하나씩 닫기. 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기, Enter로 누르기"],
 ];
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
-const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"],
+const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"], ['#tools [data-mode="move"]', "7"],
   ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"], ["#viewL", "Z"], ["#viewR", "X"], ["#turnL", "Z"], ["#turnR", "X"], ["#gridBtn", "G"]];
 const KEY_OVERLAYS = ["ask", "cloudAsk", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
 const KEY_CONTROL_SEL = "button, a[href], summary, select, [role=button]";

@@ -37,6 +37,7 @@ import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, GIFT_CAT_NAME, giftDef, g
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import { undoBlock, feeUndoLedger } from "./buildUndo.js";
+import * as RL from "./relocate.js";
 import * as MON from "./monetary.js";
 import * as P from "./population.js";
 import * as HM from "./homes.js";
@@ -2012,7 +2013,7 @@ export class World {
       }
       if (def === "pier") for (const [x, z] of CU.backCells(cells, rot)) {
         const c = g.get(x, z), occ = c && c.occupiedId && c.occupiedId !== self ? g.occupants.get(c.occupiedId) : null;
-        if (!c || g.isWater(x, z) || (occ && !occ.walkable)) return "부두는 물가에서 바다 쪽으로 놓아요. R로 방향을 돌려 봐요";
+        if (!c || g.isWater(x, z) || (occ && !occ.walkable)) return "부두는 물가에서 바다 쪽으로 놓아요. 돌리기로 방향을 바꿔 봐요";
       }
       if (this.unitOn(cells.filter(([x, z]) => !m.cells.some(([a, b]) => a === x && b === z)))) return "갈매미가 있어요";
       return "";
@@ -2021,9 +2022,9 @@ export class World {
     const e = g.get(cells[0][0], cells[0][1]).elevation;
     if (!restore && cells.some(([x, z]) => Math.abs(g.get(x, z).elevation - e) > 1e-6)) return "바닥이 평평하지 않아요";   // 되돌리기는 원래 자리(섬이 만든 등대 자리는 평평하지 않음)
     if (def === "cave") for (const [x, z] of CU.frontCells(cells, rot)) {
-      const c = g.get(x, z); if (!c) return "동굴 입구 앞이 막혀 있어요. R로 방향을 돌려 봐요";
+      const c = g.get(x, z); if (!c) return "동굴 입구 앞이 막혀 있어요. 돌리기로 방향을 바꿔 봐요";
       const h = c.occupiedId === self ? (g.isWater(x, z) ? null : c.elevation) : g.walkHeight(x, z);
-      if (h === null || Math.abs(h - e) > MAX_STEP + 1e-6 || g.doorOwner(x, z)) return "동굴 입구 앞이 막혀 있어요. R로 방향을 돌려 봐요";
+      if (h === null || Math.abs(h - e) > MAX_STEP + 1e-6 || g.doorOwner(x, z)) return "동굴 입구 앞이 막혀 있어요. 돌리기로 방향을 바꿔 봐요";
     }
     if (def === "lighthouse") {
       const R = CU.LIGHTHOUSE_SEA, sea = cells.some(([x, z]) => { for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (g.inBounds(x + dx, z + dz) && g.isWater(x + dx, z + dz)) return true; return false; });
@@ -2239,6 +2240,10 @@ export class World {
     this.emit("buildUndo", { b, refund: fee });
     return { ok: true, reason: "", refund: fee, building: b };
   }
+  // ---- 건물 옮기기(relocate.js): 돈 안 듦, id·주인·실내·공사·전기 범위가 따라감, ↶로 제자리
+  moveBlock(b) { return RL.moveBlock(this, b); }
+  moveBuilding(id, ax, az, rot, opt = {}) { return RL.moveBuilding(this, id, ax, az, rot, opt); }
+  undoMove(rec) { return RL.undoMove(this, rec); }
   isDone(b) { return b.hits >= b.need; }
   /** 저장할 은행 창고: 짓는 갈매미가 공사 재료로 꺼내 들고 있는 짐(u.load, 저장 안 함)을 창고에 되돌려 셈 */
   resWithLoads() { const r = { ...this.res }; for (const u of this.units) for (const [k, n] of Object.entries(u.load || {})) r[k] = (r[k] || 0) + n; return r; }
