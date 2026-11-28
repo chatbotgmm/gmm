@@ -149,7 +149,7 @@ export class Daylight {
       if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
         o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: LAMP_HALO, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
-        halo.position.set(0, bb.min.y + hgt * 0.88, 0);   // 등불 유리 높이(가는 가로등) halo.scale.setScalar(1.6 / s); halo.userData.noToon = true; o.add(halo);
+        halo.position.set(0, bb.min.y + hgt * 0.88, 0); halo.scale.setScalar(1.6 / s); halo.userData.noToon = true; halo.raycast = () => {}; o.add(halo);   // 등불 유리 높이(가는 가로등)
         // 발밑 빛 웅덩이: 더하기 합성이면 풀빛 위에서 연두 원판이 됐음 → 보통 합성(따뜻한 주황을 살짝 덮음)·반지름 5.5 → 3.2 m
         const pool = new THREE.Mesh(new THREE.CircleGeometry(3.2 / s, 32), new THREE.MeshBasicMaterial({ map: haloTex(), color: LAMP_POOL, transparent: true, depthWrite: false }));
         pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);

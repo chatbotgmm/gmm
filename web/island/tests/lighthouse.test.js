@@ -78,3 +78,13 @@ test("등대를 누르면: 왜 꺼져 있고 무엇을 하면 켜지는지(장�
   assert.ok(w.storyRestore(3).ok); n = ST.lighthouseNote(s, w, 5); assert.equal(n.lit, true); assert.match(n.text, /불이 켜져 있어요/);
   assert.equal(atLabel(w, { app: "story" }), "🗝 비밀 수첩 열기", "알림을 누르면 수첩으로");
 });
+
+test("밤 불빛 코드가 주석에 묻히지 않음: 줄 끝 주석 안에 실행할 문장(대입·호출 + ;)이 없음(등대 유리·가로등 빛 번짐이 그렇게 꺼져 있었음)", () => {
+  const swallowed = /[^ ]\s+[a-zA-Z_$][\w$.\[\]]*(\.\w+\(.*\)|\s=\s[^=].*);\s*(\/\/|$)/;
+  for (const f of ["render/daylight.js", "render/storyFx.js", "render/lampLook.js"]) {
+    const lines = readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8").split("\n");
+    lines.forEach((l, i) => { const at = l.search(/\s\/\/\s/); if (at < 0) return; assert.ok(!swallowed.test(l.slice(at)), `${f}:${i + 1} 주석 안의 코드: ${l.slice(at, at + 120)}`); });
+  }
+  const code = readFileSync(new URL("../src/render/daylight.js", import.meta.url), "utf8").split("\n").map(l => { const i = l.search(/\s\/\//); return i < 0 ? l : l.slice(0, i); }).join("\n");
+  assert.ok(/halo\.scale\.setScalar\(1\.6 \/ s\);.*o\.add\(halo\)/.test(code), "가로등 빛 번짐을 가로등에 붙임(실제 빛도 이 자리로 옮겨 감)");
+});
