@@ -86,7 +86,7 @@ export function restoreCheck(s, w, n) {
   if (r.seeds) rows.push({ icon: "🌟", text: "별씨", have: Math.min(s.seeds, r.seeds), need: r.seeds, ok: s.seeds >= r.seeds });
   for (const [k, need] of Object.entries(r.cost || {})) {                       // 창고가 모자라면 갈매미 가방(광부가 캔 철 등)에서 시장 값으로 사 옴(금고에서): 창고에 철이 안 들어오는 마을도 막히지 않게
     const h = Math.floor(w.res?.[k] || 0), buy = Math.min(Math.max(0, need - h), storyBagHave(w, k)), price = buy * storyRawPrice(w, k), afford = !buy || !w.economy || Math.floor(w.bank?.vault ?? Infinity) >= price;
-    rows.push({ icon: RES[k][0], text: buy ? `${RES[k][1]}(창고 ${h} + 갈매미에게 ${buy}개 사기 🪙${price}${afford ? "" : " · 금고가 모자라요"})` : `${RES[k][1]}(마을 창고)`, have: Math.min(h + buy, need), need, ok: h + buy >= need && afford, k, buy, price });
+    rows.push({ icon: RES[k][0], text: buy ? `${RES[k][1]}: 창고 ${h}, 갈매미에게서 ${buy}개 사기 🪙${price}${afford ? "" : ", 금고가 모자라요"}` : `${RES[k][1]}: 마을 창고`, have: Math.min(h + buy, need), need, ok: h + buy >= need && afford, k, buy, price });
   }
   if (r.lamps) { const h = lampsNearCave(w); rows.push({ icon: "💡", text: `동굴 입구 ${STORY_LAMP_R}칸 안 가로등`, have: Math.min(h, r.lamps), need: r.lamps, ok: h >= r.lamps }); }
   return { rows, ok: !done && rows.every(x => x.ok), done, kind: r.lamps ? "build" : "pay", at: r.at, locked: false };
@@ -133,8 +133,8 @@ export function storyOnEvent(s, ev, arg, w, day) {
     for (const id of s.queue.splice(0)) if (!s.found[id] && !stSparkOf(s, id)) out.push({ spark: id, at: STORY_PIECES[id].at });
     if (stSeedsWanted(s) && s.seedDay !== day) { s.seedDay = day; out.push({ spark: "seed:B", at: "ring" }); }   // 둘째 길: 마을 날마다 아침 첫 반짝이 차례에 별씨 하나
   } else if (ev === "away") {                                                      // 다녀온 사이 편지(10분 넘게 꺼 둠)
-    if (canFind(s, "c1_card")) out.push({ grant: "c1_card", who: null, via: "away" }, { line: "📮 우체통에 낡은 엽서가 끼어 있었어요. (🗝 비밀 수첩)" });
-    if (canFind(s, "c4_blink") && s.restored.lamp) out.push({ blink: false }, { grant: "c4_blink", who: null }, { line: "💫 어젯밤 수평선에서 불빛이 세 번 깜빡였대요. (🗝 비밀 수첩)" });
+    if (canFind(s, "c1_card")) out.push({ grant: "c1_card", who: null, via: "away" }, { line: "📮 우체통에 낡은 엽서가 끼어 있었어요. 🗝 비밀 수첩에 끼워 뒀어요." });
+    if (canFind(s, "c4_blink") && s.restored.lamp) out.push({ blink: false }, { grant: "c4_blink", who: null }, { line: "💫 어젯밤 수평선에서 불빛이 세 번 깜빡였대요. 🗝 비밀 수첩에 적어 뒀어요." });
     out.push(...retroActs(s, w));
   } else if (ev === "tick") {                                                      // 1초마다(월드 stepStory)
     const settled = !(w.storyLitAt >= 0) || w.time - w.storyLitAt >= STORY_BLINK_WAIT;   // 밤에 불을 켰으면 불이 차오르고 카드를 다 읽은 뒤에(바로 겹쳐 뜨지 않게)

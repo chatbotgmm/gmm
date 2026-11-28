@@ -39,8 +39,8 @@ test("🖨 찍어내기: 단계 50·100·200, 하루 300을 넘는 단계는 꺼
 
 test("확인창 글: 물가가 오를 수 있다는 말 + 예상(마을 돈 → +n, 몇 %) + 찍은 뒤 남은 양", () => {
   const a = printAsk(100, { pocket: 1000, printLeft: 300 });
-  assert.equal(a.title, "🖨 새 돈 🪙100을 찍을까요?");
-  assert.match(a.body, /물가가 오를 수 있어요/); assert.match(a.body, /🪙1,000 → 🪙1,100\(\+10%\)면 물가도 그만큼 오르는/); assert.match(a.body, /오늘 더 찍을 수 있는 돈 🪙200/);
+  assert.equal(a.title, "🖨 새 동전 🪙100을 찍을까요?");
+  assert.match(a.body, /물가가 오를 수 있어요/); assert.match(a.body, /🪙1,000에서 🪙1,100까지 10% 늘면, 물가도/); assert.match(a.body, /오늘 더 찍을 수 있는 돈 🪙200/);
   assert.equal(printRise(50, 0), null); assert.ok(!/예상/.test(printAsk(50, { pocket: 0, printLeft: 300 }).body), "마을 돈이 0이면 % 예상은 뺌");
 });
 

@@ -28,22 +28,22 @@ export function rankScore(w) {
     ["🐦 갈매미", w.units.length, 10, w.units.length * 10],
     ["🏠 주인 있는 집", owned, 10, owned * 10],
     ["🏚 빈 집", empty, 4, empty * 4],
-    ["🏪 시설(시장·밭·낚시터·저장고·카페 등)", fac, 8, fac * 8],
-    ["🪜 계단(최대 10점)", stairs, 2, Math.min(10, stairs * 2)],
-    ["🏮 장식(가로등 등, 최대 10점)", deco, 2, Math.min(10, deco * 2)],
-    ["🛋 집 아늑함(가구, 최대 30점)", cozy, 1, Math.min(30, cozy)],
-    ["🛣 포장도로로 시장·은행과 이은 집(최대 20점)", linkedHouses(w), 4, Math.min(20, linkedHouses(w) * 4)],
+    ["🏪 시설", fac, 8, fac * 8],
+    ["🪜 계단", stairs, 2, Math.min(10, stairs * 2)],
+    ["🏮 가로등과 장식", deco, 2, Math.min(10, deco * 2)],
+    ["🛋 집 아늑함", cozy, 1, Math.min(30, cozy)],
+    ["🛣 시장, 은행과 길로 이어진 집", linkedHouses(w), 4, Math.min(20, linkedHouses(w) * 4)],
     ["😊 평균 만족도 60 이상", w.units.length && (w.avgSat?.() ?? 0) >= 60 ? 1 : 0, 10, w.units.length && (w.avgSat?.() ?? 0) >= 60 ? 10 : 0],
     ["💭 이룬 소원", w.wishDone || 0, 6, (w.wishDone || 0) * 6],
-    ["💞 단짝(쌍, 최대 15점)", pals, 3, Math.min(15, pals * 3)],
-    ["🐠 수족관에 기증한 물고기(종류)", gave, DONATE_SCORE, gave * DONATE_SCORE],
+    ["💞 단짝 쌍", pals, 3, Math.min(15, pals * 3)],
+    ["🐠 수족관에 기증한 물고기", gave, DONATE_SCORE, gave * DONATE_SCORE],
     ["😋 평균 포만감 50 이상", fed ? 1 : 0, 10, fed ? 10 : 0],
   ];
   const mon = w.economy && w.bank?.mon;                                             // 중앙은행: 최근 3일 모두 물가 변화 1% 안쪽
-  if (mon) { const ok = (mon.stableRun || 0) >= STABLE_DAYS ? 1 : 0; parts.push([`📊 물가 안정(${STABLE_DAYS}일)`, ok, STABLE_SCORE, ok * STABLE_SCORE]); }
+  if (mon) { const ok = (mon.stableRun || 0) >= STABLE_DAYS ? 1 : 0; parts.push([`📊 물가 안정 ${STABLE_DAYS}일`, ok, STABLE_SCORE, ok * STABLE_SCORE]); }
   return { score: parts.reduce((s, p) => s + p[3], 0), parts };
 }
 /** 등급 해금 목록에 보일 이름: 업그레이드로만 생기는 건물은 '종합병원(일반병원 업그레이드)' */
-export const unlockName = id => { const d = BUILDINGS[id]; return !d ? id : d.upgradeFrom ? `${d.name}(${BUILDINGS[d.upgradeFrom]?.name || d.upgradeFrom} 업그레이드)` : d.name; };
+export const unlockName = id => { const d = BUILDINGS[id]; return !d ? id : d.upgradeFrom ? `${BUILDINGS[d.upgradeFrom]?.name || d.upgradeFrom} → ${d.name}` : d.name; };
 /** 이 건물을 지으려면 필요한 등급(없으면 0) */
 export const rankNeed = def => def.rank || 0;

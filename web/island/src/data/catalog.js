@@ -76,7 +76,7 @@ export const BUILDINGS = {
   // 계절 장식: 지금 계절에 따라 모습이 달라짐(봄 꽃 아치 · 여름 파라솔 · 가을 호박 더미 · 겨울 눈사람)
   seasonDeco:  { id: "seasonDeco", builtBy: "builder", deco: true, festive: true, decoShape: "seasonDeco", cost: { wood: 1 }, tier: 1, name: "계절 장식", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0xf2a49a, roof: 0xf2a49a, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 풍차 발전소: 둘레 18칸(world/power.js POWER_RANGE) 안에 전기 — 가로등·건물 등불(lit: 카페·잡화점·우체국, 집)·집 창가 불빛이 밤에 켜지고 집 만족도 +8
-  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등·건물 등불·집 창에 전기 · 누르면 범위가 보여요", rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
+  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등과 창에 불이 켜져요. 누르면 범위가 보여요", rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
   bridge: {
     id: "bridge", builtBy: "carpenter", bridge: true, cost: { wood: 1 }, tier: 1, name: "다리", footprint: { w: 1, d: 1 }, work: 1, height: 0.15, asset: null,
@@ -245,12 +245,12 @@ export const BUILD_SPEED = { common: 0.8, rare: 1.15, epic: 1.5, legend: 1.9 };
 // skill: 이 직업이 잘하는 활동(PERSONA의 활동 이름). 그 활동을 더 자주 고르고, 할 때 배율이 붙는다.
 export const JOBS = {
   builder:    { id: "builder",    name: "건축가", icon: "🔨", skill: "build", desc: "망치질 한 번이 배율만큼 진행. 희귀도 이상 등급의 건물까지 지을 수 있음" },
-  miner:      { id: "miner",      name: "광부",   icon: "⛏", skill: "mine",  desc: "돌을 더 많이 캐고, 철(높은 등급 건물 재료)이 잘 나옴" },
+  miner:      { id: "miner",      name: "광부",   icon: "⛏", skill: "mine",  desc: "돌을 더 많이 캐고, 높은 등급 건물에 드는 철을 잘 찾음" },
   lumberjack: { id: "lumberjack", name: "나무꾼", icon: "🪓", skill: "chop",  desc: "도끼질을 덜 하고 나무를 더 많이 얻음" },
   fisher:     { id: "fisher",     name: "낚시꾼", icon: "🎣", skill: "fish",  desc: "잘 낚고, 희귀한 물고기·보물·가구를 더 자주 얻음" },
-  merchant:   { id: "merchant",   name: "상인",   icon: "🐚", skill: "trade", desc: "가판대에서 남는 자재·보물을 팔고, 공사에 모자란 자재를 사 옴" },
+  merchant:   { id: "merchant",   name: "상인",   icon: "💼", skill: "trade", desc: "가판대에서 남는 자재·보물을 팔고, 공사에 모자란 자재를 사 옴" },
   farmer:     { id: "farmer",     name: "농부",   icon: "🌾", skill: "farm",  desc: "밭에 심고 거둬 음식을 만듦" },
-  carpenter:  { id: "carpenter",  name: "목수",   icon: "🪚", skill: "build", desc: "시장·밭·낚시터 같은 시설을 지음(집·계단은 건축가)" },
+  carpenter:  { id: "carpenter",  name: "목수",   icon: "🪚", skill: "build", desc: "시장과 밭, 낚시터 같은 시설을 지음. 집과 계단은 건축가가 지음" },
 };
 // 종족: 갈매미맨 방범대(GameMaker 프로젝트 scr_util.gml의 tribe_of, 방범대 등록증 v10 자료)의 10종족
 export const TRIBES = {
@@ -270,7 +270,7 @@ export const UNIT_JOBS = {
   "불씨": ["정령", "miner", "common"], "그림자": ["망령", "miner", "common"], "목수": ["태초", "carpenter", "rare"],   // 목수는 희귀(일반보다 빨리 지음)
 };
 
-// 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 조개로 바꿈). weight는 기본 확률 비중. cm: 낚일 때 크기 범위([작은, 큰] cm, 수족관 크기 기록)
+// 물고기: 흔한 것은 음식, 희귀 이상은 보물(상인이 팔아 동전으로 바꿈). weight는 기본 확률 비중. cm: 낚일 때 크기 범위([작은, 큰] cm, 수족관 크기 기록)
 export const FISH = [
   { id: "anchovy",  name: "멸치",     rarity: "common", weight: 34, food: 1, price: 1, cm: [6, 15] },
   { id: "mackerel", name: "고등어",   rarity: "common", weight: 26, food: 2, price: 2, cm: [22, 45] },
@@ -347,5 +347,5 @@ export const ITEMS = [
   // 🗝 메인 스토리 엔딩 선물(story: 낚시·반짝이·가게로는 안 나옴. 맨 뒤에 붙여 기존 줄 순서가 그대로)
   { id: "bormChair",  name: "보름의 흔들의자", rarity: "legend", furniture: "bormChair", story: true },
 ];
-// 시장 시세(조개 🐚). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
+// 시장 시세(동전 🪙). 상인 희귀도 배율만큼 비싸게 팔고 싸게 산다.
 export const PRICES = { wood: 1, stone: 2, iron: 6, food: 1 };

@@ -31,7 +31,7 @@ test("카드 아래 글: 값은 customCost와 같고, 심기는 한도(나무 n/
     assert.equal(m.cost, want, t.arg); if (!m.off) assert.ok(want ? m.meta.startsWith(`🪙${want}`) : m.meta === "무료", `${t.arg}: ${m.meta}`);
   }
   assert.equal(natureCard(NATURE_TOOLS[0], info).meta, `🪙2 · ${w.trees.length}/260`);
-  for (const a of ["dig", "fill"]) { const c = natureCard(natureTool(a), info); assert.equal(c.meta, "무료", a); assert.equal(c.cost, 0); assert.equal(c.short, false); assert.match(natureTool(a).tip, /\(무료\)/); }
+  for (const a of ["dig", "fill"]) { const c = natureCard(natureTool(a), info); assert.equal(c.meta, "무료", a); assert.equal(c.cost, 0); assert.equal(c.short, false); assert.match(natureTool(a).tip, /공짜예요/); }
   w.bank.vault = 0; assert.equal(natureCard(natureTool("dig"), w.customInfo()).short, false, "금고 0이어도 파기 카드는 안 모자람");
   w.bank.vault = 3; const poor = w.customInfo();
   assert.equal(natureCard(NATURE_TOOLS.find(t => t.arg === "ore"), poor).short, true, "광석 4 > 금고 3");
@@ -65,7 +65,7 @@ test("한 획 요약·되돌리기 글: 받침에 맞는 조사, 값과 남은 �
   assert.equal(strokeText("auto", { done: 1, cost: 0, kinds: ["tree"] }, 0, false), "🌳 나무 1그루를 심었어요 · ↶ 되돌리기", "경제가 없는 섬은 값 없이");
   assert.equal(undoText({ n: 1, refund: 2 }), "↶ 되돌렸어요 · 🪙2 돌려받음");
   assert.equal(undoText({ n: 0, fails: ["그사이 바뀌어서 되돌릴 수 없어요"] }), "🚫 그사이 바뀌어서 되돌릴 수 없어요");
-  assert.equal(redoText({ n: 3, cost: 6 }), "↷ 다시 했어요(3) · 🪙6");
+  assert.equal(redoText({ n: 3, cost: 6 }), "↷ 3번 다시 했어요 · 🪙6");
 });
 
 test("화면 흐름 그대로: 심기 → 되돌리기(applyInverse) → 다시하기(같은 일), 금고 60 → 58 → 60 → 58", () => {

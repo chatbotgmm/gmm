@@ -13,16 +13,16 @@ const nvCoin = n => `🪙${fmtNum(n)}`;
 
 /** 트레이 카드. arg = tools.setMode("nature", arg)의 arg. op = 월드 일(값을 찾는 열쇠), kind = 값표 종류 */
 export const NATURE_TOOLS = [
-  { arg: "auto", group: "plant", icon: "🌳", name: "나무", op: "place", kind: "tree", verb: "심기", tip: "잔디·흙에 나무(모래에 누르면 야자수) · 새 나무는 묘목으로 자라요" },
-  { arg: "palm", group: "plant", icon: "🌴", name: "야자수", op: "place", kind: "palm", verb: "심기", tip: "모래·잔디에 야자수 · 새 나무는 묘목으로 자라요" },
-  { arg: "beachRock", group: "plant", icon: "🪨", name: "바위", op: "place", kind: "beachRock", verb: "놓기", tip: "바닷가 바위(보기만)" },
-  { arg: "ore", group: "plant", icon: "⛏", name: "광석", op: "place", kind: "ore", verb: "놓기", tip: "광석 바위 · 처음엔 빈 바위라 한참 뒤에 캘 수 있어요" },
-  { arg: "bush", group: "plant", icon: "🌿", name: "덤불", op: "place", kind: "bush", verb: "놓기", tip: "덤불(길을 막지 않아요)" },
-  { arg: "flower", group: "plant", icon: "🌸", name: "꽃", op: "place", kind: "flower", verb: "놓기", tip: "꽃(길을 막지 않아요)" },
-  { arg: "clear", group: "clear", icon: "🪓", name: "치우기", op: "remove", kind: "tree", verb: "치우기", tip: "누른 칸의 나무·바위·광석·덤불·꽃을 치워요(나무·돌은 안 나와요)" },
-  { arg: "dig", group: "land", icon: "🕳", name: "파기", op: "dig", kind: "", verb: "파기", tip: "땅을 파서 연못·물길(무료)" },
-  { arg: "fill", group: "land", icon: "🏖", name: "메우기", op: "fill", kind: "", verb: "메우기", tip: "얕은 물을 모래땅으로(무료)" },
-  { arg: "move:cave", group: "move", icon: "🦇", name: "동굴", op: "move", kind: "cave", verb: "옮기기", tip: "동굴을 다른 자리로(↻ 입구 방향)" },
+  { arg: "auto", group: "plant", icon: "🌳", name: "나무", op: "place", kind: "tree", verb: "심기", tip: "잔디와 흙에 나무를, 모래에는 야자수를 심어요. 묘목부터 자라요" },
+  { arg: "palm", group: "plant", icon: "🌴", name: "야자수", op: "place", kind: "palm", verb: "심기", tip: "모래와 잔디에 야자수를 심어요. 묘목부터 자라요" },
+  { arg: "beachRock", group: "plant", icon: "🪨", name: "바위", op: "place", kind: "beachRock", verb: "놓기", tip: "보기 좋은 바닷가 바위" },
+  { arg: "ore", group: "plant", icon: "⛏", name: "광석", op: "place", kind: "ore", verb: "놓기", tip: "광석 바위. 한참 지나야 캘 수 있어요" },
+  { arg: "bush", group: "plant", icon: "🌿", name: "덤불", op: "place", kind: "bush", verb: "놓기", tip: "덤불은 길을 막지 않아요" },
+  { arg: "flower", group: "plant", icon: "🌸", name: "꽃", op: "place", kind: "flower", verb: "놓기", tip: "꽃은 길을 막지 않아요" },
+  { arg: "clear", group: "clear", icon: "🪓", name: "치우기", op: "remove", kind: "tree", verb: "치우기", tip: "누른 칸의 나무나 바위, 덤불을 치워요. 재료는 안 나와요" },
+  { arg: "dig", group: "land", icon: "🕳", name: "파기", op: "dig", kind: "", verb: "파기", tip: "땅을 파서 연못이나 물길을 내요. 공짜예요" },
+  { arg: "fill", group: "land", icon: "🏖", name: "메우기", op: "fill", kind: "", verb: "메우기", tip: "얕은 물을 모래땅으로 메워요. 공짜예요" },
+  { arg: "move:cave", group: "move", icon: "🦇", name: "동굴", op: "move", kind: "cave", verb: "옮기기", tip: "동굴을 다른 자리로 옮겨요. ↻로 입구 방향을 돌려요" },
   { arg: "move:lighthouse", group: "move", icon: "🗼", name: "등대", op: "move", kind: "lighthouse", verb: "옮기기", tip: "등대를 바닷가 다른 자리로" },
   { arg: "move:pier", group: "move", icon: "🛶", name: "부두", op: "move", kind: "pier", verb: "옮기기", tip: "부두를 다른 바닷가로", onlyIf: true },
   { arg: "move:breakwater", group: "move", icon: "🌊", name: "방파제", op: "move", kind: "breakwater", verb: "옮기기", tip: "방파제를 다른 자리로", onlyIf: true },
@@ -62,7 +62,7 @@ export function natureHover(arg, r, vault, eco = true) {
   if (a.kind === "clear") { const k = r.module?.defId || r.kind || (r.was && r.was !== "seed" ? r.was.k : null); return `🪓 ${k ? CU.NAMES[k] : "덤불·풀"} 치우기${money(r.cost)}`; }
   if (a.kind === "dig" || a.kind === "fill") {
     const n = r.done ?? 1, skip = (r.skipped || []).length;
-    return `${t.icon} ${n}칸 ${t.verb}${money(r.cost)}${skip ? ` · ${skip}칸은 못 해요(${r.skipped[0].reason})` : ""}`;
+    return `${t.icon} ${n}칸 ${t.verb}${money(r.cost)}${skip ? `. ${skip}칸은 못 해요: ${r.skipped[0].reason}` : ""}`;
   }
   if (a.kind === "move") return `${t.icon} ${t.name} 여기로 옮기기${money(r.cost)} · 🚚 옮기기를 누르면 옮겨요`;
   return "";
@@ -87,11 +87,11 @@ export function strokeText(arg, { done = 0, cost = 0, fail = "", kinds = [] } = 
 export function undoText({ n = 0, refund = 0, fails = [], paid = 0 } = {}) {
   if (!n && fails.length) return `🚫 ${fails[0]}`;
   const back = refund ? ` · ${nvCoin(refund)} 돌려받음` : "", pay = paid ? ` · 땅↔물 ${nvCoin(paid)}` : "";
-  return `↶ 되돌렸어요${n > 1 ? `(${n})` : ""}${back}${pay}${fails.length ? ` · ${fails.length}곳은 못 되돌렸어요(${fails[0]})` : ""}`;
+  return `↶ ${n > 1 ? `${n}번 ` : ""}되돌렸어요${back}${pay}${fails.length ? `. ${fails.length}곳은 못 되돌렸어요: ${fails[0]}` : ""}`;
 }
 export function redoText({ n = 0, cost = 0, fails = [] } = {}) {
   if (!n && fails.length) return `🚫 ${fails[0]}`;
-  return `↷ 다시 했어요${n > 1 ? `(${n})` : ""}${cost ? ` · ${nvCoin(cost)}` : ""}${fails.length ? ` · ${fails.length}곳은 못 했어요(${fails[0]})` : ""}`;
+  return `↷ ${n > 1 ? `${n}번 ` : ""}다시 했어요${cost ? ` · ${nvCoin(cost)}` : ""}${fails.length ? `. ${fails.length}곳은 못 했어요: ${fails[0]}` : ""}`;
 }
 
 /** 옮기기 확인창 정보. r = moveLandmark(…, { dry: true }) 결과 */

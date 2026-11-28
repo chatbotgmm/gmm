@@ -16,16 +16,16 @@ export const KEY_LIST = [
   { code: ["KeyK"], key: "K", what: "💞 관계도", app: "rel" },
   { code: ["KeyL"], key: "L", what: "📖 도감 · 가방", app: "dex" },
   { code: ["KeyH", "F1"], key: "H", what: "❓ 도움말 · 단축키", app: "help" },
-  { code: ["KeyZ"], key: "Z", what: "⟲ 화면을 왼쪽으로 90° 돌리기(가까운 비스듬히 시점 · 건설 모드도)", sel: "#viewL:not([hidden]), #turnBox:not([hidden]) #turnL" },
-  { code: ["KeyX"], key: "X", what: "⟳ 화면을 오른쪽으로 90° 돌리기(가까운 비스듬히 시점 · 건설 모드도)", sel: "#viewR:not([hidden]), #turnBox:not([hidden]) #turnR" },
+  { code: ["KeyZ"], key: "Z", what: "⟲ 화면을 왼쪽으로 90° 돌리기", sel: "#viewL:not([hidden]), #turnBox:not([hidden]) #turnL" },
+  { code: ["KeyX"], key: "X", what: "⟳ 화면을 오른쪽으로 90° 돌리기", sel: "#viewR:not([hidden]), #turnBox:not([hidden]) #turnR" },
   { code: ["KeyG"], key: "G", what: "▦ 건설 모드: 칸 격자선 켜기·끄기", sel: "#gridBtn" },
-  { code: ["KeyF"], key: "F", what: "⏩ 배속 ×1 → ×2 → ×3 (유료판 · 무료판은 🔒 안내)", fn: "speed" },
+  { code: ["KeyF"], key: "F", what: "⏩ 배속 바꾸기, 유료 이용권", fn: "speed" },
 ];
 /** 원래 있던 키(뜻은 그대로) — 도움말 표에만 */
 const KEY_KEEP_LIST = [
-  ["W A S D · 방향키", "화면 옮기기 (Shift = 빠르게)"], ["Q / E", "카메라 내리기 · 올리기"], ["Space + 끌기", "화면 돌리기(건설 모드 · 가까운 비스듬히 시점에서는 옮기기) · 입질(❗) 때는 🎣 당기기"],
+  ["W A S D · 방향키", "화면 옮기기, Shift와 함께 누르면 빠르게"], ["Q / E", "카메라 내리기 · 올리기"], ["Space + 끌기", "화면 돌리기. 입질 ❗ 때 누르면 🎣 당기기"],
   ["R", "건물·가구 돌리기"], ["Enter", "정한 자리에 건설"], ["[ ]", "붓 크기"], ["Ctrl+Z", "되돌리기"], ["Ctrl+Shift+Z · Ctrl+Y", "다시하기"],
-  ["Esc", "한 단계씩 닫기(창 → 페이지 → 카드 → 도구 끄기) · 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기 (Enter·Space로 누르기)"],
+  ["Esc", "열린 것을 하나씩 닫기. 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기, Enter로 누르기"],
 ];
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
 const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"],
@@ -154,9 +154,9 @@ export function installKeys({ hud, tools, roomView }) {
   const kb = s => s.split(/( · | \/ | \+ |~)/).map(p => /^( · | \/ | \+ |~)$/.test(p) ? p : p.split(" ").map(x => /[가-힣]/.test(x) ? x : `<kbd>${x}</kbd>`).join(" ")).join("");
   const box = $("keyHelp");
   if (box) box.innerHTML = `<p class="dim">키보드가 있을 때 써요.</p><table class="tbl keytbl">` +
-    `<tr><td>${kb("2~6")}</td><td>🔨 건설 도구(칠하기 · 높이 · 짓기 · 철거 · 자연·지형) — 누르면 건설 모드로</td></tr><tr><td>${kb("1")}</td><td>${KEY_LIST[0].what}</td></tr>` +
+    `<tr><td>${kb("2~6")}</td><td>🔨 건설 도구 고르기</td></tr><tr><td>${kb("1")}</td><td>${KEY_LIST[0].what}</td></tr>` +
     KEY_LIST.slice(6).map(k => `<tr><td>${kb(k.key)}${k.code.includes("F1") ? ` · ${kb("F1")}` : ""}</td><td>${k.what}</td></tr>`).join("") +
     KEY_KEEP_LIST.map(([k, v]) => `<tr><td>${kb(k)}</td><td>${v}</td></tr>`).join("") + `</table>` +
-    `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰(도감·메뉴 포함)·편지가 열려 있는 동안은 뒤의 화면이 키에 움직이지 않아요.</p>`;
+    `<p class="dim">한글 입력 상태여도 같은 자리의 키로 돼요. 갈매폰이나 편지가 열려 있으면 뒤의 화면은 키에 움직이지 않아요.</p>`;
   const kbtn = $("keysBtn"); if (kbtn) kbtn.onclick = () => { hud.openApp("help"); const sec = box?.closest("details"); if (sec) sec.open = true; (sec || box)?.scrollIntoView({ block: "start" }); };   // 도움말의 ⌨️ 단축키 칸을 펼쳐서
 }

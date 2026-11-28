@@ -123,7 +123,7 @@ test("저장 델타 왕복: 바깥 섬·시작 섬에서 바꾼 칸·지은 것�
   // 시작 섬 기준(base) 반복 줄임은 그대로 풀림
   const be = new Int16Array([5, 5, 5, -1000, -1000, 0, 32767, -32768]), bg = new Uint8Array([0, 0, 1, 4, 4, 4, 2, 2]), back = decodeBase(encodeBase(be, bg), 8);
   assert.deepEqual([...back.be], [...be]); assert.deepEqual([...back.bg], [...bg]);
-  assert.throws(() => World.fromJSON({ ...j, grid: { ...j.grid, genV: 99 } }), /새 판/);
+  assert.throws(() => World.fromJSON({ ...j, grid: { ...j.grid, genV: 99 } }), /새 버전/);
 });
 
 test("예전 저장(판 2, 192칸 격자 전체) → 판 3으로 옮김: 칸·건물 그대로, 바깥은 씨앗으로", () => {

@@ -38,8 +38,8 @@ test("도장 가게 사기 안내: 선물(손뜨개 목도리)도 오류 없이 
   const w = fresh(); w.stamps = 3; const before = w.items.knitScarf || 0;
   const ok = w.buyStamp("knitScarf"); assert.equal(ok, true); assert.equal(w.items.knitScarf, before + 1);
   const t = G.stampBuyText("knitScarf", ok, josa); assert.match(t, /손뜨개 목도리를 받아 왔어요/); assert.match(t, /주머니/);
-  assert.match(G.stampBuyText("stampLamp", true, josa), /집 꾸미기/);
-  assert.match(G.stampBuyText("goldLetter", true, josa), /주머니에 넣었어요\)$/);
+  assert.match(G.stampBuyText("stampLamp", true, josa), /집에 들어가 놓을/);
+  assert.match(G.stampBuyText("goldLetter", true, josa), /주머니에 넣었어요$/);
   assert.match(G.stampBuyText("knitScarf", false, josa), /도장이 모자라요/);
   assert.equal(G.stampBadge({ stamps: 0 }), 0); assert.equal(G.stampBadge({ stamps: 2 }), 2);
 });

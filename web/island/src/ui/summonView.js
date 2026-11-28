@@ -10,7 +10,7 @@ import { SPECIAL_HOME } from "../world/population.js";
 const svEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 먼저 오는 직업이 마을에 주는 것 */
 export const NEXT_WHY = { builder: "집을 지을 수 있어요", carpenter: "시장을 지을 수 있어요", merchant: "시장에 새 돈이 돌아요" };
-export const RULES = ["다 지은 집 한 채에 갈매미 한 마리(🏡 2층집은 두 마리)", "짓는 중인 집은 세지 않아요", "🗿 자이언트는 빈 '자이언트의 집'에만 와요(보통 집 자리는 안 써요)", "온 갈매미는 떠나지 않아요"];
+export const RULES = ["다 지은 집 한 채에 갈매미 한 마리, 🏡 2층집은 두 마리", "짓는 중인 집은 세지 않아요", "🗿 자이언트는 빈 '자이언트의 집'에만 와요", "온 갈매미는 떠나지 않아요"];
 const svJobOf = name => JOBS[(UNIT_JOBS[name] || [])[1]] || JOBS.builder;
 
 /** 소환 단추 상태: { disabled, text, why } */

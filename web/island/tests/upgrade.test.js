@@ -31,7 +31,7 @@ test("규칙: 일반병원(id clinic 그대로)·종합병원(침대 6, 항구 �
   assert.deepEqual([C.name, C.beds, C.rank, C.upgradeTo, C.clinic], ["일반병원", 3, 1, "hospital", true]);
   assert.deepEqual([H.name, H.beds, H.rank, H.upgradeFrom, H.clinic, H.builtBy], ["종합병원", 6, 2, "clinic", true, "carpenter"]);
   assert.deepEqual(H.footprint, { w: 5, d: 4 }); assert.equal(BK.feeOf("hospital"), 40);
-  assert.ok(RANKS[2].unlock.includes("hospital")); assert.equal(unlockName("hospital"), "종합병원(일반병원 업그레이드)"); assert.equal(unlockName("shop"), "잡화점");
+  assert.ok(RANKS[2].unlock.includes("hospital")); assert.equal(unlockName("hospital"), "일반병원 → 종합병원"); assert.equal(unlockName("shop"), "잡화점");
   const { w } = town(); const c = w.center, r = w.check("hospital", Math.floor(c.x) + 8, Math.floor(c.z) + 8, 0);
   assert.equal(r.ok, false); assert.match(r.reason, /일반병원을 업그레이드해서 지어요/, "건설 메뉴에서 바로 못 놓음");
 });
@@ -49,7 +49,7 @@ test("업그레이드 못 함: 업그레이드 길 없음 · 짓는 중 · 등�
   // 넓힐 칸에 벤치 → 그 이름으로 거절, 치우면 다시 됨
   const [ex, ez] = w.upgradeSpot(cl).extra[0]; const bench = w.placeBuilding("bench", ex, ez, 0, null, 1e9);
   assert.ok(bench.ok, bench.reason); const rb = w.upgradeCheck(cl);
-  assert.equal(rb.ok, false); assert.match(rb.reason, /옆 칸에 벤치가 있어요 \(종합병원은 5×4칸이라 옆·뒤로 넓혀요\)/);
+  assert.equal(rb.ok, false); assert.match(rb.reason, /옆 칸에 벤치가 있어요\. 종합병원은 5×4칸이라 옆과 뒤로 넓혀요/);
   assert.equal(w.startUpgrade(cl.id).ok, false, "막혀 있으면 시작도 안 됨"); assert.equal(w.buildings.get(cl.id).defId, "clinic"); assert.equal(w.bank.vault, 500, "돈도 그대로");
   w.removeBuilding(bench.building.id); assert.equal(w.upgradeCheck(cl).ok, true);
 });
@@ -67,7 +67,7 @@ test("업그레이드 시작: 설계비를 금고에서 · 같은 id에 5×4 공
   assert.equal(w.bank.vault, 200 - fee); assert.equal(b.fee, fee); assert.equal(b.doctor, "목수"); assert.equal(b.upFrom, "clinic");
   assert.equal(w.isDone(b), false); assert.equal(b.need, 3 * BUILDINGS.hospital.work); assert.equal(w.clinics().length, 0, "공사 중엔 병원이 아님");
   assert.equal(u.insideBuildingId, null, "안의 환자는 나옴"); assert.notEqual(p.state, "GoToBuilding", "가던 환자는 그만"); assert.equal(w.canEnter(u, b), false);
-  assert.equal(ev.length, 1); assert.equal(w.newsLog.some(n => n.text === `일반병원을 종합병원으로 넓히는 공사를 시작했어요 · 설계비 🪙${fee}`), true);
+  assert.equal(ev.length, 1); assert.equal(w.newsLog.some(n => n.text === `일반병원을 종합병원으로 넓히는 공사를 시작했어요. 설계비 🪙${fee}`), true);
   assert.equal(w.startUpgrade(b.id).ok, false, "공사장은 또 업그레이드 못 함");
   // 공사 중 철거 = 보통 공사 취소처럼 설계비 환불
   const v = w.bank.vault; w.removeBuilding(b.id); assert.equal(w.bank.vault, v + fee);

@@ -37,6 +37,9 @@ import { STORY_LETTER } from "../data/story.js";
 import { cardSide } from "../systems/buildSpot.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
 
+/** ⏩ 배속 설명은 여기 한 곳에만 둠(설정의 배속 줄 · 도움말 #speedHelp) */
+export const SPEED_NOTE = "갈매미 걸음과 일, 공사, 밭 일이 빨라져요. 해와 날짜는 실제 시각을 따라요.";
+
 const escHtml = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);   // 글을 그대로 보여 주기(태그로 읽히지 않게)
 
 // 하늘 기록(도감): 드문 하늘마다 언제 볼 수 있는지 한 줄
@@ -65,6 +68,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 export class Hud {
   constructor({ tools, world, onSave, onLoad, onReset }) {
     this.tools = tools; this.world = world;
+    const speedHelp = document.getElementById("speedHelp"); if (speedHelp) speedHelp.textContent = SPEED_NOTE;
     tools.onConfirm = o => this.confirm({ ...o, danger: true });                      // 철거 확인(편의성 점검 8번)
     tools.onHistory = () => { if (this.undoBtns) { this.undoBtns[0].disabled = !tools.history.length; this.undoBtns[1].disabled = !tools.redoStack.length; } };
     const crossUI = document.getElementById("cross"), crossGo = document.getElementById("crossGo");
@@ -94,7 +98,7 @@ export class Hud {
     this.ehint = el("span", "ehint", "🧹 건물을 누르면 철거할지 한 번 더 물어요");
     // ✋ 화면 이동: 끌어서 칠하는 도구(칠하기·높이·자연)를 쓰는 중에 켜면 드래그로 화면만 옮김(도구는 잠시 멈춤).
     // 짓기·철거·지형지물 옮기기는 끌기가 원래 화면 옮기기(톡 = 고르기)라 ✋를 숨김(showMode)
-    this.handBtn = auxBtn("", "✋", "화면 이동", "켜면 드래그로 화면을 옮겨요(칠하기는 잠시 멈춤). PC는 스페이스를 누른 채 끌거나 오른쪽 버튼으로, 휴대폰은 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
+    this.handBtn = auxBtn("", "✋", "화면 이동", "켜 두는 동안은 끌면 칠하지 않고 화면만 옮겨요. 스페이스를 누른 채 끌거나 두 손가락으로 끌어도 돼요"); this.handBtn.classList.add("hand");
     this.handBtn.onclick = () => tools.setHand(!tools.hand);
     tools.onHand = on => { this.handBtn.classList.toggle("on", on); this.handBtn.setAttribute("aria-pressed", String(on)); };
     const undo = auxBtn("", "↶", "되돌리기", "되돌리기(Ctrl+Z)"), redo = auxBtn("", "↷", "다시하기", "다시하기(Ctrl+Shift+Z)"); undo.onclick = () => tools.undo(); redo.onclick = () => tools.redo();
@@ -161,10 +165,10 @@ export class Hud {
     document.getElementById("save").onclick = () => { onSave(); this.closePhone(); };
     // 불러오기는 보통 확인, 새 섬은 위험 확인(지금 섬이 사라짐). 취소하면 갈매폰은 그대로
     document.getElementById("load").onclick = async () => {
-      if (this.hasSave?.() !== false && !await this.confirm({ title: "📂 마지막 저장을 불러올까요?", body: `${this.savedLabel?.() || ""} · 그 뒤에 바뀐 것은 돌아가요(1분마다 자동 저장돼요).`, ok: "불러오기" })) return;
+      if (this.hasSave?.() !== false && !await this.confirm({ title: "📂 마지막 저장을 불러올까요?", body: `${this.savedLabel?.() || ""}. 그 뒤에 바뀐 것은 돌아가요. 섬은 1분마다 저절로 저장돼요.`, ok: "불러오기" })) return;
       onLoad(); this.closePhone(); };
     document.getElementById("reset").onclick = async () => {
-      if (!await this.confirm({ title: "🏝 새 섬을 만들까요?", body: "지금 섬과 갈매미들은 사라지고, 자동 저장도 새 섬으로 바뀌어요. 되돌릴 수 없어요.", ok: "새 섬 만들기", danger: true })) return;
+      if (!await this.confirm({ title: "🏝 새 섬을 만들까요?", body: "지금 섬과 갈매미들은 사라져요. 되돌릴 수 없어요.", ok: "새 섬 만들기", danger: true })) return;
       onReset(); this.closePhone(); };
     this.list = document.getElementById("units"); this.stats = document.getElementById("stats"); this.msg = document.getElementById("msg");
     // 알림: 버튼 안내(바로 바꿈) + 차례로 보여 주는 알림(최대 3개 대기) · 지난 알림 30개(이번에 켠 동안만, 저장 안 함)
@@ -307,9 +311,9 @@ export class Hud {
   /** 설정 화면의 칸을 지금 값에 맞춤 */
   drawUiPrefs() {
     const $ = id => document.getElementById(id), root = document.documentElement, max = uiScaleMax();
-    $("uiScale").max = String(max); $("uiScale").value = String(this.uiScale); $("uiScaleLab").textContent = `크기: ${this.uiScale}%${this.uiScale === 100 ? " (기본)" : ""}`;
+    $("uiScale").max = String(max); $("uiScale").value = String(this.uiScale); $("uiScaleLab").textContent = `크기: ${this.uiScale}%`;
     $("uiScaleDown").disabled = this.uiScale <= UI_SCALE_RANGE[0]; $("uiScaleUp").disabled = this.uiScale >= max; $("uiScaleReset").disabled = this.uiScale === 100;
-    $("uiScaleNote").textContent = `75%~${max}% · 이 기기에만 기억해요(섬 저장과는 따로예요).${this.uiAuto > 1 ? ` 큰 화면이라 기본 크기를 ${Math.round(this.uiAuto * 100)}%로 맞춰 뒀어요.` : ""}`;
+    $("uiScaleNote").textContent = `75%~${max}%. 이 기기에만 기억하고, 섬 저장과는 따로예요.${this.uiAuto > 1 ? ` 큰 화면이라 기본 크기를 ${Math.round(this.uiAuto * 100)}%로 맞춰 뒀어요.` : ""}`;
     for (const b of $("segKeyhint").children) { const on = b.dataset.v === root.dataset.keyhint; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
     const sw = (id, on) => { const b = $(id); b.classList.toggle("off", !on); b.setAttribute("aria-pressed", String(on)); };
     sw("motionBtn", root.dataset.motion === "reduce"); sw("leftHand", root.dataset.hand === "left"); sw("vibeBtn", root.dataset.vibe !== "off");
@@ -379,7 +383,7 @@ export class Hud {
       const id = t.dataset.id, u = id ? w.units.find(o => String(o.unitId) === id) : null, r = w.setDoctor(b.id, u ? u.unitId : null);
       if (!r.ok) { this.status(r.reason, { kind: "warn" }); return; }
       this.moreOpen.set("clinic.doc", false);
-      this.status(u ? `${josa(u.name, "이", "가")} 당번 의사가 됐어요 · 환자가 오면 병원으로 가요` : "당번 의사를 비웠어요 · 환자는 침대에서 쉬며 나아요", { kind: "good" });
+      this.status(u ? `${josa(u.name, "이", "가")} 당번 의사가 됐어요` : "당번 의사를 비웠어요. 환자는 침대에서 쉬며 나아요", { kind: "good" });
       this.syncBldCard();
     }
   }
@@ -424,7 +428,7 @@ export class Hud {
     const lab = id => document.getElementById(id);
     if (kind === "season") this.setSeasonLabel(this.onSeasonMode?.(v === "real" ? null : v));
     else if (kind === "time") { const l = this.onTimeMode?.(v); if (l) lab("timeMode").textContent = `시간: ${l}`; }
-    else if (kind === "mult") { const l = this.onTimeMult?.(+v); if (l) lab("timeMult").textContent = `시계 빨리 감기(시험): ${l}`; }
+    else if (kind === "mult") { const l = this.onTimeMult?.(+v); if (l) lab("timeMult").textContent = `시계 빨리 감기: ${l}`; }
     else if (kind === "edition") this.onEdition?.(v);
     else if (kind === "speed") this.onSpeed?.(v);
     else if (kind === "toon") { const l = this.onToon?.(v); if (l) lab("toonBtn").textContent = `그림체: ${l}`; }
@@ -435,16 +439,16 @@ export class Hud {
     const e = this.edition; if (!e) return; const $ = id => document.getElementById(id), paid = e.isPaid, sp = e.speed;
     const box = $("edBox"); if (!box) return;
     box.dataset.edition = e.edition; box.dataset.source = e.source;
-    $("edNow").textContent = paid ? "💎 유료판" : "🆓 무료판";
-    $("edSrc").textContent = e.source === "account" ? "계정에서 정해졌어요" : "설정에서 고름";
-    $("edNote").textContent = e.canPick ? "지금은 시험용이라 누구나 바꿀 수 있어요." : "계정 값이 우선이라 여기서는 볼 수만 있어요.";
+    $("edNow").textContent = paid ? "💎 유료" : "🆓 무료";
+    $("edSrc").textContent = e.source === "account" ? "계정에 맞춰 정해졌어요" : "여기서 고름";
+    $("edNote").textContent = e.canPick ? "무료와 유료 가운데 골라요." : "계정에 맞춰 정해져서 여기서는 볼 수만 있어요.";
     for (const b of $("segEdition").children) b.disabled = !e.canPick;
     $("speedLab").textContent = paid ? `⏩ 배속: ×${sp}` : "⏩ 배속: ×1 🔒";
-    for (const b of $("segSpeed").children) { const lock = !paid && b.dataset.v !== "1"; b.classList.toggle("locked", lock); b.textContent = `×${b.dataset.v}${lock ? " 🔒" : ""}`; b.setAttribute("aria-label", lock ? `×${b.dataset.v}(유료판 기능)` : `×${b.dataset.v}`); }
-    $("speedNote").textContent = paid ? "마을 진행(걸음·일·공사·밭)이 빨라져요 · 하루 빛·날짜는 실제 시각 그대로 · 시간 칩이나 F 키로도" : "🔒 유료판 기능이에요 · 위에서 유료를 고르면 쓸 수 있어요";
+    for (const b of $("segSpeed").children) { const lock = !paid && b.dataset.v !== "1"; b.classList.toggle("locked", lock); b.textContent = `×${b.dataset.v}${lock ? " 🔒" : ""}`; b.setAttribute("aria-label", lock ? `×${b.dataset.v}, 유료 이용권` : `×${b.dataset.v}`); }
+    $("speedNote").textContent = paid ? SPEED_NOTE : "🔒 위에서 유료를 고르면 쓸 수 있어요";
     this.drawTimeChip();
-    this.chipTime.dataset.tip = paid ? `⏩ 배속 ×${sp} · 누르면 ×1 → ×2 → ×3 (F)` : "⏩ 배속은 유료판 기능 🔒 · 누르면 안내 (F)";
-    this.chipTime.setAttribute("aria-label", `${this.chipTime.textContent} · ${paid ? `배속 ×${sp}, 누르면 바꾸기` : "배속은 유료판 기능"}`);
+    this.chipTime.dataset.tip = paid ? `⏩ 배속 ×${sp}, 누르면 바뀌어요 (F)` : "⏩ 배속 🔒 유료 이용권 (F)";
+    this.chipTime.setAttribute("aria-label", `${this.chipTime.textContent} · ${paid ? `배속 ×${sp}, 누르면 바꾸기` : "배속은 유료 이용권"}`);
     this.drawQuick(); this.syncSettings(); }
   /** 시간 칩: 시각 + ⏩ 배속. 넓은 화면은 글자로(🌙 22:02 ⏩×3), 휴대폰은 칩 폭이 늘지 않게 오른쪽 위 작은 딱지(data-speed, CSS ::before) */
   drawTimeChip() {
@@ -455,8 +459,8 @@ export class Hud {
   /** 무료판에서 배속을 누름: 🔒 유료판 기능 안내 + 설정의 판 줄로 가는 바로가기 */
   async speedLocked() {
     const flash = () => { const box = document.getElementById("edBox"); box?.scrollIntoView?.({ block: "nearest" }); box?.classList.remove("flash"); void box?.offsetWidth; box?.classList.add("flash"); return box; };
-    if (!this.phone.hidden && this.app === "settings") { flash(); this.status("🔒 배속은 유료판 기능이에요 · 🎟 판에서 유료를 고르면 쓸 수 있어요", { kind: "warn" }); return; }   // 설정 안에서 누르면 창 없이 판 줄만 반짝
-    const go = await this.confirm({ title: "🔒 유료판 기능이에요", body: "⏩ 배속(×2·×3)은 유료판에서 쓸 수 있어요. 지금은 시험용이라 설정의 🎟 판에서 바로 바꿀 수 있어요.", ok: "🎟 판 바꾸러 가기", cancel: "닫기" });
+    if (!this.phone.hidden && this.app === "settings") { flash(); this.status("🔒 🎟 이용권에서 유료를 고르면 배속을 쓸 수 있어요", { kind: "warn" }); return; }   // 설정 안에서 누르면 창 없이 판 줄만 반짝
+    const go = await this.confirm({ title: "🔒 유료 이용권이 필요해요", body: "⏩ 배속 ×2, ×3은 유료 이용권으로 쓸 수 있어요. 설정 맨 위 🎟 이용권에서 고를 수 있어요.", ok: "🎟 이용권 고르러 가기", cancel: "닫기" });
     if (!go) return;
     if (this.phone.hidden) this.openPhone(); this.openApp("settings");
     flash()?.querySelector('#segEdition [data-v="paid"]')?.focus({ preventScroll: true });
@@ -497,14 +501,12 @@ export class Hud {
     if (app !== this.app && this.sbody) this.sbody.scrollTop = 0;                    // 다른 페이지로 가면 맨 위부터
     this.app = app; this.appFrom = app == null || app === "menu" ? null : from;
     const pages = { null: "pageHome", menu: "pageMenu", log: "pageLog", gulls: "pageGulls", bank: "pageBank", market: "pageMarket", summon: "pageSummon", files: "pageFiles", settings: "pageSettings", help: "pageHelp", wish: "pageWish", town: "pageTown", decor: "pageDecor", rel: "pageRel", news: "pageNews", dex: "pageDex", story: "pageStory" };
-    const titles = { null: "📱 갈매폰", menu: "☰ 메뉴", log: "🔔 지난 알림", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🐚 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지", dex: "📖 도감 · 가방", story: "🗝 비밀 수첩" };
+    const titles = { null: "📱 갈매폰", menu: "☰ 메뉴", log: "🔔 지난 알림", gulls: "🐦 갈매미", bank: "🏦 공식은행", market: "🛒 시장", summon: "🥚 소환", files: "💾 저장", settings: "⚙ 설정", help: "❓ 도움말", wish: "💭 소원 · 오늘의 부탁", town: "🏅 마을", decor: "🛋 집 꾸미기", rel: "💞 관계도", news: "📰 소식지", dex: "📖 도감 · 가방", story: "🗝 비밀 수첩" };
     for (const [k, id] of Object.entries(pages)) document.getElementById(id).hidden = String(app) !== k;
     document.getElementById("phoneTitle").textContent = titles[app];
     document.getElementById("phoneBack").hidden = app === null || app === "menu";
     if (app === "dex") this.drawDex();                                              // 도감은 열 때 한 번만 그림(읽는 중에 튀지 않게)
     if (app === "settings") { this.showSetTab(this.setTab); this.drawInstant?.(); this.syncEdition(); }
-    if (app === "help") { const touch = document.documentElement.dataset.input === "touch";   // 지금 쓰는 쪽 조작만 펼쳐 둠(터치 ↔ 마우스·키보드)
-      for (const d of document.querySelectorAll("#help details[data-input]")) d.open = d.dataset.input === (touch ? "touch" : "mouse"); }
     this.coach?.appHint(app, document.getElementById(pages[app]));                 // 처음 여는 앱이면 맨 위에 짧은 안내 한 번
     if (this.seen && (app === "news" || app === "dex")) this.seen[app] = this.badgeNow()[app];   // 열면 점 배지 해제
     if (app === "story" && this.appPrev !== "story") this.phoneOpenSeq = (this.phoneOpenSeq || 0) + 1;   // 🗝 수첩을 새로 열 때마다 「새 쪽」 표시를 다시 셈
@@ -656,7 +658,7 @@ export class Hud {
     if (us.length === 1) text = `<p class="dim">${us[0].name} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
     else if (sel < 0) text = `<p class="dim av-tap">👆 갈매미를 누르면 누구와 친한지 보여 줘요</p>`;
     else { const u = us[sel], rows = us.filter(o => o !== u).map(o => [o, M.affinity(u, o)]).sort((a, b) => b[1] - a[1]).map(([o, v]) => { const d = ST[M.friendStage(v)];
-        return `<tr><td>${v ? d.icon : "·"} ${o.name}</td><td>${v ? `<b>${d.name}</b> <span class="dim">호감 ${Math.round(v * 10) / 10}</span>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
+        return `<tr><td>${v ? d.icon : "·"} ${o.name}</td><td>${v ? `<b>${d.name}</b>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
       text = `<h4>${JOBS[u.job]?.icon ?? ""} ${u.name}의 사이</h4><table class="tbl">${rows}</table>`; }
     body.innerHTML = relHeadHtml(g.links, us.length) + `<svg viewBox="0 0 300 300" role="img" aria-label="갈매미 관계도">${lines}${dots}</svg>` +
       text + this.more("rel.legend", "🎨 범례 · 읽는 법", relLegendHtml(ST));   // 머리(단짝 수) → 그림 → 고른 갈매미 사이 → 범례는 접기
@@ -722,7 +724,7 @@ export class Hud {
     if (why) { meta.textContent = why; b.dataset.why = why; } else { meta.innerHTML = m.html; meta.dataset.html = m.html; b.classList.toggle("short", m.short); }
     b.append(pic, el("span", "bsz", size), el("span", "bnm", def.name), meta); if (locked) b.append(el("span", "block", "🔒"));
     b.setAttribute("aria-label", why ? `${def.name}, ${size}칸, 재료 ${cost}, ${locked ? "잠김: " : ""}${why}` : `${def.name}, ${size}칸, ${m.text}`);
-    b.dataset.tip = `${def.name} ${size}칸 · ${w.economy ? `설계비 🪙${m.fee}(금고에서) · ` : ""}재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${w.economy ? w.housePrice(def.id) : def.price}에 팔려요` : ""}${rankLock ? ` (🏅 마을 등급 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : locked ? " (지금은 없음)" : ""}`;
+    b.dataset.tip = `${def.name} ${size}칸 · ${w.economy ? `설계비 🪙${m.fee} · ` : ""}재료 ${cost} · ${def.tier > 1 ? tierName + " 이상 " : ""}${who}가 지어요${def.note ? ` · ${def.note}` : ""}${def.price ? ` · 다 지으면 시장에서 🪙${w.economy ? w.housePrice(def.id) : def.price}에 팔려요` : ""}${rankLock ? ` · 🏅 ${RANKS[def.rank].icon} ${RANKS[def.rank].name}이 되면 열려요` : locked ? " · 지금은 못 지어요" : ""}`;
     b.onclick = upFrom ? () => this.status(`${def.name}은 바로 못 지어요 · 다 지은 ${upFrom.name}을 눌러 업그레이드해요${rankLock ? ` (${RANKS[def.rank].icon} ${RANKS[def.rank].name}부터)` : ""}`, { kind: "info" }) : () => this.tools.setMode("build", def.id); return b;
   }
   /** 건물 갤러리: 잠금·계절이 바뀔 때만 카드를 다시 만들고, 고르기만 했으면 표시만 바꿈(사진이 깜빡이지 않고 밀어 둔 자리도 그대로) */
@@ -766,7 +768,7 @@ export class Hud {
         const b = el("button", op === arg ? "on" : "", label); b.dataset.op = op; b.onclick = () => this.tools.setMode("height", op); ob.appendChild(b); }
       if (arg === "level") { const lb = this.trayGroup("맞출 높이"); for (const hgt of [0, 0.5, 1, 1.5, 2]) { const b = el("button", this.tools.levelH === hgt ? "on" : "", `${hgt} m`); b.dataset.level = hgt; b.onclick = () => { this.tools.levelH = hgt; this.showMode("height", "level"); }; lb.appendChild(b); } }
       this.addEditTools();
-      this.status(arg === "level" ? `🎚 단 맞추기: 문지른 곳을 ${this.tools.levelH} m 높이로 맞춰요(한 번에 여러 번 눌러 올릴 필요 없음)` : "붓 안 전체가 한 번에 0.5 m씩(옆과 턱이 생김 · 오르내리려면 🏠 계단) · 다듬기: 울퉁불퉁한 곳을 매끈하게 · 바다 높이 아래로 파면 연못");
+      this.status(arg === "level" ? `🎚 문지른 곳을 ${this.tools.levelH} m 높이로 맞춰요` : "⛰ 누를 때마다 0.5 m씩 올리거나 내려요");
     }
     if (mode === "paint") {
       this.lastPaint = arg; const pb = this.trayGroup("바닥");
@@ -895,7 +897,7 @@ export class Hud {
     };
     box = fold("dex.fish", "🐟 물고기 도감", `${cnt.fish}/${cnt.fishAll}`);
     sec("", FISH, f => w.collection[f.id] || 0,
-      f => f.rarity === "common" ? `음식 +${f.food}` : `보물 ${f.price}🐚${held[f.id] ? ` · 갈매미들이 ${held[f.id]} 가짐` : ""}`,
+      f => f.rarity === "common" ? `음식 +${f.food}` : `보물 🪙${f.price}${held[f.id] ? ` · 갈매미들이 ${held[f.id]} 가짐` : ""}`,
       (f, c, n) => {                                                               // 수족관: 크기 기록·메달(다음 메달까지) · 기증됨
         const m = n ? fishMedal(f, w.fishRecord[f.id]) : 0;
         if (m) { const t = medalLine(f, w.fishRecord[f.id]); c.classList.add("m-" + MEDALS[m].id); c.append(el("span", "rec", t.now)); if (t.next) c.append(el("span", "dim", t.next)); }
@@ -903,16 +905,16 @@ export class Hud {
       });
     {                                                                              // 수족관 기증 현황(물고기 도감 바로 아래)
       const have = donatedCount(w.donated), next = DONATE_GIFTS[w.donateGifts], gift = next && ITEMS.find(i => i.id === next.item);
-      box.append(el("p", "dim aqua", !w.aquariumB() && !have ? "🐠 수족관(마을 등급 ⚓ 항구 마을부터)을 지으면 처음 낚은 희귀 이상 물고기를 한 마리씩 기증해요."
+      box.append(el("p", "dim aqua", !w.aquariumB() && !have ? "🐠 항구 마을이 되어 수족관을 지으면, 처음 낚은 귀한 물고기를 한 마리씩 기증해요."
         : `🐠 수족관 기증 ${have}/${DONATE_KINDS.length}종 · ${next ? `다음 기념 선물: ${next.label} 기증하면 ${gift?.name ?? "선물"}` : "기념 선물을 모두 받았어요!"}`));
     }
     {                                                                              // 금메달 기념 가구(기증 현황 아래)
       const next = MEDAL_GIFTS[w.medalGifts], gift = next && ITEMS.find(i => i.id === next.item);
-      box.append(el("p", "dim aqua", `🥇 금메달 ${cnt.gold}/${cnt.fishAll}종 · ${next ? `${next.label}이면 기념 가구 ${gift?.name ?? ""}` : "기념 가구를 모두 받았어요!"} · 🥈 상위 절반 · 🥇 상위 15%(제철 물고기 30%)`));
+      box.append(el("p", "dim aqua", `🥇 금메달 ${cnt.gold}/${cnt.fishAll}종 · ${next ? `${next.label}이면 기념 가구 ${gift?.name ?? ""}` : "기념 가구를 모두 받았어요!"}. 🥈은 큰 쪽 절반, 🥇은 아주 큰 것`));
     }
     box = fold("dex.bag", "🎁 가방", `${cnt.bag}/${cnt.bagAll}`);
     sec("", ITEMS, i => w.items[i.id] || 0,
-      i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : i.gift ? `선물 · ${GIFT_CAT_NAME[giftDef(i.id)?.cat] || "선물거리"}` : `${i.price}🐚${held[i.id] ? ` · 갈매미들이 ${held[i.id]} 가짐` : ""}`);
+      i => i.furniture ? "가구 · 🏠 집 꾸미기에서 아무 집에나 놓기" : i.gift ? `선물 · ${GIFT_CAT_NAME[giftDef(i.id)?.cat] || "선물거리"}` : `🪙${i.price}${held[i.id] ? ` · 갈매미들이 ${held[i.id]} 가짐` : ""}`);
     {                                                                              // 하늘 기록: 드문 하늘을 본 횟수
       box = fold("dex.sky", "🌈 하늘 기록", `${cnt.sky}/${cnt.skyAll}`); const g = el("div", "dexgrid skydex");
       for (const [k, d] of Object.entries(SKY_EVENTS)) { const n = w.skySeen[k] || 0, c = el("div", "dexcell" + (n ? "" : " unknown")); c.dataset.sky = k;
@@ -920,8 +922,8 @@ export class Hud {
       box.append(g);
     }
     box = fold("dex.note", "ℹ️ 도감 읽는 법", "");
-    box.append(el("p", "dim", "🎁 내 주머니(주운 반짝이·도장 선물)는 갈매미를 따라가며 선물로 건네요. 갈매미가 모은 것은 그 갈매미의 소지품이에요."));
-    box.append(el("p", "dim", "계절 한정 물고기·물건은 그 계절에만 나와요(물건은 낚시나 바닷가에서 먹이를 잡다가 주워요). 다른 사람과 바꾸기는 서버(여러 사람 접속)가 생기면 붙일 예정이에요."));
+    box.append(el("p", "dim", "🎁 주머니에 모은 반짝이와 도장 선물은 갈매미를 따라가며 건네요. 갈매미가 모은 것은 그 갈매미의 소지품이에요."));
+    box.append(el("p", "dim", "계절 물고기와 물건은 그 계절에만 나와요. 물건은 갈매미가 낚시하거나 바닷가에서 먹이를 잡다가 주워요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
   /** 알림 한 줄. status(글) = 버튼·도구 안내: 바로 바꿔 보여 줌(빈 글이면 안내만 지움 — 도구를 바꿀 때 낡은 안내가 남지 않게).
@@ -994,7 +996,7 @@ export class Hud {
     const building = [...w.buildings.values()].filter(b => b.hits < b.need).length;
     const avg = w.avgFull(), mood = avg < J.HUNGRY ? "😫" : avg > J.OVERFULL ? "😴" : avg >= 60 ? "😋" : "🙂";
     this.stats.innerHTML = `<span>${mood} 포만감 ${avg.toFixed(0)}</span><span>🏠 건물 ${w.buildings.size}${building ? ` (공사 ${building})` : ""}</span><span>🐦 ${w.units.length}마리 · 건물 안 ${inside}</span>` +
-      (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🐚 ${w.res.coins}</span>`);
+      (w.economy ? `<span>🏦 창고 🪵${w.res.wood} 🪨${w.res.stone} 🍗${(w.res.food || 0) + (w.res.fish || 0)}</span>` : `<span>🌳 ${w.res.wood} ⛰ ${w.res.stone} 🍗 ${w.res.food} 🪙 ${w.res.coins}</span>`);
     this.chunkInfo = chunkInfo;                                                       // 삼각형·fps는 설정 → 🛠 개발자(#devStats)에서
     this.drawBadges();
     this.drawMoneyChips();
@@ -1099,7 +1101,7 @@ export class Hud {
     if (k.chips.hidden !== !any) k.chips.hidden = !any;
     const nStash = Object.values(u.stash || {}).reduce((a, n) => a + Math.max(0, n || 0), 0); cardPut(k.moreN, nStash ? `소지품 ${nStash}` : "");
     if (k.more.open) {                                                             // 펼쳤을 때만 안쪽을 만들고, 글이 같으면 손대지 않음
-      const html = gullMoreHtml(u, w, { fav: fav ? M.ACTIVITY_NAME[fav] : "", friend: bf ? `${["친해지는 중", "친구", "단짝"][M.friendStage(M.affinity(u, bf))]}: ${bf.name}` : "" });
+      const html = gullMoreHtml(u, w, { fav: fav ? M.ACTIVITY_NAME[fav] : "", friend: bf ? `${M.FRIEND_STAGES[M.friendStage(M.affinity(u, bf))].name}: ${bf.name}` : "" });
       if (html !== this.infoMoreHtml) { this.infoMoreHtml = html; k.moreB.innerHTML = html; } }
     this.showBond(u);
   }

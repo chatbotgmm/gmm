@@ -80,7 +80,7 @@ test("1장: 젖은 쪽지(5번째 줍기) · 할머니 이야기(♥♥ 갈매�
   const h = town(); start(h); const d0 = newsDayOf(h);
   assert.equal(ST.pieceHint(h.story, "c1_tale", d0), STORY_PIECES.c1_tale.hint[0]);
   assert.equal(ST.pieceHint(h.story, "c1_tale", d0 + 1), STORY_PIECES.c1_tale.hint[0]);
-  assert.equal(ST.pieceHint(h.story, "c1_tale", d0 + 2), "아무 갈매미나 ♥♥(친한 사이)가 되어 보세요");
+  assert.equal(ST.pieceHint(h.story, "c1_tale", d0 + 2), STORY_PIECES.c1_tale.hint[1]);
   dayOf(h, d0 + 2); pickPlain(h, 5); assert.equal(ST.pieceHint(h.story, "c1_tale", d0 + 2), STORY_PIECES.c1_tale.hint[0], "조각이 늘면 다시 흐릿하게");
 });
 
@@ -101,7 +101,7 @@ test("고칠 곳 재료가 창고에 없으면 갈매미 가방에서 시장 값
   let chk = ST.restoreCheck(w.story, w, 3); assert.ok(!chk.ok, "철이 어디에도 없으면 아직");
   const miner = addGull(w, "불씨"); miner.inv.iron = 4; miner.coins = 0; assert.ok(w.economy); w.bank.vault = 100;
   chk = ST.restoreCheck(w.story, w, 3); const row = chk.rows.find(r => r.k === "iron"), price = ST.storyRawPrice(w, "iron");
-  assert.ok(chk.ok && row.buy === 1 && row.price === price && /갈매미에게 1개 사기/.test(row.text));
+  assert.ok(chk.ok && row.buy === 1 && row.price === price && /갈매미에게서 1개 사기/.test(row.text));
   w.bank.vault = price - 1; assert.ok(!ST.restoreCheck(w.story, w, 3).ok, "금고가 모자라면 아직"); w.bank.vault = 100;
   assert.ok(w.storyRestore(3).ok); assert.equal(miner.inv.iron, 3); assert.equal(miner.coins, price); assert.equal(w.bank.vault, 100 - price); assert.equal(w.res.iron, 0);
 });
@@ -235,7 +235,7 @@ test("비밀 수첩 화면: 열린 칸은 글·날·갈매미, 잠긴 칸은 ???
   start(w); w.addBond(w.units[0], 14);
   const html = storyAppHtml(w);
   assert.match(html, /녹슨 문패/); assert.match(html, /할머니의 할머니 이야기/); assert.match(html, new RegExp(w.units[0].name));
-  assert.match(html, /\?\?\?/); assert.match(html, /반짝이를 줍다 보면/); assert.match(html, /안개 속/); assert.match(html, /<b>2<\/b> \/ 18/);
+  assert.match(html, /\?\?\?/); assert.match(html, /젖은 종이가 섞여 있대요/); assert.match(html, /안개 속/); assert.match(html, /<b>2<\/b> \/ 18/);
   assert.ok(!/data-restore="1"/.test(html), "조각 모자라면 고치기 없음");
   pickPlain(w, 5); w.res.wood = 2; assert.match(storyAppHtml(w), /data-restore="1"/);
   assert.ok(storyBadge(w) > 0, "안 본 조각"); w.story.read = Object.fromEntries(Object.keys(w.story.found).map(k => [k, true])); assert.equal(storyBadge(w), 0);

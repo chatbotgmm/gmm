@@ -64,7 +64,7 @@ export function gridToSave(g) {
 export function gridFromSave(j) {
   if (!j || j.kind !== "chunks" || !Array.isArray(j.box)) throw new Error("저장 격자 형식이 달라요");
   const [x0, z0, x1, z1] = j.box, genV = Number.isInteger(j.genV) ? j.genV : 1;
-  if (genV > GEN_WORLD_V) throw new Error("더 새 판 게임에서 만든 섬이에요(새로 고침해 보세요)");
+  if (genV > GEN_WORLD_V) throw new Error("더 새 버전 게임에서 만든 섬이에요. 새로 고침해 보세요");
   const g = new ChunkGrid(j.seed, { genV, box: { x0, z0, x1, z1 }, chunk: j.chunk || 16 });
   const { be, bg } = decodeBase(j.base, (x1 - x0) * (z1 - z0)); g.setStartBase(be, bg);
   const r = new Reader(j.delta); let key = 0;

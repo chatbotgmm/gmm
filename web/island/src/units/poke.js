@@ -29,10 +29,10 @@ export const POKE_TABLE = {
   "황금":    { act: "hop",   lines: ["반짝! 오늘 운 좋은 날?", "에헴, 무슨 일이오", "톡 쳐도 반짝여!", "어머, 손님?"] },
   "물방울":  { act: "hop",   lines: ["퐁!", "찰방찰방~", "바다 가자!", "물 튄다~"] },
   "불씨":    { act: "hop",   lines: ["앗 뜨거!", "화르륵!", "불똥 조심~", "따뜻하지?"] },
-  "그림자":  { act: "aside", lines: ["…", "……(비켜섬)", "…조용히 해 줘", "…뭐야"] },
+  "그림자":  { act: "aside", lines: ["…", "……저리 가", "…조용히 해 줘", "…뭐야"] },
 };
 export const POKE_SLEEP = ["음냐…", "으응… 5분만…", "zZ… 뒤척뒤척", "쿨…"];
-export const POKE_SULK_LINES = ["흥!", "😤 몰라", "…(등 돌림)", "그만 찔러~"];
+export const POKE_SULK_LINES = ["흥!", "😤 몰라", "…흥, 안 봐", "그만 찔러~"];
 export const POKE_ZOOM_LINES = ["신난다!!", "와아아~", "잡아 봐라~"];
 export const POKE_SULK_START = ["😤 이제 그만~", "흥, 삐졌어", "아잉, 그만해!"];
 export const POKE_SLEEP_SULK = "으으… 자게 해 줘…";

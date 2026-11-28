@@ -47,7 +47,7 @@ test("나무 심기: 잔디에 묘목(금고 −2, 알림), 같은 칸·물·길
   assert.equal(w.placeNature("tree", bank.x, bank.z).reason, "다른 것과 겹쳐요");
   assert.equal(w.placeNature("tree", bank.door.x, bank.door.z).reason, "건물 문 앞이에요");
   const [px, pz] = find(w, canPlant(w), w.center, 60, new Set([`${x},${z}`])); assert.ok(w.paint(px, pz, "Cobble"));
-  assert.equal(w.placeNature("tree", px, pz).reason, "길(돌길·데크)에는 심지 않아요"); assert.equal(w.placeNature("ore", px, pz).reason, "길(돌길·데크)에는 놓지 않아요");
+  assert.equal(w.placeNature("tree", px, pz).reason, "포장된 길에는 심지 않아요"); assert.equal(w.placeNature("ore", px, pz).reason, "포장된 길에는 놓지 않아요");
   const sand = find(w, (a, b) => !w.grid.isWater(a, b) && w.grid.get(a, b).groundType === "Sand" && !w.grid.get(a, b).occupiedId);
   assert.equal(w.placeNature("tree", ...sand).reason, "나무는 잔디·흙에 심어요"); assert.equal(w.placeNature("auto", ...sand, { dry: true }).kind, "palm", "auto: 모래면 야자수");
   const [gx, gz] = find(w, canPlant(w)), u = w.units[0]; u.x = gx + 0.5; u.z = gz + 0.5;
@@ -58,7 +58,7 @@ test("나무 심기: 잔디에 묘목(금고 −2, 알림), 같은 칸·물·길
 test("금고가 모자라면 { ok:false, reason } (금고 글), 아무것도 안 바뀜. 경제가 없는 예전 섬은 모든 값 0", () => {
   const w = wild(); w.bank.vault = 1; const [x, z] = find(w, canPlant(w)), n0 = w.trees.length;
   const r = w.placeNature("tree", x, z);
-  assert.equal(r.ok, false); assert.equal(r.cost, 2); assert.match(r.reason, /금고에 조개가 모자라요 \(꾸미기 🪙2 · 금고 🪙1\)/); assert.equal(w.bank.vault, 1); assert.equal(w.trees.length, n0);
+  assert.equal(r.ok, false); assert.equal(r.cost, 2); assert.match(r.reason, /금고에 동전이 모자라요\. 꾸미기 🪙2, 금고 🪙1/); assert.equal(w.bank.vault, 1); assert.equal(w.trees.length, n0);
   assert.ok(w.placeNature("beachRock", x, z).ok, "바위(1)는 됨"); assert.equal(w.bank.vault, 0);
   assert.match(w.removeNature({ x, z }).reason, /금고/);
   assert.match(w.moveLandmark("cave", 0, 0, 0).reason, /이 섬에는|금고|섬 밖|물/);
@@ -112,7 +112,7 @@ test("한도와 길 끊김: 나무는 260그루까지, 1칸 통로를 막는 나
   const v = wild(), [x, z] = find(v, openGrass(v, 4)), ring = [];
   for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === 2 && !(dx === 0 && dz === 2)) ring.push([x + dx, z + dz]);
   setWater(v, ring);
-  assert.equal(v.placeNature("tree", x, z + 2).reason, "길이 막혀요(갈매미가 지나갈 틈을 남겨 주세요)");
+  assert.equal(v.placeNature("tree", x, z + 2).reason, "길이 막혀요. 갈매미가 지나갈 틈을 남겨 주세요");
   assert.ok(v.placeNature("tree", x, z).ok, "안쪽 가운데는 둘레가 이어져 있어 됨");
 });
 
@@ -147,7 +147,7 @@ test("동굴 옮기기: 평평한 2×2 + 입구 앞이 걸을 수 있어야 함,
   const turned = w.moveLandmark("cave", x + 1, z, 1); assert.ok(turned.ok, turned.reason); assert.deepEqual(w.landmarkFront("cave"), { x: x + 3, z }, "rot 1 = +x로 열림(입구 앞 칸 중 z·x가 작은 쪽)");
   // 입구 앞을 물로 막으면 거절(R로 돌리면 됨)
   setWater(w, [[x + 1, z - 3], [x + 2, z - 3]]);
-  const blocked = w.moveLandmark("cave", x + 1, z - 5, 0); assert.equal(blocked.reason, "동굴 입구 앞이 막혀 있어요(R로 방향 돌리기)");
+  const blocked = w.moveLandmark("cave", x + 1, z - 5, 0); assert.equal(blocked.reason, "동굴 입구 앞이 막혀 있어요. R로 방향을 돌려 봐요");
   assert.ok(w.moveLandmark("cave", x + 1, z - 5, 2).ok, "반대로 돌리면 됨");
   assert.equal(w.modules.filter(m => m.defId === "cave").length, 1, "하나뿐");
   const sea = find(w, (a, b) => w.grid.isWater(a, b) && w.grid.isWater(a + 1, b + 1) && w.grid.isWater(a + 1, b) && w.grid.isWater(a, b + 1));
@@ -156,7 +156,7 @@ test("동굴 옮기기: 평평한 2×2 + 입구 앞이 걸을 수 있어야 함,
 
 test("등대: 물에서 3칸 안(바닷가)에만, 부두·방파제는 넓은 섬엔 없음", () => {
   const w = wild(), [x, z] = find(w, openGrass(w, 4));
-  assert.equal(w.moveLandmark("lighthouse", x, z, 0).reason, "등대는 바닷가(물에서 3칸 안)에 세워요");
+  assert.equal(w.moveLandmark("lighthouse", x, z, 0).reason, "등대는 물에서 3칸 안쪽 바닷가에 세워요");
   const coast = find(w, (a, b) => w.moveLandmark("lighthouse", a, b, 0, { dry: true }).ok, { x: x + 20, z });
   assert.ok(coast); const r = w.moveLandmark("lighthouse", ...coast, 0); assert.ok(r.ok, r.reason); assert.equal(r.cost, 15);
   assert.equal(w.moveLandmark("pier", 0, 0, 0).reason, "이 섬에는 없어요"); assert.equal(w.moveLandmark("breakwater", 0, 0, 0).reason, "이 섬에는 없어요");
@@ -232,8 +232,8 @@ test("파기로 은행 가는 길을 끊으면 거절(다리를 먼저)", () => 
   const x0 = Math.min(...xs) - 2, x1 = Math.max(...xs) + 2, z0 = Math.min(...zs) - 2, z1 = Math.max(...zs) + 2, ring = [], gap = [h.door.x, z1];
   for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if ((x === x0 || x === x1 || z === z0 || z === z1) && !(x === gap[0] && z === gap[1])) ring.push([x, z]);
   setWater(w, ring);
-  assert.equal(w.digCell(...gap).reason, "길이 끊겨요(다리를 먼저 놓아요)");
-  assert.equal(w.digCell(gap[0], gap[1] + 1).reason, "길이 끊겨요(다리를 먼저 놓아요)", "틈 바로 바깥 칸도 유일한 길");
+  assert.equal(w.digCell(...gap).reason, "길이 끊겨요. 다리를 먼저 놓아 주세요");
+  assert.equal(w.digCell(gap[0], gap[1] + 1).reason, "길이 끊겨요. 다리를 먼저 놓아 주세요", "틈 바로 바깥 칸도 유일한 길");
   assert.ok(w.digCell(x1 + 1, z1 + 1).ok, "고리 밖 다른 칸은 팔 수 있음");
 });
 
@@ -400,7 +400,7 @@ test("검토 수정: 파서 갈매미를 물로 둘러싸 가두지 못함(마�
   for (const o of w.units) if (o !== u && Math.abs(o.x - cx) < 4 && Math.abs(o.z - cz) < 4) { o.x = w.bankB().door.x + 0.5; o.z = w.bankB().door.z + 0.5; }
   u.x = cx + 0.5; u.z = cz + 0.5; u.path = null;
   const ring = []; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === 2) ring.push([cx + dx, cz + dz]);
-  const r = w.digCells(ring); assert.equal(r.done, 15); assert.equal(r.skipped.length, 1); assert.equal(r.skipped[0].reason, "갈매미가 갇혀요(물로 둘러싸지 말아 주세요)");
+  const r = w.digCells(ring); assert.equal(r.done, 15); assert.equal(r.skipped.length, 1); assert.equal(r.skipped[0].reason, "그러면 갈매미가 물에 갇혀요");
   assert.equal(w.compAt(cx, cz), w.compAt(w.bankB().door.x, w.bankB().door.z), "갈매미 자리는 은행과 이어짐");
   u.x = w.bankB().door.x + 0.5; u.z = w.bankB().door.z + 0.5; const [sx, sz] = [r.skipped[0].x, r.skipped[0].z];
   assert.ok(w.digCell(sx, sz).ok, "갈매미가 떠나면 빈 땅은 섬으로 떼어 낼 수 있음");

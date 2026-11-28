@@ -112,7 +112,7 @@ export class World {
   constructor(grid, modules, rnd = Math.random, extra = {}) {
     this.grid = grid; this.modules = modules; this.rnd = rnd; this.time = 0;
     this.buildings = new Map(); this.powerRev = 0; this.units = []; this.nextId = 1; this.listeners = {}; this.timers = [];
-    // 자원: 나무·돌·철(자재), 음식(물고기·작물), 조개(돈). collection: 도감(종류별로 잡은 수, 마을 기록)
+    // 자원: 나무·돌·철(자재), 음식(물고기·작물), 동전(돈). collection: 도감(종류별로 잡은 수, 마을 기록)
     // items: 내 가방(플레이어 몫: 가구 + 선물거리 = 주운 반짝이·도장 선물·답례 물건). 갈매미가 잡은 것은 각자 u.stash(belongings.js)
     // treasures: 예전 저장에 남은 보물 물고기 칸(새로 들어오는 것 없음. 예전 저장은 불러올 때 갈매미들에게 나눔 → migrateOwnership)
     this.res = { wood: START_WOOD, stone: START_STONE, iron: 0, food: 10, coins: 0, fish: 0, eaten: 0 };
@@ -278,7 +278,7 @@ export class World {
   summon() {
     const info = this.summonInfo();
     if (!info.can) {
-      if (info.left) { const who = this.units.find(u => !u.insideBuildingId); if (who) emote(who, info.needHouse ? "🏠 집이 더 있어야 친구가 와요" : "🏯 자이언트는 큰 집이 있어야 와요", 2.6); this.emit("summonBlocked", info); }
+      if (info.left) { const who = this.units.find(u => !u.insideBuildingId); if (who) emote(who, info.needHouse ? "🏠 집이 더 있어야 친구가 올 텐데" : "🏯 자이언트는 큰 집이 있어야 온대", 2.6); this.emit("summonBlocked", info); }
       return null;
     }
     const name = info.next ?? info.candidates[Math.floor(this.rnd() * info.candidates.length)], i = UNITS.findIndex(d => d.name === name), def = UNITS[i];
@@ -670,7 +670,7 @@ export class World {
       pocket: this.moneySupply(), saved: this.units.reduce((a, u) => a + (u.saved || 0), 0), giftDone: mon.giftDay === newsDay(this.time), stable: mon.stableRun >= MON.STABLE_DAYS,
       buyLeft: this.buyLeft(), printLeft: this.printLeft(), printed: this.bank.printed };
   }
-  /** 밤이 끝나면(아침, 숙박 키가 바뀜) 그 밤(+ 그날 낮잠) 숙박비 합계 소식 한 줄. 들어온 돈이 0(모두 공짜)이면 조용 — 조개 없는 첫 갈매미가 손님이면 매일 "🪙0" 줄이 뜸. 합계는 저장 안 함 */
+  /** 밤이 끝나면(아침, 숙박 키가 바뀜) 그 밤(+ 그날 낮잠) 숙박비 합계 소식 한 줄. 들어온 돈이 0(모두 공짜)이면 조용 — 동전 없는 첫 갈매미가 손님이면 매일 "🪙0" 줄이 뜸. 합계는 저장 안 함 */
   stepLodging() {
     const t = this.lodgeTally; if (!t || t.key === this.stayKey()) return;
     this.lodgeTally = null; if (t.coins > 0) this.emit("lodging", { total: t.coins, n: t.n, free: t.free });
@@ -1018,7 +1018,7 @@ export class World {
   /** 갈매미 AI: 시장에 소지품을 팔러 가도 될까. 중앙은행이 켜진 섬은 금고 − BUY_KEEP × P로 팔 것 하나라도 살 수 있을 때만(못 사는데 가면 0개 팔고 돌아와 또 가는 헛걸음이 되풀이되어 공사를 안 맡음. 60일 시뮬 찍지 않음 씨앗 3·5·7: 이 조건이 없으면 다 지은 건물 29·짓는 중 26·물가 2.20, 있으면 60·0.67·0.70) */
   stashCanSell(u) { if (!this.monOn()) return true; const budget = this.bank.vault - this.vaultKeep(); return Object.keys(stashSellable(u)).some(id => stashPrice(id) <= budget); }
   /** 갈매미가 스스로 소지품을 팖: 먼저 수족관 기증, 그다음 팔 것(belongings.js stashSellable)을 카탈로그 값에 팖.
-   *  조개는 주인에게(상인 몫 STASH_CUT/개, 상인 자신이 팔 땐 없음). 경제 마을이면 은행이 사들임(중앙은행이 켜진 섬은 금고 돈으로, 금고가 허락하는 만큼; 꺼진 예전 규칙은 새 돈)(물건은 마을 밖으로).
+   *  동전은 주인에게(상인 몫 STASH_CUT/개, 상인 자신이 팔 땐 없음). 경제 마을이면 은행이 사들임(중앙은행이 켜진 섬은 금고 돈으로, 금고가 허락하는 만큼; 꺼진 예전 규칙은 새 돈)(물건은 마을 밖으로).
    *  시장(경제가 없으면 가판대)이나 상인이 없으면 아무 일 없음. 돌려주는 값: { n 판 개수, coins 판 값, cut 상인 몫, items [{ id, n }], donated [물고기] } */
   sellStash(u) {
     const m = this.merchantU(), place = this.economy ? this.marketB() : this.stall;
@@ -1083,7 +1083,7 @@ export class World {
   }
 
   // ---- 친구 사이
-  /** 서로 친해짐(amt만큼). 사이 단계가 오르면(서먹 → 친구 → 단짝) 둘 다 말풍선을 띄우고 알림. */
+  /** 서로 친해짐(amt만큼). 사이 단계가 오르면(친해지는 중 → 친구 → 단짝) 둘 다 말풍선을 띄우고 알림. */
   befriend(a, b, amt) {
     const top = (this.palTop ??= {}), key = [a.name, b.name].sort().join("|"), was = Math.max(top[key] ?? 0, friendStage(affinity(a, b)));
     const stage = befriend(a, b, amt); top[key] = Math.max(was, stage);
@@ -1193,7 +1193,7 @@ export class World {
       if (d.done(this, u, wish)) {
         this.wishes.splice(this.wishes.indexOf(wish), 1); this.wishDone++;
         if (this.economy) this.issue(u, WISH_REWARD * (this.postB() ? 2 : 1));   // 우체국이 있으면 축하 편지와 함께 두 배
-        u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘어요!", 3);
+        u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘다!", 3);
         this.emit("wishDone", { wish, u, def: d });
         if (wish.id === "festival") this.startFestival(wish.base);                // "축제 하자!"가 이루어지면 바로 축제가 열림
       } else if (wish.age >= WISH_NAG_AFTER && !u.insideBuildingId && this.wishNagOk()) emote(u, `💭 ${d.icon}`, 2.5);   // 다시 알림 말풍선: 마을 전체에서 하루 WISH_NAG_DAY번까지
@@ -1511,8 +1511,8 @@ export class World {
       .map(u => u.swimming && u.swim ? { x: u.swim.sx, z: u.swim.sz } : { x: Math.floor(u.x), z: Math.floor(u.z) }).filter(p => !(p.x === x && p.z === z) && at(p) === home);
     if (!doors.length && !gulls.length) return "";
     const after = this.probeComps([[x, z]], [], e, [ref, ...doors, ...gulls].map(p => [p.x, p.z])), aid = p => after.at(p.x, p.z), h = aid(ref);
-    if (!doors.every(d => aid(d) === h)) return "길이 끊겨요(다리를 먼저 놓아요)";
-    if (!gulls.every(p => aid(p) === h)) return "갈매미가 갇혀요(물로 둘러싸지 말아 주세요)";
+    if (!doors.every(d => aid(d) === h)) return "길이 끊겨요. 다리를 먼저 놓아 주세요";
+    if (!gulls.every(p => aid(p) === h)) return "그러면 갈매미가 물에 갇혀요";
     return "";
   }
   /** 놓은 덤불·꽃을 지움(건물·나무·지형지물·높이 바꾸기). 돈은 안 돌려줌 */
@@ -1547,7 +1547,7 @@ export class World {
     const why = this.landProblem(x, z, kind); if (why) return fail(why, cost);
     if (this.unitOn([[x, z]])) return fail("갈매미가 서 있어요", cost);
     const lim = this.natureLimit(kind); if (lim) return fail(lim, cost);
-    if (!opt.restore && !this.keepsLinks([[x, z]])) return fail("길이 막혀요(갈매미가 지나갈 틈을 남겨 주세요)", cost);   // 되돌리기(restore)는 원래 있던 자리라 길 검사 안 함
+    if (!opt.restore && !this.keepsLinks([[x, z]])) return fail("길이 막혀요. 갈매미가 지나갈 틈을 남겨 주세요", cost);   // 되돌리기(restore)는 원래 있던 자리라 길 검사 안 함
     if (cost > this.bank.vault) return fail(CU.customReason(cost, this.bank.vault), cost, true);
     if (opt.dry) return { ok: true, dry: true, cost, kind, x, z };
     const m = { id: opt.id || `${kind}-c${this.nextId++}`, defId: kind, cells: [[x, z]], rot: opt.rot ?? CU.rotAt(x, z), variant: opt.variant ?? CU.variantAt(x, z) };
@@ -1642,7 +1642,7 @@ export class World {
       }
       if (def === "pier") for (const [x, z] of CU.backCells(cells, rot)) {
         const c = g.get(x, z), occ = c && c.occupiedId && c.occupiedId !== self ? g.occupants.get(c.occupiedId) : null;
-        if (!c || g.isWater(x, z) || (occ && !occ.walkable)) return "부두는 물가에서 바다 쪽으로 놓아요(R로 방향 돌리기)";
+        if (!c || g.isWater(x, z) || (occ && !occ.walkable)) return "부두는 물가에서 바다 쪽으로 놓아요. R로 방향을 돌려 봐요";
       }
       if (this.unitOn(cells.filter(([x, z]) => !m.cells.some(([a, b]) => a === x && b === z)))) return "갈매미가 있어요";
       return "";
@@ -1651,16 +1651,16 @@ export class World {
     const e = g.get(cells[0][0], cells[0][1]).elevation;
     if (!restore && cells.some(([x, z]) => Math.abs(g.get(x, z).elevation - e) > 1e-6)) return "바닥이 평평하지 않아요";   // 되돌리기는 원래 자리(섬이 만든 등대 자리는 평평하지 않음)
     if (def === "cave") for (const [x, z] of CU.frontCells(cells, rot)) {
-      const c = g.get(x, z); if (!c) return "동굴 입구 앞이 막혀 있어요(R로 방향 돌리기)";
+      const c = g.get(x, z); if (!c) return "동굴 입구 앞이 막혀 있어요. R로 방향을 돌려 봐요";
       const h = c.occupiedId === self ? (g.isWater(x, z) ? null : c.elevation) : g.walkHeight(x, z);
-      if (h === null || Math.abs(h - e) > MAX_STEP + 1e-6 || g.doorOwner(x, z)) return "동굴 입구 앞이 막혀 있어요(R로 방향 돌리기)";
+      if (h === null || Math.abs(h - e) > MAX_STEP + 1e-6 || g.doorOwner(x, z)) return "동굴 입구 앞이 막혀 있어요. R로 방향을 돌려 봐요";
     }
     if (def === "lighthouse") {
       const R = CU.LIGHTHOUSE_SEA, sea = cells.some(([x, z]) => { for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (g.inBounds(x + dx, z + dz) && g.isWater(x + dx, z + dz)) return true; return false; });
-      if (!sea) return `등대는 바닷가(물에서 ${R}칸 안)에 세워요`;
+      if (!sea) return `등대는 물에서 ${R}칸 안쪽 바닷가에 세워요`;
     }
     if (this.unitOn(cells)) return "갈매미가 서 있어요";
-    if (!restore && !this.keepsLinks(cells, m.cells)) return "길이 막혀요(갈매미가 지나갈 틈을 남겨 주세요)";   // 되돌리기는 원래 있던 자리(섬이 만든 동굴 뒤 비탈처럼 그 자리로만 이어지던 길도 원래대로)
+    if (!restore && !this.keepsLinks(cells, m.cells)) return "길이 막혀요. 갈매미가 지나갈 틈을 남겨 주세요";   // 되돌리기는 원래 있던 자리(섬이 만든 동굴 뒤 비탈처럼 그 자리로만 이어지던 길도 원래대로)
     return "";
   }
   /** 지형지물 옮기기(섬에 하나씩, 지우기 없음). rot = 0~3(동굴 입구·부두가 바다로 뻗는 방향). 부두는 끝 낚시 자리를 같이 옮김, 동굴은 이름표(zones)를 입구 앞으로.
@@ -1777,7 +1777,7 @@ export class World {
   }
   /** 높이 도구의 되돌리기·다시하기용(화면이 applyHeight를 바로 부르지 않게): 칸을 바닥 g·높이 e로. canReshape를 보고, 땅↔물 경계를 넘으면 파기·메우기 검사·값 */
   restoreCell(x, z, ground, e, opt = {}) {
-    if (!this.canReshape(x, z)) return { ok: false, reason: "건물·나무·문 앞·밭 칸은 바꿀 수 없어요", cost: 0 };
+    if (!this.canReshape(x, z)) return { ok: false, reason: "건물이나 나무, 밭, 문 앞은 바꿀 수 없어요", cost: 0 };
     const c = this.grid.get(x, z), wasW = c.elevation < SEA_LEVEL, willW = e < SEA_LEVEL; let cost = 0;
     if (wasW !== willW) { const r = willW ? this.checkDig(x, z, opt, e) : this.checkFill(x, z, opt); if (!r.ok) return r; cost = r.cost; }
     if (opt.dry) return { ok: true, dry: true, cost };
@@ -1830,7 +1830,7 @@ export class World {
     if (def.winterOnly && this.season !== "winter") return { ...r, ok: false, reason: `${def.name}은 겨울에만 만들 수 있어요` };
     if (rankNeed(def) > this.rank) return { ...r, ok: false, reason: `🏅 마을 등급이 ${RANKS[rankNeed(def)].icon} ${RANKS[rankNeed(def)].name}이 되면 지을 수 있어요` };
     const job = def.builtBy || "builder", word = { builder: "건축", carpenter: "목수" }[job] || job;
-    if (!this.units.some(u => u.job === job)) return { ...r, ok: false, reason: `${word} 갈매미가 있어야 지을 수 있어요 (🥚 소환)` };
+    if (!this.units.some(u => u.job === job)) return { ...r, ok: false, reason: `${word} 갈매미가 있어야 지을 수 있어요. 🥚 소환으로 불러요` };
     if (!this.builderFor(def)) return { ...r, ok: false, reason: `${RARITY[["", "common", "rare", "epic", "legend"][def.tier]].name} 이상 건축가가 있어야 지을 수 있어요` };
     if (opt.order && (opt.order.u?.coins || 0) < opt.order.cost) return { ...r, ok: false, reason: `주문한 갈매미 돈이 모자라요 (🪙${opt.order.cost})` };
     const fee = opt.free ? 0 : this.feeFor(defId);
@@ -1916,9 +1916,9 @@ export class World {
     if (!this.isDone(b)) return fail(`${def.name}을 다 지은 뒤에 업그레이드할 수 있어요`);
     if (rankNeed(to) > this.rank) return fail(`🏅 마을 등급이 ${RANKS[rankNeed(to)].icon} ${RANKS[rankNeed(to)].name}이 되면 업그레이드할 수 있어요`);
     const job = to.builtBy || "builder", word = { builder: "건축", carpenter: "목수" }[job] || job;
-    if (!this.units.some(u => u.job === job) || !this.builderFor(to)) return fail(`${word} 갈매미가 있어야 지을 수 있어요 (🥚 소환)`);
+    if (!this.units.some(u => u.job === job) || !this.builderFor(to)) return fail(`${word} 갈매미가 있어야 지을 수 있어요. 🥚 소환으로 불러요`);
     const spot = this.upgradeSpot(b, to); if (!spot) return fail(`${to.name}이 들어갈 자리를 못 찾았어요`);
-    for (const [x, z] of spot.extra) { const why = this.upgradeBlock(b, x, z, b.elevation ?? 0); if (why) return fail(`${why} (${to.name}은 ${to.footprint.w}×${to.footprint.d}칸이라 옆·뒤로 넓혀요)`, { spot }); }
+    for (const [x, z] of spot.extra) { const why = this.upgradeBlock(b, x, z, b.elevation ?? 0); if (why) return fail(`${why}. ${to.name}은 ${to.footprint.w}×${to.footprint.d}칸이라 옆과 뒤로 넓혀요`, { spot }); }
     const fee = this.upgradeFee(to.id);
     if (fee > this.bank.vault) return fail(BK.feeReason(fee, this.bank.vault), { fee, spot });
     return { ok: true, reason: "", to, fee, spot };
@@ -2017,7 +2017,7 @@ export class World {
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
     if (b && b.ramp && this.isDone(b) && this.grid.inBounds(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); return { ok: true }; }   // 다 지은 계단 위
     if (b && this.isDone(b) && !this.canEnter(u, b)) { u.x = back.x; u.z = back.z; u.y = back.y; setIdle(u, this.rnd, this);
-      const only = BUILDINGS[b.defId].forUnit; return { ok: false, reason: only ? `${only} 전용 집이에요` : BUILDINGS[b.defId].clinic ? "병원에는 아픈 갈매미와 당번 의사만 들어가요" : `${u.name}에게는 너무 작아요(전용 집에 들어가요)` }; }
+      const only = BUILDINGS[b.defId].forUnit; return { ok: false, reason: only ? `${only} 전용 집이에요` : BUILDINGS[b.defId].clinic ? "병원에는 아픈 갈매미와 당번 의사만 들어가요" : `${u.name}에게는 너무 작아요. 전용 집이 따로 있어요` }; }
     if (b && this.isDone(b)) { u.x = b.door.x + 0.5; u.z = b.door.z + 0.5; u.y = this.grid.walkHeight(b.door.x, b.door.z) ?? 0; enterBuilding(u, b, this.rnd, this); return { ok: true, building: b }; }
     let spot = null;
     if (b) spot = this.grid.isWalkable(b.door.x, b.door.z) ? [b.door.x, b.door.z] : null;                 // 공사장: 문 앞에

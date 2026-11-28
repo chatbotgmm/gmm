@@ -97,9 +97,9 @@ export function gridV3Ok(g) {
  *  j: 계정에서 받아 푼 JSON. 성공이면 {ok:true}, 실패면 {ok:false, why}. 호출하는 쪽은 이어서 World.fromJSON도 try로 돌려 본다. */
 export function checkPulled(j, gridW) {
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, why: "계정 섬을 읽을 수 없어요." };
-  if (![1, 2, 3].includes(j.version)) return { ok: false, why: "계정 섬이 다른 판 형식이라 열 수 없어요. 게임을 새로 고침해 보세요." };
-  if (j.version === 3 ? !gridV3Ok(j.grid) : j.grid?.w !== gridW) return { ok: false, why: "계정 섬이 예전 판(지도 크기가 다름)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
-  if (!j.wild) return { ok: false, why: "계정 섬이 예전 판(작은 섬)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
+  if (![1, 2, 3].includes(j.version)) return { ok: false, why: "계정 섬이 다른 버전이라 열 수 없어요. 게임을 새로 고침해 보세요." };
+  if (j.version === 3 ? !gridV3Ok(j.grid) : j.grid?.w !== gridW) return { ok: false, why: "계정 섬은 지도 크기가 다른 예전 섬이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
+  if (!j.wild) return { ok: false, why: "계정 섬은 작은 예전 섬이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
   if (!Array.isArray(j.buildings) || !Array.isArray(j.units)) return { ok: false, why: "계정 섬 저장이 망가져 열 수 없어요." };
   return { ok: true };
 }
@@ -147,7 +147,7 @@ const LOGIN_TEXT = {
   cancel: { text: "카카오 로그인을 취소했어요.", code: false },
   fail: { text: "카카오 로그인에 실패했어요. 다시 해 보세요.", code: false },
   taken: { text: "이 카카오 계정은 이미 다른 계정에 연결돼 있어요.", code: false },
-  link: { text: "처음 쓰는 카카오 계정이에요. 카톡 코드로 한 번 로그인하면 연결돼요(10분 안에).", code: true, open: null },
+  link: { text: "처음 쓰는 카카오 계정이에요. 10분 안에 카톡 코드로 한 번 로그인하면 연결돼요.", code: true, open: null },
   linked: { text: "카카오 계정을 연결했어요.", code: false },
 };
 /** login=link(3판 B4): 섬 화면에 「/my에서 연결하기」 버튼을 보여 줄 신호. 운영 /my(my.html)는 ?kakao=link를 /login?next=/game60&kakao=link로 보내고,

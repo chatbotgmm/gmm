@@ -87,9 +87,9 @@ export function gullMoreHtml(u, world, extra = {}) {
   const sec = (t, body) => `<div class="gm-sec"><b>${t}</b>${body}</div>`, out = [];
   if (u.satParts?.length) out.push(sec("😊 만족도 내역", valueRows(u.satParts.map(([n, v]) => [n, v, `${v > 0 ? "+" : ""}${v}`]))));
   const st = stashList(u);
-  out.push(sec("🎒 소지품", st.length ? `<p>${st.map(s => `${s.kind === "fish" ? "🐟" : "🎁"} ${gvEsc(s.name)} ×${s.n}${s.furniture ? " (집에 둠)" : ""}`).join(" · ")}</p>` : `<p class="dim">아직 모은 게 없어요</p>`));
+  out.push(sec("🎒 소지품", st.length ? `<p>${st.map(s => `${s.kind === "fish" ? "🐟" : "🎁"} ${gvEsc(s.name)} ×${s.n}${s.furniture ? ", 집에 둠" : ""}`).join(" · ")}</p>` : `<p class="dim">아직 모은 게 없어요</p>`));
   if (world.economy) { const bag = ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${ITEM_ICON[k]}${u.inv[k]}`).join(" ");
-    out.push(sec("👜 가방(일거리)", `<p${bag ? "" : ` class="dim"`}>${bag || "비었음"}</p>`)); }
+    out.push(sec("👜 일감 가방", `<p${bag ? "" : ` class="dim"`}>${bag || "비었음"}</p>`)); }
   const has = CLOTHES_ORDER.filter(id => (u.clothes || []).includes(id)).map(id => `${CLOTHES[id].icon} ${CLOTHES[id].name}`);
   out.push(sec("🧣 가진 옷", `<p${has.length ? "" : ` class="dim"`}>${has.length ? has.join(" · ") : "없음 · 추워 보면 잡화점에서 스스로 사요"}</p>`));
   if ((u.immune || 0) > 0) out.push(sec("🛡 면역", `<p>${fmtLeft(u.immune)} 동안 감기에 안 걸려요</p>`));
@@ -133,7 +133,7 @@ export function stampBuyText(id, ok, josa) {
   if (!ok) return "도장이 모자라요 · 오늘의 부탁을 모두 들어주면 하나 받아요";
   const it = STAMP_SHOP.concat(STAMP_GIFTS).find(s => s.id === id); if (!it) return "도장 가게에 없는 물건이에요";
   const name = josa ? josa(it.name, "을", "를") : it.name;
-  return `🏪 도장 가게에서 ${name} 받아 왔어요 ${it.furniture ? "(🏠 집 꾸미기에서 놓아요)" : `(🎁 주머니에 넣었어요${it.clothes ? " · 주면 바로 둘러요 🧣" : ""})`}`;
+  return `🏪 도장 가게에서 ${name} 받아 왔어요. ${it.furniture ? "🏠 집에 들어가 놓을 수 있어요" : `🎁 주머니에 넣었어요${it.clothes ? ". 건네면 바로 둘러요 🧣" : ""}`}`;
 }
 /** 갈매폰 배지: 지금 쓸 수 있는 도장 수(가장 싼 물건 값 이상일 때만, 아니면 0) */
 export const stampBadge = world => { const s = world.stamps || 0, min = Math.min(...STAMP_SHOP.concat(STAMP_GIFTS).map(stampCost)); return s >= min ? s : 0; };

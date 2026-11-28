@@ -33,7 +33,7 @@ const DREAM_MEMORY_MAKERS = {
   gift: ({ u, item }) => [{ u, f: `${item.name}… 선물 받았지… 헤헤` }],
   pet: ({ u }) => [{ u, f: "쓰담쓰담… 또 해 줘…" }],
   fussSolved: ({ u, kind }) => [{ u, f: kind === "perch" ? "바위… 높았어… 내려 줘서 고마워…" : "꾸벅… 길에서 졸면… 안 되는데…" }],
-  bondStage: ({ u, stage }) => [{ u, f: `우리… ${BOND_STAGES[stage]?.name ?? "친한 사이"}…` }],
+  bondStage: ({ u, stage }) => [{ u, f: `우리… ${BOND_STAGES[stage]?.name ?? "정든 사이"}…` }],
   friendship: ({ a, b, stage }) => { const n = FRIEND_STAGES[stage]?.name ?? "친구"; return [{ u: a, f: `${b.name}… 우리 ${n}…` }, { u: b, f: `${a.name}… 우리 ${n}…` }]; },
   beachcomb: ({ u, item }) => [{ u, f: `${item.name}… 반짝반짝…` }],
   starPiece: ({ u, item }) => [{ u, f: `별똥별… ${item.name}… 내 거야…` }],

@@ -57,23 +57,23 @@ export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
   ]);
 
   const scoreH = valueRows(parts.map(([name, n, per, pts]) => [name, pts, `${n} × ${per} = ${pts}`])) +
-    `<p class="dim">점수가 큰 것부터 · 0점 줄은 흐리게. 갈매미·집·시설·이룬 소원이 늘면 올라요.</p>`;
-  const nextH = nxt ? `<p>${nxt.icon} <b>${avEsc(nxt.name)}</b>(${nxt.need}점)이 되면</p><ul class="av-list">${nxt.unlock.map(u => `<li>🔓 ${avEsc(BN(u))} 건설</li>`).join("")}<li>🪙 갈매미마다 축하금 ${RANK_REWARD}</li></ul>` : "";
+    `<p class="dim">갈매미와 집, 시설이 늘고 소원을 들어줄수록 점수가 올라요.</p>`;
+  const nextH = nxt ? `<p>${nxt.need}점을 넘어 ${nxt.icon} <b>${avEsc(nxt.name)}</b>이 되면</p><ul class="av-list">${nxt.unlock.map(u => `<li>🔓 ${avEsc(BN(u))} 건설</li>`).join("")}<li>🪙 갈매미마다 축하금 ${RANK_REWARD}</li></ul>` : "";
 
   const stamps = festivalStamps(w.festivals);
   const fLine = fOn ? `<b>${fOn.def.icon} ${fOn.def.name}</b>가 열리고 있어요! 남은 시간 <b>${Math.max(0, Math.ceil(w.festival.t))}초</b> · 함께한 갈매미 ${w.festival.who.length}마리`
     : !fNow ? `<span class="dim">축제 달력을 읽는 중이에요.</span>`
     : w.festivals[fNow.key] ? `올해 <b>${fNow.def.icon} ${fNow.def.name}</b>는 잘 치렀어요. 다음 계절에 또 만나요!`
     : w.rank < FESTIVAL_RANK ? `<span class="dim">🔒 마을 등급이 ${RANKS[FESTIVAL_RANK].icon} ${RANKS[FESTIVAL_RANK].name}이 되면 계절마다 축제를 열 수 있어요.</span>`
-    : `<b>${fNow.def.icon} ${fNow.def.name}</b> 준비 중 · 광장 장식 <b>${Math.min(plaza.n, FESTIVAL_NEED)} / ${FESTIVAL_NEED}</b><br><span class="dim">🏠 건설에서 축제 장식(${Object.values(BUILDINGS).filter(d => d.festive).map(d => d.name).join("·")})을 ${FESTIVAL_RADIUS}칸 안에 ${FESTIVAL_NEED}개 모으면 "축제 하자!" 소원이 이루어져요${plaza.ok ? " · 광장은 다 모였어요! 새 장식을 하나만 더 놓으면 열려요" : ""}${fGift ? ` · 끝나면 🎁 ${fGift.name}` : ""}</span>`;
+    : `<b>${fNow.def.icon} ${fNow.def.name}</b> 준비 중 · 광장 장식 <b>${Math.min(plaza.n, FESTIVAL_NEED)} / ${FESTIVAL_NEED}</b><br><span class="dim">🏠 건설에서 축제 장식을 ${FESTIVAL_RADIUS}칸 안에 ${FESTIVAL_NEED}개 모으면 "축제 하자!" 소원이 이루어져요${plaza.ok ? " · 광장은 다 모였어요! 새 장식을 하나만 더 놓으면 열려요" : ""}${fGift ? ` · 끝나면 🎁 ${fGift.name}` : ""}</span>`;
   const festH = `<p id="festNow">${fLine}</p><div class="stamps" id="festStamps">${stamps.map(x => `<span class="stamp" data-fest="${x.key}">${x.def.icon}<small>${x.year} ${SEASONS[x.season].name}</small></span>`).join("") || `<span class="dim">아직 찍은 축제 도장이 없어요.</span>`}</div>`;
   const fNote = fOn ? "열리는 중" : !fNow || w.rank < FESTIVAL_RANK ? "🔒" : w.festivals[fNow.key] ? "올해 끝" : `${Math.min(plaza.n, FESTIVAL_NEED)}/${FESTIVAL_NEED}`;
 
-  const winterH = `<p>${toWinter > 0 ? `겨울(12월 1일)까지 <b>${toWinter}일</b>` : `<b>지금 겨울이에요</b>`}</p>` +
+  const winterH = `<p>${toWinter > 0 ? `12월 1일 겨울까지 <b>${toWinter}일</b>` : `<b>지금 겨울이에요</b>`}</p>` +
     `<ul class="av-list"><li>${SEASONS.winter.icon} 밭이 절반 속도로 자라요</li><li>🍗 배가 1.25배 빨리 고파요</li><li>🪙 음식 값이 올라요</li></ul>` +
-    (w.granaryB?.() ? `<p>🏚 저장고 음식 <b>${w.granary}</b> / ${E.GRANARY_MAX}</p><p class="dim">농부·어부가 남는 음식을 🪙${E.GRANARY_BUY}에 팔아 쌓고, 배고픈 갈매미는 시세대로 사 가요(돈이 없고 아주 배고프면 나눠 받아요).</p>`
+    (w.granaryB?.() ? `<p>🏚 저장고 음식 <b>${w.granary}</b> / ${E.GRANARY_MAX}</p><p class="dim">농부와 어부가 남는 음식을 🪙${E.GRANARY_BUY}에 팔아 쌓아요. 배고픈 갈매미는 사 먹고, 돈이 없으면 나눠 받아요.</p>`
       : `<p class="dim">저장고가 없어요. 🪚 목수가 있으면 🏠 건설에서 <b>저장고</b>를 지을 수 있어요.</p>`);
-  const ranksH = `<table class="tbl">${RANKS.slice(1).map((r, i) => `<tr${w.rank >= i + 1 ? "" : ` class="zero"`}><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} (${r.need}점)</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
+  const ranksH = `<table class="tbl">${RANKS.slice(1).map((r, i) => `<tr${w.rank >= i + 1 ? "" : ` class="zero"`}><td>${w.rank >= i + 1 ? "✅" : "🔒"} ${r.icon} ${r.name} · ${r.need}점</td><td>${r.unlock.map(BN).join(", ")}</td></tr>`).join("")}</table>`;
 
   const finder = bldFinderRows(w);                                                 // 🔎 건물 찾기(편의성 점검 7번): 줄을 누르면 그 건물로 + 카드
   return head + facts +
@@ -85,7 +85,7 @@ export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
     more("town.ranks", "🏅 등급별 건물", ranksH, { note: `${w.rank} / ${RANKS.length - 1}` });
 }
 
-// ---- 🐚 시장
+// ---- 🛒 시장
 /** 시세 칸: 지금 값 + 지난 기록과 비교한 화살표(▲▼ 글자도 — 색만으로 알리지 않게) + 작은 그래프(20초마다 한 점) */
 export function priceCellHtml(w, k) {
   const h = (w.priceHist || []).map(p => p[k]), now = w.prices[k], prev = h.length > 1 ? h[h.length - 2] : now;
@@ -100,19 +100,19 @@ export function priceCellHtml(w, k) {
 export function marketAppHtml(w, { more = avMore, price = k => priceCellHtml(w, k) } = {}) {
   const mk = w.marketB(); if (!mk) return `<p>아직 시장이 없어요. <b>🪚 목수</b>가 있으면 🏠 건설에서 <b>시장</b>을 지을 수 있어요.</p>`;
   const sale = w.housesForSale(), m = w.merchantU(), food = w.units.filter(u => E.isProducer(u)), owners = w.units.filter(u => u.home);
-  const head = sumHead({ icon: "🐚", big: `🪙${fmtNum(w.prices.food)}`, label: "음식 한 개 값",
+  const head = sumHead({ icon: "🛒", big: `🪙${fmtNum(w.prices.food)}`, label: "음식 한 개 값",
     lineHtml: `🏠 팔리는 집 <b>${sale.length}</b>채 · ${m ? `상인 돈 🪙<b>${fmtNum(m.coins || 0)}</b>` : "상인 없음"}` });
-  const priceH = (m ? `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>${price(k)} · 창고 ${(m.raw[k] || 0) + (m.goods[k] || 0)}</td></tr>`).join("")}<tr><td>상인(${avEsc(m.name)}) 돈</td><td>🪙${fmtNum(m.coins || 0)}</td></tr></table>`
-    : `<p class="dim">상인 🐚 갈매미가 없어요(소환하면 와요).</p>`) + `<p class="dim">상인 창고에 많이 쌓이면 싸지고, 모자라면 비싸져요.</p>`;
-  const saleH = sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` (${BUILDINGS[b.defId].forUnit} 전용)` : ""}</td><td>🪙${fmtNum(w.housePrice(b))}</td></tr>`).join("")}</table>`
+  const priceH = (m ? `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.ITEM_NAME[k]}</td><td>${price(k)} · 창고 ${(m.raw[k] || 0) + (m.goods[k] || 0)}</td></tr>`).join("")}<tr><td>상인 ${avEsc(m.name)}의 돈</td><td>🪙${fmtNum(m.coins || 0)}</td></tr></table>`
+    : `<p class="dim">아직 상인 갈매미가 없어요. 🥚 소환으로 불러요.</p>`) + `<p class="dim">상인 창고에 많이 쌓이면 싸지고, 모자라면 비싸져요.</p>`;
+  const saleH = sale.length ? `<table class="tbl">${sale.map(b => `<tr><td>🏠 ${BUILDINGS[b.defId].name}${BUILDINGS[b.defId].forUnit ? ` · ${BUILDINGS[b.defId].forUnit} 전용` : ""}</td><td>🪙${fmtNum(w.housePrice(b))}</td></tr>`).join("")}</table>`
     : `<p class="dim">다 팔렸어요. 건축가가 집을 더 지으면 여기에 나와요.</p>`;
   const foodH = `<p>음식 값 ${price("food")}</p><table class="tbl">${food.map(u => `<tr><td>${JOBS[u.job].icon} ${avEsc(u.name)}</td><td>🍗${u.inv?.food || 0} 🐟${u.inv?.fish || 0}</td></tr>`).join("") || `<tr><td class="dim">농부·어부가 없어요</td><td></td></tr>`}</table>` +
     `<p class="dim">농부·어부가 내놓을 음식이 모자라거나 배고픈 갈매미가 많으면 비싸지고, 겨울엔 더 비싸요.</p>`;
-  const ownH = `<table class="tbl">${owners.map(u => `<tr><td>${avEsc(u.name)}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}${w.buildings.get(u.home)?.owner === u.unitId || !w.buildings.get(u.home) ? "" : " (같이 삶)"}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
+  const ownH = `<table class="tbl">${owners.map(u => `<tr><td>${avEsc(u.name)}</td><td>${BUILDINGS[w.buildings.get(u.home)?.defId]?.name ?? ""}${w.buildings.get(u.home)?.owner === u.unitId || !w.buildings.get(u.home) ? "" : " · 같이 살아요"}</td></tr>`).join("") || `<tr><td class="dim">아직 없어요</td><td></td></tr>`}</table>`;
   return head +
-    more("market.price", "📈 시세(상인이 사는 값)", priceH, { note: E.RAW.map(k => `${E.ITEM_ICON[k]}${w.prices[k]}`).join(" ") }) +
+    more("market.price", "📈 상인이 사는 값", priceH, { note: E.RAW.map(k => `${E.ITEM_ICON[k]}${w.prices[k]}`).join(" ") }) +
     more("market.sale", "🏠 팔리는 집", saleH, { note: `${sale.length}채` }) +
-    more("market.food", "🍗 음식(농부·어부)", foodH, { note: `${food.length}마리` }) +
+    more("market.food", "🍗 농부와 어부의 음식", foodH, { note: `${food.length}마리` }) +
     more("market.owner", "🔑 집 주인", ownH, { note: `${owners.length}마리` });
 }
 
@@ -144,8 +144,8 @@ export function wishListHtml(w, { more = avMore } = {}) {
 export function decorHeadHtml(houses, { more = avMore } = {}) {
   const best = houses.slice().sort((a, b) => b.comfort - a.comfort)[0];
   const head = sumHead({ icon: "🛋", big: `${houses.length}채`, label: "다 지은 집",
-    lineHtml: best && best.comfort > 0 ? `가장 아늑한 집: 🏠 <b>${avEsc(best.name)}</b> 🛋 ${best.comfort}` : houses.length ? "아직 꾸민 집이 없어요 · 집을 눌러 들어가 보세요" : "" });
-  return head + more("decor.how", "📖 꾸미는 법", `<p>집에 들어가 가구를 놓고 바닥·벽지를 바꿔요.</p><ul class="av-list"><li>🛏 놓은 가구는 그 집 갈매미가 써요(침대에서 낮잠 등)</li><li>🪙 집주인은 돈이 모이면 잡화점에서 가구를 사 와요</li><li>🛋 아늑함이 높을수록 갈매미가 좋아해요</li></ul>`) +
+    lineHtml: best && best.comfort > 0 ? `가장 아늑한 집: 🏠 <b>${avEsc(best.name)}</b> 🛋 ${best.comfort}` : houses.length ? "아직 꾸민 집이 없어요. 집을 누르면 들어갈 수 있어요" : "" });
+  return head + more("decor.how", "📖 꾸미는 법", `<p>집에 들어가 가구를 놓고 바닥과 벽지를 바꿔요.</p><ul class="av-list"><li>🛏 놓은 가구는 그 집 갈매미가 써요. 침대에서 낮잠도 자요</li><li>🪙 집주인은 돈이 모이면 잡화점에서 가구를 사 와요</li><li>🛋 아늑함이 높을수록 갈매미가 좋아해요</li></ul>`) +
     (houses.length ? "" : `<p>아직 다 지은 집이 없어요.</p>`);
 }
 
@@ -158,7 +158,7 @@ export function relHeadHtml(links, n) {
 /** 범례(선 굵기·색) + 읽는 법 — 접기 안쪽. stages: FRIEND_STAGES */
 export function relLegendHtml(stages) {
   return `<div class="rellegend">${stages.map(d => `<span><i style="height:${d.width}px;background:${d.color}"></i>${d.name}</span>`).join("")}</div>` +
-    `<p class="dim">갈매미를 누르면 누구와 얼마나 친한지 보여 줘요. 만나서 인사할 때마다 조금씩 친해져요(호감 ${stages[1].min}부터 친구, ${stages[2].min}부터 단짝).</p>`;
+    `<p class="dim">갈매미를 누르면 누구와 얼마나 친한지 보여 줘요. 갈매미끼리는 만나서 인사할 때마다 조금씩 친해져서 친구가 되고, 더 친해지면 단짝이 돼요.</p>`;
 }
 
 // ---- 📖 도감

@@ -107,7 +107,7 @@ export class RoomView {
     const it = this.L, span = Math.max(it.w, it.d);
     this.controls.target.set(0, 0.4, 0); this.camera.position.set(span * 0.55, span * 0.95, span * 1.15); this.fit(); this.controls.update();
     this.onSound?.("doorIn"); this.touch.hidden = false; this.ui.hidden = false; this.bubbleBox.hidden = false; document.body.classList.add("inroom"); this.refreshUI();
-    this.offFurn = () => {}; this.status(Object.keys(F.available(world, b)).length ? `${BUILDINGS[b.defId].name}에 들어왔어요 · 가구를 골라 방에 놓아 보세요` : `${BUILDINGS[b.defId].name}에 들어왔어요 · 놓을 가구는 아직 없어요(잡화점·도장 가게에서) · 바닥·벽지는 바꿀 수 있어요`);
+    this.offFurn = () => {}; this.status(Object.keys(F.available(world, b)).length ? `${BUILDINGS[b.defId].name}에 들어왔어요. 가구를 골라 방에 놓아요` : `${BUILDINGS[b.defId].name}에 들어왔어요. 바닥과 벽지를 바꿀 수 있어요`);
   }
   /** 화면 모양에 맞춰 방 전체가 보이게: 세로 화면은 렌즈를 넓히고 더 멀리서 */
   fit() {
@@ -234,7 +234,7 @@ export class RoomView {
   hover(e) { const c = this.cellAt(e); if (!c) return; Object.assign(this.ghost, this.anchor(c, this.ghost.id, this.ghost.rot)); this.drawGhost(); this.syncGo(); }
   /** ✅ 놓기 단추 색만 지금 자리에 맞춤(마우스로 움직일 때 판 전체를 다시 그리지 않게) */
   syncGo() { const b = this.ui.querySelector(".racts .commit"); if (b && b.classList.contains("go") !== !!this.ghostOk) b.classList.toggle("go", !!this.ghostOk); }
-  startPlace(id) { const it = this.L; this.sel = null; this.ghost = { id, rot: 0, x: Math.floor(it.w / 2), z: Math.floor(it.d / 2), moving: null }; this.ghost.pin = { x: this.ghost.x, z: this.ghost.z }; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status(`${FURNITURE[id].name}: 놓을 칸을 누르세요(한 번 더 누르면 놓기 · R 돌리기)`); }
+  startPlace(id) { const it = this.L; this.sel = null; this.ghost = { id, rot: 0, x: Math.floor(it.w / 2), z: Math.floor(it.d / 2), moving: null }; this.ghost.pin = { x: this.ghost.x, z: this.ghost.z }; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status(`${FURNITURE[id].name}: 놓을 칸을 눌러요`); }
   startMove() { const o = this.L.furniture[this.sel]; if (!o) return; this.ghost = { id: o.id, rot: o.rot, x: o.x, z: o.z, moving: this.sel, pin: { x: o.x, z: o.z } }; this.items[this.sel].visible = false; this.sel = null; this.drawSel(); this.drawGhost(); this.refreshUI(); this.status("옮길 칸을 누르세요"); }
   rotate() {
     if (this.ghost) { this.ghost.rot = (this.ghost.rot + 1) % 4; this.drawGhost(); this.refreshUI(); return; }
@@ -244,13 +244,13 @@ export class RoomView {
   }
   commit() {
     const g = this.ghost, ok = g.moving != null ? F.move(this.world, this.b, g.moving, g.x, g.z, g.rot, this.li) : F.place(this.world, this.b, g.id, g.x, g.z, g.rot, this.li);
-    if (!ok) return this.status("여기엔 놓을 수 없어요(벽 밖이거나 다른 가구와 겹쳐요)");
+    if (!ok) return this.status("여기엔 놓을 수 없어요. 벽 밖이거나 다른 가구와 겹쳐요");
     this.onSound?.("furniture"); this.status(`${FURNITURE[g.id].name}을 놓았어요`); this.ghost = null; this.build(); this.refreshUI();
   }
   /** 🪄 정리하기: 갈매미가 알아서 놓은 가구만 벽·앞면·길을 보고 다시 놓음(world/furniture.js relayout) */
   tidy() {
     const r = F.relayout(this.world, this.b); this.sel = null; this.ghost = null; this.build(); this.refreshUI(); this.onSound?.("furniture");
-    this.status(r.moved ? `가구 ${r.moved}개를 정리했어요${r.stashed.length ? ` · 자리가 없어 ${r.stashed.length}개는 창고에` : ""} (손으로 놓은 가구는 그대로)` : "이미 잘 정리돼 있어요");
+    this.status(r.moved ? `가구 ${r.moved}개를 정리했어요${r.stashed.length ? `. 자리가 없는 ${r.stashed.length}개는 창고에 넣었어요` : ""}` : "이미 잘 정리돼 있어요");
   }
   stow() { if (this.sel == null) return; const id = this.L.furniture[this.sel].id; F.stow(this.world, this.b, this.sel, this.li); this.sel = null; this.build(); this.refreshUI(); this.status(`${FURNITURE[id].name}을 집 창고에 넣었어요`); }
   cancel() { this.ghost = null; this.sel = null; this.build(); this.refreshUI(); this.status(""); }
@@ -281,10 +281,10 @@ export class RoomView {
         const f = FURNITURE[id], bt = rel("button", "fcard" + (this.ghost?.id === id && this.ghost.moving == null ? " on" : "")), sw = rel("i", "fsw"), bag = av[id].from !== "stash";
         sw.style.background = "#" + (f.colors?.[0] ?? 0xcccccc).toString(16).padStart(6, "0");
         bt.append(sw, rel("b", "", `${f.name} ×${av[id].n}`), rel("small", "", `${f.footprint.w}×${f.footprint.d}칸 · 아늑함 +${f.comfort}${bag ? " · 🎒" : ""}`));
-        if (bag) bt.dataset.tip = `${roomFurniSource(av[id].item)}(마을 가방)`;
+        if (bag) bt.dataset.tip = `${roomFurniSource(av[id].item)}, 마을 가방에 있어요`;
         bt.onclick = () => this.startPlace(id); list.appendChild(bt); }
       if (!ids.length) { list.classList.add("empty");                                                             // 가구가 없으면: 어디서 얻는지 + 🏵 도장 가게 바로가기(편의성 점검 10번) · 바닥·벽지는 탭에서 바꿀 수 있음
-        list.appendChild(rel("span", "dim", `놓을 가구가 없어요 · 가구는 잡화점·도장 가게에서. ${w.shopB() ? "집주인이 돈이 모이면 잡화점에서 사 와요" : "잡화점(마을 등급 ⚓ 항구 마을)이 생기면 집주인이 사 와요"} · 낚시·축제에서 얻은 가구도 놓을 수 있어요 · 바닥·벽지는 위 탭에서 바꿔요`));
+        list.appendChild(rel("span", "dim", `놓을 가구가 없어요. ${w.shopB() ? "집주인이 돈이 모이면 잡화점에서 사 와요." : "항구 마을이 되어 잡화점이 생기면 집주인이 가구를 사 와요."} 도장 가게나 낚시, 축제에서 얻은 가구도 놓을 수 있어요.`));
         if (this.onShop) { const sb = rel("button", "go", "🏵 도장 가게 보기"); sb.onclick = () => { this.close(); this.onShop(); }; list.appendChild(sb); } }
     } else {
       const table = this.tab === "floor" ? FLOORS : WALLPAPERS, key = this.tab === "floor" ? "floor" : "wallpaper";

@@ -42,7 +42,7 @@ test("은행 앱: 오늘 들어온 돈 − 나간 돈 = 오늘 금고 변화, �
   assert.equal(f.inSum - f.outSum, w.bank.vault - v0, "오늘 +/− = 금고 변화");
   assert.equal(f.lent, 18);
   const html = bankHtml(w);
-  assert.match(html, /🏠 집값\(계약금\)<\/td><td>12</); assert.match(html, /📐 설계비<\/td><td>10</); assert.match(html, /🧾 세금<\/td><td>5</);
+  assert.match(html, /🏠 집 계약금<\/td><td>12</); assert.match(html, /📐 설계비<\/td><td>10</); assert.match(html, /🧾 세금<\/td><td>5</);
   assert.match(html, /<tr class="zero"><td>🧣 옷<\/td><td>0</, "0인 줄은 흐리게");
   assert.match(html, /빌려준 집값 🪙18/);
   // 대출 줄 = loanInfo

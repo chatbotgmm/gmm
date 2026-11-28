@@ -215,7 +215,7 @@ test("소환: 빈 섬에서 시작해 한 마리씩 무작위로(겹치지 않�
   assert.equal(new Set(added).size, N, "겹치지 않음");
   const w2 = World.create(7, seededRandom(8), { empty: true });
   let u = w2.summon(); while (u.job === "builder") { w2.units.length = 0; u = w2.summon(); }   // 건축가가 아닌 갈매미 하나
-  assert.equal(w2.placeBuilding("house", 38, 26, 0).reason, "건축 갈매미가 있어야 지을 수 있어요 (🥚 소환)");
+  assert.equal(w2.placeBuilding("house", 38, 26, 0).reason, "건축 갈매미가 있어야 지을 수 있어요. 🥚 소환으로 불러요");
   while (!w2.units.some(o => o.job === "builder")) w2.summon();
   assert.equal(w2.placeBuilding("house", 38, 26, 0).ok, true, "건축 갈매미가 오면 지을 수 있음");
   const names = w2.units.map(o => o.name), back = World.fromJSON(JSON.parse(JSON.stringify(w2.serialize())));
@@ -891,7 +891,7 @@ test("소원: 단짝 옆집에 살고 싶어요 — 둘 다 가까운 집이 생
   w.befriend(a, b, 8); assert.equal(d.ok(w, a), true); assert.equal(d.ok(w, c), false);
   assert.equal(rankScore(w).score, score0 + 3, "단짝 한 쌍 = 3점");
   const wish = { id: "neighbor", unitId: a.unitId, base: d.base(w, a), age: 0 }; assert.equal(wish.base, b.name);
-  assert.equal(wishText(d, w, a, wish), `${b.name} 옆집에 살고 싶어요`); assert.equal(wishText(WISH_BY_ID.home, w, a, null), "내 집이 갖고 싶어요");
+  assert.equal(wishText(d, w, a, wish), `${b.name} 옆집에 살고 싶어`); assert.equal(wishText(WISH_BY_ID.home, w, a, null), "내 집이 생기면 좋겠다");
   const sites = []; const c0 = w.center;
   for (let r = 5; r < 60 && sites.length < 40; r += 2) for (let k = 0; k < 48; k++) { const an = k / 48 * 6.28, x = Math.floor(c0.x + Math.cos(an) * r), z = Math.floor(c0.z + Math.sin(an) * r); if (w.check("house", x, z, 0).ok) { const q = w.placeBuilding("house", x, z, 0, null, 1e9); if (q.ok) sites.push(q.building); } }
   let near = null, far = null;
@@ -1010,9 +1010,9 @@ test("다녀온 사이: 지난 실제 시간은 밖에서 받아 10분~8시간�
   // 편지: 우체국이 있으면 더 길게
   const rep = { ms: 100 * H, hours: 8, ripened: 2, catches: [{ who: "물방울", fish: { name: "참치", rarity: "epic" }, item: null }, { who: "물방울", fish: { name: "멸치", rarity: "common" }, item: { name: "유리병" } }] };
   const short = N.awayLetter(rep), long = N.awayLetter(rep, { post: true, news: [{ icon: "🏅", text: "마을 등급이 올랐어요: 🏘 어촌!" }], wishes: [{ who: "기본", text: "시장이 있으면 좋겠어요" }] });
-  assert.ok(long.lines.length > short.lines.length); assert.match(short.lines[0], /^4일 4시간 만이에요/); assert.ok(short.lines.some(l => /8시간까지만/.test(l)));
+  assert.ok(long.lines.length > short.lines.length); assert.match(short.lines[0], /^4일 4시간 만이에요/); assert.ok(short.lines.some(l => /8시간 치만/.test(l)));
   assert.ok(short.lines.some(l => /밭 2칸/.test(l)) && short.lines.some(l => /물고기 2마리/.test(l)));
-  assert.ok(long.lines.some(l => /참치 \(영웅!\)/.test(l)) && long.lines.some(l => /멸치 \+ 유리병/.test(l)) && long.lines.some(l => /어촌/.test(l)) && long.lines.some(l => /시장이 있으면/.test(l)));
+  assert.ok(long.lines.some(l => /참치, 영웅!/.test(l)) && long.lines.some(l => /멸치 \+ 유리병/.test(l)) && long.lines.some(l => /어촌/.test(l)) && long.lines.some(l => /시장이 있으면/.test(l)));
   assert.ok(N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [] }).lines.some(l => /조용한/.test(l)));
 });
 
@@ -1153,7 +1153,7 @@ test("수족관: 다녀온 사이에 낚은 첫 희귀 이상 물고기도 기�
   assert.equal(w.donateGifts, 1 + (gave.length >= 6)); assert.equal(w.items.chair >= 1, true);
   assert.ok(w.newsLog.some(n => /^물방울이 처음 낚은 .+ 수족관에 기증했어요!$/.test(n.text)), "소식지에 기증 소식"); assert.ok(w.newsLog.some(n => /기념으로 표류목 의자를 받았어요!$/.test(n.text)));
   const letter = N.awayLetter({ ms: H, hours: 1, ripened: 0, catches: [gave[0]] }, { post: true });
-  assert.ok(letter.lines.some(l => l.includes(gave[0].fish.name) && l.endsWith("🐠 수족관에 기증")));
+  assert.ok(letter.lines.some(l => l.includes(gave[0].fish.name) && l.endsWith("수족관에 기증")));
 });
 
 test("정(선물·쓰다듬기·답례): 순수 계산 — 하트 단계, 선물 갈래와 반응 3단계, 하루 쓰다듬기 횟수, 답례", async () => {
@@ -1224,7 +1224,7 @@ test("정(월드): 간직한 것은 안 팔고, 선물하면 하나 줄고 정·
   ev.length = 0; let got = w.addBond(gold, 100);
   assert.equal(gold.bond, B.BOND_MAX); assert.deepEqual(got.map(g => [g.stage, g.gift.kind, g.gift.id]), [[2, "furniture", "plant"], [3, "item", "pearl"]]);
   assert.equal(Fu.room(hb).stash.plant, 1); assert.equal(w.items.pearl, 1); assert.equal(w.keep.pearl, true);
-  assert.match(w.newsLog.find(e => /친한 사이/.test(e.text)).text, /답례로 화분을 황금네 작은 집에 들여놨어요/);
+  assert.match(w.newsLog.find(e => /정든 사이/.test(e.text)).text, /답례로 화분을 황금네 작은 집에 들여놨어요/);
   assert.deepEqual(w.addBond(gold, 5), []); assert.equal(gold.bondGifts, 3);
   assert.ok(w.pickUpUnit(gold)); assert.equal(gold.emoteText, "♥"); w.dropUnit(gold, Math.floor(gold.heldFrom.x), Math.floor(gold.heldFrom.z));
   // 저장·불러오기: 정·답례 수·쓰다듬기 횟수·간직하기가 그대로, 받은 답례를 또 받지 않음

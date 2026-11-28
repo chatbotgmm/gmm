@@ -40,10 +40,10 @@ export function valueRows(rows, { fmt = fmtNum } = {}) {
 }
 
 const phoneOf = form => form === "portrait" || form === "landscape";
-/** 🏦 내 금고 칩. bank: { vault, owed } · state: world.vaultState()(ok|low|empty) · economy가 없으면(예전 섬) 🐚 창고 조개.
+/** 🏦 내 금고 칩. bank: { vault, owed } · state: world.vaultState()(ok|low|empty) · economy가 없으면(예전 섬) 🪙 창고 동전.
  *  돌려줌 { text, tone, tip } — 휴대폰은 아이콘+숫자, 태블릿은 "금고", PC는 "내 금고"에 상태 낱말까지 */
 export function vaultChipOf({ economy = true, vault = 0, owed = 0, state = "ok", coins = 0 } = {}, form = "wide") {
-  if (!economy) return { text: `🐚 ${fmtNum(coins)}`, tone: null, tip: "가진 조개 · 누르면 🏦 은행" };
+  if (!economy) return { text: `🪙 ${fmtNum(coins)}`, tone: null, tip: "가진 동전. 누르면 🏦 은행" };
   const tone = state === "empty" || state === "low" ? state : "ok", n = fmtNum(vault), wage = owed > 0 ? "💸" : "";
   const word = tone === "empty" ? "바닥" : tone === "low" ? "얼마 안 남음" : "";
   const mark = tone === "empty" ? "🚨" : tone === "low" ? "⚠️" : "";
@@ -51,7 +51,7 @@ export function vaultChipOf({ economy = true, vault = 0, owed = 0, state = "ok",
   if (phoneOf(form)) text = `🏦${fmtShort(vault)}${mark}${wage}`;
   else if (form === "medium") text = `🏦 금고 ${n}${mark ? " " + mark : ""}${wage ? " " + wage : ""}`;
   else text = `🏦 내 금고 ${n}${word ? ` ${mark} ${word}` : ""}${wage ? " " + wage : ""}`;
-  const tip = `내 금고(건설비·품삯을 내는 내 돈) 🪙${n}${word ? ` · ${word}` : ""}${owed > 0 ? ` · 밀린 품삯 🪙${fmtNum(owed)}` : ""} · 누르면 🏦 은행`;
+  const tip = `내 금고 🪙${n}${word ? ` · ${word}` : ""}${owed > 0 ? ` · 밀린 품삯 🪙${fmtNum(owed)}` : ""} · 누르면 🏦 은행`;
   return { text, tone, tip };
 }
 /** 🪙 마을 돈 칩(갈매미들이 가진 돈 합계 — 내 돈이 아님): 휴대폰 아이콘+숫자, 그 밖엔 "마을 돈" */

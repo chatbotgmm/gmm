@@ -52,7 +52,7 @@ test("병원(빈 침대)이 있으면: 6초 누워 있다 병원으로 실려 �
   assert.equal(fx[0].clinic, true); assert.doesNotMatch(alertLine("faint", fx[0], w), /병원/, "실려 가는 건 소식지(faintCarried)에만");
   assert.equal(u.insideAct, "sleep"); assert.equal(u.carried, true);
   assert.equal(car.length, 1); assert.equal(car[0].fee, HL.CLINIC_FEE); assert.equal(u.coins, 10 - HL.CLINIC_FEE); assert.equal(w.bank.vault - v0, HL.CLINIC_FEE, "진료비는 금고로");
-  assert.match(newsFor("faintCarried", car[0], w).text, /실려 가 누웠어요 · 진료비 🪙3/);
+  assert.match(newsFor("faintCarried", car[0], w).text, /실려 가 누웠어요\. 진료비 🪙3/);
   assert.equal(w.bedsFree(c), BUILDINGS.clinic.beds - 1, "침대 하나를 씀");
   const e0 = u.needs.energy; for (let k = 0; k < 500; k++) { u.full = 90; w.update(0.1); }
   assert.ok(Math.abs(u.needs.energy - e0 - 50 * M.SLEEP_GAIN.bed) < 0.1, `50초에 +${(u.needs.energy - e0).toFixed(2)}(침대 0.16/초)`);

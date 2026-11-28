@@ -71,7 +71,7 @@ test("🖨 찍어내기: 유일한 새 돈 · 50·100·200 · 하루 합 300까�
   assert.equal(w.printLeft(), 300);
   assert.equal(w.print(200), 200); assert.equal(w.print(200), 0, "합 400은 넘음"); assert.equal(w.print(100), 100); assert.equal(w.print(50), 0, "오늘은 다 찍음");
   assert.equal(w.bank.vault, v0 + 300, "금고로"); assert.equal(w.bank.issued - iss0, 300, "새 돈"); assert.equal(w.bank.printed, 300); assert.equal(w.printLeft(), 0);
-  assert.equal(ev.length, 2); assert.equal(ev[1].left, 0); assert.ok(w.newsLog.some(e => /새 돈 🪙200을 찍어/.test(e.text)), "소식지");
+  assert.equal(ev.length, 2); assert.equal(ev[1].left, 0); assert.ok(w.newsLog.some(e => /새 동전 🪙200을 찍어/.test(e.text)), "소식지");
   assert.equal(todayOf(w).printed, 300, "장부 칸");
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())));
   assert.equal(back.printLeft(), 0, "저장해도 오늘 찍은 합이 이어짐"); assert.equal(back.bank.printed, 300);
@@ -244,7 +244,7 @@ test("옛 저장(중앙은행 없음): 돈은 그대로(안 깎음) + 4일 적�
   assert.equal(sum(o), s0, "돈의 합(주머니 + 예금 + 금고) 그대로"); assert.equal(o.bank.issued, iss0, "새 돈 0");
   assert.ok(o.bank.vault > v0 + 8 * o.units.length && o.moneySupply() < a0, `금고 ${v0} → ${o.bank.vault} · 주머니 ${a0} → ${o.moneySupply()}`);
   assert.deepEqual(pis.slice(0, 4), [0, 0, 0, 0], "4일은 π = 0"); assert.ok(pis[4] !== 0, "5일째부터 움직임");
-  assert.equal(o.newsLog.filter(e => /중앙은행 판이 생겼어요/.test(e.text)).length, 1);
+  assert.equal(o.newsLog.filter(e => /중앙은행 창구가 열렸어요/.test(e.text)).length, 1);
   assert.equal(World.create(7, seededRandom(3)).monOn(), false, "경제 없는 예전 섬은 규칙 꺼짐");
 });
 

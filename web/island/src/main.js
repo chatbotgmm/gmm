@@ -32,7 +32,7 @@ import { WISH_BY_ID, wishText } from "./world/wishes.js";
 import { newsFor, awayLetter, newsPages } from "./world/news.js";
 import { dailyKey } from "./world/daily.js";
 import { stampBuyText } from "./ui/gullView.js";
-import { PROPS, TRIBES, JOBS, BUILDINGS, MODULES, ITEMS } from "./data/catalog.js";
+import { PROPS, JOBS, BUILDINGS, MODULES, ITEMS } from "./data/catalog.js";
 import { Tools } from "./systems/tools.js";
 import { UnitControl } from "./systems/unitControl.js";
 import { josa } from "./util.js";
@@ -220,7 +220,7 @@ function mount(w) {
   { const w = world, apply = s => { if (world === w) w.applyCharacterProfiles(s.chars, WALK_SCALE, RUN_SCALE); };   // 갈매미 몸 크기·걸음(목록을 받은 뒤 · 마을 시간은 갈매미를 다 받은 뒤에야 흐름)
     if (charPool.set) apply(charPool.set); else charPool.setReady.then(apply); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
-    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true, at: noteTarget(u) }); });
+    hud?.status(`${JOBS[u.job]?.icon ?? "🐦"} ${josa(u.name, "이", "가")} 마을에 왔어요. ${u.tribe} 종족 ${josa(JOBS[u.job]?.name ?? u.job, "이에요", "예요")}`, { kind: "good", queue: true, at: noteTarget(u) }); });
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
@@ -294,8 +294,8 @@ function mount(w) {
   world.on("wishDone", e => say("wishDone", e));
   // 오늘의 부탁: 하나 끝날 때마다 알림(같은 일의 다른 알림에 묻히지 않게 한 박자 늦게), 모두 끝나면 도장
   world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
-    if (big("dailyDone", e)) { hud.logNote(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개)` : `📋 오늘의 부탁 완료: ${e.req.text}`, "good"); return; }
-    post("dailyDone", e.all ? "🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요" : `📋 오늘의 부탁 완료: ${e.req.text}`, "good", null);
+    if (big("dailyDone", e)) { hud.logNote(e.all ? `📋 오늘의 부탁 세 개를 다 들어줬어요. 도장이 ${e.stamps}개가 됐어요` : `📋 오늘의 부탁 완료: ${e.req.text}`, "good"); return; }
+    post("dailyDone", e.all ? "📋 오늘의 부탁을 다 들어주고 도장을 받았어요" : `📋 오늘의 부탁 완료: ${e.req.text}`, "good", null);
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, stream, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null, true); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
@@ -326,7 +326,7 @@ charPool.start(); drawLoading();
 // 저장: 이 브라우저에 1분마다·화면을 떠날 때 자동 저장, 다시 열면 이어서(저장이 없거나 망가졌으면 새 섬)
 let lastSaved = 0, resumed = false, cloud = null;   // cloud: 계정 저장(ui/cloudView.js · systems/cloudClient.js)
 function saveNow(quiet = true) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize(Date.now()))); lastSaved = Date.now(); cloud?.touch(); if (!quiet) hud?.status("저장했어요(이 브라우저에만 · 1분마다 자동 저장)"); return true; }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(world.serialize(Date.now()))); lastSaved = Date.now(); cloud?.touch(); if (!quiet) hud?.status("💾 이 브라우저에 저장했어요"); return true; }
   catch (e) { if (!quiet) hud?.status("저장하지 못했어요: " + e.message); return false; }
 }
 let oldMap = false;
@@ -368,7 +368,7 @@ const unitControl = new UnitControl({ dom: renderer.domElement, camera, controls
   onStatus: t => hud.status(t), onFollow: u => { hud.showFollow(u); world.watchId = u ? u.unitId : null; } });
 unitControl.restLen = () => viewCam.restLen(portrait());                        // 따라가기를 그만두면: 가까운 비스듬히는 기본 거리(30 m·26 m)로, 자유 회전은 다가가기 전 거리로
 // 찌 당기기(같이 낚시하기): 따라가는 갈매미에게 입질(❗)이 왔을 때 🎣 당기기! 버튼이나 스페이스 키
-const tugNow = () => { const u = unitControl.follow; if (!u || !world.tugFloat(u)) return false; hud.showTug(false); hud.status(`영차! ${josa(u.name, "과", "와")} 같이 당겼어요 · 귀한 물고기가 올 가능성이 커져요`); return true; };
+const tugNow = () => { const u = unitControl.follow; if (!u || !world.tugFloat(u)) return false; hud.showTug(false); hud.status(`영차! ${josa(u.name, "과", "와")} 같이 당겼어요`); return true; };
 hud.onTug = tugNow;
 // 선물 · 쓰다듬기(선물 알림은 월드가 알려 줌: gift · bondStage). 간직하기 단추는 없앰(내 주머니는 상인이 팔지 않음 — 옛 섬 규칙 world.toggleKeep은 그대로)
 hud.onGift = (u, id) => world.giveGift(u, id);
@@ -376,8 +376,8 @@ hud.onGift = (u, id) => world.giveGift(u, id);
 hud.onStampBuy = id => { const ok = world.buyStamp(id);   // 산 물건은 보상 카드(stampBuy → rewards)가 크게 보여 줌 · 알림은 지난 알림에만
   if (ok) hud.logNote(stampBuyText(id, ok, josa), "good"); else hud.status(stampBuyText(id, ok, josa)); return ok; };   // 가구·귀한 선물 둘 다(예전엔 가구 표만 찾아 선물을 사면 TypeError)
 hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
-  if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요 · 오늘은 여기까지, 내일 또 만나요`);
-  else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요 · 마을 날이 바뀌면 또 할 수 있어요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
+  if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘은 여기까지예요`);
+  else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요. 내일 또 해요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
   return r; };
 addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
@@ -430,12 +430,12 @@ unitControl.onTapFirst = e => {
 };
 // 👉 톡: 성격별 반응(units/poke.js). 정·돈은 안 바뀜 · 소리만 반응 종류마다
 const POKE_SFX = { poke: [784, 988], sleep: [392, 330], sulk: [440, 370], sulkStart: [523, 440, 370], zoom: [659, 880, 1175] };
-unitControl.onPoke = u => { if (fuss?.nudge(u)) { hud.status(`🆘 ${josa(u.name, "을", "를")} 꾹 눌러 들어서 옮겨 주세요`, { kind: "info" }); return; } const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
+unitControl.onPoke = u => { if (fuss?.nudge(u)) { hud.status(`🆘 ${josa(u.name, "을", "를")} 꾹 눌러 옮겨 주세요`, { kind: "info" }); return; } const r = poke?.poke(u, { x: toGridX(camera.position.x), z: toGridZ(camera.position.z) }); if (r) sfx.chime(POKE_SFX[r.kind] || POKE_SFX.poke, 0.07, 0.07); };
 // 🆘 깜짝 소동(units/fuss.js): 시작하면 알림 줄 · 풀면 소리 · 내려놓은 곳이 눈·모래면 쿵 자국(footprints.thud)
 function makeFuss(w) {
   const f = new Fuss(w, 91), at = u => ({ pos: { x: toWorldX(u.x), z: toWorldZ(u.z) } });
   f.near = () => ({ x: toGridX(controls.target.x), z: toGridZ(controls.target.z) });   // 화면 중심 가까이에서만 소동(FUSS_SEE칸) — 안 보이는 곳의 🆘는 하루 상한만 씀
-  f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요 · 꾹 눌러 들어서 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요 · 꾹 눌러 들어서 옮겨 주세요`, { kind: "info", at: { u: u.unitId } });   // at: 알림을 누르면 그 갈매미를 따라가며 가까이(편의성 점검 5번)
+  f.onStart = (u, kind, road) => hud.status(kind === "perch" ? `🆘 ${josa(u.name, "이", "가")} 바위 위에서 못 내려와요. 꾹 눌러 내려 주세요` : `🆘 ${josa(u.name, "이", "가")} ${road ? "길 한가운데서" : "낮에"} 꾸벅 졸아요. 꾹 눌러 옮겨 주세요`, { kind: "info", at: { u: u.unitId } });   // at: 알림을 누르면 그 갈매미를 따라가며 가까이(편의성 점검 5번)
   world.on("fussSolved", ({ u }) => { if (rewards) { hud.logNote(`💕 ${josa(u.name, "이", "가")} 고마워해요`, "good", { u: u.unitId }); return; } hud.status(`💕 ${josa(u.name, "이", "가")} 고마워해요`, { kind: "good" }); sfx.chime([659, 784, 1047], 0.1, 0.08); });   // 보상 띠(rewards)가 크게 보여 줌   // 알림 줄에 직접 연결(newsAlerts 표 밖)
   f.onLand = u => { const k = footprints.thud(world, u); if (k) sfx.play("step", { ...at(u), vol: 0.6, rate: k === "snow" ? 0.5 : 0.6 }); return k; };
   return f;
@@ -470,12 +470,12 @@ hud.onInstant = on => { world.instantBuild = on; if (on) world.finishAll(); hud.
 const assetsLoad = Promise.race([firstLoad, new Promise(r => setTimeout(r, 90000))]).then(() => { assetsOver = true; drawLoading(); });
 Promise.all([assetsLoad, charPool.ready]).then(() => {
   loadProgress.onChange = null; ready = true; clock.getDelta();
-  if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true, full: true });
-  else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true, full: true });
-  else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요", { queue: true, full: true });
-  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 아래 🔨 건설 → 🏠 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)", { queue: true, full: true });
+  if (oldMap) hud.status("🗺 지도가 넓어져서 새 섬으로 시작했어요. 예전 섬은 이 지도와 맞지 않아요", { queue: true, full: true });
+  else if (resumed) hud.status(`💾 지난 섬에서 이어서 해요. 갈매미 ${world.units.length}마리가 기다렸어요`, { queue: true, full: true });
+  else if (!world.units.length) hud.status("🥚 아직 갈매미가 없어요. 📱 소환으로 불러 주세요", { queue: true, full: true });
+  else if (world.wild) hud.status("🏦 은행 앞에 첫 갈매미가 왔어요. 아래 🔨 건설에서 집을 지어 주세요", { queue: true, full: true });
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true, full: true });
-  else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true, full: true });
+  else if (loadProgress.done < loadProgress.total) hud.status("아직 그림을 받고 있어요. 받는 대로 바뀌어요", { queue: true, full: true });
   hud.showLetter(backLetter);
   cloud.start();                                   // 계정 확인(같은 출처 /village3d/에서만 · 아니면 요청 없이 꺼짐)
   hud.coach.start({ fresh: !resumed });           // 처음 안내 3단계(새 섬일 때 · 편지·처음 알림이 지나간 뒤 말풍선이 뜸)
@@ -603,17 +603,17 @@ function frameBody() {
 }
 addEventListener("resize", () => { fitView(); renderer.setSize(innerWidth, innerHeight); });
 // 시간 배수(테스트용): 시각·날짜·계절이 빨리 감 + 마을 진행(눈 쌓임·갈매미 하루)도 simSpeed배. 실제 시간 모드에서만 날짜가 바뀜
-const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60 (1분=1시간)"], [1440, 4, "×1440 (1분=하루)"], [86400, 8, "×86400 (1초=하루)"]];   // [시계 배수, 마을 진행 배수, 라벨] — 게임 ⏩ 배속(edition.js)과 따로, 둘이 겹치면 곱(프레임당 최대 12번)
+const TIME_MULTS = [[1, 1, "×1"], [60, 2, "×60, 1분에 한 시간"], [1440, 4, "×1440, 1분에 하루"], [86400, 8, "×86400, 1초에 하루"]];   // [시계 배수, 마을 진행 배수, 라벨] — 게임 ⏩ 배속(edition.js)과 따로, 둘이 겹치면 곱(프레임당 최대 12번)
 let simSpeed = 1;
 hud.onTimeMult = to => { const j = TIME_MULTS.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MULTS.findIndex(m => m[0] === daylight.mult) + 1) % TIME_MULTS.length, [m, sp, l] = TIME_MULTS[i];   // to = 고른 배수(없으면 다음 값)
   if (m > 1 && daylight.mode !== "real") { daylight.mode = "real"; document.getElementById("timeMode").textContent = "시간: 실제 시간"; }
   daylight.setMult(m); simSpeed = sp; return l; };
 // 판·배속 고르기(설정 칸 · 시간 칩 · F 키가 모두 이리로)
-hud.onEdition = v => { const r = edition.setLocal(v); if (!r.ok && r.reason === "account") hud.status("🎟 판은 계정에서 정해져요 · 설정에서는 볼 수만 있어요", { kind: "warn" });
-  else if (r.ok) hud.status(edition.isPaid ? "🎟 유료판 · ⏩ 배속(×2·×3)을 쓸 수 있어요" : "🎟 무료판 · 배속은 ×1로 돌아갔어요", { kind: edition.isPaid ? "good" : "info" }); };
+hud.onEdition = v => { const r = edition.setLocal(v); if (!r.ok && r.reason === "account") hud.status("🎟 이용권은 계정에 맞춰 정해져요", { kind: "warn" });
+  else if (r.ok) hud.status(edition.isPaid ? "🎟 유료 이용권: 이제 ⏩ 배속을 쓸 수 있어요" : "🎟 무료로 바꿨어요. 배속은 ×1로 돌아갔어요", { kind: edition.isPaid ? "good" : "info" }); };
 hud.onSpeed = v => { const r = v === "next" ? edition.cycleSpeed() : edition.setSpeed(+v); if (!r.ok && r.reason === "locked") { hud.speedLocked(); return; }
-  if (r.ok) hud.status(r.speed > 1 ? `⏩ 배속 ×${r.speed} · 마을 진행(걸음·일·공사·밭)이 ${r.speed}배 · 하루 빛은 실제 시각 그대로` : "▶ 배속 ×1(보통 빠르기)"); };
-const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게(1분=1시간)"]];
+  if (r.ok) hud.status(r.speed > 1 ? `⏩ 배속 ×${r.speed}` : "▶ 보통 빠르기"); };
+const TIME_MODES = [["real", "실제 시간"], ["noon", "낮 고정"], ["fast", "빠르게, 1분에 한 시간"]];
 hud.onTimeMode = to => { const j = TIME_MODES.findIndex(m => m[0] === to), i = j >= 0 ? j : (TIME_MODES.findIndex(m => m[0] === daylight.mode) + 1) % TIME_MODES.length; daylight.mode = TIME_MODES[i][0]; daylight.last = -1; return TIME_MODES[i][1]; };
 const STYLES = [["toon", "툰"], ["clay", "클레이"], ["basic", "기본"]];
 function applyStyle(s) { toon.setStyle(s); roomView.toon.setStyle(s); tintGround(); try { localStorage.setItem("galmaemiman-style", s); } catch { /* 무시 */ } return STYLES.find(x => x[0] === s)[1]; }

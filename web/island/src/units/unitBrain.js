@@ -616,7 +616,7 @@ function startSleep(u, world, rnd) {
   for (const b of spare) if (startPath(u, world, b.door.x, b.door.z)) return go(b, "🏠 빈 집에서 하룻밤 신세 질게요");
   setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false;
   if (world.economy) u.sleptOutAt = world.time || 0;
-  emote(u, "🌙 집이 없어 밖에서 자요…", 2.6); return true;
+  emote(u, "🌙 집이 없으니 밖에서 자야지…", 2.6); return true;
 }
 // ---------------------------------------------------------------- 쓰러짐(chrono.js FAINT_AT·FAINT_LIE)
 /** 쓰러질까: 깨어 밖에 있고(건물 안·잠·들림·배·헤엄 아님) 기력이 FAINT_AT 이하. 한 번 쓰러지면 기력이 잠 문턱(20) 위로 올라와야 다시 쓰러질 수 있음
@@ -1120,13 +1120,13 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     case US.GoTrade:
       if (world.economy && followPath(u, dt, world, rnd)) {                         // 경제: 시장 앞에서 한동안 손님을 기다림
-        u.state = US.Trade; u.timer = 8 + rnd() * 6; emote(u, "어서 오세요!"); u.tradeStart = u.coins || 0; break;
+        u.state = US.Trade; u.timer = 8 + rnd() * 6; emote(u, "자, 구경하고 가!"); u.tradeStart = u.coins || 0; break;
       }
       if (world.economy) break;
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Trade; face(u, world.stall.x + 0.5, world.stall.z + 0.5);
         doOnce(u, "Attack", () => { const l = world.trade(u); u.lastReward = l.sold > 0 ? 1 + Math.min(1, l.sold / 50) : l.bought > 0 ? 0.7 : 0.1;
-            chatter(u, l.sold || l.bought ? (nums(world) ? `🐚 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : l.sold ? "잘 팔렸다!" : "좋은 거 샀다") : "손님이 없네", world, 2.2); },
+            chatter(u, l.sold || l.bought ? (nums(world) ? `🪙 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : l.sold ? "잘 팔렸다!" : "좋은 거 샀다") : "손님이 없네", world, 2.2); },
           () => done(u, u.lastReward ?? 0.5, rnd, world, 1 + rnd()));
       }
       break;
@@ -1163,9 +1163,9 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (!followPath(u, dt, world, rnd)) break;
       const shop = u.shop || {}; u.shop = null;
       if (shop.kind === "sell") {
-        const r = world.sellToMarket(u); chatter(u, r.coins ? (nums(world) ? `🐚 원자재 🪙+${r.coins}` : "재료 잘 팔았다") : "상인이 돈이 없대…", world, 2.2); done(u, r.coins ? 0.5 + r.coins / 20 : 0.1, rnd, world);
-      } else if (shop.kind === "peddle") {                                         // 소지품 팔기(조개는 내 것, 상인은 1개에 1조개)
-        const r = world.sellStash(u); chatter(u, r.coins ? (nums(world) ? `🐚 소지품 ${r.n}개 🪙+${r.coins - r.cut}` : "소지품 정리 끝!") : r.donated.length ? "🐠 수족관에 기증!" : "오늘은 안 팔래", world, 2.2); done(u, r.coins ? 0.5 + r.coins / 30 : 0.1, rnd, world);
+        const r = world.sellToMarket(u); chatter(u, r.coins ? (nums(world) ? `원자재 🪙+${r.coins}` : "재료 잘 팔았다") : "상인이 돈이 없대…", world, 2.2); done(u, r.coins ? 0.5 + r.coins / 20 : 0.1, rnd, world);
+      } else if (shop.kind === "peddle") {                                         // 소지품 팔기(동전은 내 것, 상인은 1개에 1동전)
+        const r = world.sellStash(u); chatter(u, r.coins ? (nums(world) ? `소지품 ${r.n}개 🪙+${r.coins - r.cut}` : "소지품 정리 끝!") : r.donated.length ? "🐠 수족관에 기증!" : "오늘은 안 팔래", world, 2.2); done(u, r.coins ? 0.5 + r.coins / 30 : 0.1, rnd, world);
       } else if (shop.kind === "process") {                                        // 가공: 개수만큼 망치질하는 시간
         const n = E.total(u.raw); u.state = US.Trade; u.processing = true; u.timer = 1.5 + n * 0.6; u.tool = "hammer"; u.anim = "Build"; chatter(u, nums(world) ? `🔨 가공 중(${n})` : "뚝딱뚝딱…", world);
       } else if (shop.kind === "food") {
@@ -1177,7 +1177,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       } else if (shop.kind === "stock") {
         const n = world.stockFood(u); chatter(u, n ? (nums(world) ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고 채웠다!") : "저장고가 꽉 찼네", world, 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
       } else if (shop.kind === "granary") {
-        const r = world.takeFood(u); if (r) { world.eatFood(u); emote(u, r === "buy" ? "🏚 저장고 음식 냠" : "🏚 나눠 받았어요", 2.2); done(u, 0.8, rnd, world); } else { emote(u, "저장고가 비었네…"); setIdle(u, rnd, world); }
+        const r = world.takeFood(u); if (r) { world.eatFood(u); emote(u, r === "buy" ? "🏚 저장고 음식 냠" : "🏚 나눠 받았다, 고마워", 2.2); done(u, 0.8, rnd, world); } else { emote(u, "저장고가 비었네…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "share") {                                          // 2층집에 같이 살기(homes.js)
         const b = world.buildings.get(shop.b);
         if (b && world.moveIn(u, b)) { emote(u, "🏡 같이 살자!", 3); world.notice(u.x, u.z, "building", u); done(u, 2.5, rnd, world); } else { emote(u, "놓쳤다…"); setIdle(u, rnd, world); }
