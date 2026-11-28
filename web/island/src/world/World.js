@@ -26,11 +26,11 @@ import * as RD from "./roads.js";
 import * as PW from "./power.js";
 import { sizeNoise, fishSize, donatable, giftsEarned, DONATE_GIFTS, donatedFromSave, recordsFromSave } from "./aquarium.js";
 import { fishMedal, grantMedalGifts, medalGiftsFromSave } from "./medals.js";
-import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay } from "./news.js";
+import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay, awayBuildCycles, awayDuesDays, awayGiftCount } from "./news.js";
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
-import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost } from "./daily.js";
+import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText } from "./daily.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
@@ -45,7 +45,7 @@ import * as CLO from "./clothes.js";
 import * as HL from "./health.js";
 import * as ST from "./story.js";
 import { STORY_PIECES, STORY_CHAPTERS, STORY_CHAIR } from "../data/story.js";
-import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk } from "./sparkles.js";
+import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk, sparkleKinds } from "./sparkles.js";
 
 /**
  * 새 넓은 섬에 공식은행을 놓음(예전 저장을 불러올 땐 쓰지 않음). 난수를 쓰지 않아 같은 섬 → 같은 자리.
@@ -150,6 +150,8 @@ export class World {
     this.festKey = null; this.festival = festivalFromSave(extra.festival); this.festivals = festivalsFromSave(extra.festivals); this.festClock = 0;
     // 오늘의 부탁: 그날의 부탁 { key 실제 날짜, reqs, stamped }(화면이 setDay로 날짜를 넣어 줄 때 고름. 그 전엔 null) · 모은 도장 · 도장 가게에서 산 것 { id: 개수 }
     this.daily = null; this.stamps = Math.max(0, extra.stamps | 0); this.stampBought = stampBoughtFromSave(extra.stampBought);
+    // 오늘의 첫 인사(greetToday): 마지막으로 인사받은 실제 날짜 열쇠(예전 저장엔 없음 → 다음 접속에 인사) · 다녀온 사이 문 앞에서 기다리는 갈매미 id(저장 안 함)
+    this.greetDay = typeof extra.greetDay === "string" ? extra.greetDay : null; this.doorGull = null;
     // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
     this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
     this.showNumbers = false;                                                     // 건설 모드인지(화면이 넣어 줌): 그때만 갈매미 말풍선에 "나무+2"·"🪙+12" 같은 숫자를 보임. 저장 안 함
@@ -261,7 +263,7 @@ export class World {
     J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
     s.coins = 0; s.inv = E.newBag(); s.home = null; s.stash = {};              // 돈·가방·내 집·소지품(잡거나 주운 것, belongings.js)
     s.loan = null; s.wageOwed = 0; s.loanRefused = false;                       // 집 대출 { left, per } · 밀린 품삯 · 금고가 비어 대출을 거절당함(bank.js)
-    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
+    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(실제 날짜 열쇠, petKey)과 그날 횟수
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     s.clothes = []; s.wear = CLO.emptyWear();                                   // 가진 옷 · 입은 옷(clothes.js)
     if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(중앙은행이 켜진 섬은 금고에서, issue)
@@ -550,21 +552,27 @@ export class World {
     const mon = this.monOn() ? bk.mon : null;
     if (mon) for (const u of this.units) if (u.loan && u.loan.left > 0) u.loan.left = Math.ceil(u.loan.left * (1 + mon.rate / 100 + 0.01));   // 대출 이자(금리 + 1%p, 갚을 때 금고로)
     for (const b of this.buildings.values()) if (b.order && this.isDone(b)) this.settleOrder(b);   // 다 지었는데 마지막 품삯 전에 일이 끊긴 주문 공사: 남은 돈 돌려줌
-    let total = 0, n = 0;
+    const { total, n } = this.collectDues(true);
+    this.emit("tax", { total, n });
+    if (mon) this.stepMon(d);
+  }
+  /** 마을 하루치 집값 갚기와 세금(stepBank · 다녀온 사이 applyAway가 같이 씀, 난수 안 씀). talk: 밖에 있는 갈매미가 말풍선으로 알림.
+   *  돌려주는 값: { total 세금, n 낸 갈매미 수, repaid 갚은 집값 } */
+  collectDues(talk = true) {
+    const bk = this.bank; let total = 0, n = 0, repaid = 0;
     for (const u of this.units) {
-      const out = !u.insideBuildingId; let said = false;
+      const out = talk && !u.insideBuildingId; let said = false;
       if (u.loan) {
         const k = BK.repayOf(u.loan, u.coins);
-        if (k) { u.coins -= k; u.loan.left -= k; bk.repaid += k; this.deposit(k, "returned", "repay"); }
-        if (u.loan.left <= 0) { u.loan = null; emote(u, "🏠 집값 다 갚았다!", 2.4); said = true; this.emit("loanPaid", { u }); }
-        else if (!k && out) { emote(u, "집값은 내일 갚을게…", 2); said = true; }
+        if (k) { u.coins -= k; u.loan.left -= k; bk.repaid += k; repaid += k; this.deposit(k, "returned", "repay"); }
+        if (u.loan.left <= 0) { u.loan = null; if (talk) emote(u, "🏠 집값 다 갚았다!", 2.4); said = true; this.emit("loanPaid", { u }); }
+        else if (!k && out) { emote(u, "집값은 다음에 갚을게…", 2); said = true; }
       }
       const t = BK.taxOf(u.coins); if (!t) continue;
       u.coins -= t; this.deposit(t, "tax"); total += t; n++;
       if (out && !said) emote(u, `🏦 -${t}`, 1.6);
     }
-    this.emit("tax", { total, n });
-    if (mon) this.stepMon(d);
+    return { total, n, repaid };
   }
 
   // ---- 중앙은행(monetary.js): 물가 P · 🖨 하루 발행(가공품 매입 한도) · 🏦 금리(예금·대출) · 🎁 축하 나눠주기 · 🤖 자동
@@ -1120,11 +1128,13 @@ export class World {
     const thanks = this.addBond(u, t.bond * (item.stampGift ? STAMP_GIFT_BOND : 1));
     return { item, tier, say: t.say, bond: u.bond, thanks };
   }
-  /** 쓰다듬기: 정·재미가 조금 오름. 갈매미마다 마을 하루에 PET_DAILY번까지(실제 시계가 아니라 마을 날짜).
+  /** 쓰다듬기: 정·재미가 조금 오름. 갈매미마다 하루(실제 날짜, petKey)에 PET_DAILY번까지.
    *  돌려주는 값: { ok, left: 오늘 남은 횟수, thanks } · 못 했으면 { ok: false, reason: "cap" | "away" } */
+  /** 쓰다듬기 날짜 열쇠: 실제 날짜(오늘의 부탁과 같은 daily.key, 화면이 기기 날짜로 넣어 줌). 날짜를 모르면(시험 받침) 마을 날짜 */
+  petKey() { return this.daily?.key ?? newsDay(this.time); }
   pet(u) {
     if (!u || !this.units.includes(u) || u.insideBuildingId || u.state === UnitState.Held || u.sailing) return { ok: false, reason: "away" };
-    const day = newsDay(this.time);
+    const day = this.petKey();
     if (!petsLeft(u, day)) return { ok: false, reason: "cap", left: 0 };
     if (u.petDay !== day) { u.petDay = day; u.petN = 0; }
     u.petN++; if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + PET_FUN);
@@ -1269,12 +1279,15 @@ export class World {
     if (home) { if (!F.autoPlace(this, home, item.furniture)) { const it = F.room(home); it.stash[item.furniture] = (it.stash[item.furniture] || 0) + 1; emote(u, F.NO_ROOM_SAY, 2.4); } return; }
     stashAdd(u, item.id);
   }
-  /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌. 마을을 돌리지 않고 딱 두 가지만:
-   *  자라던 밭이 익고(10분이면 어느 계절·날씨에도 다 익음), 어부가 낚싯대를 몇 번(awayCasts) 던짐. 돈·시세·시장은 그대로.
-   *  돌려주는 값: { ms, hours, ripened, catches: [{ who, fish, item }] } 또는 null(10분 안쪽·이상한 시각) */
-  applyAway(ms, rnd = this.rnd) {
+  /** 다녀온 사이: 게임을 꺼 둔 실제 시간(ms, 밖에서 재서 넘겨줌)만큼 가볍게 쳐 줌(8시간까지). 마을을 돌리지 않고:
+   *  자라던 밭이 익고(10분이면 어느 계절·날씨에도 다 익음), 어부가 낚싯대를 몇 번(awayCasts) 던지고(rnd — 예전과 같은 순서),
+   *  짓는 갈매미가 공사를 해 두고(awayBuild: 품삯은 금고에서, 모자라면 멈춤 — 새 돈 없음), 세금·집값·숙박비를 걷고(awayDues),
+   *  문 앞에 반짝이 선물을 두고(awayGifts), 한 마리가 은행 앞에서 기다림(awayWaiter). 뒤의 넷은 rnd를 쓰지 않음(선물만 따로 만든 난수).
+   *  now: 지금 시각(숙박비 하룻밤을 가림, 없으면 화면 시계·기기 시계).
+   *  돌려주는 값: { ms, hours, ripened, catches: [{ who, fish, item }], built, buildStop, money, gifts, waiter, story } 또는 null(10분 안쪽·이상한 시각) */
+  applyAway(ms, rnd = this.rnd, now = this.clock || new Date()) {
     const hours = awayHours(ms); if (!hours) return null;
-    let ripened = 0; const catches = [], made = this.bank.mon?.made;                 // 다녀온 사이 낚은 것은 물가 식의 '만든 물건'에 세지 않음(돈·시세는 그대로)
+    let ripened = 0; const catches = [], made = this.bank.mon?.made;                 // 다녀온 사이 낚은 것은 물가 식의 '만든 물건'에 세지 않음
     for (const p of this.plots) if (p.stage === "growing") { p.stage = "ripe"; p.t = 0; ripened++; this.emit("plot", p); }
     this.stepCustom(Infinity);                                                    // 심은 묘목·빈 광석 바위도 다 자람(밭과 같은 규칙)
     const fishers = this.spots.length ? this.units.filter(u => u.job === "fisher") : [];
@@ -1284,11 +1297,128 @@ export class World {
       if (got.gifts) { this.noteNews("donate", { u, fish: got.fish }); for (const g of got.gifts) this.noteNews("donateGift", g); }   // 그동안의 기증은 소식지에만
       for (const g of got.medalGifts) this.noteNews("medalGift", g);               // 그동안 받은 금메달 기념 가구도 소식지에(가방에만 조용히 들어가던 것)
     }
+    if (this.bank.mon) this.bank.mon.made = made;
+    const { built, stop: buildStop, wages } = this.awayBuild(hours), money = { wages, ...this.awayDues(hours, ms, now) };
+    const gifts = this.awayGifts(hours, ms), waiter = this.awayWaiter(built);
     const fished = catches.length ? `물고기 ${catches.length}마리를 낚았어요` : "", did = ripened ? `밭 ${ripened}칸이 ${fished ? `익고 ${fished}` : "익었어요"}` : fished;
     if (did) addNews(this.newsLog, this.time, { icon: "💌", text: `다녀온 사이에 ${did}`, weight: 3 });
-    if (this.bank.mon) this.bank.mon.made = made;
+    for (const b of built) if (b.done) addNews(this.newsLog, this.time, { icon: "🔨", text: `다녀온 사이에 ${josa(b.who, "이", "가")} ${josa(b.name, "을", "를")} 다 지었어요`, weight: 2 });
     this.storyLines = []; this.storyEvent("away"); const story = this.storyLines; this.storyLines = null;   // 🗝 엽서·깜빡임 소식(편지에 한 줄씩)
-    return { ms, hours, ripened, catches, story };
+    return { ms, hours, ripened, catches, built, buildStop, money, gifts, waiter, story };
+  }
+  /** 다녀온 사이 공사: 짓는 갈매미마다 awayBuildCycles 바퀴. 한 바퀴 = 재료(가방 → 들고 온 짐 → 은행 창고, 모자라면 모으러 다녀온 셈으로 바퀴 둘 몫) +
+   *  망치질 3번(hammerPower) + 품삯(금고에서 payWage와 같은 값 — 금고가 모자라거나 밀린 품삯이 있으면 그 갈매미는 멈춤, 새로 밀리지 않음).
+   *  맡은 공사(committed)를 먼저, 다음은 오래된 공사장부터. 갈매미 주문 공사(b.order)는 품삯·자재값을 주문한 갈매미가 냄(금고 아님). 난수·말풍선·호기심(notice) 없음.
+   *  돌려주는 값: { built: [{ id, name, who, from, to, done }], stop: 금고 때문에 멈췄나, wages: 낸 품삯 } */
+  awayBuild(hours) {
+    const out = new Map(), WG = this.economy ? this.wage() : 0; let stop = false, wages = 0;
+    const sites = () => [...this.buildings.values()].filter(b => !this.isDone(b) && !BUILDINGS[b.defId].fixed);
+    if (!sites().length) return { built: [], stop, wages };
+    if (this.economy) this.settleOwed();
+    for (const u of this.units) {
+      if (!(J.hammerPower(u) > 0)) continue;
+      let budget = awayBuildCycles(hours);
+      while (budget > 0) {
+        const mine = sites().filter(b => J.canBuild(u, BUILDINGS[b.defId])); if (!mine.length) break;
+        const b = mine.find(x => x.id === u.committed) || mine[0];
+        const ordered = !!b.order || b.orderBy != null;                                // 갈매미 주문 공사: 품삯·자재값은 주문한 갈매미가(payWage·orderMaterials와 같음)
+        if (WG && !ordered && (this.bank.vault < WG || u.wageOwed > 0)) { stop = true; break; }
+        const cost = { ...(BUILDINGS[b.defId].cost || { wood: 1, stone: 1 }) }; if ((BUILDINGS[b.defId].tier || 1) >= 3) cost.iron = (cost.iron || 0) + 1;   // unitBrain costOf와 같은 재료
+        const has = k => [u.inv, u.load, this.res].reduce((a, bag) => a + Math.max(0, Math.floor(bag?.[k] || 0)), 0);
+        const lack = Object.entries(cost).some(([k, n]) => has(k) < n);                 // 모자란 것은 그동안 벌목·채광으로 모아 바로 쓴 셈(바퀴 둘 몫)
+        const need = lack ? 2 : 1; if (budget < need && budget < awayBuildCycles(hours)) break; budget -= need;   // 첫 바퀴는 짧게 비워도 함
+        const mineUsed = {}, wareUsed = {};
+        for (const [k, n] of Object.entries(cost)) {
+          let left = n; for (const bag of [u.inv, u.load, this.res]) { const t = Math.min(left, Math.max(0, Math.floor(bag?.[k] || 0))); if (t) { bag[k] -= t; left -= t; const to = bag === u.inv ? mineUsed : wareUsed; to[k] = (to[k] || 0) + t; } }
+        }
+        if (b.order) this.orderMaterials(b, u, mineUsed, wareUsed);
+        const rec = out.get(b.id) || { id: b.id, name: BUILDINGS[b.defId].name, who: u.name, from: Math.floor(100 * b.hits / b.need), to: 0, done: false }; out.set(b.id, rec);
+        b.used = true; this.releaseFee(b); b.lastBuilder = u.unitId;
+        b.hits = Math.min(b.need, b.hits + 3 * J.hammerPower(u)); this.emit("buildingProgress", b);
+        if (WG && ordered) u.coins = (u.coins || 0) + this.payOrder(b, WG);
+        else if (WG) { this.bank.vault -= WG; this.bank.wages += WG; this.led("wages", WG); u.coins = (u.coins || 0) + WG; wages += WG; }
+        rec.to = Math.floor(100 * b.hits / b.need);
+        if (this.isDone(b)) { rec.done = true; rec.who = u.name; b.supply = null; if (u.committed === b.id) uncommit(u, this); this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); }
+      }
+    }
+    if (wages) this.checkLow();
+    return { built: [...out.values()].filter(r => r.done || r.to > r.from), stop, wages };
+  }
+  /** 다녀온 사이 세금·집값 갚기(마을 awayDuesDays일치, collectDues와 같은 규칙 · 대출 이자도 그날마다)와 숙박비(밤을 넘겼으면 집 없는 갈매미가
+   *  주인 없는 빈 집에서 하룻밤 — lodge와 같은 값). 갈매미 돈에서 금고로 옮길 뿐(새 돈 없음). 돌려주는 값: { tax, repay, lodging } */
+  awayDues(hours, ms, now) {
+    const r = { tax: 0, repay: 0, lodging: 0 }; if (!this.economy) return r;
+    const mon = this.monOn() ? this.bank.mon : null;
+    for (let d = awayDuesDays(hours); d > 0; d--) {
+      if (mon) for (const u of this.units) if (u.loan && u.loan.left > 0) u.loan.left = Math.ceil(u.loan.left * (1 + mon.rate / 100 + 0.01));
+      const g = this.collectDues(false); r.tax += g.total; r.repay += g.repaid;
+    }
+    const at = d => BK.stayKey(d, d.getHours() < 6 || d.getHours() >= 18), key = at(now);
+    const was = at(new Date(now.getTime() - ms)), inn = [...this.buildings.values()].find(b => BUILDINGS[b.defId].house && !b.owner && this.isDone(b));
+    if (was !== key && inn) for (const u of this.units) {
+      if (u.home || u.lodgeNight === key) continue; u.lodgeNight = key;
+      const fee = Math.min(BK.LODGING_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee, "returned", "lodging"); r.lodging += fee; }
+    }
+    return r;
+  }
+  /** 문 자리: 공식은행 문(없으면 마을 가운데) */
+  doorSpot() { const b = this.bankB(); return b ? { x: b.door.x, z: b.door.z } : { x: Math.floor(this.center.x), z: Math.floor(this.center.z) }; }
+  /** 다녀온 사이 문 앞 선물: awayGiftCount개의 낮 반짝이를 은행 문 둘레(1~5칸)에 놓음. 반짝이 한도(SPARKLE_MAX)가 차면 남는 것은 바로 내 주머니로.
+   *  고르는 난수는 섬 씨앗·마을 시간·비운 분으로 따로 만듦(마을 난수·반짝이 난수를 쓰지 않음 → 같은 저장·같은 시간이면 같은 선물).
+   *  돌려주는 값: [{ k, name, pocket }] */
+  awayGifts(hours, ms) {
+    const n = awayGiftCount(hours), kinds = [...sparkleKinds("beach", this.season), ...sparkleKinds("village", this.season)]; if (!n || !kinds.length) return [];
+    const rnd = seededRandom(hashText(`gift:${this.seed ?? 7}:${Math.floor(this.time || 0)}:${Math.floor(ms / 60000)}`)), door = this.doorSpot(), out = [];
+    const plain = this.sparkles.filter(s => !s.story), cells = [];
+    for (let r = 1; r <= 5; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (Math.max(Math.abs(dx), Math.abs(dz)) === r) cells.push([door.x + dx, door.z + dz]);
+    let room = sparkleRoom(plain, false);
+    for (let i = 0; i < n; i++) {
+      const k = kinds[Math.floor(rnd() * kinds.length)].id, name = ITEMS.find(it => it.id === k)?.name ?? k;
+      const free = room > 0 ? cells.filter(([x, z]) => sparkleCellFree(this, x, z) && this.sparkles.every(s => Math.max(Math.abs(s.x - x), Math.abs(s.z - z)) > 1)).slice(0, 8) : [];
+      if (!free.length) { this.items[k] = (this.items[k] || 0) + 1; out.push({ k, name, pocket: true }); continue; }
+      const [x, z] = free[Math.floor(rnd() * free.length)], s = { id: this.sparkId++, k, x, z, t: sparkleLife(k) };
+      this.sparkles.push(s); this.emit("sparkleSpawn", s); room--; out.push({ k, name, pocket: false });
+    }
+    return out;
+  }
+  /** 갈매미 한 마리를 은행 문 앞에 세워 말을 걸게 함(밖에 있을 때만): 문 옆 걸을 수 있는 칸으로 옮기고 secs초 쉬며 말풍선. 세웠으면 true(난수 안 씀) */
+  meetAtDoor(u, say, secs = 14) {
+    if (!u || u.insideBuildingId || u.sailing || u.state === UnitState.Held) return false;
+    const d = this.doorSpot(); let spot = null;
+    for (let r = 1; r <= 4 && !spot; r++) for (let dz = -r; dz <= r && !spot; dz++) for (let dx = -r; dx <= r && !spot; dx++) {
+      const x = d.x + dx, z = d.z + dz; if (Math.max(Math.abs(dx), Math.abs(dz)) !== r || !this.grid.isWalkable(x, z) || this.grid.doorOwner(x, z) != null || this.sparkles.some(s => s.x === x && s.z === z)) continue;
+      spot = [x, z];
+    }
+    if (!spot) return false;
+    setIdle(u, null, this, secs); u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; u.y = this.standHeight(u.x, u.z); emote(u, say, secs - 2);
+    return true;
+  }
+  /** 다녀온 사이 은행 앞에서 기다리는 갈매미(난수 안 씀): 공사를 끝낸 갈매미가 자랑 → 소원이 있는 갈매미가 부탁 → 나와 가장 정든 갈매미가 인사.
+   *  돌려주는 값: { id, who, say } 또는 null(밖에 있는 갈매미가 없음) */
+  awayWaiter(built) {
+    const out = this.units.filter(u => !u.insideBuildingId && !u.sailing && u.state !== UnitState.Held); if (!out.length) return null;
+    const fin = built.find(b => b.done && out.some(u => u.name === b.who)), wish = this.wishes.find(x => x.id !== "festival" && out.some(u => u.unitId === x.unitId));
+    let u, say;
+    if (fin) { u = out.find(o => o.name === fin.who); say = `${fin.name} 다 지었어! 보러 와 ♪`; }
+    else if (wish) { u = out.find(o => o.unitId === wish.unitId); say = `💭 ${WISH_BY_ID[wish.id]?.icon ?? ""} 부탁이 있어…`.replace("  ", " "); }
+    else { u = [...out].sort((a, b) => (b.bond || 0) - (a.bond || 0) || a.unitId.localeCompare(b.unitId))[0]; say = (u.bond || 0) >= 5 ? "왔구나! 보고 싶었어 ♥" : "어서 와! 기다렸어"; }
+    if (!this.meetAtDoor(u, say)) return null;
+    this.doorGull = u.unitId; return { id: u.unitId, who: u.name, say };
+  }
+  /** 오늘의 첫 인사: 실제 날짜 열쇠(YYYY-MM-DD, daily.js dailyKey)마다 한 번, 갈매미 한 마리가 은행 문 앞으로 달려와 작은 반짝이 물건을 줌(내 주머니로).
+   *  고르는 것(갈매미·물건)은 날짜 열쇠와 섬 씨앗으로만(마을 난수를 쓰지 않음). 다녀온 사이 문 앞에서 기다리던 갈매미가 있으면 그 갈매미가 줌.
+   *  돌려주는 값: { u, item, say } 또는 null(오늘 이미 했거나 갈매미가 없음). 알림: greet({ u, item, say }) */
+  greetToday(key) {
+    if (!key || this.greetDay === key || !this.units.length) return null;
+    const kinds = [...sparkleKinds("beach", this.season), ...sparkleKinds("village", this.season)]; if (!kinds.length) return null;
+    this.greetDay = key;
+    const rnd = seededRandom(hashText(`greet:${this.seed ?? 7}:${key}`)), pool = [...this.units].sort((a, b) => a.unitId.localeCompare(b.unitId));
+    const outside = pool.filter(u => !u.insideBuildingId && !u.sailing && u.state !== UnitState.Held), pick = Math.floor(rnd() * pool.length), k = kinds[Math.floor(rnd() * kinds.length)].id;
+    const u = outside.find(o => o.unitId === this.doorGull) || outside[pick % Math.max(1, outside.length)] || pool[pick];
+    const item = ITEMS.find(it => it.id === k), says = ["좋은 아침! 이거 주웠어 ♪", "오늘 처음 만났네! 선물이야", "히히, 너 주려고 챙겼어", "왔다! 이거 받아 ♪"], say = says[Math.floor(rnd() * says.length)];
+    this.items[k] = (this.items[k] || 0) + 1; this.doorGull = null;
+    if (!this.meetAtDoor(u, say, 10)) emote(u, say, 6);
+    this.emit("greet", { u, item, say }); return { u, item, say };
   }
 
   // ---- 시장(상인만): 남는 자재·음식·보물·물건을 팔고, 공사에 모자란 나무·돌·철을 사 온다. 상인 희귀도만큼 비싸게 팔고 싸게 산다.
@@ -2274,7 +2404,7 @@ export class World {
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
-      daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
+      daily: this.daily, stamps: this.stamps, stampBought: this.stampBought, greetDay: this.greetDay,
       sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock, story: ST.storyToSave(this.story),
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, ...(b.mates?.length ? { mates: b.mates } : {}), fee: b.fee || 0, ...(b.feeHeld ? { feeHeld: 1 } : {}), ...(b.feeTo ? { feeTo: b.feeTo } : {}), order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
@@ -2298,7 +2428,7 @@ export class World {
     const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
     w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
     for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; u.saved = Math.max(0, Math.floor(+s.saved || 0)); if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
-      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.lodgeNight = typeof s.lodgeNight === "string" ? s.lodgeNight : null; u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
+      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.lodgeNight = typeof s.lodgeNight === "string" ? s.lodgeNight : null; u.petDay = typeof s.petDay === "string" ? s.petDay : s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
       u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused;   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
       u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0);   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
       u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes);   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)

@@ -135,7 +135,7 @@ test("상환·세금: 마을 날이 바뀔 때 상환 먼저(10은 남김) → �
   assert.deepEqual(taxes, [{ total: 8, n: 1 }]);
   w.stepBank(); assert.equal(w.bank.taxed, 8, "같은 날 두 번 걷지 않음");
   // 못 갚는 날: 벌 없이 남은 날만 늘어남
-  mini.coins = 10; nextDay(w); assert.equal(mini.loan.left, 14); assert.equal(mini.coins, 10); assert.match(mini.emoteText, /내일 갚을게/);
+  mini.coins = 10; nextDay(w); assert.equal(mini.loan.left, 14); assert.equal(mini.coins, 10); assert.match(mini.emoteText, /다음에 갚을게/);
   const paid = []; w.on("loanPaid", e => paid.push(e.u.name));
   for (let d = 0; d < 4; d++) { mini.coins = 14; nextDay(w); }
   assert.equal(mini.loan, null); assert.deepEqual(paid, ["미니"]); assert.equal(w.bank.repaid, 18);

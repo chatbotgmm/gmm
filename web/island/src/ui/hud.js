@@ -411,7 +411,7 @@ export class Hud {
       const got = w.print(n);                                                       // 금고 칩 +n은 main.js의 monPrint가 띄움
       this.status(got ? (VIEW.adv ? `🖨 새 돈 🪙${got}을 찍어 금고에 넣었어요 · 오늘 더 🪙${w.printLeft()}` : `🖨 동전 🪙${got}을 찍어 금고에 넣었어요`) : "🖨 오늘은 더 찍을 수 없어요", { kind: got ? "good" : "warn" });
     }
-    else if (act === "rate") { if (w.setRate(v) && v !== mi.rate) this.status(`🏦 금리 ${mi.rate}% → ${v}% · 내일부터 저금·이자에 들어가요`, { kind: "info" }); }
+    else if (act === "rate") { if (w.setRate(v) && v !== mi.rate) this.status(`🏦 금리 ${mi.rate}% → ${v}% · 마을의 다음 날부터 저금과 이자에 들어가요`, { kind: "info" }); }
     else if (act === "auto") w.setAuto(v === 1);
     else if (act === "issue") w.setIssue(v);
     else if (act === "gift") { const sum = w.giftAll(); this.status(sum ? `🎁 금고에서 모두에게 🪙${Math.round(sum / Math.max(1, w.units.length))}씩 나눠 줬어요` : "🎁 금고가 모자라거나 오늘은 이미 나눠 줬어요", { kind: sum ? "good" : "warn" }); }
@@ -900,7 +900,7 @@ export class Hud {
     const on = !!u && this.tugBtn.hidden, bar = this.bondBar;
     if (!on || u !== this.bondU) this.giftPick.hidden = true;                       // 다른 갈매미로 바꾸면 고르는 판은 닫음
     this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!u) return;       // 자리는 CSS(카드 바로 위, 가로 폰은 카드 옆)
-    const left = petsLeft(u, newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
+    const left = petsLeft(u, this.world.petKey?.() ?? newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
     if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
     if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
   }

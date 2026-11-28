@@ -43,6 +43,8 @@ export function rewardOf(ev, a, world) {
   switch (ev) {
     case "sparkle": { const it = a.item; if (!it) return null;   // 직접 주운 반짝이 → 내 주머니
       return { tier: it.rarity && it.rarity !== "common" ? "big" : "medium", icon: itemIcon(it), title: got(nameOf(it)), line: "🎁 내 주머니에 쏙!", to: "bag", snd: "glint", key: "sparkle" }; }
+    case "greet": { const it = a.item, u = a.u; if (!it || !u) return null;   // 오늘의 첫 인사: 실제 날짜마다 한 번 갈매미가 문 앞으로 달려와 준 작은 물건
+      return { tier: "medium", icon: itemIcon(it), title: got(nameOf(it)), line: `💛 ${u.name}의 오늘의 첫 인사 · 🎁 내 주머니로`, to: "bag", snd: "glint", key: "greet" }; }
     case "stampBuy": { const it = a.item; if (!it) return null;   // 도장 가게: 도장으로 바꾼 한정 가구·귀한 선물
       return { tier: "big", icon: itemIcon(it), title: got(it.name), line: it.furniture ? `🏪 도장 가게 한정 가구 · ${FURNI_LINE}` : "🏪 도장 가게 귀한 선물 · 🎁 내 주머니로", to: "bag", snd: "fanfare", key: `stamp:${it.id}` }; }
     case "medalGift": case "donateGift": { const it = a.item; if (!it) return null;   // 수족관 금메달·기증 기념 가구
@@ -84,7 +86,7 @@ export function rewardOf(ev, a, world) {
   }
 }
 /** 이 이벤트들은 보상 화면이 알림을 맡음(알림 줄에는 안 띄우고 지난 알림에만 남김). small(세금·숙박비)은 알림 줄 한 줄도 그대로 */
-export const REWARD_EVENTS = ["storyPiece", "storyRestore", "storyEnd", "storySeed", "storyPostcard", "sparkle", "stampBuy", "medalGift", "donateGift", "festivalEnd", "rank", "dailyDone", "bondStage", "wishDone", "fussSolved", "donate", "fishRecord", "tax", "lodging"];
+export const REWARD_EVENTS = ["greet", "storyPiece", "storyRestore", "storyEnd", "storySeed", "storyPostcard", "sparkle", "stampBuy", "medalGift", "donateGift", "festivalEnd", "rank", "dailyDone", "bondStage", "wishDone", "fussSolved", "donate", "fishRecord", "tax", "lodging"];
 
 /** small 합치기: add(r, now) → 새로 띄울 것인지 합친 것인지. due(now) → 합치기가 끝나 날릴 것들 [{ to, n, icon, line }] */
 export function makeSmallSum(win = RF_SUM_MS) {

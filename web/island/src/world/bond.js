@@ -57,9 +57,9 @@ export function giftTier(name, id) {
   return cat && p.likes?.includes(cat) ? 2 : cat && p.dislikes?.includes(cat) ? 0 : 1;
 }
 
-// 쓰다듬기: 갈매미마다 하루(마을 날짜, news.js의 newsDay) PET_DAILY번까지
-export const PET_DAILY = 3, PET_BOND = 0.5, PET_FUN = 4;
-/** 오늘 더 쓰다듬을 수 있는 횟수 */
+// 쓰다듬기: 갈매미마다 하루(실제 날짜 열쇠 — 오늘의 부탁과 같은 daily.js dailyKey, World.petKey) PET_DAILY번까지
+export const PET_DAILY = 5, PET_BOND = 0.5, PET_FUN = 4;
+/** 오늘 더 쓰다듬을 수 있는 횟수(day = 날짜 열쇠, 글자 또는 예전 저장의 마을 날짜 수) */
 export const petsLeft = (u, day) => Math.max(0, PET_DAILY - (u.petDay === day ? u.petN || 0 : 0));
 
 // 답례: 하트 단계(1~3)에 처음 닿았을 때 한 번. item = 마을 가방에 들어가는 물건(ITEMS의 id),

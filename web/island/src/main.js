@@ -227,6 +227,7 @@ function mount(w) {
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
   { const d0 = daylight.now(); if (world.isNight == null) world.isNight = (2 - sunPosition(d0).elev) / 8 > 0.5; world.hour ??= d0.getHours() + d0.getMinutes() / 60; }   // 첫 프레임 전에 밤인지·몇 시인지(tickClock과 같은 규칙): 저녁에 고른 부탁엔 밤 부탁이 낄 수 있음
+  if (!world.units.length) world.greetDay = dailyKey(new Date());               // 갓 만든 섬: 첫 인사는 다음 날부터(첫날 안내를 가리지 않게)
   world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
   // 플레이어 보상(ui/rewardFx.js rewardOf): 띠·큰 카드·+N이 크게 보여 주고 소리도 냄 → 알림 줄에는 안 띄우고 지난 알림에만(같은 소식 두 번 아님). small(세금·숙박비)은 알림 줄도 그대로
@@ -343,8 +344,10 @@ function welcomeBack(w) {
   if (!r) return null;
   saveNow();                                       // 쳐 준 것을 바로 저장: 저장 전에 다시 불러와도 편지·낚은 물고기를 또 받지 않게
   const wishes = w.wishes.map(x => { const u = w.units.find(o => o.unitId === x.unitId), d = WISH_BY_ID[x.id]; return u && d ? { who: u.name, text: wishText(d, w, u, x) } : null; }).filter(Boolean);
-  return awayLetter(r, { post: !!w.postB(), news, wishes });
+  return { ...awayLetter(r, { post: !!w.postB(), news, wishes }), onClose: greetSoon };   // 편지를 닫으면 오늘의 첫 인사
 }
+/** 💛 오늘의 첫 인사(World.greetToday): 실제 날짜마다 한 번, 갈매미가 은행 문 앞으로 와서 작은 물건을 줌. 보상 띠(rewardFx greet)가 알림을 맡음 */
+function greetSoon() { const w = world; setTimeout(() => { if (ready && world === w) w.greetToday(dailyKey(new Date())); }, 600); }
 const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 다 지은 작은 집 한 채(갈매미 0) → 🥚 소환으로 첫 갈매미(집 한 채에 한 마리)
 const backLetter = savedWorld ? welcomeBack(world) : null;                        // 다 불러온 뒤에 보여 줌
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
@@ -479,7 +482,7 @@ Promise.all([assetsLoad, charPool.ready]).then(() => {
   else if (world.wild) hud.status("🏦 은행 앞에 첫 갈매미가 왔어요. 아래 🔨 건설에서 집을 지어 주세요", { queue: true, full: true });
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true, full: true });
   else if (loadProgress.done < loadProgress.total) hud.status("아직 그림을 받고 있어요. 받는 대로 바뀌어요", { queue: true, full: true });
-  hud.showLetter(backLetter);
+  hud.showLetter(backLetter); if (!backLetter && resumed) greetSoon();          // 편지가 없으면 바로 오늘의 첫 인사(편지가 있으면 닫은 뒤)
   cloud.start();                                   // 계정 확인(같은 출처 /village3d/에서만 · 아니면 요청 없이 꺼짐)
   hud.coach.start({ fresh: !resumed });           // 처음 안내 3단계(새 섬일 때 · 편지·처음 알림이 지나간 뒤 말풍선이 뜸)
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
@@ -573,7 +576,7 @@ function frameBody() {
   tickClock();
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
-  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); world.setDay(dailyKey(new Date())); }
+  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); if (world.setDay(dailyKey(new Date())) && ready) greetSoon(); }   // 켜 둔 채 날짜가 바뀌어도 첫 인사
   followSun();                                                                  // 해(달) 방향은 시간대에 따라, 그림자 범위는 보는 곳을 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);
