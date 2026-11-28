@@ -185,7 +185,8 @@ export function newsAppHtml(w, { more = avMore } = {}) {
   const today = newsDay(w.time), pages = newsPages((w.newsLog || []).filter(e => VIEW.adv || !e.eco));   // 쉬운 보기: 세금·숙박비·물가 같은 살림 속사정은 거름(🔧 자세히 보기면 다)
   const sub = `<p class="av-sub">📰 마을 <b>${today}일째</b> · 하루 큰일 ${NEWS_HEADLINES}건까지 · 최근 ${NEWS_KEEP_DAYS}일</p>`;
   if (!pages.length) return sub + `<p class="dim">아직 실을 소식이 없어요. 집을 짓거나, 소원을 들어주거나, 귀한 물고기를 낚으면 여기에 실려요.</p>`;
-  const li = (e, top) => `<li${top ? ` class="top"` : ""}><span class="ico">${e.icon}</span><span>${avEsc(e.text)}</span></li>`;
+  const easyText = t => VIEW.adv ? t : String(t).replace(/[.,] (진료비|약값) 🪙\d+.*$/, "");   // 쉬운 보기: "…실려 가 누웠어요. 진료비 🪙6" → 진료비 꼬리 뗌
+  const li = (e, top) => `<li${top ? ` class="top"` : ""}><span class="ico">${e.icon}</span><span>${avEsc(easyText(e.text))}</span></li>`;
   const extra = p => p.more ? `<p class="dim">그 밖의 소식 ${p.more}건</p>` : "";
   const [first, ...rest] = pages, others = first.heads.slice(1);
   const lead = `<section class="newsday"><h4>${newsDayName(first.day, today)} <span class="dim">마을 ${first.day}일째</span></h4><ul>${li(first.heads[0], true)}</ul>` +

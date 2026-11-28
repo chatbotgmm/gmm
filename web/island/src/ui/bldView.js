@@ -13,9 +13,9 @@ import { owns } from "../world/furniture.js";
 import { newsDay } from "../world/news.js";
 import { fmtLeft, sickLeftOf, stateLabelOf, sickLeftText } from "./gullView.js";
 import { VIEW, leftWord } from "./viewPrefs.js";
+import { sumHead, moreBox, fmtNum } from "./hudParts.js";
 /** 밭이 다 자라기까지: 쉬운 보기는 낱말, 🔧 자세히 보기는 분·초 */
 const growLeft = s => VIEW.adv ? `${fmtLeft(s)} 남음` : { "곧": "곧 다 자라요", "조금 더": "조금 더 자라야 해요", "한참": "한참 자라야 해요" }[leftWord(s)];
-import { sumHead, moreBox, fmtNum } from "./hudParts.js";
 
 const bdEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const bdMore = (key, title, html, opts) => moreBox(key, title, html, opts);

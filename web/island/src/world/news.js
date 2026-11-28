@@ -114,7 +114,7 @@ const NEWS_MAKERS = {
 export const NEWS_EVENTS = Object.keys(NEWS_MAKERS);
 /** 이 일의 소식 한 줄(없으면 null) */
 /** 살림 속사정 소식(세금·숙박비·대출·물가·중앙은행 창구): 소식지에 eco 표시를 달아 둠 → 쉬운 보기(ui/viewPrefs.js)에서는 소식지가 거름. 규칙과 저장은 그대로 */
-export const ECO_NEWS = new Set(["lodging", "tax", "fee", "loanPaid", "loanRefused", "wageOwed", "wagePaid", "monIssue", "monRate", "monGift", "inflation", "deflation", "priceStable", "capFull", "monAuto", "monPrint", "monStart", "clinicVisit", "faintCarried"]);
+export const ECO_NEWS = new Set(["lodging", "tax", "fee", "loanPaid", "loanRefused", "wageOwed", "wagePaid", "monIssue", "monRate", "monGift", "inflation", "deflation", "priceStable", "capFull", "monAuto", "monPrint", "monStart", "clinicVisit"]);   // faintCarried(🚑 실려 감)는 갈매미 일이라 남기고, 쉬운 보기에서는 진료비 꼬리만 뗌(ui/appViews.js)
 export const newsFor = (ev, arg, world) => { const n = NEWS_MAKERS[ev]?.(arg, world) ?? null; if (n && ECO_NEWS.has(ev)) n.eco = true; return n; };
 
 /** 소식 하나를 넣고 정리: 같은 날 같은 글은 한 번만, 오래된 날은 버리고, 너무 많으면 덜 중요한 것(같으면 오래된 것)부터 버림. 넣었으면 true. */

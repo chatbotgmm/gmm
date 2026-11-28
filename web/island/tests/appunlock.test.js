@@ -47,3 +47,11 @@ test("소식지: 세금·숙박비·물가 소식은 eco 표시 → 쉬운 보�
   assert.ok(!/세금/.test(newsAppHtml(w))); assert.match(newsAppHtml(w), /작은 집/);
   setAdv(true); try { assert.match(newsAppHtml(w), /세금/); } finally { setAdv(false); }
 });
+
+test("소식지: 🚑 실려 간 일은 갈매미 소식이라 쉬운 보기에도 남고 진료비 꼬리만 빠짐", () => {
+  const w = fresh(); w.newsLog = [];
+  const n = { icon: "🚑", text: "기본이 병원에 실려 가 누웠어요. 진료비 🪙3", weight: 1 }; assert.ok(!newsFor("faintCarried", { u: { name: "기본" }, b: null, fee: 3 }, w).eco);
+  addNews(w.newsLog, 10, n);
+  assert.match(newsAppHtml(w), /실려 가 누웠어요/); assert.doesNotMatch(newsAppHtml(w), /진료비/);
+  setAdv(true); try { assert.match(newsAppHtml(w), /진료비 🪙3/); } finally { setAdv(false); }
+});
