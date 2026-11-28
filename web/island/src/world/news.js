@@ -113,20 +113,22 @@ const NEWS_MAKERS = {
 /** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */
 export const NEWS_EVENTS = Object.keys(NEWS_MAKERS);
 /** 이 일의 소식 한 줄(없으면 null) */
-export const newsFor = (ev, arg, world) => NEWS_MAKERS[ev]?.(arg, world) ?? null;
+/** 살림 속사정 소식(세금·숙박비·대출·물가·중앙은행 창구): 소식지에 eco 표시를 달아 둠 → 쉬운 보기(ui/viewPrefs.js)에서는 소식지가 거름. 규칙과 저장은 그대로 */
+export const ECO_NEWS = new Set(["lodging", "tax", "fee", "loanPaid", "loanRefused", "wageOwed", "wagePaid", "monIssue", "monRate", "monGift", "inflation", "deflation", "priceStable", "capFull", "monAuto", "monPrint", "monStart", "clinicVisit", "faintCarried"]);
+export const newsFor = (ev, arg, world) => { const n = NEWS_MAKERS[ev]?.(arg, world) ?? null; if (n && ECO_NEWS.has(ev)) n.eco = true; return n; };
 
 /** 소식 하나를 넣고 정리: 같은 날 같은 글은 한 번만, 오래된 날은 버리고, 너무 많으면 덜 중요한 것(같으면 오래된 것)부터 버림. 넣었으면 true. */
 export function addNews(log, time, n) {
   const day = newsDay(time);
   if (!n || !(n.weight > 0) || log.some(e => e.day === day && e.text === n.text)) return false;
-  log.push({ day, t: Math.round(time), icon: n.icon, text: n.text, weight: n.weight });
+  log.push({ day, t: Math.round(time), icon: n.icon, text: n.text, weight: n.weight, ...(n.eco ? { eco: true } : {}) });
   for (let i = log.length - 1; i >= 0; i--) if (log[i].day <= day - NEWS_KEEP_DAYS) log.splice(i, 1);
   while (log.length > NEWS_MAX) { let k = 0; for (let i = 1; i < log.length; i++) if (log[i].weight < log[k].weight) k = i; log.splice(k, 1); }
   return true;
 }
 /** 저장에서 읽은 소식(예전 저장엔 없음 → 빈 소식지). 모양이 맞는 것만. */
 export const newsFromSave = list => (Array.isArray(list) ? list : []).filter(e => e && e.day > 0 && typeof e.text === "string")
-  .map(e => ({ day: e.day, t: e.t || 0, icon: e.icon || "📰", text: e.text, weight: e.weight || 1 })).slice(-NEWS_MAX);
+  .map(e => ({ day: e.day, t: e.t || 0, icon: e.icon || "📰", text: e.text, weight: e.weight || 1, ...(e.eco ? { eco: true } : {}) })).slice(-NEWS_MAX);
 /** 날짜별 소식지(새 날부터): [{ day, heads: 중요한 순 top건, more: 그 밖의 소식 수 }] */
 export function newsPages(log, top = NEWS_HEADLINES) {
   const days = [...new Set(log.map(e => e.day))].sort((a, b) => b - a);

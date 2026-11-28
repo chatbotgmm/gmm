@@ -18,6 +18,7 @@ import { stashList } from "../world/belongings.js";
 import { ITEMS_ORDER, ITEM_ICON } from "../world/economy.js";
 import { STAMP_SHOP, STAMP_GIFTS, stampCost } from "../world/daily.js";
 import { valueRows } from "./hudParts.js";
+import { VIEW, leftWord } from "./viewPrefs.js";
 
 // 갈매미가 지금 하는 일(카드·목록). 모든 UnitState 키가 있어야 함(시험으로 고정) — 영문 상태 이름이 화면에 나오지 않게
 export const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",
@@ -41,6 +42,10 @@ const gvEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 const gvHex = n => "#" + (n >>> 0).toString(16).padStart(6, "0");
 /** 남은 초 → "2분" · "40초"(1분 넘으면 분으로 올림) */
 export const fmtLeft = s => { const v = Math.max(0, Math.ceil(s || 0)); return v >= 60 ? `${Math.ceil(v / 60)}분` : `${v}초`; };
+/** 병이 낫기까지: 쉬운 보기는 "곧 나아요 · 조금 더 쉬어야 해요 · 한참 쉬어야 해요", 🔧 자세히 보기는 "2분 남음" */
+export const sickLeftText = s => VIEW.adv ? `${fmtLeft(s)} 남음` : { "곧": "곧 나아요", "조금 더": "조금 더 쉬어야 해요", "한참": "한참 쉬어야 해요" }[leftWord(s)];
+/** 일 속도(능률 u.eff) → 낱말. 🔧 자세히 보기는 ×1.07 */
+export const effText = eff => { const e = eff ?? 1; return VIEW.adv ? `능률 ×${e.toFixed(2)}` : `일 속도: ${e >= 1.08 ? "빨라요" : e >= 0.92 ? "보통이에요" : "느려요"}`; };
 
 /** 지금 있는 곳의 회복 자리(unitBrain healthTick과 같은 판정): out · inside · bed · clinic · doctor */
 export function recoverWhereOf(u, world) {
@@ -74,10 +79,10 @@ export function gullChips(u, world) {
   const load = ITEMS_ORDER.filter(k => (u.load?.[k] || 0) > 0).map(k => `${ITEM_ICON[k]}${u.load[k]}`).join(" ");
   return {
     coin: eco ? `🪙 ${Math.floor(u.coins || 0)}` : "",
-    home: !eco ? "" : loan ? `🏠 집값 ${loan.left} 남음` : homeB ? `🏠 ${BUILDINGS[homeB.defId]?.name ?? "집"}${housemate(u, homeB, world)}` : "🏠 집 없음",
-    wage: (u.wageOwed || 0) > 0 ? `💸 밀린 품삯 ${u.wageOwed}` : "",
+    home: !eco ? "" : loan ? (VIEW.adv ? `🏠 집값 ${loan.left} 남음` : "🏠 집값 갚는 중") : homeB ? `🏠 ${BUILDINGS[homeB.defId]?.name ?? "집"}${housemate(u, homeB, world)}` : "🏠 집 없음",
+    wage: (u.wageOwed || 0) > 0 ? (VIEW.adv ? `💸 밀린 품삯 ${u.wageOwed}` : "💸 품삯이 밀렸어요") : "",
     wear: wear ? `${wear} 입음` : "",
-    sick: sd ? `${sd.icon} ${sd.name}${u.sick.med ? " · 💊" : ""} · ${fmtLeft(sickLeftOf(u, world))} 남음` : "",
+    sick: sd ? `${sd.icon} ${sd.name}${u.sick.med ? " · 💊" : ""} · ${sickLeftText(sickLeftOf(u, world))}` : "",
     load: load ? `📦 짐 ${load}` : "",
   };
 }
@@ -85,15 +90,17 @@ export function gullChips(u, world) {
 /** [자세히 보기] 안쪽. extra: { fav: 좋아하는 일 이름, friend: "단짝: 꽃" 같은 글, eff } — 마음(mind.js)은 부르는 쪽이 계산해 넘김 */
 export function gullMoreHtml(u, world, extra = {}) {
   const sec = (t, body) => `<div class="gm-sec"><b>${t}</b>${body}</div>`, out = [];
-  if (u.satParts?.length) out.push(sec("😊 만족도 내역", valueRows(u.satParts.map(([n, v]) => [n, v, `${v > 0 ? "+" : ""}${v}`]))));
+  if (u.satParts?.length && VIEW.adv) out.push(sec("😊 만족도 내역", valueRows(u.satParts.map(([n, v]) => [n, v, `${v > 0 ? "+" : ""}${v}`]))));
+  else if (u.satParts?.length) { const good = u.satParts.filter(p => p[1] > 0 && p[0] !== "기본").map(p => gvEsc(p[0])), bad = u.satParts.filter(p => p[1] < 0).map(p => gvEsc(p[0]));   // 쉬운 보기: 점수 없이 좋은 것 · 아쉬운 것만
+    out.push(sec("😊 기분", `${good.length ? `<p>👍 ${good.join(" · ")}</p>` : ""}${bad.length ? `<p>👎 ${bad.join(" · ")}</p>` : ""}${good.length || bad.length ? "" : `<p class="dim">그냥 그래요</p>`}`)); }
   const st = stashList(u);
   out.push(sec("🎒 소지품", st.length ? `<p>${st.map(s => `${s.kind === "fish" ? "🐟" : "🎁"} ${gvEsc(s.name)} ×${s.n}${s.furniture ? ", 집에 둠" : ""}`).join(" · ")}</p>` : `<p class="dim">아직 모은 게 없어요</p>`));
   if (world.economy) { const bag = ITEMS_ORDER.filter(k => u.inv?.[k]).map(k => `${ITEM_ICON[k]}${u.inv[k]}`).join(" ");
     out.push(sec("👜 일감 가방", `<p${bag ? "" : ` class="dim"`}>${bag || "비었음"}</p>`)); }
   const has = CLOTHES_ORDER.filter(id => (u.clothes || []).includes(id)).map(id => `${CLOTHES[id].icon} ${CLOTHES[id].name}`);
   out.push(sec("🧣 가진 옷", `<p${has.length ? "" : ` class="dim"`}>${has.length ? has.join(" · ") : "없음 · 추워 보면 잡화점에서 스스로 사요"}</p>`));
-  if ((u.immune || 0) > 0) out.push(sec("🛡 면역", `<p>${fmtLeft(u.immune)} 동안 감기에 안 걸려요</p>`));
-  out.push(`<p class="dim gm-foot">좋아하는 일: ${gvEsc(extra.fav || "아직 몰라")}${extra.friend ? ` · ${gvEsc(extra.friend)}` : ""} · 능률 ×${(u.eff ?? 1).toFixed(2)}</p>`);
+  if ((u.immune || 0) > 0) out.push(sec("🛡 면역", `<p>${VIEW.adv ? `${fmtLeft(u.immune)} 동안` : "한동안"} 감기에 안 걸려요</p>`));
+  out.push(`<p class="dim gm-foot">좋아하는 일: ${gvEsc(extra.fav || "아직 몰라")}${extra.friend ? ` · ${gvEsc(extra.friend)}` : ""} · ${effText(u.eff)}</p>`);
   return out.join("");
 }
 

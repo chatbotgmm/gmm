@@ -4,8 +4,9 @@
 //  접기: 최근 며칠 물가·마을 돈·금고 작은 막대 · 돈이 어디서 오고 가는지(최근 7일 합) · 규칙 설명.
 //  단추는 data-mon="pstep|print|rate|issue|auto|gift" + data-v(값) → hud.js bankClick.
 import * as MON from "../world/monetary.js";
-import { moreBox, valueRows, fmtNum, TONE_ICON } from "./hudParts.js";
-import { dayFlow, bankHtml } from "./bankView.js";
+import { moreBox, valueRows, fmtNum, TONE_ICON, sumHead } from "./hudParts.js";
+import { dayFlow, bankHtml, todayOf, weekRows } from "./bankView.js";
+import { VIEW } from "./viewPrefs.js";
 
 const mvEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 물가 변화 π(하루) → 화살표·글·색 상태. ±0.2% 안은 →(그대로) */
@@ -18,8 +19,9 @@ export function monArrow(pi, adapt = 0) {
 }
 /** 찍기 전 예상: 마을 돈 A에 n이 다 풀리면 목표 물가가 몇 % 오르나(P* = A ÷ (4 × 만든 물건)이라 A에 비례). A가 0이면 null */
 export const printRise = (n, A) => A > 0 ? Math.round(n / A * 1000) / 10 : null;
-/** 🖨 확인창 글 { title, body, ok } */
-export function printAsk(n, info) {
+/** 🖨 확인창 글 { title, body, ok }. 쉬운 보기(자세히 보기 끔)면 물가 셈 없이 한 문장 */
+export function printAsk(n, info, { easy = !VIEW.adv } = {}) {
+  if (easy) return { title: `🖨 동전 🪙${n}을 찍을까요?`, body: "찍은 동전은 금고에 들어와요. 너무 많이 찍으면 물건값이 조금씩 올라요.", ok: `🖨 🪙${n} 찍기` };
   const A = Math.floor(info.pocket || 0), rise = printRise(n, A), after = Math.max(0, (info.printLeft || 0) - n);
   return {
     title: `🖨 새 동전 🪙${n}을 찍을까요?`,
@@ -125,8 +127,32 @@ export function monHtml(w, { more = (k, t, h, o) => moreBox(k, t, h, o), pstep =
 /** 은행 앱 탭 두 개(🏦 금고 | 🏛 중앙은행): 단추 data-banktab */
 export const bankTabs = tab => `<div class="stabs bk-tabs" role="tablist" aria-label="은행 앱">${[["vault", "🏦 금고"], ["mon", "🏛 중앙은행"]].map(([k, t]) =>
   `<button role="tab" data-banktab="${k}" aria-selected="${tab === k}"${tab === k ? ` class="on"` : ""}>${t}</button>`).join("")}</div>`;
-/** 은행 앱 전체: 중앙은행이 있는 섬은 탭 + 고른 판, 없으면(예전 섬·경제 없음) 금고 판만 */
-export function bankAppHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o), { tab = "vault", pstep = 100 } = {}) {
+/** 쉬운 은행(자세히 보기 끔 · 기본): 내 금고 하나만. 금고 숫자 + 오늘 들고 난 돈 + 🖨 동전 찍기 + 접힌 「어디서 오고 어디에 썼나」.
+ *  세금·숙박비·대출·마을에 도는 돈·물가·금리·매입 예산은 화면에서 뺌(규칙은 그대로, ⚙ 설정 → 🔧 자세히 보기를 켜면 보임).
+ *  🖨 찍기는 남김: 새 동전은 이 단추로만 생겨서, 금고가 바닥나면 공사를 이어 갈 길이 이것뿐(중앙은행 판과 같은 data-mon="print" → hud.bankClick) */
+export function bankEasyHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o), { pstep = 100 } = {}) {
+  if (!w.economy) return `<p class="dim">이 섬에는 은행이 없어요.</p>`;
+  const bk = w.bank, state = w.vaultState(), t = dayFlow(todayOf(w)), owed = bk.owed || 0;
+  const toneText = state === "empty" ? "바닥났어요" : state === "low" ? "얼마 안 남았어요" : "넉넉해요";
+  const head = sumHead({ icon: "🏦", big: `🪙${fmtNum(bk.vault)}`, label: "내 금고", tone: state, toneText,
+    lineHtml: `오늘 <b class="up">+${fmtNum(t.inSum)}</b> · <b class="down">−${fmtNum(t.outSum)}</b>${owed > 0 ? " · 💸 못 준 품삯이 있어요" : ""}` });
+  const sub = `<p class="bk-sub">금고 돈으로 건물을 짓고 섬을 꾸며요. 갈매미들이 장을 보고 집을 사면 다시 들어와요.</p>`;
+  const mi = w.monInfo?.(); let printBox = "";
+  if (mi) { const left = mi.printLeft, pick = printPick(pstep, left), need = state !== "ok";
+    printBox = `<section class="mon-print bk-print"${need ? ` data-need="1"` : ""}><div class="mon-kh"><b>🖨 동전 찍기</b><span>${need ? "금고가 모자라면 동전을 찍어 채워요" : "금고가 모자랄 때 써요"}</span></div>` +
+      `<button class="${need ? "go " : ""}mon-pbtn" data-mon="print" data-v="${pick ?? 0}"${pick ? "" : " disabled"}>${pick ? `🖨 🪙${pick} 찍기` : "🖨 오늘은 다 찍었어요"}</button></section>`; }
+  const v = t.inV, o = t.outV, back = Object.entries(v).filter(([k]) => !["printed", "refunds", "customBack"].includes(k)).reduce((s, [, n]) => s + n, 0);
+  const inRows = [["🛒 갈매미들이 낸 돈", back], ["🖨 찍은 동전", v.printed || 0], ["↩️ 돌려받은 설계비·꾸미기 값", (v.refunds || 0) + (v.customBack || 0)]];
+  const outRows = [["📐 설계비", o.fees], ["🔨 품삯", o.wages], ["🌳 섬 꾸미기", o.custom], ["🏛 은행이 쓴 돈", o.buy + o.interest + o.grant]];
+  const ledger = `<div class="bk-cols"><div><h4>들어온 돈</h4>${valueRows(inRows)}</div><div><h4>나간 돈</h4>${valueRows(outRows)}</div></div>`;
+  const week = weekRows(w), top = Math.max(1, ...week.map(d => Math.max(d.inSum, d.outSum)));
+  const bar = (n, cls) => `<i class="${cls}" style="width:${Math.round(n / top * 100)}%"></i>`;
+  const weekH = week.length ? `<table class="tbl bk-week">${week.slice().reverse().map(d => `<tr${d.inSum || d.outSum ? "" : ` class="zero"`}><td>${d.day}일째</td><td class="bk-bars">${bar(d.inSum, "up")}${bar(d.outSum, "down")}</td><td>🏦${fmtNum(d.end)}</td></tr>`).join("")}</table>` : `<p class="dim">아직 장부가 없어요.</p>`;
+  return head + sub + printBox + more("bank.today", "📒 오늘 어디서 오고 어디에 썼나", ledger) + more("bank.week", "📊 최근 며칠 금고", weekH);
+}
+/** 은행 앱 전체: 쉬운 보기(기본)는 금고 하나 · 자세히 보기면 중앙은행이 있는 섬은 탭 + 고른 판, 없으면(예전 섬·경제 없음) 금고 판만 */
+export function bankAppHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o), { tab = "vault", pstep = 100, adv = VIEW.adv } = {}) {
+  if (!adv) return bankEasyHtml(w, more, { pstep });
   if (!w.economy || !w.monInfo?.()) return bankHtml(w, more);
   return bankTabs(tab === "mon" ? "mon" : "vault") + (tab === "mon" ? monHtml(w, { more, pstep }) : bankHtml(w, more));
 }

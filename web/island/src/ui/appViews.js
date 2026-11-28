@@ -21,6 +21,9 @@ import { newsDay, newsPages, NEWS_HEADLINES, NEWS_KEEP_DAYS } from "../world/new
 import { josa } from "../util.js";
 import { sumHead, moreBox, valueRows, factRow, fmtNum } from "./hudParts.js";
 import { wishBuildId, bldFinderRows, bldFinderHtml } from "./qolViews.js";
+import { VIEW, leftWord } from "./viewPrefs.js";
+/** 축제 남은 때 → 낱말(🔧 자세히 보기는 초) */
+const festLeft = t => ({ "곧": "곧 끝나요", "조금 더": "한창이에요", "한참": "막 시작했어요" })[leftWord(t)];
 
 const avEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const avMore = (k, t, h, o) => moreBox(k, t, h, o);
@@ -48,7 +51,7 @@ export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
 
   const toWinter = daysToWinter(today, w.season), gr = granaryFact(w);
   const fNow = festivalOf(w.festKey), fOn = w.festival && festivalOf(w.festival.id), plaza = festivalPlaza(w), fGift = fNow && festivalGift(fNow.key);
-  const fFact = fOn ? { icon: "🎪", text: `축제 중! ${Math.max(0, Math.ceil(w.festival.t))}초`, tone: "ok" }
+  const fFact = fOn ? { icon: "🎪", text: VIEW.adv ? `축제 중! ${Math.max(0, Math.ceil(w.festival.t))}초` : `축제 중! ${festLeft(w.festival.t)}`, tone: "ok" }
     : !fNow || w.rank < FESTIVAL_RANK ? null
     : w.festivals[fNow.key] ? { icon: "🎪", text: "올해 축제 ✅", tone: null }
     : { icon: "🎪", text: `장식 ${Math.min(plaza.n, FESTIVAL_NEED)} / ${FESTIVAL_NEED}`, tone: null };
@@ -57,12 +60,12 @@ export function townAppHtml(w, { today = new Date(), more = avMore } = {}) {
     gr, fFact,
   ]);
 
-  const scoreH = valueRows(parts.map(([name, n, per, pts]) => [name, pts, `${n} × ${per} = ${pts}`])) +
+  const scoreH = valueRows(parts.map(([name, n, per, pts]) => [name, pts, VIEW.adv ? `${n} × ${per} = ${pts}` : `${fmtNum(pts)}점`])) +
     `<p class="dim">갈매미와 집, 시설이 늘고 소원을 들어줄수록 점수가 올라요.</p>`;
   const nextH = nxt ? `<p>${nxt.need}점을 넘어 ${nxt.icon} <b>${avEsc(nxt.name)}</b>${josa(nxt.name, "이", "가").slice(nxt.name.length)} 되면</p><ul class="av-list">${nxt.unlock.map(u => `<li>🔓 ${avEsc(BN(u))} 건설</li>`).join("")}<li>🪙 갈매미마다 축하금 ${RANK_REWARD}</li></ul>` : "";
 
   const stamps = festivalStamps(w.festivals);
-  const fLine = fOn ? `<b>${fOn.def.icon} ${fOn.def.name}</b>가 열리고 있어요! 남은 시간 <b>${Math.max(0, Math.ceil(w.festival.t))}초</b> · 함께한 갈매미 ${w.festival.who.length}마리`
+  const fLine = fOn ? `<b>${fOn.def.icon} ${fOn.def.name}</b>가 열리고 있어요! ${VIEW.adv ? `남은 시간 <b>${Math.max(0, Math.ceil(w.festival.t))}초</b>` : `<b>${festLeft(w.festival.t)}</b>`} · 함께한 갈매미 ${w.festival.who.length}마리`
     : !fNow ? `<span class="dim">축제 달력을 읽는 중이에요.</span>`
     : w.festivals[fNow.key] ? `올해 <b>${fNow.def.icon} ${fNow.def.name}</b>는 잘 치렀어요. 다음 계절에 또 만나요!`
     : w.rank < FESTIVAL_RANK ? `<span class="dim">🔒 마을 등급이 ${RANKS[FESTIVAL_RANK].icon} ${RANKS[FESTIVAL_RANK].name}이 되면 계절마다 축제를 열 수 있어요.</span>`
@@ -179,7 +182,7 @@ export function dexHeadHtml(c) {
 const newsDayName = (day, today) => day === today ? "오늘" : day === today - 1 ? "어제" : `${today - day}일 전`;
 /** 소식지 HTML: 맨 위 짧은 한 줄 → 가장 새 날의 머리기사(크게) + 그날 나머지 기사 접기 → 지난 날짜는 날짜마다 접기(날짜 묶음 유지) */
 export function newsAppHtml(w, { more = avMore } = {}) {
-  const today = newsDay(w.time), pages = newsPages(w.newsLog || []);
+  const today = newsDay(w.time), pages = newsPages((w.newsLog || []).filter(e => VIEW.adv || !e.eco));   // 쉬운 보기: 세금·숙박비·물가 같은 살림 속사정은 거름(🔧 자세히 보기면 다)
   const sub = `<p class="av-sub">📰 마을 <b>${today}일째</b> · 하루 큰일 ${NEWS_HEADLINES}건까지 · 최근 ${NEWS_KEEP_DAYS}일</p>`;
   if (!pages.length) return sub + `<p class="dim">아직 실을 소식이 없어요. 집을 짓거나, 소원을 들어주거나, 귀한 물고기를 낚으면 여기에 실려요.</p>`;
   const li = (e, top) => `<li${top ? ` class="top"` : ""}><span class="ico">${e.icon}</span><span>${avEsc(e.text)}</span></li>`;

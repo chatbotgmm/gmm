@@ -11,7 +11,10 @@ import { waterFactor, waterEdges, DRY_BELOW, MOIST_OK } from "../world/farming.j
 import { DOCTOR_WAGE, SICK } from "../world/health.js";
 import { owns } from "../world/furniture.js";
 import { newsDay } from "../world/news.js";
-import { fmtLeft, sickLeftOf, stateLabelOf } from "./gullView.js";
+import { fmtLeft, sickLeftOf, stateLabelOf, sickLeftText } from "./gullView.js";
+import { VIEW, leftWord } from "./viewPrefs.js";
+/** 밭이 다 자라기까지: 쉬운 보기는 낱말, 🔧 자세히 보기는 분·초 */
+const growLeft = s => VIEW.adv ? `${fmtLeft(s)} 남음` : { "곧": "곧 다 자라요", "조금 더": "조금 더 자라야 해요", "한참": "한참 자라야 해요" }[leftWord(s)];
 import { sumHead, moreBox, fmtNum } from "./hudParts.js";
 
 const bdEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -103,7 +106,7 @@ export function fieldCardOf(b, w, more = bdMore) {
   const rows = plots.map((p, i) => {
     const m = Math.round(Math.max(0, Math.min(1, p.moisture ?? 1)) * 20) * 5, ph = plotPhaseOf(p), left = plotLeftOf(p, w);
     const tone = (p.moisture ?? 1) < DRY_BELOW ? "dry" : (p.moisture ?? 1) < MOIST_OK ? "low" : "ok";
-    return `<tr><td>${i + 1}. ${PLOT_PHASE[ph]}</td><td><span class="bc-moist" data-tone="${tone}"><i style="width:${m}%"></i></span> 💧${m}%</td><td>${ph === "empty" || ph === "ripe" ? "" : `${fmtLeft(left)} 남음`}</td></tr>`;
+    return `<tr><td>${i + 1}. ${PLOT_PHASE[ph]}</td><td><span class="bc-moist" data-tone="${tone}"><i style="width:${m}%"></i></span> 💧${VIEW.adv ? `${m}%` : { dry: "말랐어요", low: "목말라요", ok: "촉촉해요" }[tone]}</td><td>${ph === "empty" || ph === "ripe" ? "" : growLeft(left)}</td></tr>`;
   }).join("");
   const body = `<table class="tbl bc-tbl bc-plots">${rows}</table><p class="bc-note">💧 ${Math.round(MOIST_OK * 100)}% 아래로 마르면 천천히 자라요. 시들지는 않아요</p>`;
   return { title: "🌱 밭", sub: `${plots.length}칸`, parts: [head, who + dry, more("field.plots", "칸별 촉촉함·남은 시간", body, { note: n.thirsty ? `목마름 ${n.thirsty}` : "" })] };
@@ -122,14 +125,14 @@ export function clinicCardOf(b, w, more = bdMore) {
   const def = BUILDINGS[b.defId], beds = clinicBedsOf(b, w), used = beds.filter(Boolean).length, doc = w.doctorOf(b), docIn = w.doctorIn?.(b);
   const head = sumHead({ icon: "🛏", big: `${used}/${def.beds || 0}`, label: "침대", line: doc ? `🩺 당번 의사: ${doc.name}${docIn ? ", 병원에 있어요" : ""}` : "🩺 당번이 없어도 침대에서 쉬며 나아요" });
   const slots = `<ul class="bc-beds">${beds.map(s => !s ? `<li class="dim">🛏 빈 침대</li>`
-    : `<li>${(SICK[s.u.sick.kind] || SICK.cold).icon} <b>${bdEsc(s.u.name)}</b> · ${s.coming ? "오는 중" : `${fmtLeft(sickLeftOf(s.u, w))} 남음`}</li>`).join("")}</ul>`;
+    : `<li>${(SICK[s.u.sick.kind] || SICK.cold).icon} <b>${bdEsc(s.u.name)}</b> · ${s.coming ? "오는 중" : sickLeftText(sickLeftOf(s.u, w))}</li>`).join("")}</ul>`;
   const list = [{ id: "", name: "당번 없음", note: "침대만 써요" }, ...w.units.filter(u => !u.sick || u.name === b.doctor).map(u => ({ id: u.unitId, name: u.name, note: `${(JOBS[u.job] || {}).icon || ""} ${(JOBS[u.job] || {}).name || ""}` }))];
   const pick = `<p class="bc-note">당번은 환자가 오면 병원에 와서 약을 줘요. 약을 먹으면 더 빨리 나아요. 한 마리 고칠 때마다 금고에서 품삯 🪙${DOCTOR_WAGE}을 줘요</p><div class="bc-pick">` +
     list.map(o => { const on = (o.id === "" && !doc) || (doc && o.id === doc.unitId);
       return `<button type="button" data-act="doctor" data-id="${bdEsc(o.id)}" aria-pressed="${on}"${on ? ` class="on"` : ""}>${on ? "✓ " : ""}${bdEsc(o.name)} <span class="dim">${bdEsc(o.note.trim())}</span></button>`; }).join("") + `</div>`;
   const L = w.bank?.ledger, last = L && L[L.length - 1], today = last && last.day === newsDay(w.time) ? last.clinic || 0 : 0;
   const sick = w.units.filter(u => u.sick).map(u => { const ib = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
-    return `<li>${(SICK[u.sick.kind] || SICK.cold).icon} ${bdEsc(u.name)} · ${ib ? `${bdEsc(BUILDINGS[ib.defId].name)} 안` : bdEsc(stateLabelOf(u))} · ${fmtLeft(sickLeftOf(u, w))} 남음</li>`; }).join("");
+    return `<li>${(SICK[u.sick.kind] || SICK.cold).icon} ${bdEsc(u.name)} · ${ib ? `${bdEsc(BUILDINGS[ib.defId].name)} 안` : bdEsc(stateLabelOf(u))} · ${sickLeftText(sickLeftOf(u, w))}</li>`; }).join("");
   const info = `<p class="bc-line">🏦 오늘 진료 수입 <b>🪙${fmtNum(today)}</b> <span class="dim">금고로 들어가요</span></p>` +
     `<b class="bc-sub">아픈 갈매미</b>${sick ? `<ul class="bc-list">${sick}</ul>` : `<p class="dim">지금 아픈 갈매미가 없어요</p>`}` +
     `<p class="bc-note">감기는 밖에서보다 집에서, 집보다 병원 침대에서 훨씬 빨리 나아요.</p>`;

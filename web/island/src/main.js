@@ -58,7 +58,8 @@ import { DreamView } from "./render/dreamView.js";
 import { Dreams } from "./world/dreams.js";
 import { Poke } from "./units/poke.js";
 import { Fuss } from "./units/fuss.js";
-import { ALERTS, BATCH_MS, batchText, makeGate, alertLine, makeBudget, quietAlert } from "./ui/newsAlerts.js";
+import { ALERTS, BATCH_MS, batchText, makeGate, alertLine, makeBudget, quietAlert, advOnlyAlert } from "./ui/newsAlerts.js";
+import { VIEW } from "./ui/viewPrefs.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { stepGridLines } from "./render/gridLines.js";
 import { gridShown } from "./ui/gridView.js";
@@ -257,6 +258,7 @@ function mount(w) {
     if (world !== mine || !hud || !gate(ev, arg, world.time)) return;
     const text = alertLine(ev, arg, world); if (!text) return;
     if (big(ev, arg)) { hud.logNote(text, a.kind, noteTarget(arg)); return; }                     // ✨ 반짝이 줍기 등: 보상 띠가 대신 보여 주고 소리도 냄
+    if (advOnlyAlert(ev, VIEW.adv)) { hud.logNote(text, a.kind, a.app ? { app: a.app } : noteTarget(arg)); return; }   // 쉬운 보기: 물가·대출·품삯 속사정은 지난 알림에만(⚙ 🔧 자세히 보기면 알림 줄에)
     if (!a.batch) { const at = a.app ? { app: a.app } : noteTarget(arg); if (a.now) hud.status(text, { kind: a.kind, at }); else post(ev, text, a.kind, at); ring(a, arg); return; }
     let b = batches.get(ev); if (!b) { b = { list: [], first: text }; batches.set(ev, b);
       setTimeout(() => { batches.delete(ev); if (world !== mine) return; const m = b.list.length > 1 && batchText(ev, b.list);

@@ -5,6 +5,9 @@ import * as R from "../src/ui/rewardFx.js";
 import { ITEMS } from "../src/data/catalog.js";
 import { RANKS } from "../src/world/rank.js";
 import { World } from "../src/world/World.js";
+import { setAdv } from "../src/ui/viewPrefs.js";
+/** 🔧 자세히 보기(관리자)를 켠 채로 fn을 돌림(끝나면 쉬운 보기로 되돌림) */
+const withAdv = fn => { setAdv(true); try { return fn(); } finally { setAdv(false); } };
 
 const item = id => ITEMS.find(i => i.id === id);
 const eco = { economy: true }, u = { name: "갈매미" };
@@ -36,7 +39,8 @@ test("rewardOf: 받는 것마다 알맞은 단계", () => {
 
 test("rewardOf: 금고로 들어오는 돈은 small(+N), 0이거나 경제가 없으면 없음", () => {
   const t = R.rewardOf("tax", { total: 12, n: 3 }, eco); assert.equal(t.tier, "small"); assert.equal(t.n, 12); assert.equal(t.to, "vault"); assert.equal(t.title, "+12");
-  assert.equal(R.rewardOf("lodging", { total: 4 }, eco).line, "숙박비");
+  assert.equal(R.rewardOf("lodging", { total: 4 }, eco).line, "금고에 들어온 돈", "쉬운 보기: 세금·숙박비 낱말 없이");
+  assert.equal(withAdv(() => R.rewardOf("lodging", { total: 4 }, eco).line), "숙박비");
   assert.equal(R.rewardOf("tax", { total: 0 }, eco), null);
   assert.equal(R.rewardOf("tax", { total: 5 }, { economy: false }), null);
   for (const ev of R.REWARD_EVENTS) assert.ok(typeof ev === "string");

@@ -7,6 +7,9 @@ import { josa } from "../src/util.js";
 import { UnitState } from "../src/data/types.js";
 import { STAMP_SHOP, STAMP_GIFTS } from "../src/world/daily.js";
 import * as G from "../src/ui/gullView.js";
+import { setAdv } from "../src/ui/viewPrefs.js";
+/** 🔧 자세히 보기(관리자)를 켠 채로 fn을 돌림(끝나면 쉬운 보기로 되돌림) */
+const withAdv = fn => { setAdv(true); try { return fn(); } finally { setAdv(false); } };
 
 const fresh = () => { const w = World.create(7, seededRandom(3), { wild: true }); w.summon(); return w; };
 
@@ -65,10 +68,14 @@ test("갈매미 카드 칩: 대출은 '집값 N 남음'(loanInfo와 같음) · �
   assert.equal(c.coin, `🪙 ${u.coins || 0}`); assert.equal(c.wage, ""); assert.equal(c.sick, ""); assert.equal(c.wear, ""); assert.equal(c.load, "");
   u.loan = { left: 18, per: 4 }; u.wageOwed = 4; u.wear = { neck: "scarf", body: "coat", head: null }; u.clothes = ["scarf", "coat"];
   u.sick = { kind: "cold", left: 300, med: false }; u.load = { wood: 5, stone: 0 }; u.insideBuildingId = null;
-  c = G.gullChips(u, w);
+  c = withAdv(() => G.gullChips(u, w));
   assert.equal(c.home, `🏠 집값 ${w.loanInfo(u).left} 남음`); assert.equal(c.home, "🏠 집값 18 남음");
   assert.equal(c.wage, "💸 밀린 품삯 4"); assert.equal(c.wear, "🧣🧥 입음"); assert.equal(c.load, "📦 짐 🪵5");
   assert.equal(c.sick, "🤧 감기 · 10분 남음", "밖: 300 / 0.5 = 600초");
+  // 쉬운 보기(기본): 숫자·초 대신 낱말
+  c = G.gullChips(u, w);
+  assert.equal(c.home, "🏠 집값 갚는 중"); assert.equal(c.wage, "💸 품삯이 밀렸어요"); assert.equal(c.sick, "🤧 감기 · 한참 쉬어야 해요", "600초 → 한참");
+  u.sick.left = 20; assert.equal(G.gullChips(u, w).sick, "🤧 감기 · 곧 나아요", "40초 → 곧"); u.sick.left = 300;
   u.sick.med = true; assert.match(G.gullChips(u, w).sick, /💊/);
   u.bodyT = 38.6; assert.equal(G.gullFlags(u), "🤧🥶💸");
   u.sick = null; u.wageOwed = 0; u.bodyT = 40; assert.equal(G.gullFlags(u), "");
@@ -86,8 +93,10 @@ test("체온 줄: 39° 이하 cold(추워요/꽁꽁) · 41° 이상 hot · 그 �
 test("자세히 보기 안쪽: 만족도 내역(큰 값 먼저) · 소지품 · 가진 옷 · 면역, undefined 없음", () => {
   const w = fresh(), u = w.units[0];
   u.satParts = [["집", 10], ["배고픔", -20], ["길", 0]]; u.stash = { tuna: 2 }; u.clothes = ["scarf"]; u.immune = 90;
-  const h = G.gullMoreHtml(u, w, { fav: "낚시", friend: "단짝: 꽃" });
-  assert.ok(!/undefined|NaN/.test(h));
+  const h = withAdv(() => G.gullMoreHtml(u, w, { fav: "낚시", friend: "단짝: 꽃" }));
+  assert.ok(!/undefined|NaN/.test(h)); assert.match(h, /능률 ×/);
+  const e = G.gullMoreHtml(u, w, { fav: "낚시" });   // 쉬운 보기: 점수 없이 👍·👎, 면역은 「한동안」, 능률은 낱말
+  assert.match(e, /👍 집/); assert.match(e, /👎 배고픔/); assert.ok(!/class="zero"|×1\.|분 동안/.test(e)); assert.match(e, /한동안 감기에 안 걸려요/); assert.match(e, /일 속도: /);
   assert.ok(h.indexOf("배고픔") < h.indexOf("집") && h.indexOf("집") < h.indexOf("길"), "큰 값 먼저, 0은 맨 아래");
   assert.match(h, /class="zero"/); assert.match(h, /×2/); assert.match(h, /털목도리/); assert.match(h, /2분 동안 감기에 안 걸려요/); assert.match(h, /단짝: 꽃/);
 });

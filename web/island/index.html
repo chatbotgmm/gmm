@@ -361,6 +361,13 @@
   .apps button[data-count] span::after { content: attr(data-count); position: absolute; top: calc(-6*var(--u)); right: calc(-8*var(--u)); min-width: calc(20*var(--u)); height: calc(20*var(--u)); padding: 0 calc(5*var(--u)); box-sizing: border-box; border-radius: var(--r-pill);
     background: var(--c-danger); color: #fff; font: 700 var(--fs-cap)/calc(20*var(--u)) system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 calc(2*var(--u)) #fff; }
   .apps button.new span::after { content: ""; position: absolute; top: calc(-3*var(--u)); right: calc(-3*var(--u)); width: calc(12*var(--u)); height: calc(12*var(--u)); border-radius: 50%; background: var(--c-accent); box-shadow: 0 0 0 calc(2*var(--u)) #fff; }
+  /* 필요할 때 생기는 앱(appUnlock.js): 새로 생긴 앱엔 「새 앱」 꼬리표(열면 사라짐) · 앱이 다 숨은 묶음은 머리글째 숨김(hud.drawApps) */
+  .apps button.fresh::before { content: "새 앱"; position: absolute; z-index: 1; top: 0; left: 50%; transform: translate(-50%, -40%); padding: 0 calc(6*var(--u)); border-radius: var(--r-pill); background: var(--c-accent); color: #fff; font-size: var(--fs-cap); font-weight: 700; line-height: 1.5; white-space: nowrap; box-shadow: 0 0 0 calc(2*var(--u)) #fff; pointer-events: none; }
+  .agroup[hidden] { display: none; }
+  /* 🔧 자세히 보기(관리자)를 끈 쉬운 보기: 마을 돈 칩 · 갈매폰 맨 위 숫자 줄 · 따라가기 카드 막대 숫자는 숨김(막대·얼굴로 충분) */
+  html:not([data-adv="on"]) #chipTown, html:not([data-adv="on"]) #chipVault .vt, html:not([data-adv="on"]) #pageHome #stats { display: none !important; }
+  html:not([data-adv="on"]) #info .needs .need:not(.itemp) > em { visibility: hidden; }
+  .bk-print[data-need] { outline: calc(2*var(--u)) solid var(--c-accent); }
   #phoneBtn .badge-count { position: absolute; top: calc(-6*var(--u)); right: calc(-6*var(--u)); min-width: calc(22*var(--u)); height: calc(22*var(--u)); padding: 0 calc(6*var(--u)); box-sizing: border-box; border-radius: var(--r-pill); background: var(--c-danger); color: #fff;
     font: 700 var(--fs-cap)/calc(22*var(--u)) system-ui, sans-serif; box-shadow: 0 0 0 calc(2*var(--u)) #fff; pointer-events: none; }
   #phoneBtn .dot { position: absolute; top: calc(-3*var(--u)); right: calc(-3*var(--u)); width: calc(14*var(--u)); height: calc(14*var(--u)); border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 calc(4*var(--u)) var(--c-accent-strong); pointer-events: none; }
@@ -1008,7 +1015,9 @@
         <details class="dev"><summary>🛠 개발자 <span class="dim">시험할 때만</span></summary>
           <div class="srow"><span id="timeMult" class="slab">시계 빨리 감기: ×1</span><div class="seg" id="segMult" data-set="mult"><button data-v="1">×1</button><button data-v="60">×60</button><button data-v="1440">×1440</button><button data-v="86400">×86400</button></div><p class="dim">개발자용: 시각과 날짜, 계절을 빨리 감고 마을 진행도 2~8배로 빨라져요. 게임 ⏩ 배속은 맨 위 🎟 이용권 상자에 있어요.</p></div>
           <button id="instantBtn" data-tip="켜면 놓자마자 완공, 끄면 갈매미가 나무 1·돌 1씩 들고 와서 망치질로 지어요">⚡ 바로 완공: 끔</button>
-          <div id="devStats" class="dim"></div></details></div>
+          <div id="devStats" class="dim"></div></details>
+        <div class="srow"><button id="advBtn" class="sw2 off" aria-pressed="false">🔧 자세히 보기(관리자)</button>
+        <p class="dim">켜면 숨겨 둔 살림이 보여요: 은행의 🏛 중앙은행 창구(금리·매입 예산·축하금), 세금과 숙박비, 대출, 마을에 도는 돈, 물가 알림, 숫자와 셈. 꺼도 마을은 똑같이 돌아가요. 동전 찍기는 끈 채로도 🏦 은행 앱에 있어요.</p></div></div>
       <div class="spanel col" data-stab="keys" hidden><p class="dim">키보드가 있으면 단축키로도 할 수 있어요.</p><button id="keysBtn">⌨️ 단축키 보기</button><button id="leftHand" class="sw2 off" aria-pressed="false">왼손 배치: 🔨 ↔ 📱 자리 바꾸기</button><button id="vibeBtn" class="sw2" aria-pressed="true">칠할 때 톡톡 진동</button><button id="dexBtn" hidden>도감</button></div>
     </div>
     <div id="pageDecor" class="page" hidden><div id="decorBody"></div></div>
@@ -1032,7 +1041,7 @@
         <p>↶ 방금 놓은 공사장은 갈매미가 재료를 쓰기 전까지 되돌릴 수 있고, 설계비도 다 돌아와요. 그 뒤에는 🧹 철거만 되고, 다 짓기 전이면 설계비만 돌려받아요.</p>
         <p>🛣 돌길이나 나무 데크로 집과 🛒 시장, 🏦 은행을 이어 주면 그 집 갈매미가 기뻐해요. 포장된 길에서는 걸음도 빨라져요. 흙길은 포장으로 치지 않아요.</p></details>
       <details class="hsec"><summary>🐦 갈매미</summary><p>갈매미를 누르면 따라가고, 꾹 눌러 끌면 옮겨져요. 나무나 낚시터, 공사장 가까이 내려놓으면 바로 그 일을 시작해요.</p><p>💭 소원을 들어주면 갈매미가 기뻐하고 은행이 축하금을 줘요.</p><p>📋 오늘의 부탁은 날마다 세 개씩 와요. 모두 들어주면 도장을 하나 받고, 도장은 🏪 도장 가게에서 귀한 선물이나 한정 가구로 바꿔요.</p><p>🌙 해가 지면 갈매미들은 집에 가서 자요. 그림자와 불씨는 밤에 일하고 낮에 자요. 일하다 지치면 벤치나 침대에서 쉬어요.</p><p>🔧 살기 불편한 갈매미는 스스로 집 앞 마당을 고르고, 시장과 은행까지 돌길을 깔고, 벤치나 화단을 주문해요.</p><p>🛋 집을 누르면 들어가서 가구를 놓을 수 있어요. 집주인도 돈이 모이면 잡화점에서 가구를 사 와요.</p></details>
-      <details class="hsec"><summary>🏘 마을 살림</summary><p>🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼과 광부는 캔 것을 🛒 시장의 상인에게 팔고, 상인은 목재나 석재로 다듬어 은행에 팔아요. 갈매미들은 번 동전으로 음식을 사고 집을 사요. 동전이 없으면 물건끼리 바꿔요.</p><p>🏅 갈매미와 집, 시설이 늘고 소원을 들어줄수록 마을 등급이 올라요. 등급이 오르면 카페, 잡화점, 우체국, 큰 집을 지을 수 있어요.</p><p>🌷 벤치와 화단, 분수가 집 가까이 있으면 갈매미가 좋아해요. 겨울엔 눈사람도요.</p><p>⚡ 풍차 발전소 둘레에만 전기가 들어와요. 가로등과 집 창문은 전기가 닿아야 밤에 켜져요. 풍차를 누르면 전기가 닿는 곳이 보여요.</p><p>☕ 카페가 가까우면 갈매미가 즐거워하고 친구도 잘 사귀어요. ✉ 우체국이 있으면 소원이 더 자주 오고 축하금도 두 배예요.</p><p>🗺 본섬 둘레에 작은 섬이 다섯 있어요. 가까운 숲섬, 바위섬, 들판섬에는 🪚 목수가 다리를 놓고, 먼 야자섬과 조개섬에는 선착장을 지어 배로 가요.</p></details>
+      <details class="hsec"><summary>🏘 마을 살림</summary><p>🔨 공사를 하면 🏦 은행이 품삯을 줘요. 나무꾼과 광부는 캔 것을 🛒 시장의 상인에게 팔고, 상인은 목재나 석재로 다듬어 은행에 팔아요. 갈매미들은 번 동전으로 음식을 사고 집을 사요. 동전이 없으면 물건끼리 바꿔요.</p><p>🏅 갈매미와 집, 시설이 늘고 소원을 들어줄수록 마을 등급이 올라요. 등급이 오르면 카페, 잡화점, 우체국, 큰 집을 지을 수 있어요.</p><p>🌷 벤치와 화단, 분수가 집 가까이 있으면 갈매미가 좋아해요. 겨울엔 눈사람도요.</p><p>⚡ 풍차 발전소 둘레에만 전기가 들어와요. 가로등과 집 창문은 전기가 닿아야 밤에 켜져요. 풍차를 누르면 전기가 닿는 곳이 보여요.</p><p>☕ 카페가 가까우면 갈매미가 즐거워하고 친구도 잘 사귀어요. ✉ 우체국이 있으면 소원이 더 자주 오고 축하금도 두 배예요.</p><p>📱 갈매폰 앱은 쓸 일이 생기면 하나씩 생겨요. 첫 공사를 하면 🏦 은행, 갈매미가 셋이 되면 💞 관계도, 처음 무언가를 모으면 📖 도감이 생겨요. 세금, 물가, 대출 같은 속사정은 ⚙ 설정의 🌤 게임에서 🔧 자세히 보기를 켜면 보여요.</p><p>🗺 본섬 둘레에 작은 섬이 다섯 있어요. 가까운 숲섬, 바위섬, 들판섬에는 🪚 목수가 다리를 놓고, 먼 야자섬과 조개섬에는 선착장을 지어 배로 가요.</p></details>
       <details class="hsec"><summary>⏩ 배속 · 🎟 이용권</summary><p>⏩ 위쪽 시간 칩을 누르거나 F 키를 누르면 ×1, ×2, ×3으로 바뀌어요.</p><p id="speedHelp"></p><p>🎟 ⚙ 설정 맨 위에서 무료와 유료 가운데 골라요. 무료로 바꾸면 배속이 ×1로 돌아가요.</p></details>
       <details class="hsec"><summary>🗝 갈매미섬의 비밀</summary><p>둘째 날, 섬 끝 등대 발치에 🗝 이야기 반짝이가 생겨요. 주우면 📱 <b>🗝 비밀</b> 수첩이 생겨요. 장마다 조각 세 개를 모아 고칠 곳을 고치면 다음 이야기가 열려요.</p><p>조각은 반짝이, 갈매미가 털어놓는 말, 하늘, 편지, 수족관, 작은 섬에서 나와요. 이야기 반짝이는 줍기 전까지 사라지지 않아요. 막히면 이틀 뒤 수첩의 힌트가 더 자세해져요.</p></details>
       <details class="hsec"><summary>🍂 계절·수집</summary><p>계절은 기기 날짜를 따라요. 봄엔 밭이 빨리 자라고 가을엔 더 많이 거둬요. 겨울엔 밭이 느리고 갈매미가 쉽게 배고파져요. 비는 밭과 낚시에 좋고, 폭풍이 치면 낚시를 못 해요.</p><p>❄️ 겨울에 눈이 오면 지붕과 나무 위까지 쌓였다가 봄비에 녹아요. 눈과 모래 위에는 발자국이 남아요.</p><p>🏚 저장고를 지으면 남는 음식이 쌓여서 겨울에 배고픈 갈매미를 먹여요. 📖 도감에는 그 계절에만 나오는 물고기와 물건이 있어요.</p></details>

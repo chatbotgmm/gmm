@@ -12,7 +12,7 @@ import { fmtNum } from "./hudParts.js";
 const bvEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const bvWhoOf = def => def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가";
 /** 돈만 모자랄 때 덧붙이는 한 줄 */
-export const MONEY_HINT = "세금·집값이 금고에 들어오면 지을 수 있어요";
+export const MONEY_HINT = "금고가 다시 차면 지을 수 있어요. 급하면 📱 은행에서 동전을 찍어요";
 
 /** 공사 끝까지 드는 재료(가장 느린 건축가 기준): [[아이콘, 드는 수, 창고에 있는 수], …] */
 export function materialsOf(w, defId, times = 1) {
