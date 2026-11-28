@@ -30,7 +30,7 @@ import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay, awayBuil
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
-import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText, STAMP_COINS } from "./daily.js";
+import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText, STAMP_COINS, DAILY_COUNT, DAILY_GROUP, DAILY_POOL } from "./daily.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
@@ -221,7 +221,15 @@ export class World {
   emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); if (STORY_EVENTS.has(ev)) this.storyEvent(ev, arg); }
   // ---- 오늘의 부탁(daily.js)
   /** 실제 날짜 열쇠(YYYY-MM-DD)를 받음: 날짜가 바뀌었으면(처음이면) 새 부탁을 고름 → 나아간 것은 처음부터, 못 끝낸 부탁은 사라짐. 새로 골랐으면 true */
-  setDay(key) { if (!key || this.daily?.key === key) return false; this.daily = rollDaily(key, this); return true; }
+  setDay(key) { if (!key) return false; if (this.daily?.key === key) { this.topUpDaily(); return false; } this.daily = rollDaily(key, this); this._dailyN = this.units.length; return true; }
+  /** 부탁 채우기: 고를 때 할 수 있는 게 모자라 DAILY_COUNT개가 안 됐고(갈매미가 없던 새 섬의 첫날 등) 아직 도장 전이면, 갈매미 수가 바뀔 때 같은 날짜 열쇠로 다시 골라
+   *  모자란 만큼 뒤에 덧붙임(이미 있는 부탁·나아간 것은 그대로, 난수는 날짜 열쇠로만). 덧붙였으면 true */
+  topUpDaily() {
+    const d = this.daily; if (!d || d.stamped || d.reqs.length >= DAILY_COUNT || this._dailyN === this.units.length) return false;
+    this._dailyN = this.units.length; const have = new Set(d.reqs.map(r => r.id)), groups = new Set(d.reqs.map(r => DAILY_GROUP[r.id]).filter(Boolean)), n0 = d.reqs.length;
+    for (const r of rollDaily(d.key, this, DAILY_POOL.length).reqs) { if (d.reqs.length >= DAILY_COUNT) break; const g = DAILY_GROUP[r.id]; if (have.has(r.id) || (g && groups.has(g))) continue; d.reqs.push(r); if (g) groups.add(g); }
+    return d.reqs.length > n0;
+  }
   /** 알린 일을 부탁에 셈(듣는 쪽이 다 들은 뒤에 → 부탁 알림이 그 일의 알림 뒤에 옴). 모두 끝나면 도장 하나(하루 한 번) */
   noteDaily(ev, arg) {
     const d = this.daily; if (!d) return;

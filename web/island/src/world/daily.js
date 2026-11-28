@@ -47,6 +47,8 @@ export const DAILY_POOL = [
     ok: w => w.isNight === true && !(Number.isFinite(w.hour) && w.hour < 12), hit: (ev, e) => ev === "sparkle" && e?.item?.sparkleTime === "night" ? 1 : 0 },
 ];
 const DAILY_BY_ID = Object.fromEntries(DAILY_POOL.map(d => [d.id, d]));
+/** 부탁 id → 묶음(같은 묶음은 하루에 하나만 — World.topUpDaily가 덧붙일 때도) */
+export const DAILY_GROUP = Object.fromEntries(DAILY_POOL.filter(d => d.group).map(d => [d.id, d.group]));
 
 // 도장 가게: 도장으로만 바꾸는 한정 가구(ITEMS의 stamp = 도장 값). 사면 내 가방(world.items)으로 → 🏠 집 꾸미기에서 아무 집에나 놓음
 export const STAMP_SHOP = ITEMS.filter(i => i.stamp > 0);
@@ -63,11 +65,11 @@ export function hashText(s) { let h = 0x811c9dc5; for (const ch of String(s)) { 
 
 /** 그날의 부탁을 고름: 날짜 열쇠로 목록을 섞고, 지금 할 수 있는 것을 앞에서부터(같은 묶음은 하나만) DAILY_COUNT개.
  *  돌려주는 값: { key, reqs: [{ id, icon, text, need, have }], stamped: 도장을 받았는가 } (할 수 있는 게 모자라면 그만큼만) */
-export function rollDaily(key, w) {
+export function rollDaily(key, w, count = DAILY_COUNT) {
   const rnd = seededRandom(hashText(key)), list = [...DAILY_POOL], reqs = [], groups = new Set();
   for (let i = list.length - 1; i > 0; i--) { const k = Math.floor(rnd() * (i + 1)); [list[i], list[k]] = [list[k], list[i]]; }
   for (const d of list) {
-    if (reqs.length >= DAILY_COUNT) break;
+    if (reqs.length >= count) break;
     if ((d.group && groups.has(d.group)) || !d.ok(w)) continue;
     if (d.group) groups.add(d.group);
     reqs.push({ id: d.id, icon: d.icon, text: d.text(w), need: d.need, have: 0 });

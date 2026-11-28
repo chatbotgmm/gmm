@@ -29,6 +29,19 @@ test("첫날 부탁: 갈매미가 없는 새 섬에는 「새 갈매미 부르�
   for (let d = 1; d <= 28; d++) assert.ok(!D.rollDaily(`2026-12-${d}`, w).reqs.some(r => r.id === "summon"));
 });
 
+test("첫날 부탁 채우기: 갈매미 없이 골라 모자란 부탁은 첫 갈매미가 오면 같은 날짜 열쇠로 덧붙임(나아간 것은 그대로, 도장 뒤에는 안 늘림)", () => {
+  const w = fresh(); w.isNight = false; w.hour = 10; w.setDay("2026-11-28"); const n0 = w.daily.reqs.length; assert.ok(n0 < D.DAILY_COUNT, `갈매미 없는 첫날은 ${n0}개`);
+  const r0 = w.daily.reqs[0]; r0.have = 1;
+  assert.equal(w.setDay("2026-11-28"), false); assert.equal(w.daily.reqs.length, n0, "갈매미 수가 그대로면 그대로");
+  w.summon(); w.setDay("2026-11-28");
+  assert.ok(w.daily.reqs.length > n0, "첫 갈매미가 오면 덧붙임"); assert.equal(w.daily.reqs[0], r0); assert.equal(r0.have, 1);
+  assert.ok(!w.daily.reqs.some(r => r.id === "summon" && r.have > 0), "막 온 갈매미로 저절로 끝나지 않음");
+  assert.equal(new Set(w.daily.reqs.map(r => r.id)).size, w.daily.reqs.length, "같은 부탁 두 번 없음");
+  const again = fresh(); again.isNight = false; again.hour = 10; again.setDay("2026-11-28"); again.summon(); again.setDay("2026-11-28");
+  assert.deepEqual(again.daily.reqs.map(r => r.id), w.daily.reqs.map(r => r.id), "같은 날·같은 섬이면 같은 부탁(난수는 날짜 열쇠로만)");
+  const s = fresh(); s.isNight = false; s.hour = 10; s.setDay("2026-11-28"); s.daily.stamped = true; const k = s.daily.reqs.length; s.summon(); s.setDay("2026-11-28"); assert.equal(s.daily.reqs.length, k, "도장 뒤에는 안 늘림");
+});
+
 test("배고파요 칩: 시장·저장고가 없을 때만, 글은 손쓸 일 하나", () => {
   const w = fresh(); w.summon(); const u = w.units[0]; u.full = 5;
   assert.equal(hungerCall(w, 30), u); assert.equal(HUNGER_CHIP, "😣 시장을 지으면 배불러요");
