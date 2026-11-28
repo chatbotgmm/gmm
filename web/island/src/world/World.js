@@ -1,6 +1,6 @@
 // 섬 전체 상태: 격자, 해안 모듈, 자원(나무·광석·씨앗·낚시 자리), 건물, 유닛.
 // 그림과 입력은 모르고, 바뀐 일을 이벤트(on/emit)로 알린다. 뷰가 이벤트와 매 프레임 상태를 읽어 그린다.
-import { BUILDINGS, MODULES, UNITS, RARITY, FISH, ITEMS, PRICES, FURNITURE, CLOTHES } from "../data/catalog.js";
+import { BUILDINGS, MODULES, UNITS, RARITY, JOBS, FISH, ITEMS, PRICES, FURNITURE, CLOTHES } from "../data/catalog.js";
 import { WATER_Y, SEA_LEVEL, MAX_STEP } from "../config.js";
 import * as J from "./jobs.js";
 import { createBuildingData, createUnitAIState, UnitState } from "../data/types.js";
@@ -13,8 +13,10 @@ import { checkPlacement, footprint } from "./placement.js";
 import { terrainHeight } from "./terrain.js";
 import { nearestWalkable, findPath } from "./pathfinding.js";
 import { updateUnit, exitBuilding, enterBuilding, setIdle, emote, uncommit, interactNear, startSwimHere } from "../units/unitBrain.js";
-import { isNocturnal } from "../units/chrono.js";
-import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToNames, friendsFromNames } from "../units/mind.js";
+import { isNocturnal, nightOwl } from "../units/chrono.js";
+import * as EV from "./evolve.js";
+import { pickName, validName, tidyName, NAME_RE } from "../data/gullNames.js";
+import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToNames, friendsFromNames, friendsToIds, friendsFromIds } from "../units/mind.js";
 import { seededRandom, josa } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
@@ -31,7 +33,7 @@ import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, 
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
 import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost } from "./daily.js";
-import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
+import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, GIFT_CAT_NAME, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import { undoBlock, feeUndoLedger } from "./buildUndo.js";
@@ -55,6 +57,11 @@ import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells
  * 3) 그래도 없으면 같은 순서로 자리를 골라 은행 칸·문 앞 칸의 땅을 높이 0으로 고른 뒤 같은 조건을 봄(안 되면 되돌림).
  * @returns 놓은 은행 건물(끝내 못 놓으면 null)
  */
+/** 예전 저장 갈매미에게 새 이름을 주지 않고 모습 이름을 그대로 둘지(사용자가 고를 거리) */
+export const KEEP_OLD_NAMES = false;
+/** 변신 연출 길이(초): 빙글 → 흰 빛이 커짐 → 가장 밝을 때(절반) 모습이 바뀜 → 반짝 */
+export const EVO_FX_SECS = 2.2;
+
 export function placeTownBank(w, R = 16) {
   const def = BUILDINGS.bank, g = w.grid, B = g.box, mid = { x: (B.x0 + B.x1) / 2, z: (B.z0 + B.z1) / 2 }, ax0 = mid.x - Math.floor(def.footprint.w / 2), az0 = mid.z - Math.floor(def.footprint.d / 2);
   const first = w.placeBuilding("bank", ax0, az0, 0, null, 1e9); if (first.ok) return first.building;
@@ -130,6 +137,10 @@ export class World {
     this.season = null; this.wrnd = seededRandom(((extra.seed ?? 7) * 7919 + 13) >>> 0);
     this.weather = extra.weather?.kind ? { ...extra.weather } : { kind: "clear", t: 150 };
     // 소원: { id, unitId, base, age } 최대 2개 · 이룬 수
+    // 갈매미 성장·변신(evolve.js): 다음 갈매미 번호(u1~u9는 옛 저장 몫) · 지금까지 부른 수(성향 덱 차례) · 도감(본 모습) · 마지막으로 변신을 판정한 날(불러온 직후 날이 바뀐 것처럼 판정하지 않게 저장)
+    this.nextGullNo = Math.max(10, extra.nextGullNo | 0); this.gullsMade = Math.max(0, extra.gullsMade | 0);
+    this.formsSeen = new Set((Array.isArray(extra.formsSeen) ? extra.formsSeen : []).filter(f => UNITS.some(d => d.name === f)));
+    this.evoDay = Number.isFinite(extra.evoDay) ? extra.evoDay : null; this.evoPending = []; this.renamed = null;
     this.wishes = (extra.wishes || []).map(x => ({ ...x })); this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
     // 시세: 상인이 사는 원자재 값·음식 값(5초마다 다시 셈) · 지난 값(20초마다 하나, 48개)
     this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = extra.priceHist || []; this.priceClock = 0; this.histClock = 0;
@@ -210,13 +221,163 @@ export class World {
   }
   /** 이름으로 갈매미 하나를 가운데(은행 앞) 근처에 부름. */
   addUnitByName(name) {
-    const i = UNITS.findIndex(u => u.name === name); if (i < 0 || this.units.some(o => o.name === name)) return null;
+    const i = UNITS.findIndex(u => u.name === name); if (i < 0 || this.units.some(o => EV.formOf(o) === name && o.name === name)) return null;   // 시험·개발용: 이름 = 모습(옛 받침). 같은 모습 여럿은 addGullOfForm
     const c = this.center, spot = nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z) + 4, 8) || nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z));
-    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5); u.y = this.standHeight(u.x, u.z);
+    const id = this.units.some(o => o.unitId === `u${i + 1}`) ? `u${this.nextGullNo++}` : `u${i + 1}`;
+    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5, this.rnd, { id }); u.y = this.standHeight(u.x, u.z); this.formsSeen.add(name);
     this.migrateLate(); this.emit("unitAdded", u); return u;
   }
+  /** 시험·개발용: 이 모습의 갈매미 하나(같은 모습이 여럿이어도 됨, 이름은 풀에서). 기본이 아니면 이미 변신한 셈. opts: { disp, job, near:{x,z} } */
+  addGullOfForm(form, opts = {}) {
+    const i = UNITS.findIndex(u => u.name === form); if (i < 0) return null;
+    const c = opts.near || this.center, spot = nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z) + (opts.near ? 0 : 4), 8) || nearestWalkable(this.grid, Math.floor(c.x), Math.floor(c.z)); if (!spot) return null;
+    const day = newsDay(this.time), base = form === EV.BASE_FORM;
+    const u = this.addUnit(UNITS[i], i, spot[0] + 0.5, spot[1] + 0.5, this.rnd, { id: `u${this.nextGullNo++}`, name: this.newName(), job: opts.job, rarity: opts.rarity,
+      disp: opts.disp ?? (base ? EV.dispFor(this.seed ?? 7, this.gullsMade) : EV.FORM_DISP[form]), evo: base ? null : { day, from: EV.BASE_FORM, to: form } });
+    this.gullsMade++; u.y = this.standHeight(u.x, u.z); this.formsSeen.add(form);
+    this.migrateLate(); this.emit("unitAdded", u); return u;
+  }
+  /** 마을에 없는 새 이름(섬 씨앗으로 섞은 풀, gullNames.js) */
+  newName() { return pickName(this.seed ?? 7, this.units.map(u => u.name)); }
+  /** 이름 바꾸기: 규칙(gullNames.validName) + 마을 안에서 겹치지 않음. { ok, reason, name } */
+  renameGull(unitId, name) {
+    const u = this.units.find(o => o.unitId === unitId); if (!u) return { ok: false, reason: "그런 갈매미가 없어요" };
+    const v = validName(name, this.units.filter(o => o !== u).map(o => o.name)); if (!v.ok) return v;
+    if (v.name === u.name) return { ok: true, reason: "", name: v.name };
+    const from = u.name; u.name = v.name; this.emit("rename", { u, from, to: v.name }); return { ok: true, reason: "", name: v.name };
+  }
+  // ---- 성장·변신(evolve.js)
+  /** 자란 방식 카운터 올리기: src = "job"(제 직업 일, ×0.4) | "free"(스스로) | "player"(플레이어 손길). 하루 상한은 evolve.growthAdd */
+  noteGrowth(u, key, n, src = "free") { return u ? EV.growthAdd(u, key, n, src, newsDay(this.time)) : 0; }
+  /** 알린 일 → 카운터(이벤트 인자에 갈매미가 있는 일만. 직접 부르는 곳: 벌목·채광·밭·망치질) */
+  growthOf(ev, a) {
+    if (!a || !this.units.length) return;
+    const job = (u, j) => (u?.job === j ? "job" : "free");
+    switch (ev) {
+      case "fish": if (a.u) this.noteGrowth(a.u, "sea", 2, job(a.u, "fisher")); break;
+      case "beachcomb": this.noteGrowth(a.u, "sea", 1); break;
+      case "ate": if ((a.full ?? 0) >= 110) this.noteGrowth(a, "big", 0.5); break;   // 배가 부른데 더 먹음(먹보의 "한 그릇 더") · 누구나 먹는 끼니는 안 셈
+      case "trade": this.noteGrowth(a.u, "shiny", 1, job(a.u, "merchant")); break;
+      case "barter": this.noteGrowth(a.a, "shiny", 1); this.noteGrowth(a.b, "shiny", 1); break;
+      case "stashSale": this.noteGrowth(a.u, "shiny", 1); break;
+      case "friendship": this.noteGrowth(a.a, "social", 1); this.noteGrowth(a.b, "social", 1); break;
+      case "pet": this.noteGrowth(a.u, "social", 0.5, "player"); if (this.isNight) this.noteGrowth(a.u, "night", 0.5, "player"); break;
+      case "cocoa": this.noteGrowth(a.u, "warm", 2); break;
+      case "starPiece": this.noteGrowth(a.u, "night", 3); break;
+      case "fussSolved": this.noteGrowth(a.u, a.kind === "perch" ? "timid" : "night", 2); break;
+      case "festivalEnd": for (const u of this.units) if (u.cheer > 0) this.noteGrowth(u, "warm", 2); break;
+      case "gift": { const cat = giftDef(a.item?.id ?? a.item)?.cat, key = { sea: "sea", fish: "big", plant: "green", shiny: "shiny", warm: "warm", letter: "alone", ice: "alone" }[cat];
+        if (key) this.noteGrowth(a.u, key, cat === "fish" ? 2 : 3, "player"); if (cat === "fish") this.noteGrowth(a.u, "sea", 1, "player"); break; }
+    }
+  }
+  /** 플레이어가 들어서 내려놓은 자리 → 카운터 +1(60초에 한 번): 바다 sea · 밭 green · 공사장 craft · 카페 warm · 시장 shiny · 다른 갈매미 곁 social (비평 9). 오른 키(없으면 null) */
+  dropGrowth(u, x = u?.x, z = u?.z) {
+    if (!u || u.evo || !u.disp || (this.time - (u.dropAt ?? -1e9)) < 60) return null;
+    const near = (b, r) => Math.hypot(b.door.x + 0.5 - x, b.door.z + 0.5 - z) <= r, bs = [...this.buildings.values()];
+    let key = null;
+    const cx = Math.floor(x), cz = Math.floor(z), sea = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]].some(([dx, dz]) => this.grid.isWater?.(cx + dx, cz + dz));
+    if (sea || u.swimming) key = "sea";
+    else if (this.plots.some(p => Math.hypot(p.x + 0.5 - x, p.z + 0.5 - z) < 2.5) || bs.some(b => BUILDINGS[b.defId].field && near(b, 3))) key = "green";
+    else if (bs.some(b => !this.isDone(b) && near(b, 3.5))) key = "craft";
+    else if (bs.some(b => b.defId === "cafe" && near(b, 3.5))) key = "warm";
+    else if (bs.some(b => BUILDINGS[b.defId].market && near(b, 3.5))) key = "shiny";
+    else if (this.units.some(o => o !== u && !o.insideBuildingId && Math.hypot(o.x - x, o.z - z) < 2)) key = "social";
+    if (!key || !this.noteGrowth(u, key, 1, "player")) return null;
+    u.dropAt = this.time; emote(u, "✨", 1.6); return key;
+  }
+  /** 시간으로 쌓이는 카운터(30초마다): 밤에 깨어 있음 · 혼자 쉬기 · 추운 날 안에서 쉬기 · 헤엄 */
+  growTick(st, day) {
+    for (const u of this.units) {
+      if (!u.disp || u.evo || u.evoFx) continue;
+      const asleep = u.state === UnitState.Sleep, resting = [UnitState.Idle, UnitState.Sit].includes(u.state) && !u.path;
+      if (this.isNight && !asleep) this.noteGrowth(u, "night", st / 60);
+      if (resting && !u.insideBuildingId && !this.units.some(o => o !== u && !o.insideBuildingId && Math.hypot(o.x - u.x, o.z - u.z) < 4)) this.noteGrowth(u, "alone", st / 60);
+      if (u.insideBuildingId && !asleep && (this.air ?? 15) < 10) this.noteGrowth(u, "warm", st / 60);
+      if (u.swimming) this.noteGrowth(u, "sea", st / 10);
+      if (u.evoSoon === day && !asleep && !u.insideBuildingId && this.skyRnd && (u.itchT = (u.itchT ?? 0) - st) <= 0) { u.itchT = 90; emote(u, "몸이 근질근질…", 2.4); }   // 전날 예고
+    }
+  }
+  /** 매 프레임: 날이 바뀌면 한 번 판정(마지막 판정 날 evoDay는 저장 → 불러온 직후 가짜로 날이 바뀐 것처럼 보지 않음) · 차례인 갈매미가 한가해지면 연출 시작 */
+  stepEvolve(dt) {
+    if (!this.units.length) return;
+    const day = newsDay(this.time);
+    if (this.evoDay == null) this.evoDay = day;
+    else if (day > this.evoDay) { this.evoDay = day; this.evoJudge(day); }
+    if ((this.growClock = (this.growClock || 0) + dt) >= 30) { const st = this.growClock; this.growClock = 0; this.growTick(st, day); }
+    if (this.evoPending.length && !this.units.some(u => u.evoFx)) {
+      for (const id of this.evoPending) { const u = this.units.find(o => o.unitId === id); if (u && !u.evo && this.evoFree(u)) { this.startEvolve(u); break; } }
+    }
+  }
+  /** 그날 변신할 차례를 정함(evoQueue: 하루 한 마리, 밀리면 두 마리) · 내일 차례 예고 · 집을 기다리는 자이언트 이사 */
+  evoJudge(day = newsDay(this.time)) {
+    const stage = u => bondStage(u.bond);
+    this.evoPending = EV.evoQueue(this.units, day, stage).map(u => u.unitId);
+    for (const u of EV.evoSoon(this.units, day, stage)) u.evoSoon = day;
+    this.moveGiantsHome();
+    return this.evoPending;
+  }
+  /** 연출해도 되는 때: 깨어 있고, 건물 밖이고, 한가하고(일·길 가는 중 아님), 들려 있지 않음 */
+  evoFree(u) { return !u.insideBuildingId && !u.swimming && !u.sailing && !u.once && !(u.path && u.pathIndex < u.path.length) && [UnitState.Idle, UnitState.Wander].includes(u.state); }
+  /** 변신 연출 시작(2.2초): 무엇이 될지는 지금 정함(evolve.pickForm, 난수 안 씀). 빛이 가장 밝을 때(1.1초) 모습이 바뀜 */
+  startEvolve(u, to = null) {
+    if (!u || u.evo || u.evoFx) return false;
+    const pick = to ? { form: to, stayed: to === EV.BASE_FORM } : EV.pickForm(u, this.seed ?? 7);
+    u.path = null; u.heading0 = u.heading; u.evoFx = { t: EVO_FX_SECS, dur: EVO_FX_SECS, from: EV.formOf(u), to: pick.form, stayed: pick.stayed, swapped: false };
+    this.evoPending = this.evoPending.filter(id => id !== u.unitId);
+    this.emit("evolveStart", { u, to: pick.form }); return true;
+  }
+  stepEvoFx(u, dt) {
+    const f = u.evoFx; f.t -= dt; u.heading += dt * 9 * Math.min(1, f.t / f.dur * 2);
+    if (!f.swapped && f.t <= f.dur / 2) { f.swapped = true; this.evolve(u, f.to); }
+    if (f.t <= 0) { u.evoFx = null; u.heading = u.heading0 ?? u.heading; emote(u, f.stayed ? "든든!" : "짠!", 2.4); this.emit("evolve", { u, from: f.from, to: f.to, disp: u.disp, stayed: f.stayed, calling: EV.isCalling(f.to, u.job), first: u.evoFirst, guessHit: u.guessHit }); }
+  }
+  /** 변신(딱 한 번, 난수 안 씀): 모습 → 몸 크기·속도(applyProfile) · 성격 · 희귀도(rarityAfter). 직업은 그대로. 기본으로 남으면 칭호 "든든한" + 정 +3. 이벤트는 연출 끝(stepEvoFx) */
+  evolve(u, to) {
+    if (!u || u.evo) return false;
+    const from = EV.formOf(u), day = newsDay(this.time), stayed = to === EV.BASE_FORM;
+    u.evo = { day, from, to, ...(stayed ? { stayed: true } : {}) }; u.form = to; u.evoSoon = null;
+    u.evoFirst = !this.formsSeen.has(to); this.formsSeen.add(to);
+    if (stayed) { u.title = "든든한"; u.bond = Math.min(BOND_MAX, (u.bond || 0) + 3); }
+    else { const r = EV.rarityAfter(to, u.job, u.rarity); if (r) u.rarity = r; const i = UNITS.findIndex(d => d.name === to); if (i >= 0) u.scale = UNITS[i].scale; }
+    if (this.profiles) this.applyProfile(u);
+    u.guessHit = !!u.guess && u.guess === u.disp; if (u.guessHit) this.stamps++;
+    if (P.SPECIAL_HOME[to]) this.giantArrived(u);
+    return true;
+  }
+  /** 자이언트가 됨: 빈 자이언트의 집이 있으면 바로 이사, 없으면 giant 소원(상한을 넘어서라도) + 소식 */
+  giantArrived(u) {
+    if (this.moveGiantsHome().includes(u)) return;
+    if (!this.wishes.some(x => x.unitId === u.unitId && x.id === "giant")) { const def = WISH_BY_ID.giant; if (def) { const wish = { id: "giant", unitId: u.unitId, base: this.units.length, age: 0 }; this.wishes.push(wish); this.emit("wish", { wish, u }); } }
+    this.emit("giantWait", { u });
+  }
+  /** 다 지은 빈 전용 집(자이언트의 집)으로, 아직 이사 못 한 그 모습 갈매미를 옮김. 옮긴 갈매미들 */
+  moveGiantsHome() {
+    const moved = [];
+    for (const u of this.units) {
+      const want = P.SPECIAL_HOME[EV.formOf(u)]; if (!want) continue;
+      const cur = u.home && this.buildings.get(u.home); if (cur?.defId === want) continue;
+      const b = [...this.buildings.values()].find(x => x.defId === want && this.isDone(x) && !x.owner);
+      if (b && this.moveToSpecialHome(u, b)) moved.push(u);
+    }
+    return moved;
+  }
+  /** 전용 집으로 이사(돈 안 냄 · 남은 대출은 그대로 · 소지품 창고는 그대로): 옛 집 주인이었으면 같이 사는 갈매미를 주인으로, 없으면 빈 집 · 같이 살던 집이면 mates에서 뺌 */
+  moveToSpecialHome(u, b) {
+    if (!u || !b || b.owner) return false;
+    const old = u.home && this.buildings.get(u.home);
+    if (old) {
+      if (old.owner === u.unitId) { const next = (old.mates || [])[0] ?? null; old.owner = next; old.mates = (old.mates || []).filter(id => id !== next); if (next) { const m = this.units.find(o => o.unitId === next); if (m) m.home = old.id; } }
+      else old.mates = (old.mates || []).filter(id => id !== u.unitId);
+    }
+    if (u.insideBuildingId === old?.id) exitBuilding(u, this);
+    b.owner = u.unitId; b.mates = []; u.home = b.id;
+    this.wishes = this.wishes.filter(x => !(x.unitId === u.unitId && x.id === "giant"));
+    emote(u, "🗿 딱 맞는 집이다!", 2.6); this.emit("giantMove", { u, b, from: old || null }); return true;
+  }
+  /** 성향 맞히기(카드 칩): 변신할 때 맞혔으면 도장 하나 */
+  guessDisp(unitId, disp) { const u = this.units.find(o => o.unitId === unitId); if (!u || u.evo || !EV.DISPS.includes(disp)) return false; u.guess = disp; return true; }
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
-  emit(ev, arg) { this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); if (STORY_EVENTS.has(ev)) this.storyEvent(ev, arg); }
+  emit(ev, arg) { this.growthOf(ev, arg); this.noteNews(ev, arg); for (const fn of this.listeners[ev] || []) fn(arg); this.noteDaily(ev, arg); if (STORY_EVENTS.has(ev)) this.storyEvent(ev, arg); }
   // ---- 오늘의 부탁(daily.js)
   /** 실제 날짜 열쇠(YYYY-MM-DD)를 받음: 날짜가 바뀌었으면(처음이면) 새 부탁을 고름 → 나아간 것은 처음부터, 못 끝낸 부탁은 사라짐. 새로 골랐으면 true */
   setDay(key) { if (!key || this.daily?.key === key) return false; this.daily = rollDaily(key, this); return true; }
@@ -248,23 +409,46 @@ export class World {
     for (const u of this.units) if (u !== src && !u.insideBuildingId && Math.hypot(u.x - x, u.z - z) < 9 && this.rnd() < chance) u.curious = { x, z, kind };
   }
 
-  spawnUnits(names = UNITS.map(u => u.name)) {
+  /** 옛 섬·옛 저장: 모습 이름마다 한 마리(UNITS 차례 · seededRandom(99) 차례를 그대로 지켜 옛 섬의 다음 진행이 같음). id = u{UNITS 차례+1}, 이름 = 모습 이름(옮기기가 나중에 새 이름을 줌) */
+  spawnUnits(names = UNITS.map(u => u.name)) { return this.spawnLegacy(names); }
+  spawnLegacy(names = UNITS.map(u => u.name)) {
     const r = seededRandom(99);
     UNITS.forEach((u, i) => {
       if (!names.includes(u.name)) return;
       const a = i / UNITS.length * Math.PI * 2, c = this.center, spot = nearestWalkable(this.grid, Math.floor(c.x + Math.cos(a) * 5), Math.floor(c.z + Math.sin(a) * 5));
-      this.addUnit(u, i, spot[0] + 0.5, spot[1] + 0.5, r);
+      this.addUnit(u, i, spot[0] + 0.5, spot[1] + 0.5, r); this.formsSeen.add(u.name);
     });
   }
-  addUnit(def, i, x, z, r = this.rnd) {
-    const s = createUnitAIState(`u${i + 1}`, def.name, x, z, 0.5 + r() * 2); s.scale = def.scale;
-    J.assignJob(s); s.full = 55 + r() * 35; initMind(s, r);                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
+  /** 새 저장(gulls: 1)의 갈매미를 저장 차례대로 되살림: 저장된 id·이름·모습·직업·자리. seededRandom(99)는 저장 차례로 씀 · 상인 창업금은 다시 주지 않음 */
+  spawnSaved(list) {
+    const r = seededRandom(99), n = list.length, taken = [];
+    list.forEach((s, k) => {
+      const i = Math.max(0, UNITS.findIndex(d => d.name === s.form)), def = UNITS[i], c = this.center, a = k / Math.max(1, n) * Math.PI * 2;
+      const ok = Number.isFinite(s.x) && Number.isFinite(s.z) && this.grid.isWalkable?.(Math.floor(s.x), Math.floor(s.z));
+      const spot = ok ? [s.x - 0.5, s.z - 0.5] : nearestWalkable(this.grid, Math.floor(c.x + Math.cos(a) * 5), Math.floor(c.z + Math.sin(a) * 5));
+      const t = tidyName(s.name), name = NAME_RE.test(t) && !taken.includes(t) ? t : pickName(this.seed ?? 7, taken.concat(list.map(o => o.name))); taken.push(name);   // 허용 글자만(이름에 태그가 들어간 저장은 새 이름) · 모습 이름(옛 이름 그대로 둔 갈매미)은 괜찮음
+      const id = typeof s.id === "string" && /^u\d+$/.test(s.id) && !this.units.some(o => o.unitId === s.id) ? s.id : `u${this.nextGullNo++}`;
+      const u = this.addUnit(def, i, spot[0] + 0.5, spot[1] + 0.5, r, { id, name, restoring: true, job: s.job, rarity: s.rarity, tribe: s.tribe, disp: EV.DISPS.includes(s.disp) ? s.disp : null,
+        bornDay: Number.isFinite(s.born) ? s.born : 0, evo: s.evo && typeof s.evo === "object" && s.evo.to ? { day: s.evo.day | 0, from: String(s.evo.from || EV.BASE_FORM), to: String(s.evo.to), ...(s.evo.stayed ? { stayed: true } : {}) } : null });
+      for (const k2 of EV.GROWTH_KEYS) if (Number.isFinite(+s.growth?.[k2]) && +s.growth[k2] > 0) u.growth[k2] = +s.growth[k2];
+      u.title = typeof s.title === "string" ? s.title : null; u.guess = EV.DISPS.includes(s.guess) ? s.guess : null; u.guessHit = !!s.guessHit;
+      const no = +String(u.unitId).slice(1); if (no >= this.nextGullNo) this.nextGullNo = no + 1;
+      this.formsSeen.add(def.name);
+    });
+  }
+  addUnit(def, i, x, z, r = this.rnd, opts = {}) {
+    const s = createUnitAIState(opts.id ?? `u${i + 1}`, opts.name ?? def.name, x, z, 0.5 + r() * 2, def.name); s.scale = def.scale;
+    J.assignJob(s); if (opts.job && JOBS[opts.job]) { s.job = opts.job; s.rarity = opts.rarity && RARITY[opts.rarity] ? opts.rarity : "common"; if (opts.tribe) s.tribe = opts.tribe; }   // 직업은 저장값(필요에 따라 맡긴 직업은 모습에서 다시 셀 수 없음) · 없으면 모습에서
+    else if (opts.rarity && RARITY[opts.rarity]) s.rarity = opts.rarity;
+    s.full = 55 + r() * 35; initMind(s, r);                                    // 직업·희귀도, 처음 포만감, 욕구·취향·친구
+    if (!opts.restoring) this.evoDay ??= newsDay(this.time);                   // 변신 판정 날짜의 시작점(첫 갈매미가 온 날)
+    s.disp = opts.disp ?? null; s.growth = {}; s.bornDay = opts.bornDay ?? newsDay(this.time); s.evo = opts.evo ?? null; s.title = null; s.guess = null;   // 숨은 성향 · 자란 방식 · 온 날 · 변신(evolve.js)
     s.coins = 0; s.inv = E.newBag(); s.home = null; s.stash = {};              // 돈·가방·내 집·소지품(잡거나 주운 것, belongings.js)
     s.loan = null; s.wageOwed = 0; s.loanRefused = false;                       // 집 대출 { left, per } · 밀린 품삯 · 금고가 비어 대출을 거절당함(bank.js)
     s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(마을 날짜)과 그날 횟수
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     s.clothes = []; s.wear = CLO.emptyWear();                                   // 가진 옷 · 입은 옷(clothes.js)
-    if (this.economy && s.job === "merchant") this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(중앙은행이 켜진 섬은 금고에서, issue)
+    if (this.economy && s.job === "merchant" && !opts.restoring) this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(중앙은행이 켜진 섬은 금고에서, issue)
     if (this.profiles) this.applyProfile(s);
     this.units.push(s); return s;
   }
@@ -272,21 +456,22 @@ export class World {
   /** 화면용: 지금 🥚 소환할 수 있는가와 까닭(난수 안 씀).
    *  { can, count(지금 부를 수 있는 마릿수), reason(못 부를 때 한국어 글, 부를 수 있으면 ""), houses(다 지은 보통 집), gulls(보통 갈매미), free(남은 집 자리), left(아직 안 온 갈매미 수),
    *    next(다음에 올 갈매미 이름, 무작위면 null), candidates(올 수 있는 이름들), needHouse, needGiantHouse, gated(집 수 규칙이 켜진 섬인가) } */
-  summonInfo() { return P.summonInfoFor(this.units, [...this.buildings.values()].filter(b => this.isDone(b)), this.economy); }
-  /** 🥚 소환: 아직 마을에 없고 지금 올 수 있는(집 자리가 있는) 갈매미 하나를 광장 근처에 부름. 꼭 필요한 직업(건축가 → 목수 → 상인)이 없으면 그 갈매미부터, 아니면 무작위.
+  summonInfo() { return P.summonInfoFor(this.units, [...this.buildings.values()].filter(b => this.isDone(b)), this.economy, this.maxGulls ?? P.MAX_GULLS); }
+  /** 🥚 소환: 지금 올 수 있으면(집 자리가 있으면) 🥚 기본 갈매미 하나를 광장 근처에 부름. 숨은 성향은 섬 씨앗의 덱 차례(evolve.js dispFor), 직업은 필요한 것부터, 이름은 풀에서.
    *  못 부르면 null(집이 모자라면 "summonBlocked"를 알리고, 밖에 있는 갈매미 하나가 말풍선으로 알려 줌) */
   summon() {
     const info = this.summonInfo();
     if (!info.can) {
-      if (info.left) { const who = this.units.find(u => !u.insideBuildingId); if (who) emote(who, info.needHouse ? "🏠 집이 더 있어야 친구가 와요" : "🏯 자이언트는 큰 집이 있어야 와요", 2.6); this.emit("summonBlocked", info); }
+      if (info.left) { const who = this.units.find(u => !u.insideBuildingId); if (who) emote(who, "🏠 집이 더 있어야 친구가 와요", 2.6); this.emit("summonBlocked", info); }
       return null;
     }
-    const name = info.next ?? info.candidates[Math.floor(this.rnd() * info.candidates.length)], i = UNITS.findIndex(d => d.name === name), def = UNITS[i];
+    const def = UNITS[0];                                                            // 언제나 🥚 기본 모습(evolve.js) · 직업은 필요한 것부터(population.js jobForSummon)
     let spot = null;
     const c = this.center, d0 = this.wild ? 4 : 1;                                   // 넓은 섬은 은행 앞쪽
     for (let k = 0; k < 20 && !spot; k++) { const a = this.rnd() * Math.PI * 2, d = d0 + this.rnd() * 3; spot = nearestWalkable(this.grid, Math.floor(c.x + Math.cos(a) * d), Math.floor(c.z + 3 + Math.sin(a) * d), 4); }
     if (!spot) return null;
-    const u = this.addUnit(def, i, spot[0] + 0.5, spot[1] + 0.5);
+    const u = this.addUnit(def, 0, spot[0] + 0.5, spot[1] + 0.5, this.rnd, { id: `u${this.nextGullNo++}`, name: this.newName(), job: info.nextJob, rarity: "common", tribe: "태초", disp: EV.dispFor(this.seed ?? 7, this.gullsMade) });
+    this.gullsMade++; this.formsSeen.add(def.name);
     u.y = this.standHeight(u.x, u.z); emote(u, "안녕!", 2.2);
     for (const o of this.units) if (o !== u && !o.insideBuildingId && Math.hypot(o.x - u.x, o.z - u.z) < 9) o.curious = { x: u.x, z: u.z, kind: "drop" };   // 둘레 갈매미가 쳐다봄
     this.migrateLate(); this.emit("unitAdded", u); return u;
@@ -298,9 +483,9 @@ export class World {
     this.units.forEach(u => this.applyProfile(u));
   }
   applyProfile(u) {
-    const { chars, walkScale, runScale } = this.profiles, i = UNITS.findIndex(d => d.name === u.name);
-    const c = chars.find(c => c.name === u.name) || chars[Math.max(0, i) % chars.length]; if (!c) return;
-    u.name = c.name; u.scale = c.scale; u.height = c.height * c.scale; J.assignJob(u);
+    const { chars, walkScale, runScale } = this.profiles, f = EV.formOf(u), i = UNITS.findIndex(d => d.name === f);
+    const c = chars.find(c => c.name === f) || chars[Math.max(0, i) % chars.length]; if (!c) return;   // 모습으로 찾음(이름은 덮어쓰지 않음 · 직업도 그대로)
+    u.scale = c.scale; u.height = c.height * c.scale;
     u.walkSpeed = c.walk * walkScale * c.scale * SPEED_BOOST; u.runSpeed = c.run * runScale * c.scale * SPEED_BOOST;
   }
 
@@ -361,7 +546,7 @@ export class World {
   releaseFee(b) {
     if (!b?.feeHeld) return; if (!b.fee) { b.feeHeld = false; return; }
     const t = this.feeTaker(b.defId); if (!t) return;                               // 갈매미가 하나도 없으면 계속 맡아 둠(돈이 사라지지 않게)
-    t.coins = (t.coins || 0) + b.fee; b.feeTo = t.name; b.feeHeld = false;
+    t.coins = (t.coins || 0) + b.fee; b.feeTo = t.unitId; b.feeHeld = false;
   }
   /** 금고가 맡아 둔(아직 건축가에게 안 간) 설계비 합: 돈의 합 M = 금고 + 주머니 + 예금 + 밀린 품삯 + 주문 공사 맡긴 돈 + 이것 */
   feesHeld() { let n = 0; for (const b of this.buildings.values()) if (b.feeHeld) n += b.fee || 0; return n; }
@@ -682,7 +867,7 @@ export class World {
     this.emit("market", { u, kind: "food" }); return true;
   }
   /** 이 갈매미 몸에 맞는 집인가(자이언트는 자이언트의 집, 다른 갈매미는 일반 집) */
-  canFit(u, b) { const only = BUILDINGS[b.defId].forUnit; return only ? only === u.name : !Object.values(BUILDINGS).some(d => d.forUnit === u.name); }
+  canFit(u, b) { const only = BUILDINGS[b.defId].forUnit, f = EV.formOf(u); return only ? only === f : !Object.values(BUILDINGS).some(d => d.forUnit === f); }
   housesForSale(u = null) { return [...this.buildings.values()].filter(b => BUILDINGS[b.defId].house && this.isDone(b) && !b.owner && (!u || this.canFit(u, b))); }
   /** 집 사기: 집값을 다 가졌으면 현금, 아니면 계약금 + 금고 대출(houseDeal). 금고가 모자라 거절되면 표시하고 false */
   buyHouse(u, b) {
@@ -789,19 +974,19 @@ export class World {
     return this.clinics().filter(b => this.bedsFree(b, u) > 0).sort((a, b) => d(a) - d(b))[0] || null;
   }
   /** 당번 의사 갈매미(없으면 null) */
-  doctorOf(b) { return b?.doctor ? this.units.find(o => o.name === b.doctor) || null : null; }
+  doctorOf(b) { return b?.doctor ? this.units.find(o => o.unitId === b.doctor) || null : null; }
   /** 당번 의사가 지금 의원 안에 있나(있으면 그 갈매미) */
   doctorIn(b) { const d = this.doctorOf(b); return d && d.insideBuildingId === b.id && !d.sick ? d : null; }
   /** 이 갈매미가 당번인 의원(다 지은 것, 없으면 null) */
-  dutyClinic(u) { return this.clinics().find(b => b.doctor === u.name) || null; }
+  dutyClinic(u) { return this.clinics().find(b => b.doctor === u.unitId) || null; }
   /** 당번 의사 정하기(플레이어가 의원 카드에서): unitId가 null이면 당번을 비움. 한 갈매미는 한 의원만(다른 의원 당번은 풀림).
    *  돌려주는 값: { ok, reason } */
   setDoctor(clinicId, unitId) {
     const b = this.buildings.get(clinicId); if (!b || !BUILDINGS[b.defId].clinic) return { ok: false, reason: "병원이 아니에요" };
     if (unitId == null) { const was = b.doctor; b.doctor = null; if (was) this.emit("doctor", { b, u: null, was }); return { ok: true, reason: "" }; }
-    const u = this.units.find(o => o.unitId === unitId || o.name === unitId); if (!u) return { ok: false, reason: "그런 갈매미가 없어요" };
-    for (const o of this.buildings.values()) if (o !== b && o.doctor === u.name) o.doctor = null;
-    b.doctor = u.name; emote(u, "🩺 오늘은 내가 당번!", 2.4); this.emit("doctor", { b, u }); return { ok: true, reason: "" };
+    const u = this.units.find(o => o.unitId === unitId); if (!u) return { ok: false, reason: "그런 갈매미가 없어요" };
+    for (const o of this.buildings.values()) if (o !== b && o.doctor === u.unitId) o.doctor = null;
+    b.doctor = u.unitId; emote(u, "🩺 오늘은 내가 당번!", 2.4); this.emit("doctor", { b, u }); return { ok: true, reason: "" };
   }
   /** 병에 걸림(한 번에 하나). from: 옮긴 갈매미(전염) · why: 까닭("freeze" 꽁꽁 · "wet" 젖음 · "overwork" 과로 · "spread" 옮음) */
   makeSick(u, kind = "cold", from = null, why = from ? "spread" : null) {
@@ -919,7 +1104,7 @@ export class World {
     if (s.kind !== "meteor" || (this.starClock += dt) < STAR_CHECK_SECS) return;
     this.starClock = 0; const item = ITEMS.find(i => i.id === STAR_ITEM);
     for (const u of this.units) {                                                   // 깨어서 밖에 있는 야행성 갈매미가 별조각을 주움
-      if (s.found >= STAR_MAX || !isNocturnal(u) || u.insideBuildingId || [UnitState.Sleep, UnitState.Held].includes(u.state) || this.skyRnd() >= STAR_CHANCE) continue;
+      if (s.found >= STAR_MAX || !nightOwl(u) || u.insideBuildingId || [UnitState.Sleep, UnitState.Held].includes(u.state) || this.skyRnd() >= STAR_CHANCE) continue;
       s.found++; stashAdd(u, item.id); emote(u, "⭐", 2.5); this.emit("starPiece", { u, item });   // 주운 갈매미의 소지품
     }
   }
@@ -1085,7 +1270,7 @@ export class World {
   // ---- 친구 사이
   /** 서로 친해짐(amt만큼). 사이 단계가 오르면(서먹 → 친구 → 단짝) 둘 다 말풍선을 띄우고 알림. */
   befriend(a, b, amt) {
-    const top = (this.palTop ??= {}), key = [a.name, b.name].sort().join("|"), was = Math.max(top[key] ?? 0, friendStage(affinity(a, b)));
+    const top = (this.palTop ??= {}), key = [a.unitId, b.unitId].sort().join("|"), was = Math.max(top[key] ?? 0, friendStage(affinity(a, b)));
     const stage = befriend(a, b, amt); top[key] = Math.max(was, stage);
     if (stage <= was) return 0;                                                 // 겁먹어 잠깐 멀어졌다 다시 친해진 사이는 또 알리지 않음
     const d = FRIEND_STAGES[stage]; emote(a, `${d.icon} ${d.name}!`, 3); emote(b, `${d.icon} ${d.name}!`, 3);
@@ -1113,9 +1298,10 @@ export class World {
     const item = giftDef(id), bag = item?.kind === "fish" ? this.treasures : this.items;
     if (!u || !item || !this.units.includes(u) || !((bag[id] || 0) > 0)) return null;
     bag[id]--; if (!bag[id]) delete this.keep[id];                            // 마지막 하나를 건넸으면 간직 표시도 지움(가방에 없으면 끌 단추가 안 보이므로)
-    const tier = giftTier(u.name, id), t = GIFT_TIERS[tier];
+    const tier = giftTier(u, id), t = GIFT_TIERS[tier];
     if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + t.fun);
-    emote(u, t.say, 2.4); this.emit("gift", { u, item, tier });
+    emote(u, t.say, 2.4); if (!u.evo && u.disp && tier !== 1 && GIFT_CAT_NAME[item.cat]) EV.addNote(u, tier === 2 ? `♥ ${GIFT_CAT_NAME[item.cat]}을(를) 좋아했어요` : `${GIFT_CAT_NAME[item.cat]}은(는) 별로래요`);   // 변신 전 선물 반응 = 단서(관찰 노트)
+    this.emit("gift", { u, item, tier });
     if (item.clothes) this.giveClothes(u, item.clothes);                        // 손뜨개 목도리: 그 갈매미 옷이 되어 바로 둘러 줌
     const thanks = this.addBond(u, t.bond * (item.stampGift ? STAMP_GIFT_BOND : 1));
     return { item, tier, say: t.say, bond: u.bond, thanks };
@@ -1212,7 +1398,7 @@ export class World {
     if (!t.alive) return;
     t.hp -= who ? 3 / J.chopsNeeded(who) : 1; this.emit("treeHit", t);
     if (t.hp > 1e-6) return;
-    t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got;
+    t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got; this.noteGrowth(who, "big", 1, who?.job === "lumberjack" ? "job" : "free");
     this.emit("treeFell", { tree: t, dir: [t.x + 0.5 - who.x, t.z + 0.5 - who.z] }); this.notice(t.x + 0.5, t.z + 0.5, "tree", who);
     this.after(25 + this.rnd() * 15, () => { if (t.removed) return; t.alive = true; t.hp = 3; this.emit("treeGrow", t); });   // 그사이 치운 나무(꾸미기)는 되살리지 않음
   }
@@ -1221,7 +1407,7 @@ export class World {
     o.hp--; this.emit("oreHit", o);
     if (o.hp > 0) return;
     o.alive = false; const got = who ? J.stoneYield(who) : 2; this.gain(who, "stone", got); o.lastYield = got;
-    o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron);
+    o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron); this.noteGrowth(who, "big", 1, who?.job === "miner" ? "job" : "free");
     this.emit("oreBroke", o);
     this.after(20 + this.rnd() * 12, () => { if (o.removed) return; o.alive = true; o.hp = 3; this.emit("oreGrow", o); });
   }
@@ -1308,12 +1494,13 @@ export class World {
 
   // ---- 밭(농부만): 빈 밭에 심고, 다 자라면 거둬 음식이 됨
   farmPlot(p, u) {
+    if (p.stage !== "growing") this.noteGrowth(u, "green", 1, u?.job === "farmer" ? "job" : "free");
     if (p.stage === "empty") { p.stage = "growing"; p.grow = J.growSeconds(u); p.t = p.grow; this.emit("plot", p); return "plant"; }
     if (p.stage === "ripe") { const n = J.harvestYield(u) + this.fx.harvest; this.gain(u, "food", n); p.stage = "empty"; p.t = 0; p.lastYield = n; this.emit("plot", p); return "harvest"; }
     return null;
   }
   /** 밭에 물을 줌(농부가 물가에서 떠 온 물): 촉촉함이 다 참 */
-  waterPlot(p, u = null) { p.moisture = 1; this.emit("plotWater", { p, u }); return true; }
+  waterPlot(p, u = null) { p.moisture = 1; this.noteGrowth(u, "green", 0.5, u?.job === "farmer" ? "job" : "free"); this.emit("plotWater", { p, u }); return true; }
   /** 격자 좌표(연속)에 서는 높이: 부두처럼 걸을 수 있는 시설 위면 그 높이, 아니면 보이는 땅 높이(경사면 포함). */
   standHeight(gx, gz) {
     const x = Math.floor(gx), z = Math.floor(gz), c = this.grid.get(x, z), o = c?.occupiedId && this.grid.occupants.get(c.occupiedId);
@@ -1876,7 +2063,7 @@ export class World {
     if (this.isDone(b)) return;
     this.releaseFee(b);                                                             // 첫 망치질 = 공사 시작 → 맡아 둔 설계비가 건축가에게
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
-    b.lastBuilder = u ? u.unitId : null; this.emit("buildingProgress", b);
+    b.lastBuilder = u ? u.unitId : null; this.noteGrowth(u, "craft", this.isDone(b) ? 2.3 : 0.3, u?.job === "builder" || u?.job === "carpenter" ? "job" : "free"); this.emit("buildingProgress", b);
     if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (!u && b.order) this.settleOrder(b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
   finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { this.releaseFee(b); b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); } }
@@ -1965,16 +2152,16 @@ export class World {
   /** 이 갈매미가 이 건물에 들어갈 수 있나: 전용 집(forUnit)은 그 갈매미만, 전용 집이 있는 갈매미(자이언트)는 그 집에만 */
   canEnter(u, b) {
     if ((b.defId === "cafe" || b.defId === "aquarium") && this.isDone(b)) return true;   // 카페·수족관은 누구나(카페: 재미·친구, 수족관: 재미가 차오름)
-    if (BUILDINGS[b.defId].clinic) return this.isDone(b) && (!!u.sick || b.doctor === u.name);   // 의원: 아픈 갈매미와 당번 의사만
+    if (BUILDINGS[b.defId].clinic) return this.isDone(b) && (!!u.sick || b.doctor === u.unitId);   // 의원: 아픈 갈매미와 당번 의사만
     if (!this.isHouse(b) || !this.isDone(b)) return false;
-    if (this.economy) return HM.livesIn(b, u);                                      // 경제가 있으면 사는 집만(산 주인 + 같이 사는 갈매미, homes.js)
+    if (this.economy) return HM.livesIn(b, u) && this.canFit(u, b);               // 경제가 있으면 사는 집만(산 주인 + 같이 사는 갈매미, homes.js) · 몸에 맞아야(변신한 자이언트는 작은 집에 못 들어감)
     return this.canFit(u, b);
   }
   removeBuilding(id) {
     const b = this.buildings.get(id); if (!b) return false;
     if (b.feeHeld && this.isDone(b)) this.releaseFee(b);                          // 다 지었는데 맡아 둔 설계비가 남음(예전 ⚡ 완공 저장): 건축가에게 보내고 철거(돈이 사라지지 않게)
     if (b.fee && !this.isDone(b)) {                                                // 다 짓기 전 철거(공사 취소): 설계비를 돌려줌(쓴 자재·치른 품삯은 그대로). 중앙은행: 받은 갈매미가 가진 만큼만 되돌려 받음(돈이 새로 생기지 않게)
-      const t = !b.feeHeld && this.monOn() ? (this.units.find(u => u.name === b.feeTo) || (b.feeTo ? null : this.feeTaker(b.defId))) : null;   // 맡아 둔 설계비는 그대로 · 이미 건축가에게 간 건 그 갈매미가 가진 만큼만(마을을 떠났으면 0)
+      const t = !b.feeHeld && this.monOn() ? (this.units.find(u => u.unitId === b.feeTo) || (b.feeTo ? null : this.feeTaker(b.defId))) : null;   // 맡아 둔 설계비는 그대로 · 이미 건축가에게 간 건 그 갈매미가 가진 만큼만(마을을 떠났으면 0)
       const n = b.feeHeld || !this.monOn() ? b.fee : t ? Math.min(b.fee, Math.max(0, Math.floor(t.coins || 0))) : 0; if (t) t.coins -= n;
       this.bank.vault += n; this.bank.fees -= n; this.led("refunds", n); b.refunded = n; b.fee = 0; b.feeHeld = false; this.settleOwed();
     }
@@ -2012,7 +2199,13 @@ export class World {
   /** 내려놓기. 완공된 건물이면 들어가고, 걸을 수 있는 칸이면 거기 서고(나무·광석·공사장 칸이면 바로 옆 땅에),
    *  가까이 있는 것(나무·광석·낚시 자리·공사장·밭·씨앗·친구)과 바로 상호작용한다. 바다 등은 원래 자리로 돌아간다.
    *  돌려주는 값: { ok, building?, act?: { kind, label } } 또는 { ok: false, reason } */
-  dropUnit(u, x, z, at = null) {                                             // at: 마우스가 가리킨 정확한 점(그 칸 안이면 거기에)
+  /** 들어서 내려놓기. 내려놓은 자리가 그 갈매미 자란 방식에 들어감(dropGrowth: 바다·밭·공사장·카페·시장·친구 곁, 60초에 한 번) */
+  dropUnit(u, x, z, at = null) {
+    const r = this.dropUnitAt(u, x, z, at);
+    if (r.ok && u) { if (r.building?.defId === "cafe") { if (!u.evo && u.disp && (this.time - (u.dropAt ?? -1e9)) >= 60 && this.noteGrowth(u, "warm", 1, "player")) u.dropAt = this.time; } else if (!r.building) { const g = this.dropGrowth(u); if (g) r.grow = g; } }
+    return r;
+  }
+  dropUnitAt(u, x, z, at = null) {                                           // at: 마우스가 가리킨 정확한 점(그 칸 안이면 거기에)
     if (!u || u.state !== UnitState.Held) return { ok: false, reason: "" };
     const b = this.grid.inBounds(x, z) ? this.buildingAt(x, z) : null, back = u.heldFrom; u.heldFrom = null;
     if (b && b.ramp && this.isDone(b) && this.grid.inBounds(x, z)) { u.x = x + 0.5; u.z = z + 0.5; u.y = this.standHeight(u.x, u.z); setIdle(u, this.rnd, this); return { ok: true }; }   // 다 지은 계단 위
@@ -2050,8 +2243,8 @@ export class World {
     if ((this.rankClock += dt) >= 2) { this.rankClock = 0; this.updateRoads(); this.stepRank(); }
     for (let i = this.timers.length - 1; i >= 0; i--) if ((this.timers[i].t -= dt) <= 0) { const f = this.timers[i].fn; this.timers.splice(i, 1); f(); }
     this.air = this.airNow();
-    for (const u of this.units) updateUnit(u, dt, this, this.rnd);
-    this.stepHealth(dt);
+    for (const u of this.units) { if (u.evoFx) { this.stepEvoFx(u, dt); continue; } updateUnit(u, dt, this, this.rnd); }   // 변신 연출 중(약 2.2초)엔 제자리에서 빙글
+    this.stepHealth(dt); this.stepEvolve(dt);
     this.separate();
   }
   // 겹친 갈매미를 살짝 밀어냄. 밀린 자리가 걸을 수 없는 칸이면 밀지 않는다.
@@ -2261,6 +2454,26 @@ export class World {
     this.migrated = res; return res;
   }
 
+  /** 예전 저장 옮기기(이름이 곧 모습이던 때 → unitId·모습·이름 분리). 난수 안 씀.
+   *  id는 옛 addUnit이 만들던 u{UNITS 차례+1} 그대로(spawnLegacy) → 집 주인·같이 사는 갈매미·주문·소원·축제는 그대로 맞음.
+   *  이름으로 적던 것(당번 의사·설계비 받은 갈매미·옆집 소원 단짝)은 id로 · 이미 다른 모습인 갈매미는 변신한 셈 · 기본은 성향을 받아 이제부터 자람 · 새 이름(KEEP_OLD_NAMES면 그대로) */
+  migrateGulls(saved = null, keepNames = KEEP_OLD_NAMES) {
+    const day = newsDay(this.time), idOfForm = n => this.units.find(u => EV.formOf(u) === n)?.unitId ?? null, isForm = v => typeof v === "string" && UNITS.some(d => d.name === v);
+    for (const b of this.buildings.values()) { if (isForm(b.doctor)) b.doctor = idOfForm(b.doctor); if (isForm(b.feeTo)) b.feeTo = idOfForm(b.feeTo); }
+    for (const x of this.wishes) if (x.id === "neighbor" && isForm(x.base)) x.base = idOfForm(x.base);
+    const renamed = [];
+    for (const u of this.units) {
+      const f = EV.formOf(u); u.form = f;
+      if (f === EV.BASE_FORM) { u.evo = null; u.disp = EV.dispFor(this.seed ?? 7, 0); } else { u.evo = { day, from: EV.BASE_FORM, to: f }; u.disp = EV.FORM_DISP[f]; }
+      u.bornDay = day; u.growth = {};
+      if (!keepNames) { const to = pickName(this.seed ?? 7, this.units.filter(o => o !== u).map(o => o.name).concat(renamed.map(r => r.to))); renamed.push({ form: f, to, id: u.unitId }); }
+    }
+    for (const r of renamed) { const u = this.units.find(o => o.unitId === r.id); if (u) u.name = r.to; }
+    this.nextGullNo = Math.max(10, ...this.units.map(u => +String(u.unitId).slice(1) + 1)); this.gullsMade = this.units.length;
+    for (const u of this.units) this.formsSeen.add(EV.formOf(u));
+    if (renamed.length) { this.renamed = renamed; addNews(this.newsLog, this.time, { icon: "🏷", text: `갈매미들이 이름을 갖게 됐어요 · ${renamed.map(r => `${r.form} → ${r.to}`).join(" · ")}`, weight: 4 }); }
+  }
+
   // ---- 저장/불러오기
   /** savedAt: 저장하는 실제 시각(ms). 월드는 기기 시계를 모르므로 화면이 넣어 줌. */
   serialize(savedAt = null) {
@@ -2271,7 +2484,8 @@ export class World {
       decor: CU.decorToSave(this.decor), dug: [...this.dug].map(k => k.split(",").map(Number)), res: this.resWithLoads(),
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
-      units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
+      gulls: 1, minClient: "gulls1", nextGullNo: this.nextGullNo, gullsMade: this.gullsMade, formsSeen: [...this.formsSeen], evoDay: this.evoDay,
+      units: this.units.map(u => ({ id: u.unitId, name: u.name, form: EV.formOf(u), disp: u.disp || null, growth: Object.fromEntries(Object.entries(u.growth || {}).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])), born: u.bornDay ?? 0, evo: u.evo || null, job: u.job, rarity: u.rarity, tribe: u.tribe, ...(u.title ? { title: u.title } : {}), ...(u.guess ? { guess: u.guess } : {}), ...(u.guessHit ? { guessHit: 1 } : {}), x: Math.round(u.x * 100) / 100, z: Math.round(u.z * 100) / 100, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToIds(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
@@ -2295,17 +2509,20 @@ export class World {
       r.building.upFrom = !w.isDone(r.building) && BUILDINGS[s.defId]?.upgradeFrom === s.up ? s.up : null; } }   // 업그레이드 공사 중(예전 저장엔 없음 → 보통 공사)
     w.wild = !!j.wild; if (w.wild) { w.hungerScale = 0.48; w.seedFood = 20; }
     w.decor = CU.decorFromSave(j.decor, (x, z, k) => !w.landProblem(x, z, k));      // 덤불·꽃 겹(예전 저장엔 없음 → 빈 겹). 건물을 다시 놓은 뒤에(그사이 못 쓰게 된 칸은 버림)
-    const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u);
-    w.spawnUnits(saved ? saved.map(u => u.name) : undefined);                       // 예전 저장(units 없음)은 8마리 모두
-    for (const s of saved || []) { const u = w.units.find(o => o.name === s.name); if (!u) continue; u.coins = s.coins || 0; u.saved = Math.max(0, Math.floor(+s.saved || 0)); if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; friendsFromNames(u, s.friends, w.units);
+    const saved = (j.units || null)?.map(u => typeof u === "string" ? { name: u } : u), gulls = !!j.gulls;
+    if (gulls) w.spawnSaved(saved || []);                                           // 새 저장: id·이름·모습을 저장한 그대로
+    else w.spawnLegacy(saved ? saved.map(u => u.name) : undefined);                 // 예전 저장(이름 = 모습): 옛 차례 그대로(units 없음은 9마리 모두) → 아래 migrateGulls가 id로 옮김
+    const byIdx = (s, k) => gulls ? w.units[k] : w.units.find(o => o.name === s.name);
+    (saved || []).forEach((s, k) => { const u = byIdx(s, k); if (!u) return; u.coins = s.coins || 0; u.saved = Math.max(0, Math.floor(+s.saved || 0)); if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; if (gulls) friendsFromIds(u, s.friends, w.units); else friendsFromNames(u, s.friends, w.units);
       u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.lodgeNight = typeof s.lodgeNight === "string" ? s.lodgeNight : null; u.petDay = s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
       u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused;   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
       u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0);   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
       u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes);   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)
-      u.sick = HL.sickFromSave(s.sick); u.immune = Math.max(0, Math.min(HL.IMMUNE_SECS, +s.immune || 0)); u.wet = Math.max(0, Math.min(1, +s.wet || 0)); }   // 병·면역(예전 저장엔 없음 → 건강)
+      u.sick = HL.sickFromSave(s.sick); u.immune = Math.max(0, Math.min(HL.IMMUNE_SECS, +s.immune || 0)); u.wet = Math.max(0, Math.min(1, +s.wet || 0)); });   // 병·면역(예전 저장엔 없음 → 건강)
+    if (!gulls) w.migrateGulls(saved);                                              // 이름 = 모습이던 예전 저장 → id·모습·성향·새 이름(evolve.js)
     w.bank = BK.bankFromSave(j.bank, w.time);                                     // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게). 금고가 없는 예전 저장은 100 + 돌아온 돈
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);
-    for (const b of w.buildings.values()) if (b.doctor && !w.units.some(u => u.name === b.doctor)) b.doctor = null;   // 마을에 없는 당번 의사는 비움
+    for (const b of w.buildings.values()) if (b.doctor && !w.units.some(u => u.unitId === b.doctor)) b.doctor = null;   // 마을에 없는 당번 의사는 비움
     w.tidyResidents();
     for (const b of w.buildings.values()) if (b.feeHeld && w.isDone(b)) w.releaseFee(b);   // 다 지은 건물에 맡아 둔 설계비(⚡ 완공 고치기 전 저장): 갈매미를 다시 만든 뒤 건축가에게
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)

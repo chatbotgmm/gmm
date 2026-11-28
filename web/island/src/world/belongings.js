@@ -21,7 +21,7 @@ export function stashSellable(u) {
   const out = {};
   for (const [id, n0] of Object.entries(u?.stash || {})) {
     if (!(n0 > 0) || !stashPrice(id)) continue;
-    const n = n0 - (giftTier(u.name, id) === 2 ? STASH_KEEP_LIKED : 0); if (n > 0) out[id] = n;
+    const n = n0 - (giftTier(u, id) === 2 ? STASH_KEEP_LIKED : 0); if (n > 0) out[id] = n;
   }
   return out;
 }

@@ -220,7 +220,7 @@ function mount(w) {
   { const w = world, apply = s => { if (world === w) w.applyCharacterProfiles(s.chars, WALK_SCALE, RUN_SCALE); };   // 갈매미 몸 크기·걸음(목록을 받은 뒤 · 마을 시간은 갈매미를 다 받은 뒤에야 흐름)
     if (charPool.set) apply(charPool.set); else charPool.setReady.then(apply); }
   world.on("unitAdded", u => { hud?.setWorld(world); hud?.setSummon(world); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild);
-    hud?.status(`🎉 ${u.name} 등장! (${TRIBES[u.tribe]?.icon ?? ""}${u.tribe} 종족 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})`, { kind: "good", queue: true, at: noteTarget(u) }); });
+    hud?.status(`🎉 ${u.name} 등장! (🥚 ${u.form ?? "기본"} 갈매미 · ${JOBS[u.job]?.icon ?? ""}${JOBS[u.job]?.name ?? u.job})${world.units.length <= 1 ? " · 갈매미마다 타고난 성향이 있어요. 하는 짓을 잘 보세요 🔍" : ""}`, { kind: "good", queue: true, at: noteTarget(u) }); });
   world.winterYear = winterYearOf(daylight.now());                              // 첫 프레임의 마을 계산보다 먼저(첫눈을 본 겨울과 견줄 해)
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
@@ -273,6 +273,12 @@ function mount(w) {
   world.on("wishLost", ({ wish, u, def }) => post("wishLost", `💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요`, "warn", noteTarget(u)));
   world.on("rank", e => { say("rank", e); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
   world.on("beachcomb", e => say("beachcomb", e));
+  // 🌟 변신: 시작하면 상태 줄 "[보러 가기]"(누르면 그 갈매미를 따라감 · 카메라를 억지로 끌고 가지 않음) · 끝나면 큰 카드(rewardFx)와 소식 · 자이언트 이사·집 기다림
+  world.on("evolveStart", e => { if (unitControl?.follow !== e.u) hud?.status(`✨ ${e.u.name}에게 무슨 일이…? [보러 가기]`, { kind: "good", at: noteTarget(e.u), now: true }); sfx.chime([784, 988, 1319, 1568], 0.08, 0.12); });
+  world.on("evolve", e => say("evolve", e));
+  world.on("giantMove", e => say("giantMove", e));
+  world.on("giantWait", e => say("giantWait", e));
+  world.on("rename", e => say("rename", e));
   // 🗝 메인 스토리: 이야기 반짝이(누르면 그곳으로) · 조각·별씨·고침·엔딩·엽서(보상 카드가 크게, 알림은 지난 알림에) · 깜빡이는 대답
   world.on("storySpark", e => { say("storySpark", e); sfx.chime([988, 1319, 1760], 0.07, 0.14); });
   world.on("storyPiece", e => say("storyPiece", e));
@@ -330,7 +336,9 @@ function saveNow(quiet = true) {
   catch (e) { if (!quiet) hud?.status("저장하지 못했어요: " + e.message); return false; }
 }
 let oldMap = false;
-function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const j = JSON.parse(s); if (j.grid?.kind !== "chunks" && j.grid?.w !== GRID_W) { oldMap = true; return null; } const w = World.fromJSON(j); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }   // 지도 크기가 바뀐 예전 저장은 새 섬으로
+/** 갈매미 이름·모습을 나누기 전(gulls 표시 없음) 저장을 한 번만 따로 둠(<saveKey>.preGulls) — 옛 코드 기기와 섞여 잘못되면 되살릴 수 있게 */
+function backupPreGulls(s, j) { try { if (j && !j.gulls && j.units?.length && !localStorage.getItem(SAVE_KEY + ".preGulls")) localStorage.setItem(SAVE_KEY + ".preGulls", s); } catch {} }
+function loadSaved() { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const j = JSON.parse(s); backupPreGulls(s, j); if (j.grid?.kind !== "chunks" && j.grid?.w !== GRID_W) { oldMap = true; return null; } const w = World.fromJSON(j); return w.wild ? w : null; } catch (e) { console.warn("저장을 못 읽어 새 섬으로 시작", e); return null; } }   // 지도 크기가 바뀐 예전 저장은 새 섬으로
 const savedWorld = loadSaved(); resumed = !!savedWorld;
 /** 다녀온 사이 편지: 저장한 때부터 지금까지 지난 실제 시간(기기 시계 그대로 → 설정의 시간 배수와 상관없음)을 월드에 넘겨 가볍게 쳐 주고, 편지 글을 만듦.
  *  섬을 올린(mount) 뒤에 부름(계절이 정해진 뒤). 10분이 안 지났거나 예전 저장(시각 없음)이면 null. */
@@ -473,7 +481,8 @@ Promise.all([assetsLoad, charPool.ready]).then(() => {
   if (oldMap) hud.status("🗺 지도가 넓어져(본섬 + 작은 섬 5개) 새 섬으로 시작했어요 · 예전 저장은 이 크기와 맞지 않아요", { queue: true, full: true });
   else if (resumed) hud.status(`💾 지난 섬을 이어서 해요 (갈매미 ${world.units.length}마리 · 새로 하려면 📱 → 💾 저장 → 🏝 새 섬)`, { queue: true, full: true });
   else if (!world.units.length) hud.status("갈매미가 아직 없어요 · 📱 → 🥚 소환을 눌러 불러 보세요", { queue: true, full: true });
-  else if (world.wild) hud.status("🏦 공식은행 앞에 🔨 기본 갈매미가 왔어요 · 아래 🔨 건설 → 🏠 짓기에서 집을 지어 보세요(나무는 기본이 직접 베어 와요)", { queue: true, full: true });
+  else if (world.wild) hud.status(`🏦 공식은행 앞에 🔨 ${world.units[0].name}(기본 갈매미)이 왔어요 · 아래 🔨 건설 → 🏠 짓기에서 집을 지어 보세요(나무는 직접 베어 와요)`, { queue: true, full: true });
+  if (world.renamed?.length) hud.status(`🏷 갈매미들이 이름을 갖게 됐어요 · ${world.renamed.map(r => `${r.form} → ${r.to}`).join(" · ")} · 카드에서 이름을 누르면 바꿀 수 있어요`, { kind: "good", queue: true, full: true });
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true, full: true });
   else if (loadProgress.done < loadProgress.total) hud.status("아직 받는 모델이 있어요(받는 대로 바뀌어요)", { queue: true, full: true });
   hud.showLetter(backLetter);

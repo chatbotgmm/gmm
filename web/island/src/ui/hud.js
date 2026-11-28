@@ -639,25 +639,27 @@ export class Hud {
   /** 📱 관계도: 갈매미를 원 위에 놓고 친한 사이를 선으로(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로. */
   drawRelations() {
     const w = this.world, us = w.units, body = document.getElementById("relBody"), ST = M.FRIEND_STAGES;
-    if (!us.some(u => u.name === this.relSel)) this.relSel = null;
-    const g = M.relationGraph(us), sel = us.findIndex(u => u.name === this.relSel);
-    const key = `${this.relSel}|${us.map(u => u.name + u.job).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
+    if (!us.some(u => u.unitId === this.relSel)) this.relSel = null;                // 고른 갈매미는 unitId로(이름이 겹치거나 바뀌어도)
+    const g = M.relationGraph(us), sel = us.findIndex(u => u.unitId === this.relSel), n = us.length;
+    const key = `${this.relSel}|${us.map(u => u.unitId + u.name + u.job + (u.form || "")).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
     if (key === this.relKey && body.firstChild) return;                             // 바뀐 게 없으면 다시 안 그림(누르기가 끊기지 않게)
     this.relKey = key;
     body.onclick = e => { const t = e.target.closest?.("[data-gull]"); if (!t) return; this.relSel = this.relSel === t.dataset.gull ? null : t.dataset.gull; this.drawRelations(); };
     if (!us.length) { body.innerHTML = `<p class="dim">갈매미가 아직 없어요. 📱 → 🥚 소환으로 불러 보세요.</p>`; return; }
+    const R = M.relNodeR(n), near = new Set(sel >= 0 ? [sel, ...g.links.filter(l => l.a === sel || l.b === sel).map(l => l.a === sel ? l.b : l.a)] : []);   // 마리가 많으면 원을 작게(20마리 넘으면 겹치지 않게)
     const lines = g.links.map(l => { const a = g.nodes[l.a], b = g.nodes[l.b], d = ST[l.stage], dim = sel >= 0 && l.a !== sel && l.b !== sel;
       return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${d.color}" stroke-width="${d.width}" stroke-linecap="round" opacity="${dim ? 0.2 : 1}"/>`; }).join("");
-    const dots = g.nodes.map((n, i) => `<g class="relnode" data-gull="${n.name}"><circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="26" fill="transparent"/>` +
-      `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="19" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
-      `<text class="ico" x="${n.x.toFixed(1)}" y="${n.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${JOBS[n.u.job]?.icon ?? n.name[0]}</text>` +
-      `<text x="${n.x.toFixed(1)}" y="${(n.y + 33).toFixed(1)}" text-anchor="middle">${n.name}</text></g>`).join("");
+    const dots = g.nodes.map((nd, i) => { const label = n <= 12 || near.has(i);                // 12마리 넘으면 이름표는 고른 갈매미와 그 친구에게만
+      return `<g class="relnode" data-gull="${escHtml(nd.u.unitId)}"><circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${(R + 7).toFixed(1)}" fill="transparent"/>` +
+      `<circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${R.toFixed(1)}" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
+      `<text class="ico" x="${nd.x.toFixed(1)}" y="${nd.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central"${R < 14 ? ` font-size="${Math.round(R * 1.1)}"` : ""}>${JOBS[nd.u.job]?.icon ?? escHtml(nd.name[0])}</text>` +
+      (label ? `<text x="${nd.x.toFixed(1)}" y="${(nd.y + R + 14).toFixed(1)}" text-anchor="middle">${escHtml(nd.name)}</text>` : "") + `</g>`; }).join("");
     let text;
-    if (us.length === 1) text = `<p class="dim">${us[0].name} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
+    if (us.length === 1) text = `<p class="dim">${escHtml(us[0].name)} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
     else if (sel < 0) text = `<p class="dim av-tap">👆 갈매미를 누르면 누구와 친한지 보여 줘요</p>`;
     else { const u = us[sel], rows = us.filter(o => o !== u).map(o => [o, M.affinity(u, o)]).sort((a, b) => b[1] - a[1]).map(([o, v]) => { const d = ST[M.friendStage(v)];
-        return `<tr><td>${v ? d.icon : "·"} ${o.name}</td><td>${v ? `<b>${d.name}</b> <span class="dim">호감 ${Math.round(v * 10) / 10}</span>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
-      text = `<h4>${JOBS[u.job]?.icon ?? ""} ${u.name}의 사이</h4><table class="tbl">${rows}</table>`; }
+        return `<tr><td>${v ? d.icon : "·"} ${escHtml(o.name)}</td><td>${v ? `<b>${d.name}</b> <span class="dim">호감 ${Math.round(v * 10) / 10}</span>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
+      text = `<h4>${JOBS[u.job]?.icon ?? ""} ${escHtml(u.name)}의 사이</h4><table class="tbl">${rows}</table>`; }
     body.innerHTML = relHeadHtml(g.links, us.length) + `<svg viewBox="0 0 300 300" role="img" aria-label="갈매미 관계도">${lines}${dots}</svg>` +
       text + this.more("rel.legend", "🎨 범례 · 읽는 법", relLegendHtml(ST));   // 머리(단짝 수) → 그림 → 고른 갈매미 사이 → 범례는 접기
   }
@@ -845,7 +847,7 @@ export class Hud {
   }
   /** 🥚 소환 페이지: 지금 부를 수 있는 수(인구 = 집 수) · 단추(못 부르면 꺼짐 + 까닭) · 다음 갈매미 · 자이언트 안내 · 자세히. 글이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게) */
   setSummon(world) {
-    const info = world.summonInfo(), btn = summonButton(info), v = summonHtml(info, world.units, (k, t, h, o) => this.more(k, t, h, o));
+    const info = world.summonInfo(), btn = summonButton(info), v = summonHtml(info, world.units, (k, t, h, o) => this.more(k, t, h, o), world.formsSeen, [...world.buildings.values()]);
     if (this.summonBtn.textContent !== btn.text) this.summonBtn.textContent = btn.text;
     if (this.summonBtn.disabled !== btn.disabled) this.summonBtn.disabled = btn.disabled;
     const why = document.getElementById("summonWhy"), whyText = v.giantOnly ? "" : btn.why; if (why.textContent !== whyText) why.textContent = whyText; why.hidden = !whyText;
@@ -1065,7 +1067,7 @@ export class Hud {
     acts.append(k.rel, this.giftBtn, this.petBtn, k.goHome); c.append(head, body, acts);
     k.tog.onclick = () => { this.infoOpen = !this.infoOpen; if (this.infoEdit) this.infoWas = this.infoOpen; this.syncInfo(); };
     k.x.onclick = () => { if (this.follow) this.onUnitClick?.(this.follow); };       // 따라가기 그만(카드도 닫힘)
-    k.rel.onclick = () => { const u = this.follow; if (!u) return; this.relSel = u.name; if (this.phone.hidden) this.openPhone(); this.openApp("rel"); };
+    k.rel.onclick = () => { const u = this.follow; if (!u) return; this.relSel = u.unitId; if (this.phone.hidden) this.openPhone(); this.openApp("rel"); };
     k.goHome.onclick = () => { const u = this.follow, b = u && u.home && this.world.buildings.get(u.home); if (b) this.onGoto?.(b); };
   }
   /** 카드의 값만 고침. 1초에 5번(update) + 접기·모드가 바뀔 때 바로. 접혀 있어도 머리줄은 계속 고침 */

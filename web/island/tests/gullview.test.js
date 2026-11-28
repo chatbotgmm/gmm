@@ -1,5 +1,6 @@
 // 갈매미 카드 · 선물 판 · 도장 가게 글(ui/gullView.js) — 화면 연결 5단계
 import { test } from "node:test";
+import { personaOf } from "../src/world/evolve.js";
 import assert from "node:assert/strict";
 import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
@@ -53,7 +54,7 @@ test("선물 판: 내 주머니 개수, 빈 글은 반짝이·도장 가게, 도
   assert.match(h, /내 주머니 4개/); assert.ok(!/간직|💛|undefined/.test(h));
   assert.match(h, /⭐ 황금 생선 통조림 ×1 <small>정 ×2<\/small>/);
   assert.ok(!h.includes("♥ "), "아직 처음 만난 사이: 취향을 모름");
-  u.bond = 5; const likes = new Set((G.likersOf("sea").includes(u.name) ? ["shell"] : []).concat(G.likersOf("letter").includes(u.name) ? ["postcard"] : []));
+  u.bond = 5; const likes = new Set(["shell", "postcard"].filter(id => personaOf(u).likes.includes(id === "shell" ? "sea" : "letter")));   // 변신 전 기본 = 숨은 성향의 취향(evolve.js DISP_LIKES)
   h = G.giftPickHtml(u, w); const order = [...h.matchAll(/data-gift="([^"]+)">(♥ )?/g)].map(m => [m[1], !!m[2]]);
   assert.deepEqual(order.filter(([, l]) => l).map(([id]) => id).sort(), [...likes].sort());
   const firstPlain = order.findIndex(([, l]) => !l); assert.ok(order.slice(firstPlain).every(([, l]) => !l), "좋아하는 것이 앞에");

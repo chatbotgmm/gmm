@@ -26,10 +26,10 @@ export function validName(s, taken = []) {
   if ([...taken].includes(name)) return { ok: false, name, reason: "같은 이름의 갈매미가 있어요" };
   return { ok: true, name, reason: "" };
 }
-const mix = (a, b) => { let h = (Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35)) >>> 0; h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f) >>> 0; return (h ^ (h >>> 16)) >>> 0; };
+const nameMix = (a, b) => { let h = (Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35)) >>> 0; h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f) >>> 0; return (h ^ (h >>> 16)) >>> 0; };
 /** 섬 씨앗으로 섞은 이름 풀 차례(늘 같음, 월드 난수 안 씀) */
 export function nameOrder(seed = 7, pool = GULL_NAMES) {
-  return pool.filter(n => !BANNED_NAMES.has(n)).map((n, i) => [mix(seed | 0, i), n]).sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : 1)).map(x => x[1]);
+  return pool.filter(n => !BANNED_NAMES.has(n)).map((n, i) => [nameMix(seed | 0, i), n]).sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : 1)).map(x => x[1]);
 }
 /** 새 갈매미 이름: 섞은 차례에서 마을에 없는 첫 이름, 다 쓰면 "보리 2"(마을에 없는 가장 작은 수) */
 export function pickName(seed, taken = [], pool = GULL_NAMES) {

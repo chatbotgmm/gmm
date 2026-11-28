@@ -97,11 +97,9 @@ test("밤 부탁: 밤에 고를 때만 후보 · 밤 반짝이 2개 주우면 �
   assert.deepEqual(D.dailyFromSave(JSON.parse(JSON.stringify(w.daily))).reqs.find(q => q.id === "nightSparkle").have, 2);
 });
 
-test("야행성 조기 소환: SUMMON_FIRST 셋째 자리 = 야행성 · 야행성이 이미 있으면 건너뜀", async () => {
-  const P = await import("../src/world/population.js");
-  assert.deepEqual(P.SUMMON_FIRST, ["builder", "carpenter", "nocturnal", "merchant"]);
-  const done = [...Array(6)].map(() => ({ defId: "house" }));
-  const info = P.summonInfoFor([{ name: "기본" }, { name: "목수" }], done);
-  assert.ok(PERSONA[info.next].nocturnal, info.next); assert.equal(info.next, "불씨");
-  assert.equal(P.summonInfoFor([{ name: "기본" }, { name: "목수" }, { name: "그림자" }], done).next, "황금", "그림자가 있으면 상인 차례");
+test("밤 친구 일찍(SUMMON_FIRST 대신): 성향 덱에서 밤 성향이 앞 3마리 안 — 셋째쯤 소환되는 기본 갈매미가 반야행성으로 밤에 깨어 있음", async () => {
+  const EV = await import("../src/world/evolve.js"), CH = await import("../src/units/chrono.js");
+  for (const seed of [1, 7, 42]) assert.ok([0, 1, 2].some(n => EV.dispFor(seed, n) === "night"), `씨앗 ${seed}`);
+  const u = { form: "기본", disp: "night", evo: null };
+  assert.equal(CH.nightOwl(u), true, "별조각을 주울 수 있음"); assert.equal(CH.fatigueMult(u, { isNight: true }), 1); assert.equal(CH.fatigueMult(u, { isNight: false }), CH.HALF_NIGHT_FATIGUE);
 });

@@ -72,8 +72,8 @@ export const DISP_BONUS = 0.25, DISP_BONUS2 = 0.12, BASE_SCORE = 0.30, EASY_BASE
 export const RARE_MIN_SHARE = 0.3, RARE_P = 0.5, RARE_P_OFF = 0.2, RARE_KEY = { "자이언트": "big", "미니": "timid" };
 export const EVO_MIN_DAYS = 3, EVO_MAX_DAYS = 6, EVO_MIN_GROWTH = 12;
 
-const hash32 = (...xs) => { let h = 0x811c9dc5; for (const x of xs) { const s = String(x); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } h ^= 0xff; h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
-export const strHash = s => hash32(s);
+const evoHash = (...xs) => { let h = 0x811c9dc5; for (const x of xs) { const s = String(x); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } h ^= 0xff; h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+export const strHash = s => evoHash(s);
 /** 모습마다 점수(순수) */
 export function evoScores(u) {
   const g = u.growth || {}, tot = growthSum(g), s = {}; for (const k of GROWTH_KEYS) s[k] = tot > 0 ? Math.max(0, +g[k] || 0) / tot : 0;
@@ -88,7 +88,7 @@ export function evoScores(u) {
 export function pickForm(u, seed = 7) {
   const { scores, share, total } = evoScores(u);
   if (total < EVO_MIN_GROWTH) return { form: BASE_FORM, stayed: true, scores, why: "few" };
-  const r = seededRandom(hash32(seed, u.unitId, 0xE70));
+  const r = seededRandom(evoHash(seed, u.unitId, 0xE70));
   const order = Object.keys(FORM_WEIGHTS).map(f => [f, scores[f], r()]).sort((a, b) => b[1] - a[1] || a[2] - b[2]);
   for (const [f, v] of order) {
     if (v < scores[BASE_FORM]) break;
@@ -118,15 +118,15 @@ export function evoQueue(units, day, stageOf = () => 0) {
 export const evoSoon = (units, day, stageOf) => evoQueue(units, day + 1, stageOf).filter(u => !evoDue(u, day, stageOf(u)));
 
 // ---- 보상
-const RANKS = ["common", "rare", "epic", "legend"];
+const RARITY_STEPS = ["common", "rare", "epic", "legend"];
 /** 모습의 특기 직업 */
 export const formJob = form => (UNIT_JOBS[form] || [])[1] || null;
 /** 변신한 뒤 희귀도(비평 10): 변신 → 희귀, 드문 모습 → 영웅, 모습 특기가 지금 직업과 같으면("천직") 한 단계 더(최대 전설). 기본으로 남으면 null(그대로) */
 export function rarityAfter(form, job, cur = "common") {
   if (form === BASE_FORM) return null;
   let i = RARE_FORMS.has(form) ? 2 : 1; if (formJob(form) === job) i++;
-  i = Math.min(RANKS.length - 1, Math.max(i, RANKS.indexOf(cur)));
-  return RANKS[i];
+  i = Math.min(RARITY_STEPS.length - 1, Math.max(i, RARITY_STEPS.indexOf(cur)));
+  return RARITY_STEPS[i];
 }
 export const isCalling = (form, job) => form !== BASE_FORM && formJob(form) === job;   // 천직
 
@@ -151,7 +151,7 @@ export function dispFor(seed = 7, n = 0) {
   for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
   const ni = deck.indexOf("night"); if (ni > 2) [deck[2], deck[ni]] = [deck[ni], deck[2]];
   if (n < deck.length) return deck[n];
-  const w = DISPS.map(d => d === "easy" ? 1.5 : 1), tot = w.reduce((a, b) => a + b, 0); let x = seededRandom(hash32(seed, n, 0xD15))() * tot;
+  const w = DISPS.map(d => d === "easy" ? 1.5 : 1), tot = w.reduce((a, b) => a + b, 0); let x = seededRandom(evoHash(seed, n, 0xD15))() * tot;
   for (let i = 0; i < DISPS.length; i++) { x -= w[i]; if (x < 0) return DISPS[i]; }
   return DISPS[DISPS.length - 1];
 }
@@ -183,3 +183,8 @@ export const POKE_HINT = {
   timid: { act: "flee", line: "히, 히익" }, easy: { act: "slow", line: "느긋하게~" },
 };
 export const rarityName = id => RARITY[id]?.name ?? "일반";
+/** 관찰 노트(카드: 최근 단서 3개, 저장 안 함): 같은 글이 이어지면 ×N */
+export function addNote(u, text) {
+  if (!u || u.evo || !text) return; const notes = u.notes ||= [], same = notes.find(x => x.text === text);
+  if (same) { same.n++; notes.splice(notes.indexOf(same), 1); notes.push(same); } else { notes.push({ text, n: 1 }); if (notes.length > 3) notes.shift(); }
+}

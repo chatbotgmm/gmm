@@ -39,12 +39,13 @@ test("새 섬: 공식은행 + 다 지은 작은 집 한 채(은행 옆, 문까�
   const t = World.create(7, seededRandom(3), { wild: true, firstGull: true }); assert.deepEqual(t.units.map(u => u.name), ["기본"]); assert.equal(houses(t).length, 1);
 });
 
-test("소환: 갈매미 수 < 다 지은 집 수일 때만 · 첫 갈매미는 건축가(기본) · 막히면 null + 까닭(summonBlocked·말풍선)", () => {
+test("소환: 갈매미 수 < 다 지은 집 수일 때만 · 언제나 🥚 기본 갈매미 · 첫 갈매미는 건축가 · 막히면 null + 까닭(summonBlocked·말풍선)", () => {
   const w = fresh(); const blocked = []; w.on("summonBlocked", e => blocked.push(e));
   let info = w.summonInfo();
-  assert.deepEqual([info.can, info.houses, info.gulls, info.free, info.left, info.next, info.gated], [true, 1, 0, 1, UNITS.length, "기본", true]);
-  assert.equal(info.reason, ""); assert.equal(info.needGiantHouse, true, "자이언트의 집이 아직 없음");
-  const first = w.summon(); assert.equal(first.name, "기본"); assert.equal(first.job, "builder", "첫 갈매미가 집을 지을 수 있음");
+  assert.deepEqual([info.can, info.houses, info.gulls, info.free, info.left, info.next, info.nextJob, info.gated], [true, 1, 0, 1, P.MAX_GULLS, "기본", "builder", true]);
+  assert.equal(info.reason, ""); assert.equal(info.needGiantHouse, false, "자이언트는 소환으로 오지 않음(변신으로만)");
+  const first = w.summon(); assert.equal(first.form, "기본"); assert.equal(first.job, "builder", "첫 갈매미가 집을 지을 수 있음"); assert.equal(first.unitId, "u10");
+  assert.ok(first.name && first.name !== "기본", "모습 이름이 아닌 고유 이름"); assert.ok(first.disp, "숨은 성향");
   assert.ok(w.grid.isWalkable(Math.floor(first.x), Math.floor(first.z)));
   info = w.summonInfo(); assert.equal(info.can, false); assert.equal(info.needHouse, true); assert.deepEqual(info.candidates, []);
   assert.match(info.reason, /집이 모자라요 — 집을 한 채 더 지으면 부를 수 있어요/); assert.match(info.reason, /집 1채 · 갈매미 1마리/);
@@ -57,36 +58,35 @@ test("소환: 갈매미 수 < 다 지은 집 수일 때만 · 첫 갈매미는 �
   const s = spotFor(w, "house"), site = w.placeBuilding("house", s[0], s[1], 0); assert.ok(site.ok); assert.equal(w.bank.vault, BK.VAULT_START - 10, "설계비 10");
   assert.equal(w.summonInfo().can, false, "짓는 중"); assert.equal(w.summon(), null);
   w.finishAll(); assert.equal(w.summonInfo().houses, 2); assert.equal(w.summonInfo().can, true);
-  const second = w.summon(); assert.equal(second.name, "목수", "둘째는 목수(시장을 지음)"); assert.equal(w.summon(), null);
+  const second = w.summon(); assert.equal(second.form, "기본"); assert.equal(second.job, "carpenter", "둘째는 목수 일(시장을 지음)"); assert.equal(second.rarity, "common");
+  assert.notEqual(second.name, first.name); assert.notEqual(second.disp, first.disp, "처음 8마리는 성향이 모두 다름"); assert.equal(w.summon(), null);
   // 시험·개발용 addUnitByName은 집 수와 상관없음
   assert.ok(w.addUnitByName("미니")); assert.equal(w.units.length, 3); assert.equal(w.summonInfo().gulls, 3);
 });
 
-test("오는 순서: 건축가 → 목수 → 야행성(불씨) → 상인, 그다음은 무작위 · 자이언트는 다 지은 빈 자이언트의 집이 있어야 오고 보통 집 자리와 따로 셈", () => {
-  const w = fresh(5); const order = [];
-  for (let k = 0; k < 7; k++) ready(w);                                        // 보통 집 8채
-  assert.equal(w.summonInfo().houses, 8);
-  for (let u; (u = w.summon());) order.push(u.name);
-  assert.deepEqual(order.slice(0, 4), ["기본", "목수", "불씨", "황금"]);
-  assert.equal(order.length, 8); assert.ok(!order.includes("자이언트"), "자이언트는 보통 집으로는 안 옴");
-  assert.equal(new Set(order).size, 8);
-  let info = w.summonInfo(); assert.deepEqual([info.can, info.left, info.needHouse, info.needGiantHouse], [false, 1, false, true]);
-  assert.equal(info.reason, P.REASON_GIANT);
-  ready(w); info = w.summonInfo(); assert.equal(info.houses, 9); assert.equal(info.free, 1); assert.equal(info.can, false, "보통 집이 남아도 자이언트는 못 옴");
-  const s = spotFor(w, "giantHouse"); w.bank.vault = 100; const g = w.placeBuilding("giantHouse", s[0], s[1], 0).building;
-  assert.equal(w.summonInfo().can, false, "짓는 중인 자이언트의 집");
-  w.finishAll(); info = w.summonInfo(); assert.equal(info.can, true); assert.equal(info.next, "자이언트"); assert.equal(info.needGiantHouse, false); assert.equal(info.houses, 9, "자이언트의 집은 보통 집으로 세지 않음");
-  assert.equal(w.summon().name, "자이언트"); assert.equal(w.units.length, UNITS.length);
-  info = w.summonInfo(); assert.equal(info.can, false); assert.equal(info.reason, P.REASON_ALL); assert.equal(info.gulls, 8, "자이언트는 보통 갈매미 수에 안 들어감");
-  const n = []; w.on("summonBlocked", e => n.push(e)); assert.equal(w.summon(), null); assert.equal(n.length, 0, "다 모였을 때는 집이 모자란 게 아님");
-  void g;
-  // 자이언트의 집이 먼저 있으면: 보통 집 자리가 없어도 자이언트는 옴. 자이언트의 집은 다른 갈매미 자리가 아님
-  const w2 = fresh(); assert.equal(w2.summon().name, "기본"); ready(w2, "giantHouse");
-  info = w2.summonInfo(); assert.deepEqual(info.candidates, ["자이언트"]); assert.equal(info.houses, 1);
-  assert.equal(w2.summon().name, "자이언트"); assert.equal(w2.summon(), null); assert.match(w2.summonInfo().reason, /집이 모자라요/);
-  // 순수 계산: 난수를 쓰지 않음
-  const pure = P.summonInfoFor([{ name: "기본", job: "builder" }], [{ defId: "house" }, { defId: "cottage" }, { defId: "giantHouse", owner: "u9" }, { defId: "market" }], true);
-  assert.deepEqual([pure.houses, pure.homes, pure.gulls, pure.free, pure.next, pure.needGiantHouse], [3, 2, 1, 2, "목수", true], "주인 있는 자이언트의 집·시장은 자리가 아님 · 2층집은 두 자리");
+test("직업 차례: 건축가 → 목수 → (시장) 상인 → (밭) 농부 → (낚시터) 낚시꾼 → 나무꾼 → 광부 → 가장 적은 직업 · 모두 기본 모습 · 상한은 집 자리와 maxGulls뿐(9마리에 묶이지 않음)", () => {
+  assert.equal(P.jobForSummon([]), "builder");
+  const u = (...jobs) => jobs.map(job => ({ job }));
+  assert.equal(P.jobForSummon(u("builder")), "carpenter");
+  assert.equal(P.jobForSummon(u("builder", "carpenter")), "lumberjack", "시설이 없으면 나무꾼");
+  assert.equal(P.jobForSummon(u("builder", "carpenter"), { market: true, field: true, dock: true }), "merchant");
+  assert.equal(P.jobForSummon(u("builder", "carpenter", "merchant"), { market: true, field: true, dock: true }), "farmer");
+  assert.equal(P.jobForSummon(u("builder", "carpenter", "merchant", "farmer"), { market: true, field: true, dock: true }), "fisher");
+  assert.equal(P.jobForSummon(u("builder", "carpenter", "lumberjack")), "miner");
+  assert.equal(P.jobForSummon(u("builder", "carpenter", "lumberjack", "miner")), "fisher", "가장 적은 직업(해변에서도 낚시)"); assert.equal(P.jobForSummon(u("builder", "carpenter", "lumberjack", "miner", "fisher")), "builder", "같으면 건축가");
+  const w = fresh(5); for (let k = 0; k < 11; k++) ready(w);                     // 보통 집 12채
+  assert.equal(w.summonInfo().houses, 12);
+  const got = []; for (let g; (g = w.summon());) got.push(g);
+  assert.equal(got.length, 12, "9마리 넘게"); assert.ok(got.every(g => g.form === "기본")); assert.equal(new Set(got.map(g => g.name)).size, 12, "이름은 모두 다름");
+  assert.equal(new Set(got.slice(0, 8).map(g => g.disp)).size, 8);
+  assert.deepEqual(got.slice(0, 4).map(g => g.job), ["builder", "carpenter", "lumberjack", "miner"]);
+  let info = w.summonInfo(); assert.deepEqual([info.can, info.needHouse], [false, true]);
+  w.maxGulls = 12; ready(w); info = w.summonInfo(); assert.equal(info.can, false); assert.match(info.reason, new RegExp(P.REASON_FULL)); assert.equal(info.left, 0);
+  // 순수 계산: 자이언트의 집에 사는 자이언트는 보통 집 자리를 안 셈 · 아직 이사 못 한 자이언트는 셈
+  const done = [{ id: 1, defId: "house" }, { id: 2, defId: "cottage" }, { id: 3, defId: "giantHouse", owner: "u9" }];
+  assert.equal(P.summonInfoFor([{ job: "builder" }, { form: "자이언트", home: 3 }], done, true).gulls, 1);
+  assert.equal(P.summonInfoFor([{ job: "builder" }, { form: "자이언트", home: 1 }], done, true).gulls, 2);
+  assert.deepEqual([P.houseSlots(done), P.houseCount(done)], [3, 2], "자이언트의 집은 보통 자리 아님 · 2층집은 두 자리");
 });
 
 test("철거·예전 저장: 집이 갈매미보다 적어져도 갈매미는 그대로, 새 소환만 막힘(집이 갈매미보다 많아지면 다시 됨)", () => {
@@ -112,9 +112,9 @@ test("막힘 방지: 건축가가 없으면 기본은 집 수와 상관없이 �
   // 갈매미 0 · 집 0(첫 집을 철거한 섬, 또는 예전 저장)
   const w = fresh(); for (const b of houses(w)) w.removeBuilding(b.id);
   let info = w.summonInfo(); assert.deepEqual([info.houses, info.can, info.next], [0, true, "기본"]); assert.deepEqual(info.candidates, ["기본"]);
-  assert.equal(w.summon().name, "기본"); assert.equal(w.summon(), null);
+  assert.equal(w.summon().job, "builder"); assert.equal(w.summon(), null);
   // 건축가가 아닌 갈매미만 있는 섬
-  const w2 = fresh(); w2.addUnitByName("미니"); assert.equal(w2.summonInfo().next, "기본"); assert.equal(w2.summon().name, "기본"); assert.equal(w2.summon(), null);
+  const w2 = fresh(); w2.addUnitByName("미니"); assert.equal(w2.summonInfo().nextJob, "builder"); assert.equal(w2.summon().job, "builder"); assert.equal(w2.summon(), null);
   // 금고 0 · 갈매미 1 = 집 1: 작은 집 한 채는 설계비 0(그 밖의 건물은 그대로 못 놓음)
   const w3 = fresh(); w3.summon(); w3.bank.vault = 0;
   assert.equal(w3.rescueHouse("house"), true); assert.equal(w3.feeFor("house"), 0); assert.equal(w3.feeFor("cottage"), 15); assert.equal(w3.feeFor("bench"), 2);
@@ -122,19 +122,19 @@ test("막힘 방지: 건축가가 없으면 기본은 집 수와 상관없이 �
   const s = spotFor(w3, "house"), r = w3.placeBuilding("house", s[0], s[1], 0); assert.ok(r.ok); assert.equal(r.building.fee, 0); assert.equal(w3.bank.vault, 0); assert.equal(w3.bank.fees, 0);
   assert.equal(w3.rescueHouse("house"), false, "짓는 중인 집이 있으면 한 채만"); assert.equal(w3.feeFor("house"), 10);
   const s2 = spotFor(w3, "house"); assert.equal(w3.placeBuilding("house", s2[0], s2[1], 0).ok, false);
-  w3.finishAll(); assert.equal(w3.feeFor("house"), 10, "집 자리가 남으면(소환할 수 있으면) 다시 설계비"); assert.equal(w3.summon().name, "목수");
+  w3.finishAll(); assert.equal(w3.feeFor("house"), 10, "집 자리가 남으면(소환할 수 있으면) 다시 설계비"); assert.equal(w3.summon().job, "carpenter");
   assert.equal(w3.feeFor("house"), 0, "또 막히면 또 한 채"); assert.equal(w3.feeFor("market"), 0, "첫 시장은 원래 설계비 없음");
   // 금고가 설계비 이상이면 그대로 냄
   w3.bank.vault = 10; assert.equal(w3.feeFor("house"), 10); assert.equal(w3.rescueHouse("house"), false);
-  // 모두 모였거나 자이언트만 남았으면 없음
-  const w4 = fresh(); for (const d of UNITS) if (d.name !== "자이언트") w4.addUnitByName(d.name); w4.bank.vault = 0;
+  // 마을이 꽉 찼으면(maxGulls) 없음
+  const w4 = fresh(); for (const d of UNITS) w4.addUnitByName(d.name); w4.maxGulls = 9; w4.bank.vault = 0;
   assert.equal(w4.summonInfo().needHouse, false); assert.equal(w4.feeFor("house"), 10);
 });
 
-test("공식은행이 없는 예전 섬은 예전 그대로(집 수와 상관없이 무작위) · 오늘의 부탁 '소환'은 부를 수 있을 때만", () => {
+test("공식은행이 없는 예전 섬은 집 수와 상관없이 UNGATED_CAP(9)마리까지(모두 기본) · 오늘의 부탁 '소환'은 부를 수 있을 때만", () => {
   const old = World.create(7, seededRandom(8), { empty: true }); assert.equal(old.economy, false);
-  let info = old.summonInfo(); assert.deepEqual([info.gated, info.can, info.next, info.candidates.length], [false, true, null, UNITS.length]);
-  for (let k = 0; k < UNITS.length; k++) assert.ok(old.summon()); assert.equal(old.summon(), null);
+  let info = old.summonInfo(); assert.deepEqual([info.gated, info.can, info.next, info.count], [false, true, "기본", P.UNGATED_CAP]);
+  for (let k = 0; k < P.UNGATED_CAP; k++) assert.equal(old.summon().form, "기본"); assert.equal(old.summon(), null);
   // 오늘의 부탁
   const has = w => { for (let d = 1; d <= 28; d++) if (D.rollDaily(`2027-04-${d}`, w).reqs.some(x => x.id === "summon")) return true; return false; };
   const w = fresh(); assert.equal(has(w), true, "새 섬: 첫 갈매미를 부를 수 있음");
@@ -151,7 +151,7 @@ test("검토 회귀: 가운데 바닥이 평평하지 않은 섬 씨앗(13·2138
     assert.ok(Math.hypot(bk.x - bx, bk.z - bz) <= 3, "가운데에서 세 칸 안"); assert.ok(Math.hypot(bk.x - bx, bk.z - bz) > 0, "가운데에는 못 놓는 씨앗");
     const hs = houses(w); assert.equal(hs.length, 1); assert.ok(w.isDone(hs[0])); assert.ok(findPath(w.grid, bk.door.x, bk.door.z, hs[0].door.x, hs[0].door.z));
     assert.equal(w.bank.vault, BK.VAULT_START); assert.equal(w.units.length, 0); assert.equal(w.summonInfo().gated, true);
-    assert.equal(w.summon().name, "기본"); assert.equal(w.summon(), null, "집 1 = 갈매미 1");
+    assert.equal(w.summon().form, "기본"); assert.equal(w.summon(), null, "집 1 = 갈매미 1");
     const again = World.create(seed, seededRandom(8), { wild: true }); assert.deepEqual([again.bankB().x, again.bankB().z], [bk.x, bk.z], "난수와 상관없이 같은 자리");
   }
   const w7 = World.create(7, seededRandom(3), { wild: true }), c = w7.center;   // 가운데가 평평한 섬은 예전 그대로 한가운데

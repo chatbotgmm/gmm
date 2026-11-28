@@ -123,7 +123,7 @@ export function clinicCardOf(b, w, more = bdMore) {
   const head = sumHead({ icon: "🛏", big: `${used}/${def.beds || 0}`, label: "침대", line: doc ? `🩺 당번 의사: ${doc.name}${docIn ? " (병원에 있음)" : ""}` : "🩺 당번 없음 — 침대에서 쉬며 나아요" });
   const slots = `<ul class="bc-beds">${beds.map(s => !s ? `<li class="dim">🛏 빈 침대</li>`
     : `<li>${(SICK[s.u.sick.kind] || SICK.cold).icon} <b>${bdEsc(s.u.name)}</b> · ${s.coming ? "오는 중" : `${fmtLeft(sickLeftOf(s.u, w))} 남음`}</li>`).join("")}</ul>`;
-  const list = [{ id: "", name: "당번 없음", note: "침대만 써요" }, ...w.units.filter(u => !u.sick || u.name === b.doctor).map(u => ({ id: u.unitId, name: u.name, note: `${(JOBS[u.job] || {}).icon || ""} ${(JOBS[u.job] || {}).name || ""}` }))];
+  const list = [{ id: "", name: "당번 없음", note: "침대만 써요" }, ...w.units.filter(u => !u.sick || u.unitId === b.doctor).map(u => ({ id: u.unitId, name: u.name, note: `${(JOBS[u.job] || {}).icon || ""} ${(JOBS[u.job] || {}).name || ""}` }))];
   const pick = `<p class="bc-note">당번은 환자가 오면 병원에 와서 약을 줘요(더 빨리 나아요) · 한 마리 낫게 할 때마다 품삯 🪙${DOCTOR_WAGE}(금고에서)</p><div class="bc-pick">` +
     list.map(o => { const on = (o.id === "" && !doc) || (doc && o.id === doc.unitId);
       return `<button type="button" data-act="doctor" data-id="${bdEsc(o.id)}" aria-pressed="${on}"${on ? ` class="on"` : ""}>${on ? "✓ " : ""}${bdEsc(o.name)} <span class="dim">${bdEsc(o.note.trim())}</span></button>`; }).join("") + `</div>`;

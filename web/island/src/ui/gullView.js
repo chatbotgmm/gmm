@@ -9,6 +9,7 @@
 import { UnitState } from "../data/types.js";
 import { BUILDINGS, FURNITURE, PERSONA, CLOTHES, CLOTHES_ORDER } from "../data/catalog.js";
 import { residentsOf } from "../world/homes.js";
+import { personaOf } from "../world/evolve.js";
 /** 둘이 사는 집이면 같이 사는 갈매미 이름(" · 💞 같이 사는 A") */
 const housemate = (u, b, world) => { const o = residentsOf(b).filter(id => id !== u.unitId).map(id => world.units?.find(x => x.unitId === id)?.name).filter(Boolean); return o.length ? ` · 같이 사는 ${o.join(", ")}` : ""; };
 import { SICK, secsLeft } from "../world/health.js";
@@ -98,12 +99,13 @@ export function gullMoreHtml(u, world, extra = {}) {
 }
 
 /** 이 갈래를 좋아하는 갈매미 이름(PERSONA): best는 "모두" */
-export const likersOf = cat => cat === "best" ? ["모두"] : Object.keys(PERSONA).filter(n => PERSONA[n].likes?.includes(cat));
+export const likersOf = (cat, units = null) => cat === "best" ? ["모두"] : units ? units.filter(u => bondStage(u.bond) >= 1 && personaOf(u).likes?.includes(cat)).map(u => u.name)   // 마을 갈매미 중 아는 사이(♥ 1) 이상인 갈매미만(취향을 알게 된 갈매미)
+  : Object.keys(PERSONA).filter(n => PERSONA[n].likes?.includes(cat));
 
 /** 🎁 선물 판. 하트 1개부터 취향을 알려 주고 좋아하는 것을 ♥ 표시로 앞에. 도장 선물은 ⭐ 정 ×2 */
 export function giftPickHtml(u, world) {
-  const p = PERSONA[u.name] || {}, know = bondStage(u.bond) >= 1, names = c => c.map(k => GIFT_CAT_NAME[k]).filter(Boolean).join(", ");
-  const list = giftables(world).map((g, i) => ({ ...g, i, liked: know && giftTier(u.name, g.id) === 2 }))
+  const p = personaOf(u) || {}, know = bondStage(u.bond) >= 1, names = c => c.map(k => GIFT_CAT_NAME[k]).filter(Boolean).join(", ");
+  const list = giftables(world).map((g, i) => ({ ...g, i, liked: know && giftTier(u, g.id) === 2 }))
     .sort((a, b) => (b.liked - a.liked) || (a.i - b.i));
   const n = pocketCount(world) + list.filter(g => g.kind === "fish").reduce((s, g) => s + g.n, 0);
   const hint = know && p.likes?.length ? `${gvEsc(u.name)}의 취향: ♥ ${names(p.likes)}${p.dislikes?.length ? ` · 음… ${names(p.dislikes)}` : ""}` : `${gvEsc(u.name)}에게 무엇을 줄까요? 건네 보면 좋아하는 걸 알 수 있어요.`;
@@ -121,8 +123,8 @@ export function stampShopHtml(world) {
   const row = (s, sw, sub) => { const c = stampCost(s);
     return `<div class="sitem"><i style="background:${sw}"></i><div><b>${gvEsc(s.name)}</b><span class="dim">${sub}${bought(s.id) ? ` · ${bought(s.id)}개 받았어요` : ""}</span></div><button data-stamp="${gvEsc(s.id)}"${stamps < c ? " disabled" : ""}>도장 ${c}개</button></div>`; };
   const GIFT_SW = { letter: "#e8c66a", shiny: "#9fd0ff", plant: "#8fd18a", sea: "#f2a6c0", ice: "#cfe9f7", fish: "#f0b45a", best: "#f7d34a", warm: "#d9534f" };
-  const gifts = STAMP_GIFTS.map(s => { const cat = giftDef(s.id)?.cat, who = likersOf(cat);
-    const sub = s.clothes ? "따뜻한 옷 · 누구나 고마워해요 · 주면 바로 둘러요 🧣" : `${GIFT_CAT_NAME[cat] || "선물"} · ♥ ${who.length ? who.join("·") : "—"} · 정 ×${STAMP_GIFT_BOND}`;
+  const gifts = STAMP_GIFTS.map(s => { const cat = giftDef(s.id)?.cat, who = likersOf(cat, world.units || []);
+    const sub = s.clothes ? "따뜻한 옷 · 누구나 고마워해요 · 주면 바로 둘러요 🧣" : `${GIFT_CAT_NAME[cat] || "선물"} · ♥ ${who.length ? who.map(gvEsc).join("·") : "?"} · 정 ×${STAMP_GIFT_BOND}`;
     return row(s, GIFT_SW[cat] || "#ddd", sub); }).join("");
   const furn = STAMP_SHOP.map(s => { const f = FURNITURE[s.furniture]; return row(s, gvHex(f.colors[0]), `가구 · 아늑함 +${f.comfort}`); }).join("");
   return `<div class="sgroups"><div class="sgroup"><h5>🎁 귀한 선물 <span class="dim">🎁 주머니로</span></h5>${gifts}</div>` +

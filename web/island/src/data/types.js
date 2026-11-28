@@ -67,9 +67,9 @@ export function createFurnitureData(id, defId, x, z, rot = 0) {
  *   targetBuildingId: string|null, insideBuildingId: string|null,
  *   targetFurnitureId: string|null, interaction: string|null }} UnitAIState
  */
-export function createUnitAIState(unitId, name, x, z, timer = 1) {
+export function createUnitAIState(unitId, name, x, z, timer = 1, form = name) {
   return {
-    unitId, name, state: UnitState.Idle, x, z, y: 0, heading: 0, timer,
+    unitId, name, form, state: UnitState.Idle, x, z, y: 0, heading: 0, timer,   // name: 고유한 표시 이름 · form: 모습(모델·성격 열쇠, evolve.js)
     path: null, pathIndex: 0, goal: null,
     targetBuildingId: null, insideBuildingId: null, targetFurnitureId: null, interaction: null,
   };

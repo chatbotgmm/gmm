@@ -64,7 +64,7 @@ test("업그레이드 시작: 설계비를 금고에서 · 같은 id에 5×4 공
   const res = w.startUpgrade(cl.id); assert.equal(res.ok, true, res.reason);
   const b = w.buildings.get(cl.id); assert.equal(b, res.building); assert.equal(b.defId, "hospital"); assert.equal(b.cells.length, 20); assert.deepEqual(b.door, door);
   assert.ok(oldCells.every(k => b.cells.some(c => c.join(",") === k)), "예전 칸을 모두 덮음"); assert.equal(b.rot, cl.rot);
-  assert.equal(w.bank.vault, 200 - fee); assert.equal(b.fee, fee); assert.equal(b.doctor, "목수"); assert.equal(b.upFrom, "clinic");
+  assert.equal(w.bank.vault, 200 - fee); assert.equal(b.fee, fee); assert.equal(b.doctor, "u9"); assert.equal(b.upFrom, "clinic");
   assert.equal(w.isDone(b), false); assert.equal(b.need, 3 * BUILDINGS.hospital.work); assert.equal(w.clinics().length, 0, "공사 중엔 병원이 아님");
   assert.equal(u.insideBuildingId, null, "안의 환자는 나옴"); assert.notEqual(p.state, "GoToBuilding", "가던 환자는 그만"); assert.equal(w.canEnter(u, b), false);
   assert.equal(ev.length, 1); assert.equal(w.newsLog.some(n => n.text === `일반병원을 종합병원으로 넓히는 공사를 시작했어요 · 설계비 🪙${fee}`), true);
@@ -84,7 +84,7 @@ test("다 지으면 종합병원: 침대 6 · upgraded 소식 · 당번 의사 �
   assert.ok(w.res.wood < w0 && w.res.stone < s0, `창고 나무 ${w0}→${w.res.wood} · 돌 ${s0}→${w.res.stone}`);
   assert.equal(done.length, 1); assert.equal(done[0].from, "clinic"); assert.equal(b.upFrom, null);
   assert.equal(w.newsLog.some(n => n.text === "일반병원이 종합병원이 됐어요! 침대 6개"), true);
-  assert.deepEqual(w.clinics(), [b]); assert.equal(w.bedsFree(b), 6); assert.equal(b.doctor, "목수"); assert.equal(w.dutyClinic(doc), b);
+  assert.deepEqual(w.clinics(), [b]); assert.equal(w.bedsFree(b), 6); assert.equal(b.doctor, "u9"); assert.equal(w.dutyClinic(doc), b);
   assert.equal(w.upgradeCheck(b).ok, false, "종합병원은 더 업그레이드 없음"); assert.equal(canShowUpgrade(b), false);
 });
 
@@ -103,14 +103,14 @@ test("저장·불러오기: 업그레이드 공사 중(up)·당번 이어받음 
   const { w, doc } = town(25); const cl = clinicWithRoom(w); w.setDoctor(cl.id, doc.unitId); w.bank.vault = 300;
   assert.ok(w.startUpgrade(cl.id).ok);
   const j = JSON.parse(JSON.stringify(w.serialize())), s = j.buildings.find(x => x.id === cl.id);
-  assert.equal(s.up, "clinic"); assert.equal(s.defId, "hospital"); assert.equal(s.doctor, "목수");
+  assert.equal(s.up, "clinic"); assert.equal(s.defId, "hospital"); assert.equal(s.doctor, "u9");
   const back = World.fromJSON(j, seededRandom(1)), bb = back.buildings.get(cl.id);
-  assert.deepEqual([bb.defId, bb.upFrom, bb.doctor, back.isDone(bb), bb.cells.length], ["hospital", "clinic", "목수", false, 20]);
+  assert.deepEqual([bb.defId, bb.upFrom, bb.doctor, back.isDone(bb), bb.cells.length], ["hospital", "clinic", "u9", false, 20]);
   const ev = []; back.on("upgraded", e => ev.push(e)); back.finishAll(); assert.equal(ev.length, 1); assert.equal(back.clinics()[0], bb); assert.equal(back.bedsFree(bb), 6);
   const old = JSON.parse(JSON.stringify(j)); delete old.buildings.find(x => x.id === cl.id).up;
   const ob = World.fromJSON(old, seededRandom(1)); assert.equal(ob.buildings.get(cl.id).upFrom, null);
   const j2 = JSON.parse(JSON.stringify(back.serialize())), s2 = j2.buildings.find(x => x.id === cl.id); assert.equal(s2.up, undefined, "다 지은 뒤엔 up 없음");
-  const b2 = World.fromJSON(j2, seededRandom(1)).buildings.get(cl.id); assert.deepEqual([b2.defId, b2.doctor], ["hospital", "목수"]);
+  const b2 = World.fromJSON(j2, seededRandom(1)).buildings.get(cl.id); assert.deepEqual([b2.defId, b2.doctor], ["hospital", "u9"]);
 });
 
 test("화면 단추(ui/upgradeView.js): 글·꺼짐·사유 · 확인창 글", () => {

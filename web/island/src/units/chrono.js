@@ -5,6 +5,7 @@
 //    그래서 아침형은 낮에·야행성은 밤에 더 오래 깨어 일하게 되지만 강제는 아님.
 //  · world.isNight를 모르면(시험 받침·화면 없음) 체질 효과 없음.
 import { PERSONA } from "../data/catalog.js";
+import { formOf, halfNight } from "../world/evolve.js";
 
 /** 이 기력 이하면 자러 감(사용자 결정: "기력이 20이하로 떨어지면 자러가고"). 체질과 상관없이 하나 — 어긋난 시간엔 피로가 OFF_FATIGUE배로 쌓여 더 빨리 닿을 뿐.
  *  (예전엔 어긋난 시간 문턱 30이 따로 있었음.) 20~30은 피곤함: 가끔 잠깐 숨만 돌림(mind.js TIRED·BREATH_EVERY) */
@@ -28,11 +29,14 @@ export const SLEEP_HUNGRY = 20;
  *  배고프기 전에 다 차고, 밖(≈ 869초)은 대개 조금 덜 차서 깸 */
 export const SLEEP_HUNGER = 0.2;
 
-export const isNocturnal = u => !!(PERSONA[u?.name] || {}).nocturnal;
+export const isNocturnal = u => !!(PERSONA[formOf(u)] || {}).nocturnal;
+/** 아직 기본 모습인 밤 성향(반야행성): 낮 피로만 조금(HALF_NIGHT_FATIGUE) · 밤엔 보통 · 별조각을 주움 */
+export const HALF_NIGHT_FATIGUE = 1.25;
+export const nightOwl = u => isNocturnal(u) || halfNight(u);
 /** 체질과 어긋난 시간인가(아침형의 밤 · 야행성의 낮). 밤낮을 모르면 false */
 export const offHours = (u, world) => world?.isNight == null ? false : (isNocturnal(u) ? !world.isNight : !!world.isNight);
 /** 지금 피로가 쌓이는 배율(기력이 닳을 때만 곱함) */
-export const fatigueMult = (u, world) => offHours(u, world) ? OFF_FATIGUE : 1;
+export const fatigueMult = (u, world) => halfNight(u) ? (world?.isNight === false ? HALF_NIGHT_FATIGUE : 1) : offHours(u, world) ? OFF_FATIGUE : 1;
 /** 자러 가는 기력 문턱(이 값 이하면 잠) — 체질·밤낮과 상관없이 SLEEP_BELOW */
 export const sleepBelow = () => SLEEP_BELOW;
 /** 카드 표시: 체질 이름 */

@@ -1,6 +1,7 @@
 // 갈매미와 나(플레이어) 사이의 정: 선물 주기 · 쓰다듬기 · 답례(순수 계산: 화면·난수를 모름).
 // 정(u.bond, 0~BOND_MAX)은 선물과 쓰다듬기로만 오르고 줄지 않음. 하트 단계(0~3)에 처음 닿으면 갈매미가 답례를 한 번 남김.
 import { ITEMS, FISH, FURNITURE, PERSONA } from "../data/catalog.js";
+import { personaOf } from "./evolve.js";
 
 export const BOND_MAX = 40;
 // 하트 단계: 정이 min 이상이면 그 단계. held = 들어 올렸을 때 하는 말(친해질수록 덜 놀람)
@@ -50,9 +51,10 @@ export function giftables(world) {
 }
 /** 내 주머니(플레이어 몫 선물거리)의 총 개수: world.items 가운데 선물할 수 있는 것. 갈매미가 잡은 것은 각자 u.stash에 있어 여기 안 셈 */
 export const pocketCount = world => ITEMS.reduce((s, i) => s + (giftDef(i.id) ? Math.max(0, world.items?.[i.id] || 0) : 0), 0);
-/** 이 갈매미가 이 선물을 받았을 때의 반응 단계(0 꺼림 · 1 보통 · 2 좋아함) */
-export function giftTier(name, id) {
-  const p = PERSONA[name] || {}, cat = giftDef(id)?.cat;
+/** 이 갈매미가 이 선물을 받았을 때의 반응 단계(0 꺼림 · 1 보통 · 2 좋아함).
+ *  who: 갈매미(모습 + 아직 변신 전이면 숨은 성향의 취향 = 단서, evolve.js personaOf) 또는 모습 이름(옛 받침) */
+export function giftTier(who, id) {
+  const p = (typeof who === "string" ? PERSONA[who] : personaOf(who)) || {}, cat = giftDef(id)?.cat;
   if (cat === "best") return 2;
   return cat && p.likes?.includes(cat) ? 2 : cat && p.dislikes?.includes(cat) ? 0 : 1;
 }
