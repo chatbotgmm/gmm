@@ -188,7 +188,7 @@ export function awayLetter(report, { post = false, news = [], wishes = [] } = {}
   if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
   const door = gifts.filter(g => !g.pocket), pocket = gifts.filter(g => g.pocket);
   if (door.length) lines.push(`🎁 누군가 문 앞에 ${josa(countNames(door.map(g => g.name)), "을", "를")} 두고 갔어요. 톡 눌러 주워요.`);
-  if (pocket.length) lines.push(`🎁 문 앞이 꽉 차서 ${josa(countNames(pocket.map(g => g.name)), "은", "는")} 주머니에 넣어 뒀어요.`);
+  if (pocket.length) lines.push(`🎁 ${door.length ? "나머지 " : ""}${josa(countNames(pocket.map(g => g.name)), "은", "는")} 주머니에 넣어 뒀어요.`);   // 반짝이 한도(2개)가 다른 곳 반짝이로 차 있어도 맞는 말(예전 「문 앞이 꽉 차서」)
   if (waiter) lines.push(`🏦 은행 앞에서 ${josa(waiter.who, "이", "가")} 기다려요. "${waiter.say}"`);
   const story = report.story || [];
   if (!ripened && !catches.length && !built.length && !inc && !money.wages && !gifts.length && !waiter && !story.length) lines.push("별일 없이 조용한 시간이었어요.");

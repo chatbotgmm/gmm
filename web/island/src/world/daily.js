@@ -43,7 +43,8 @@ export const DAILY_POOL = [
     ok: canFish, hit: ev => ev === "tug" ? 1 : 0 },
   // 🌙 밤 부탁: 부탁을 고르는 때가 저녁 밤(기기 시계, 해가 진 뒤 ~ 자정)일 때만 고름 → 저녁에 켠 사람에게만(그날 밤이 자정까지 남아 있음).
   //  자정~새벽은 고르지 않음: 자정에 날짜가 바뀌며 고른 부탁이 그날 낮까지 남아, 낮에만 하는 사람의 도장을 막지 않게(hour를 모르면 밤만 봄)
-  { id: "nightSparkle", icon: "🌙", need: 2, text: () => "밤에 가로등 둘레에서 반짝이 2개 줍기",
+  //  밤 반짝이는 한 번에 1개(sparkles.js SPARKLE_NIGHT_MAX)라 1개 줍기(예전 2개: 다음 회차 300초를 기다려야 해서 줄임)
+  { id: "nightSparkle", icon: "🌙", need: 1, text: () => "밤에 가로등 둘레에서 반짝이 줍기",
     ok: w => w.isNight === true && !(Number.isFinite(w.hour) && w.hour < 12), hit: (ev, e) => ev === "sparkle" && e?.item?.sparkleTime === "night" ? 1 : 0 },
 ];
 const DAILY_BY_ID = Object.fromEntries(DAILY_POOL.map(d => [d.id, d]));
@@ -93,7 +94,9 @@ export const dailyAllDone = daily => !!daily && daily.reqs.length > 0 && daily.r
 export function dailyFromSave(j) {
   if (!j || typeof j.key !== "string" || !Array.isArray(j.reqs)) return null;
   const reqs = j.reqs.filter(r => r && DAILY_BY_ID[r.id] && typeof r.text === "string").slice(0, DAILY_COUNT).map(r => { const d = DAILY_BY_ID[r.id];
-    return { id: d.id, icon: d.icon, text: r.text, need: d.need, have: Math.max(0, Math.min(d.need, r.have | 0)) }; });
+    // 저장 뒤 need가 바뀐 부탁(밤 반짝이 2 → 1): 글이 마을과 상관없으면(text 인자 없음) 지금 글로 · 저장 때 못 채운 것은 한 칸 남김 → 다음 줍기에 끝나며 도장이 평소처럼
+    const was = r.have | 0, changed = (r.need | 0) > 0 && (r.need | 0) !== d.need; let have = Math.max(0, Math.min(d.need, was)); if (changed && r.need > was && have >= d.need) have = d.need - 1;
+    return { id: d.id, icon: d.icon, text: changed && d.text.length === 0 ? d.text() : r.text, need: d.need, have }; });
   return { key: j.key, reqs, stamped: !!j.stamped };
 }
 /** 저장에서 읽은 도장 가게에서 산 것(예전 저장엔 없음 → 빈 것): { 물건 id: 산 개수 } */

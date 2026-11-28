@@ -86,8 +86,8 @@ test("해가 지면 첫 밤 반짝이는 20초 안에 · 밤을 모르면(시험
   assert.ok(!got.some(s => s.t === 900), "낮 반짝이 수명(600초)을 넘는 것은 버림");
 });
 
-test("밤 부탁: 밤에 고를 때만 후보 · 밤 반짝이 2개 주우면 채움(낮 반짝이는 안 셈) · 저장에서 읽힘", () => {
-  const req = D.DAILY_POOL.find(d => d.id === "nightSparkle"); assert.ok(req); assert.equal(req.need, 2);
+test("밤 부탁: 밤에 고를 때만 후보 · 밤 반짝이 1개 주우면 채움(낮 반짝이는 안 셈) · 저장에서 읽힘 · 예전 2개 부탁 저장", () => {
+  const req = D.DAILY_POOL.find(d => d.id === "nightSparkle"); assert.ok(req); assert.equal(req.need, 1);
   const w = town(); assert.equal(req.ok(w), false); w.isNight = false; assert.equal(req.ok(w), false); w.isNight = true; assert.equal(req.ok(w), true);
   let key = null; for (let d = 1; d <= 400 && !key; d++) { const k = `2026-${String(1 + (d % 12)).padStart(2, "0")}-${String(1 + (d % 28)).padStart(2, "0")}-${d}`; if (D.rollDaily(k, w).reqs.some(r => r.id === "nightSparkle")) key = k; }
   assert.ok(key, "밤에는 고를 수 있음");
@@ -98,13 +98,17 @@ test("밤 부탁: 밤에 고를 때만 후보 · 밤 반짝이 2개 주우면 �
   w.isNight = true; w.daily = D.rollDaily(key, w);
   w.isNight = false; const day = w.spawnSparkles()[0]; w.pickSparkle(day.id);
   const r = () => w.daily.reqs.find(q => q.id === "nightSparkle"); assert.equal(r().have, 0, "낮 반짝이는 안 셈");
-  w.isNight = true; const ns = [];   // 밤 반짝이는 한 번에 1개(SPARKLE_NIGHT_MAX): 주우면 다음 회차에 또 하나 → 2개 부탁은 회차 두 번(해 지고 20초 + 300초쯤)
-  for (let k = 0; k < 2; k++) {
+  w.isNight = true; const ns = [];   // 밤 반짝이는 한 번에 1개(SPARKLE_NIGHT_MAX) → 부탁도 1개
+  for (let k = 0; k < 1; k++) {
     const [s] = w.spawnSparkles(); assert.ok(s && S.isNightSparkle(s)); assert.deepEqual(w.spawnSparkles(), [], "줍기 전엔 더 안 생김");
     const it = w.pickSparkle(s.id); assert.equal(it.id, s.rare ? S.rareSparkleOf(s.k).id : s.k); ns.push(it.id);
   }
-  assert.equal(r().have, 2); assert.equal(ns.reduce((n, id) => n + (w.items[id] > 0 ? 1 : 0), 0), 2, "주운 밤 반짝이는 내 주머니로");
-  assert.deepEqual(D.dailyFromSave(JSON.parse(JSON.stringify(w.daily))).reqs.find(q => q.id === "nightSparkle").have, 2);
+  assert.equal(r().have, 1); assert.equal(ns.reduce((n, id) => n + (w.items[id] > 0 ? 1 : 0), 0), 1, "주운 밤 반짝이는 내 주머니로");
+  assert.deepEqual(D.dailyFromSave(JSON.parse(JSON.stringify(w.daily))).reqs.find(q => q.id === "nightSparkle").have, 1);
+  // 예전 저장(2개 부탁, 1개 주움): 지금 글 · 아직 못 채운 것으로(다음 줍기에 끝나 도장이 평소처럼) · 다 채운 것은 그대로 채움
+  const old = D.dailyFromSave({ key: "k", stamped: false, reqs: [{ id: "nightSparkle", icon: "🌙", text: "밤에 가로등 둘레에서 반짝이 2개 줍기", need: 2, have: 1 }] }).reqs[0];
+  assert.equal(old.text, "밤에 가로등 둘레에서 반짝이 줍기"); assert.equal(old.need, 1); assert.equal(old.have, 0);
+  assert.equal(D.dailyFromSave({ key: "k", reqs: [{ id: "nightSparkle", icon: "🌙", text: "x", need: 2, have: 2 }] }).reqs[0].have, 1);
 });
 
 test("밤 친구 일찍(SUMMON_FIRST 대신): 성향 덱에서 밤 성향이 앞 3마리 안 — 셋째쯤 소환되는 기본 갈매미가 반야행성으로 밤에 깨어 있음", async () => {
