@@ -151,7 +151,7 @@ export class World {
     // 오늘의 부탁: 그날의 부탁 { key 실제 날짜, reqs, stamped }(화면이 setDay로 날짜를 넣어 줄 때 고름. 그 전엔 null) · 모은 도장 · 도장 가게에서 산 것 { id: 개수 }
     this.daily = null; this.stamps = Math.max(0, extra.stamps | 0); this.stampBought = stampBoughtFromSave(extra.stampBought);
     // 오늘의 첫 인사(greetToday): 마지막으로 인사받은 실제 날짜 열쇠(예전 저장엔 없음 → 다음 접속에 인사) · 다녀온 사이 문 앞에서 기다리는 갈매미 id(저장 안 함)
-    this.greetDay = typeof extra.greetDay === "string" ? extra.greetDay : null; this.doorGull = null;
+    this.greetDay = typeof extra.greetDay === "string" ? extra.greetDay : null; this.doorGull = null; this.doorSay = null;
     // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
     this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
     this.showNumbers = false;                                                     // 건설 모드인지(화면이 넣어 줌): 그때만 갈매미 말풍선에 "나무+2"·"🪙+12" 같은 숫자를 보임. 저장 안 함
@@ -1332,13 +1332,13 @@ export class World {
           let left = n; for (const bag of [u.inv, u.load, this.res]) { const t = Math.min(left, Math.max(0, Math.floor(bag?.[k] || 0))); if (t) { bag[k] -= t; left -= t; const to = bag === u.inv ? mineUsed : wareUsed; to[k] = (to[k] || 0) + t; } }
         }
         if (b.order) this.orderMaterials(b, u, mineUsed, wareUsed);
-        const rec = out.get(b.id) || { id: b.id, name: BUILDINGS[b.defId].name, who: u.name, from: Math.floor(100 * b.hits / b.need), to: 0, done: false }; out.set(b.id, rec);
+        const rec = out.get(b.id) || { id: b.id, name: BUILDINGS[b.defId].name, who: u.name, uid: u.unitId, from: Math.floor(100 * b.hits / b.need), to: 0, done: false }; out.set(b.id, rec);
         b.used = true; this.releaseFee(b); b.lastBuilder = u.unitId;
         b.hits = Math.min(b.need, b.hits + 3 * J.hammerPower(u)); this.emit("buildingProgress", b);
         if (WG && ordered) u.coins = (u.coins || 0) + this.payOrder(b, WG);
         else if (WG) { this.bank.vault -= WG; this.bank.wages += WG; this.led("wages", WG); u.coins = (u.coins || 0) + WG; wages += WG; }
         rec.to = Math.floor(100 * b.hits / b.need);
-        if (this.isDone(b)) { rec.done = true; rec.who = u.name; b.supply = null; if (u.committed === b.id) uncommit(u, this); this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); }
+        if (this.isDone(b)) { rec.done = true; rec.who = u.name; rec.uid = u.unitId; b.supply = null; if (u.committed === b.id) uncommit(u, this); this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); }
       }
     }
     if (wages) this.checkLow();
@@ -1397,13 +1397,18 @@ export class World {
    *  돌려주는 값: { id, who, say } 또는 null(밖에 있는 갈매미가 없음) */
   awayWaiter(built) {
     const out = this.units.filter(u => !u.insideBuildingId && !u.sailing && u.state !== UnitState.Held); if (!out.length) return null;
-    const fin = built.find(b => b.done && out.some(u => u.name === b.who)), wish = this.wishes.find(x => x.id !== "festival" && out.some(u => u.unitId === x.unitId));
+    const fin = built.find(b => b.done && out.some(u => u.unitId === b.uid)), wish = this.wishes.find(x => x.id !== "festival" && out.some(u => u.unitId === x.unitId));
     let u, say;
-    if (fin) { u = out.find(o => o.name === fin.who); say = `${fin.name} 다 지었어! 보러 와 ♪`; }
+    if (fin) { u = out.find(o => o.unitId === fin.uid); say = `${fin.name} 다 지었어! 보러 와 ♪`; }
     else if (wish) { u = out.find(o => o.unitId === wish.unitId); say = `💭 ${WISH_BY_ID[wish.id]?.icon ?? ""} 부탁이 있어…`.replace("  ", " "); }
     else { u = [...out].sort((a, b) => (b.bond || 0) - (a.bond || 0) || a.unitId.localeCompare(b.unitId))[0]; say = (u.bond || 0) >= 5 ? "왔구나! 보고 싶었어 ♥" : "어서 와! 기다렸어"; }
     if (!this.meetAtDoor(u, say)) return null;
-    this.doorGull = u.unitId; return { id: u.unitId, who: u.name, say };
+    this.doorGull = u.unitId; this.doorSay = say; return { id: u.unitId, who: u.name, say };
+  }
+  /** 편지를 닫은 뒤: 다녀온 사이 문 앞에서 기다리던 갈매미가 같은 말을 다시 함(편지를 읽는 동안 말풍선이 지나가 버리지 않게). 했으면 true(난수 안 씀) */
+  doorHello() {
+    const say = this.doorSay; this.doorSay = null; if (!say || !this.doorGull) return false;
+    return this.meetAtDoor(this.units.find(u => u.unitId === this.doorGull), say, 16);
   }
   /** 오늘의 첫 인사: 실제 날짜 열쇠(YYYY-MM-DD, daily.js dailyKey)마다 한 번, 갈매미 한 마리가 은행 문 앞으로 달려와 작은 반짝이 물건을 줌(내 주머니로).
    *  고르는 것(갈매미·물건)은 날짜 열쇠와 섬 씨앗으로만(마을 난수를 쓰지 않음). 다녀온 사이 문 앞에서 기다리던 갈매미가 있으면 그 갈매미가 줌.

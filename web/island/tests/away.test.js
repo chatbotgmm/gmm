@@ -90,3 +90,14 @@ test("오늘의 첫 인사: 실제 날짜마다 한 번, 같은 날·같은 섬�
   assert.ok(!/\(|\)/.test(rw.title + rw.line + g.say));
   const days = new Set(); for (let d = 1; d <= 20; d++) days.add(town().greetToday(`2026-12-${String(d).padStart(2, "0")}`).item.id); assert.ok(days.size >= 3, "날마다 물건이 바뀜");
 });
+
+test("기다리는 갈매미: 끝낸 공사는 unitId로 찾고, 편지를 닫으면 같은 말을 한 번 더(doorHello)", () => {
+  const w = town(); site(w); const u = w.units[0];
+  const r = w.applyAway(8 * H, seededRandom(5), NOON);
+  assert.equal(r.built[0].uid, u.unitId); assert.equal(r.waiter?.id, u.unitId); assert.equal(w.doorGull, u.unitId);
+  u.emoteT = 0; u.emoteText = ""; const rnd0 = JSON.stringify([w.rnd(), w.wrnd()]), v = town(); site(v); v.applyAway(8 * H, seededRandom(5), NOON); v.doorHello();
+  assert.equal(JSON.stringify([v.rnd(), v.wrnd()]), rnd0, "난수 안 씀");
+  assert.equal(w.doorHello(), true); assert.equal(u.emoteText, r.waiter.say);
+  assert.equal(w.doorHello(), false, "한 번만");
+  const g = w.greetToday("2026-11-28"); assert.equal(g.u, u, "기다리던 갈매미가 첫 인사도");
+});

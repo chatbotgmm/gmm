@@ -347,7 +347,7 @@ function welcomeBack(w) {
   return { ...awayLetter(r, { post: !!w.postB(), news, wishes }), onClose: greetSoon };   // 편지를 닫으면 오늘의 첫 인사
 }
 /** 💛 오늘의 첫 인사(World.greetToday): 실제 날짜마다 한 번, 갈매미가 은행 문 앞으로 와서 작은 물건을 줌. 보상 띠(rewardFx greet)가 알림을 맡음 */
-function greetSoon() { const w = world; setTimeout(() => { if (ready && world === w) w.greetToday(dailyKey(new Date())); }, 600); }
+function greetSoon() { const w = world, hi = ready && w.doorHello?.(); setTimeout(() => { if (ready && world === w) { w.greetToday(dailyKey(new Date())); w.doorGull = null; } }, hi ? 3500 : 600); }   // 기다리던 갈매미가 먼저 한마디(doorHello) → 첫 인사
 const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 다 지은 작은 집 한 채(갈매미 0) → 🥚 소환으로 첫 갈매미(집 한 채에 한 마리)
 const backLetter = savedWorld ? welcomeBack(world) : null;                        // 다 불러온 뒤에 보여 줌
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
@@ -362,7 +362,7 @@ const buildingThumbs = new BuildingThumbs(renderer);                            
 tools.stream = stream; lockView();                                         // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대 · 가까운 비스듬히는 왼쪽 끌기도 옮기기)
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
-  onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
+  onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); const L = welcomeBack(world); hud.showLetter(L); if (!L) greetSoon(); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
   onReset: () => { mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); cloud?.markReplace(); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 // 건설 모드에 들어가고 나와도 카메라는 그대로(플레이 시점 하나): 조작 배치만 tools.applyControls가 도구에 맞춤. 화면(HUD)은 hud.showMode가 맡음
@@ -411,7 +411,7 @@ hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { r
 installKeys({ hud, tools, roomView });
 // ☁️ 계정 저장: 💾 저장 앱 맨 위 카드. 받은 계정 섬은 여기서 올림(다녀온 사이 편지는 계정 판마다 한 번만 — cloudSync.awayFor)
 cloud = installCloud({ hud, saveKey: SAVE_KEY, gridW: GRID_W, getWorld: () => world, saveLocal: () => saveNow(), fromJSON: j => World.fromJSON(j),
-  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); hud.showLetter(welcomeBack(world)); saveNow(); } });   // 받은 섬을 바로 이 기기에도(savedAt 새로 → 다시 열어도 보상 두 번 없음)
+  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); const L = welcomeBack(world); hud.showLetter(L); if (!L) greetSoon(); saveNow(); } });   // 받은 섬을 바로 이 기기에도(savedAt 새로 → 다시 열어도 보상 두 번 없음)
 // 🎟 판(무료·유료)과 ⏩ 배속(유료판 전용, 마을 진행 ×1·×2·×3). 판은 systems/edition.js 한 곳에서만 읽고 씀(지금은 설정에서 고름, 나중엔 계정 값이 우선)
 const edition = createEdition();
 hud.edition = edition; hud.syncEdition();
