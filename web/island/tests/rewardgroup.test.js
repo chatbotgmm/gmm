@@ -56,6 +56,20 @@ test("취향 답례: 좋아하는 갈래에서, 모습(form)을 먼저 보고, �
   for (const st of [1, 3]) for (const id of Object.values(B.THANKS_BY_TASTE[st])) { assert.ok(B.giftDef(id), id); assert.notEqual(R.itemIcon(id), "🎁", id); }
 });
 
+test("취향 답례 × 변신: 아직 기본 모습인 갈매미는 숨은 성향의 취향(선물 반응과 같은 personaOf)으로 → 같은 날 아는 사이가 돼도 저마다 다름", async () => {
+  const EV = await import("../src/world/evolve.js");
+  const w = World.create(5, seededRandom(2), { wild: true, firstGull: false }), got = {};
+  for (const disp of ["sea", "night", "shiny", "big"]) {
+    const u = w.addGullOfForm("기본", { disp }); assert.equal(EV.formOf(u), "기본");
+    const [t] = w.addBond(u, 5.01); got[disp] = t.gift.id;
+    assert.equal(B.giftTier(u, t.gift.id), 2, `${disp}: 답례는 그 갈매미가 좋아하는 것(선물 판의 ♥와 같은 취향)`);
+  }
+  assert.deepEqual(got, { sea: "conch", night: "icicle", shiny: "seaglass", big: "goby" });
+  assert.equal(B.thanksFor(1, false, { form: "기본", disp: "sea" }).id, "conch", "갈매미를 주면 personaOf");
+  assert.equal(B.thanksFor(1, false, { form: "황금", disp: "sea", evo: { to: "황금" } }).id, "seaglass", "변신한 뒤엔 모습의 취향");
+  assert.equal(B.thanksFor(1, false, { form: "기본", disp: "easy" }).id, "bottle", "좋아하는 갈래가 없으면 예전 답례");
+});
+
 // 예전 rollSparkles(드문 반짝이 전): 자리·종류가 바뀌지 않았는지 견줌
 function oldRoll(cells, existing, season, rnd, wave = S.SPARKLE_WAVE, night = false) {
   const out = [], room = Math.min(wave, S.sparkleRoom(existing, night));

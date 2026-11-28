@@ -33,7 +33,7 @@ import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, 
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
 import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText, STAMP_COINS, DAILY_COUNT, DAILY_GROUP, DAILY_POOL } from "./daily.js";
-import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, GIFT_CAT_NAME, giftDef, giftTier, PET_BOND, PET_FUN, PET_COOL_MS, petBondsLeft, petCoolLeft, thanksFor, gullForm, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
+import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, GIFT_CAT_NAME, giftDef, giftTier, PET_BOND, PET_FUN, PET_COOL_MS, petBondsLeft, petCoolLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import { undoBlock, feeUndoLedger } from "./buildUndo.js";
@@ -1334,7 +1334,7 @@ export class World {
   addBond(u, amt) {
     u.bond = Math.min(BOND_MAX, (u.bond || 0) + amt); const got = [];
     for (const top = bondStage(u.bond); (u.bondGifts || 0) < top;) {
-      const stage = u.bondGifts = (u.bondGifts || 0) + 1, home = u.home && this.buildings.get(u.home), gift = thanksFor(stage, !!home, gullForm(u));
+      const stage = u.bondGifts = (u.bondGifts || 0) + 1, home = u.home && this.buildings.get(u.home), gift = thanksFor(stage, !!home, u);   // 취향 답례: 그 갈매미의 취향(personaOf — 변신 전이면 숨은 성향의 취향)
       if (gift?.kind === "furniture") { const it = F.room(home); it.stash[gift.id] = (it.stash[gift.id] || 0) + 1; gift.where = BUILDINGS[home.defId].name; }
       else if (gift) { this.items[gift.id] = (this.items[gift.id] || 0) + 1; if (giftDef(gift.id)) this.keep[gift.id] = true; }   // 답례로 받은 물건은 팔리지 않게 간직
       got.push({ stage, gift }); this.emit("bondStage", { u, stage, gift });

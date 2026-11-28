@@ -84,11 +84,13 @@ export const THANKS_BY_TASTE = {
 };
 /** 갈매미의 모습(성격·취향 표 PERSONA의 열쇠) = evolve.js formOf(u.form, 옛 받침은 u.name) */
 export const gullForm = u => formOf(u);
-/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지 · form: 갈매미 모습, 주면 취향 답례) */
-export function thanksFor(stage, hasHome, form) {
+/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지 ·
+ *  who: 갈매미(취향 = personaOf: 모습 + 아직 변신 전이면 숨은 성향의 취향 — 선물 반응 giftTier와 같은 취향) 또는 모습 이름(옛 받침). 주면 취향 답례)
+ *  → 아직 모두 기본 모습인 첫 며칠에도 갈매미마다 답례가 다름(모습 표 PERSONA만 보면 기본은 모두 같은 답례가 됨) */
+export function thanksFor(stage, hasHome, who) {
   const t = BOND_THANKS[stage]; if (!t) return null;
   if (t.furniture && hasHome && FURNITURE[t.furniture]) return { kind: "furniture", id: t.furniture, name: FURNITURE[t.furniture].name };
-  const likes = PERSONA[form]?.likes || [], cat = likes.length ? likes[Math.floor(stage / 2) % likes.length] : null, id = THANKS_BY_TASTE[stage]?.[cat] || t.item;
+  const likes = (typeof who === "string" ? PERSONA[who] : who ? personaOf(who) : null)?.likes || [], cat = likes.length ? likes[Math.floor(stage / 2) % likes.length] : null, id = THANKS_BY_TASTE[stage]?.[cat] || t.item;
   const it = ITEMS.find(i => i.id === id); return it ? { kind: "item", id: it.id, name: it.name } : null;
 }
 /** 저장에서 읽은 간직하기 표시(예전 저장엔 없음 → 빈 것). 선물할 수 있는 것만 */
