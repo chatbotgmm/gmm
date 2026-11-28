@@ -1,5 +1,6 @@
 // 도구(입력): 둘러보기 / 바닥 칠하기 / 건물 짓기(고스트 미리보기) / 철거 / 자연·지형(심기·치우기·파기·메우기·지형지물 옮기기, 월드 꾸미기 API의 dry로 미리보기).
-// 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 화면 옮기기(건설 모드는 고정 쿼터뷰라 돌리기 없음), 휠·두 손가락은 확대·축소.
+// 도구가 켜져 있으면 왼쪽 버튼(한 손가락)은 도구, 오른쪽 드래그는 화면 옮기기(가까운 비스듬히 — 돌리기는 ⟲ ⟳) 또는 돌리기(자유 회전), 휠·두 손가락은 확대·축소.
+// 카메라는 둘러보기와 같음(건설 모드에 들어가도 시점이 바뀌지 않음).
 // 단 「누르면 고르는」 도구(짓기·철거·지형지물 옮기기)는 끌기 = 화면 옮기기, 짧게 톡 = 자리 정하기(pressKind.js).
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ, toGridX, toGridZ, WATER_Y } from "../config.js";
@@ -108,12 +109,13 @@ export class Tools {
   get toolActive() { return this.mode !== "view" && !this.hand && !this.spaceHeld && !this.cross; }   // 십자선 모드: 한 손가락은 화면 옮기기, 칠하기는 버튼으로
   /** 톡 = 고르기 · 끌기 = 화면 옮기기인 도구가 켜져 있나(짓기·철거·지형지물 옮기기). 이때 ✋는 필요 없음 */
   get tapPick() { return this.toolActive && tapTool(this.mode, this.natAct?.kind); }
-  /** 조작 배치: 도구 중에는 한 손가락·왼쪽 = 도구, 두 손가락 = 돌리기·확대, 오른쪽 = 돌리기, 가운데 = 확대.
-   *  둘러보기(또는 ✋)에서는 한 손가락 = 화면 옮기기, 두 손가락 = 돌리기·확대 / 마우스 왼쪽 = 돌리기, 오른쪽 = 옮기기.
-   *  건설 모드의 고정 쿼터뷰(viewLock, main.js가 켬)에서는 돌리기가 없음: 오른쪽 = 옮기기, ✋·스페이스 + 왼쪽 = 옮기기, 두 손가락 = 옮기기·확대. */
+  /** 조작 배치(카메라 시점은 둘러보기·건설 모드 같음 — 바뀌는 건 손가락·버튼이 하는 일뿐).
+   *  가까운 비스듬히(viewLock, main.js가 켬): 끌어 돌리기 없음 — 왼쪽(도구가 안 쓸 때)·오른쪽 = 옮기기, 두 손가락 = 옮기기·확대(비틀면 90°), ⟲ ⟳ = 90°.
+   *  자유 회전: 둘러보기는 왼쪽 = 돌리기, 오른쪽 = 옮기기 / 건설 모드는 왼쪽 = 도구(짓기·철거 끌기·✋·스페이스는 옮기기 — 돌지 않게), 오른쪽 = 돌리기.
+   *  터치: 도구가 안 쓸 때 한 손가락 = 옮기기, 두 손가락은 twoFinger.js. */
   applyControls() {
-    const t = this.toolActive && !this.tapPick, q = !!this.viewLock, M = THREE.MOUSE, T = THREE.TOUCH;
-    this.controls.mouseButtons = { LEFT: t ? null : q ? M.PAN : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: t && !q ? M.ROTATE : M.PAN };
+    const t = this.toolActive && !this.tapPick, q = !!this.viewLock, edit = this.mode !== "view", M = THREE.MOUSE, T = THREE.TOUCH;
+    this.controls.mouseButtons = { LEFT: t ? null : q || edit ? M.PAN : M.ROTATE, MIDDLE: M.DOLLY, RIGHT: !q && edit ? M.ROTATE : M.PAN };
     this.controls.touches = { ONE: t ? null : T.PAN, TWO: null };                           // 터치: 한 손가락 = 옮기기, 두 손가락(비틀기 돌리기·벌려 확대)은 twoFinger.js
     this.dom.style.cursor = this.mode === "view" ? "" : t || this.tapPick ? "crosshair" : "grab";
   }

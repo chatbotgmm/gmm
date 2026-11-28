@@ -16,8 +16,8 @@ export const KEY_LIST = [
   { code: ["KeyK"], key: "K", what: "💞 관계도", app: "rel" },
   { code: ["KeyL"], key: "L", what: "📖 도감 · 가방", app: "dex" },
   { code: ["KeyH", "F1"], key: "H", what: "❓ 도움말 · 단축키", app: "help" },
-  { code: ["KeyZ"], key: "Z", what: "⟲ 화면을 왼쪽으로 90° 돌리기(건설 모드 · 가까운 비스듬히 시점)", sel: "#viewL:not([hidden]), #turnBox:not([hidden]) #turnL" },
-  { code: ["KeyX"], key: "X", what: "⟳ 화면을 오른쪽으로 90° 돌리기(건설 모드 · 가까운 비스듬히 시점)", sel: "#viewR:not([hidden]), #turnBox:not([hidden]) #turnR" },
+  { code: ["KeyZ"], key: "Z", what: "⟲ 화면을 왼쪽으로 90° 돌리기(가까운 비스듬히 시점 · 건설 모드도)", sel: "#viewL:not([hidden]), #turnBox:not([hidden]) #turnL" },
+  { code: ["KeyX"], key: "X", what: "⟳ 화면을 오른쪽으로 90° 돌리기(가까운 비스듬히 시점 · 건설 모드도)", sel: "#viewR:not([hidden]), #turnBox:not([hidden]) #turnR" },
   { code: ["KeyG"], key: "G", what: "▦ 건설 모드: 칸 격자선 켜기·끄기", sel: "#gridBtn" },
   { code: ["KeyF"], key: "F", what: "⏩ 배속 ×1 → ×2 → ×3 (유료판 · 무료판은 🔒 안내)", fn: "speed" },
 ];

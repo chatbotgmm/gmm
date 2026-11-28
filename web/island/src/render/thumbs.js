@@ -50,7 +50,7 @@ export class BuildingThumbs {
     const box = new THREE.Box3().setFromObject(model); box.min.y = Math.max(box.min.y, floor);
     const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), fp = def?.footprint || { w: 1, d: 1 }, rad = Math.max(0.35, Math.hypot(size.x, size.y, size.z) / 2);
     this.ground.material.color.setHex(wet ? 0x7fd0e6 : 0xa9d672); this.ground.scale.setScalar(Math.max(fp.w, fp.d, size.x, size.z) * 0.62 + 0.25); this.ground.position.set(c.x, floor - 0.01, c.z);   // 발밑 잔디(또는 물)
-    // 건설 모드와 같은 쿼터뷰(정문 +z가 보이는 앞·오른쪽 위)에서, 모델이 사진에 꽉 차게: 모델의 점들을 화면에 비춰 보고 가운데·거리를 맞춤(세 번이면 충분)
+    // 쿼터뷰(정문 +z가 보이는 앞·오른쪽 위)에서, 모델이 사진에 꽉 차게: 모델의 점들을 화면에 비춰 보고 가운데·거리를 맞춤(세 번이면 충분)
     const yaw = THREE.MathUtils.degToRad(38), pitch = THREE.MathUtils.degToRad(60), tanV = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
     const dir = new THREE.Vector3(Math.sin(pitch) * Math.sin(yaw), Math.cos(pitch), Math.sin(pitch) * Math.cos(yaw)), look = c.clone(), v = new THREE.Vector3(); let dist = rad / tanV;
     // 맞출 점: 모델의 실제 꼭짓점(메시마다 600개쯤 골라서) — 상자 모서리로 맞추면 둥근 집이 사진 속에서 작아짐. 꼭짓점이 없으면 상자 모서리 8개

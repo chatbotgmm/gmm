@@ -1,8 +1,8 @@
-// 평소 시점(systems/viewCam.js): 가까운 비스듬히(기본) · 자유 회전(예전) — 거리별 각도 곡선 · 90° 돌리기 · 비틀기 · 설정 기억 · 건설 모드와 함께. node --test tests/
+// 평소 시점(systems/viewCam.js): 가까운 비스듬히(기본) · 자유 회전(예전) — 거리별 각도 곡선 · 90° 돌리기 · 비틀기 · 설정 기억 · 건설 모드도 같은 카메라. node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NEAR_VIEW, FREE_VIEW, VIEW_KEY, readViewPref, saveViewPref, nearHomeDist, viewFov, nearElevDeg, snap90, twistTurn, viewHomeLen, ViewCam } from "../src/systems/viewCam.js";
-import { QuarterCam } from "../src/systems/quarterView.js";
+import { readFileSync } from "node:fs";
 import { showOverviewBtn } from "../src/systems/camAssist.js";
 
 const D = Math.PI / 180;
@@ -10,9 +10,8 @@ const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
 const vec = (x = 0, y = 0, z = 0) => ({ x, y, z, set(a, b, c) { this.x = a; this.y = b; this.z = c; return this; } });
 function rig(mode = "near", portrait = true, pos = [0, 70, 50]) {
   const camera = { position: vec(...pos), fov: 50, lookAt() {} }, controls = { target: vec(0, 0, 4), enableRotate: true, minDistance: 1.5, maxDistance: 110 };
-  const quarterCam = new QuarterCam({ camera, controls, duration: 0 }); quarterCam.quick = () => true;
-  const v = new ViewCam({ camera, controls, quarterCam, mode, portrait: () => portrait, quick: () => true });
-  return { camera, controls, quarterCam, v };
+  const v = new ViewCam({ camera, controls, mode, portrait: () => portrait, quick: () => true });
+  return { camera, controls, v };
 }
 
 test("숫자: 35° · 세로 30 m/가로 26 m · 렌즈 50°/40° · 확대 9~55 m · 자유 회전은 예전 그대로(62°/45°, 1.5~110 m)", () => {
@@ -65,21 +64,31 @@ test("확대·축소하면 tick이 각도를 곡선에 맞추고 방향은 90° 
   v.tick(16); const s = v.state(); assert.ok(near(s.yaw, 90, 0.01)); assert.ok(near(s.elev, nearElevDeg(s.dist, true), 0.01)); assert.ok(near(s.dist, Math.hypot(30, 30, 10), 0.01));
 });
 
-test("건설 모드: 들어가면 쿼터뷰(viewCam은 손 안 댐) · 나오면 가까운 비스듬히 각도로 · 돌리기는 쿼터뷰가 맡음", () => {
-  const { v, quarterCam } = rig("near"); v.init(); v.turn(1);
-  quarterCam.enter(); quarterCam.tick(0); v.tick(0); assert.equal(v.turn(1), false, "건설 중엔 쿼터뷰 ⟲ ⟳");
-  assert.ok(near(quarterCam.state().pitch, 52, 0.01));
-  quarterCam.exit(); quarterCam.tick(1); v.tick(1); const s = v.state(); assert.ok(near(s.yaw, 90, 0.01) && near(s.elev, 35, 0.01));
-  assert.equal(v.controls.enableRotate, false, "나와도 회전은 꺼진 채");
+test("건설 모드: 들어가고 나와도 카메라 그대로(각도·거리·방향 숫자 같음) · ⟲ ⟳ 는 건설 중에도 viewCam이 90°", () => {
+  for (const mode of ["near", "free"]) {
+    const { v, camera, controls } = rig(mode, true, [12, 40, 30]); v.init(); if (mode === "near") { v.turn(1); for (let t = 0; t < 1000; t += 16) v.tick(t); }
+    const snap = () => [camera.position.x, camera.position.y, camera.position.z, controls.target.x, controls.target.z, controls.minDistance, controls.maxDistance, controls.enableRotate];
+    const before = snap();
+    for (let t = 1000; t < 2000; t += 16) v.tick(t);                                // 건설 모드 = 아무 일도 없음: 몇 초 지나도 숫자 그대로
+    assert.deepEqual(snap(), before, `${mode}: 들어가도 그대로`);
+    if (mode === "near") { assert.equal(v.turn(1), true); for (let t = 2000; t < 3000; t += 16) v.tick(t); assert.ok(near(v.state().yaw, 180, 0.01)); assert.ok(near(v.state().elev, 35, 0.01)); }
+    else assert.equal(v.turn(1), false, "자유 회전은 끌어서 돌림");
+  }
 });
 
-test("설정 바꾸기: free → near는 기본 거리·35°·가까운 90°로 · near → free는 자리 그대로 회전 켬 · 건설 중 바꾸면 나올 때 맞춤", () => {
+test("main.js·viewCam.js: 건설 모드에 들어가고 나올 때 카메라를 건드리지 않음(QuarterCam 없음, tools.onMode를 감싸 카메라를 바꾸지 않음)", () => {
+  const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8"), vc = readFileSync(new URL("../src/systems/viewCam.js", import.meta.url), "utf8");
+  assert.ok(!/QuarterCam|quarterCam/.test(main), "main.js에 쿼터뷰 없음"); assert.ok(!/quarterCam/.test(vc));
+  assert.ok(!/tools\.onMode\s*=/.test(main), "모드 바꿀 때 카메라를 바꾸는 손잡이 없음");
+  assert.match(main, /hud\.onViewTurn = dir => viewCam\.turn\(dir\)/); assert.match(main, /twoFinger\.onTurn = dir => viewCam\.turn\(dir\)/);
+});
+
+test("설정 바꾸기: free → near는 기본 거리·35°·가까운 90°로 · near → free는 자리 그대로 회전 켬 · 다시 near면 회전 끔·9~55 m", () => {
   const { v, controls } = rig("free", true, [30, 40, 40]); v.init();
   assert.equal(v.setMode("near"), true); let s = v.state(); assert.ok(near(s.dist, 30, 0.01) && near(s.elev, 35, 0.01) && near(s.yaw % 90, 0, 0.01));
   assert.equal(v.setMode("near"), false, "같은 값");
   assert.equal(v.setMode("free"), true); assert.equal(controls.enableRotate, true); assert.ok(near(v.state().dist, 30, 0.01));
-  const r = rig("free"); r.v.init(); r.quarterCam.enter(); r.v.setMode("near"); assert.equal(r.quarterCam.rotateWas, false); r.quarterCam.exit(); r.quarterCam.tick(1); r.v.tick(1);
-  assert.equal(r.controls.enableRotate, false); assert.ok(near(r.v.state().elev, nearElevDeg(r.v.state().dist, true), 0.01));
+  assert.equal(v.setMode("near"), true); assert.equal(controls.enableRotate, false); assert.deepEqual([controls.minDistance, controls.maxDistance], [9, 55]);
 });
 
 test("🏝 전체 보기·따라가기 그만: 가까운 비스듬히는 55 m·58°(방향 그대로) · 기본 거리로 돌아감 · 단추는 기본 거리의 70% 미만일 때", () => {
@@ -94,12 +103,10 @@ test("🏝 전체 보기·따라가기 그만: 가까운 비스듬히는 55 m·5
   assert.equal(showOverviewBtn({ ...base, len: 30, homeLen: viewHomeLen("free", true) }), true, "자유 회전은 예전 기준(처음 시점 83.8 m)");
 });
 
-test("건설 모드를 끝내며 되돌아가는 중에 돌리면: 끝난 뒤 순간이동하지 않고 부드럽게 돌아감", () => {
+test("크게 어긋나면(누가 카메라를 돌려 놓음): 한 프레임에 순간이동하지 않고 부드럽게 90° 자리로", () => {
   const camera = { position: vec(0, 70, 50), fov: 50, lookAt() {} }, controls = { target: vec(0, 0, 4), enableRotate: true, minDistance: 1.5, maxDistance: 110 };
-  const quarterCam = { locked: false, tween: null };
-  const v = new ViewCam({ camera, controls, quarterCam, mode: "near", portrait: () => true, quick: () => false }); v.init(); v.tick(0);
-  quarterCam.tween = {}; assert.ok(v.turn(1)); v.tick(16); assert.equal(v.tw, null);   // 쿼터뷰 되돌림이 잡고 있는 동안은 손대지 않음
-  quarterCam.tween = null; v.tick(32);
+  const v = new ViewCam({ camera, controls, mode: "near", portrait: () => true, quick: () => false }); v.init(); v.tick(0);
+  v.yaw = Math.PI / 2; v.tick(32);
   const yaw = v.state().yaw; assert.ok(yaw < 45, `한 프레임 만에 90°로 튀지 않음(${yaw})`); assert.ok(v.tw);
   for (let t = 48; t < 1000; t += 16) v.tick(t);
   assert.ok(near(v.state().yaw, 90, 0.01));

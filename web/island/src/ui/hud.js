@@ -111,10 +111,10 @@ export class Hud {
     const gridSync = () => { for (const b of [this.gridBtn, this.gridChip]) { b.classList.toggle("on", this.gridOn); b.setAttribute("aria-pressed", String(this.gridOn)); } };
     this.gridBtn.onclick = this.gridChip.onclick = () => { this.gridOn = !this.gridOn; gridSync(); saveGridPref((k, v) => localStorage.setItem(k, v), this.gridOn); };
     gridSync();
-    // ⟲ ⟳: 건설 모드는 내려다보는 각도가 고정이라, 화면은 이 버튼(Z · X)으로 90°씩 돌려 봄
+    // ⟲ ⟳: 건설 모드에서도 둘러보기와 같은 시점 — 가까운 비스듬히면 이 버튼(Z · X)으로 90°씩 돌려 봄(자유 회전이면 숨김: 오른쪽 끌기·두 손가락으로 돌림)
     this.viewBtns = [auxBtn("viewL", "⟲", "화면을 왼쪽으로 90° 돌리기", "화면을 왼쪽으로 90° 돌려요"), auxBtn("viewR", "⟳", "화면을 오른쪽으로 90° 돌리기", "화면을 오른쪽으로 90° 돌려요")];
     this.viewBtns[0].onclick = () => this.onViewTurn?.(-1); this.viewBtns[1].onclick = () => this.onViewTurn?.(1);
-    // 둘러보기의 ⟲ ⟳(가까운 비스듬히 시점일 때만): 아래 🔨·📱 줄 가운데 — 건설 모드의 것과 같은 onViewTurn(Z · X)
+    // 둘러보기의 ⟲ ⟳(가까운 비스듬히 시점일 때만): 아래 🔨·📱 줄 가운데 — 건설 모드의 것과 같은 onViewTurn(Z · X), 같은 카메라
     this.turnBox = el("div", ""); this.turnBox.id = "turnBox"; this.turnBox.hidden = true; this.turnBox.setAttribute("role", "group"); this.turnBox.setAttribute("aria-label", "화면 돌리기");
     for (const [id, icon, dir, side] of [["turnL", "⟲", -1, "왼쪽"], ["turnR", "⟳", 1, "오른쪽"]]) {
       const b = el("button", "", icon); b.id = id; b.setAttribute("aria-label", `화면을 ${side}으로 90° 돌리기`); b.dataset.tip = `화면을 ${side}으로 90° 돌려요 · 두 손가락으로 비틀어도 돼요`; b.onclick = () => this.onViewTurn?.(dir); this.turnBox.appendChild(b); }
@@ -294,7 +294,7 @@ export class Hud {
     try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(this.uiPrefs)); } catch { /* 무시 */ }
     this.applyUiPrefs(); this.drawUiPrefs();
   }
-  /** 설정 값을 html에 적음: --ui-user(배율) · data-keyhint · data-hand · data-motion · data-vibe. CSS와 tools.js(진동)·quarterView.js(화면 돌리기)가 봄 */
+  /** 설정 값을 html에 적음: --ui-user(배율) · data-keyhint · data-hand · data-motion · data-vibe. CSS와 tools.js(진동)·viewCam.js(화면 돌리기)가 봄 */
   applyUiPrefs() {
     const root = document.documentElement, p = this.uiPrefs, k = String(this.uiScale / 100);
     if (this.uiScale === 100) root.style.removeProperty("--ui-user"); else if (root.style.getPropertyValue("--ui-user") !== k) root.style.setProperty("--ui-user", k);
@@ -318,6 +318,7 @@ export class Hud {
   setCamMode(m) {
     this.camMode = m === "free" ? "free" : "near"; document.documentElement.dataset.cam = this.camMode;
     this.turnBox.hidden = this.tools.mode !== "view" || this.camMode !== "near";
+    for (const b of this.viewBtns) b.hidden = this.tools.mode === "view" || this.camMode !== "near";
     const seg = document.getElementById("segCam"); if (seg) for (const b of seg.children) { const on = b.dataset.v === this.camMode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
   }
   /** 섬에서 건물을 눌렀을 때 작은 카드(저절로 닫히지 않음: ✕ · 빈 땅 누르기 · 도구 바꾸기 · 갈매미 따라가기).
@@ -751,7 +752,7 @@ export class Hud {
     if (tap && this.tools.hand) this.tools.setHand(false);
     this.handBtn.hidden = mode === "view" || tap;
     this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
-    for (const b of this.viewBtns) b.hidden = mode === "view";                      // 건설 모드의 ⟲ ⟳ · 둘러보기는 turnBox(가까운 비스듬히일 때만)
+    for (const b of this.viewBtns) b.hidden = mode === "view" || this.camMode !== "near";   // 건설 모드의 ⟲ ⟳ · 둘러보기는 turnBox(둘 다 가까운 비스듬히일 때만)
     this.turnBox.hidden = mode !== "view" || this.camMode !== "near";
     this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
     this.gridBtn.hidden = this.gridChip.hidden = mode === "view";                   // ▦ 격자(G)도 건설 모드에서만

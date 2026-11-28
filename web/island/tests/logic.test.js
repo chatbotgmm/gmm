@@ -1629,45 +1629,13 @@ test("바닥 그림: 길(돌길·데크·흙길) 경계는 또렷하게 끊고 �
   for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) assert.ok(Math.abs(ls[i] - ls[j]) > (i === 0 ? 15 : 7), `L* ${ls[i].toFixed(1)} vs ${ls[j].toFixed(1)}`);
 });
 
-test("건설 모드 쿼터뷰: 방향은 가장 가까운 대각선으로, ⟲ ⟳ 는 90°씩, 돌 때는 짧은 쪽으로", async () => {
+test("카메라 각도 계산(quarterView.js): 짧은 쪽으로 도는 양 · 벡터 ↔ (거리·방향·기울기) 왕복 · 건설 모드 고정 쿼터뷰(QuarterCam)는 없음", async () => {
   const Q = await import("../src/systems/quarterView.js"), deg = r => Math.round(r * 180 / Math.PI * 1000) / 1000, rad = d => d * Math.PI / 180;
-  assert.deepEqual(Q.QUARTER_YAWS_DEG, [45, 135, 225, 315]);
-  // 가장 가까운 대각선(음수·한 바퀴 넘는 각도도)
-  for (const [from, to] of [[0, 45], [10, 45], [44, 45], [45, 45], [89.9, 45], [90, 135], [100, 135], [179, 135], [181, 225], [269, 225], [271, 315], [359, 315], [-10, 315], [-100, 225], [370, 45], [725, 45]])
-    assert.equal(deg(Q.quarterSnapYaw(rad(from))), to, `${from}° → ${to}°`);
-  // 90°씩: 네 번 돌면 제자리, 어디서 시작해도 언제나 대각선
-  let y = Q.quarterSnapYaw(rad(20)); const seen = [];
-  for (let i = 0; i < 4; i++) { y = Q.quarterStepYaw(y, 1); seen.push(deg(y)); }
-  assert.deepEqual(seen, [135, 225, 315, 45]);
-  assert.equal(deg(Q.quarterStepYaw(rad(45), -1)), 315); assert.equal(deg(Q.quarterStepYaw(rad(315), 1)), 45); assert.equal(deg(Q.quarterStepYaw(rad(200), -1)), 135);
-  for (let a = -400; a <= 400; a += 7) for (const d of [1, -1]) assert.ok(Q.QUARTER_YAWS_DEG.includes(deg(Q.quarterStepYaw(rad(a), d))));
-  // 짧은 쪽으로 도는 양
+  assert.equal(Q.QuarterCam, undefined, "건설 모드도 플레이 시점(viewCam) 하나");
+  assert.equal(deg(Q.quarterNorm(rad(-90))), 270); assert.equal(deg(Q.quarterNorm(rad(725))), 5);
   assert.equal(deg(Q.quarterDelta(rad(315), rad(45))), 90); assert.equal(deg(Q.quarterDelta(rad(45), rad(315))), -90); assert.equal(deg(Q.quarterDelta(rad(10), rad(45))), 35);
-  // 벡터 ↔ (거리·방향·기울기) 왕복
-  const o = Q.quarterOffset(20, rad(135), rad(Q.QUARTER_PITCH_DEG)), back = Q.quarterOrbit(o);
-  assert.ok(Math.abs(back.r - 20) < 1e-9 && Math.abs(deg(back.yaw) - 135) < 1e-6 && Math.abs(deg(back.pitch) - Q.QUARTER_PITCH_DEG) < 1e-6);
-});
-
-test("건설 모드 쿼터뷰: 들어가면 고정 각도, 끌어도 그대로, ⟲ ⟳ 로 90°, 나오면 보던 각도", async () => {
-  const Q = await import("../src/systems/quarterView.js");
-  const vec = (x, y, z) => ({ x, y, z, set(a, b, c) { this.x = a; this.y = b; this.z = c; } });
-  const camera = { position: vec(0, 54, 52), lookAt() {} }, controls = { target: vec(0, 0, 4), enableRotate: true };
-  const cam = new Q.QuarterCam({ camera, controls, duration: 0.3 }), run = (s = 0.5) => { for (let i = 0; i < Math.round(s * 60); i++) cam.update(1 / 60); };
-  const before = cam.state();
-  assert.equal(cam.turn(1), false);                                                // 평소엔 돌리기 버튼이 아무것도 안 함
-  cam.enter(); assert.equal(controls.enableRotate, false); run();
-  assert.deepEqual([cam.state().yaw, cam.state().pitch], [45, Q.QUARTER_PITCH_DEG]);   // 0° → 45°, 기울기 고정
-  camera.position.set(30, 5, -20); run(0.1);                                       // 누가 카메라를 돌려 놓아도(끌기·비틀기) 다음 프레임에 제 각도로, 거리는 그대로
-  assert.deepEqual([cam.state().yaw, cam.state().pitch], [45, Q.QUARTER_PITCH_DEG]);
-  assert.ok(Math.abs(Math.hypot(camera.position.x, camera.position.y, camera.position.z - 4) - Math.hypot(30, 5, -24)) < 1e-6);
-  camera.position.set(0, 54, 52); run(0.1);
-  cam.turn(1); run(); assert.equal(cam.state().yaw, 135);
-  cam.turn(1); cam.turn(1); run(); assert.equal(cam.state().yaw, 315);             // 잇달아 눌러도 90°씩 쌓임
-  cam.turn(-1); run(); assert.equal(cam.state().yaw, 225);
-  controls.target.set(10, 0, -6); run(0.1);                                        // 화면 옮기기(보는 점 이동)는 막지 않음
-  assert.deepEqual([cam.state().yaw, cam.state().pitch], [225, Q.QUARTER_PITCH_DEG]);
-  cam.exit(); assert.equal(controls.enableRotate, true); run();
-  assert.deepEqual([cam.state().yaw, cam.state().pitch], [before.yaw, before.pitch]);   // 들어오기 전 각도로
+  const o = Q.quarterOffset(20, rad(135), rad(52)), back = Q.quarterOrbit(o);
+  assert.ok(Math.abs(back.r - 20) < 1e-9 && Math.abs(deg(back.yaw) - 135) < 1e-6 && Math.abs(deg(back.pitch) - 52) < 1e-6);
 });
 
 test("전기(풍차 선행): 가로등·건물 등불·집은 다 지은 풍차 둘레 POWER_RANGE칸 안에서만 전기가 들어옴 — 경계·짓는 중·철거·저장/불러오기·소원", async () => {

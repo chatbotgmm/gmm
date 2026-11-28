@@ -1,4 +1,5 @@
-// 평소 시점(둘러보기): 「가까운 비스듬히」(기본) · 「자유 회전」(예전) 두 가지. 설정에서 고르고 이 기기에 기억(localStorage).
+// 시점(둘러보기·건설 모드 같은 카메라): 「가까운 비스듬히」(기본) · 「자유 회전」(예전) 두 가지. 설정에서 고르고 이 기기에 기억(localStorage).
+//  건설 모드에 들어가고 나와도 카메라는 그대로(각도·거리가 튀지 않음) — 예전의 고정 쿼터뷰(QuarterCam)는 뺐음.
 //  가까운 비스듬히: 땅에서 35° 위로 내려다보고, 거리 세로 화면 30 m · 가로 화면 26 m, 렌즈(세로 화각) 세로 50° · 가로 40°.
 //   돌리기는 90° 단위만(⟲ ⟳ · Z X · 두 손가락 비틀기 45° 넘게), 한 손가락·왼쪽 끌기 = 화면 옮기기. 확대 9 ~ 55 m:
 //   기본 거리보다 멀어지면 각도가 위에서 보는 쪽으로 올라감(55 m에서 땅에서 58°) — 멀리서도 마을이 납작하게 눌려 보이지 않게.
@@ -53,28 +54,31 @@ export const nearOverviewLen = () => NEAR_VIEW.max;
 export const viewHomeLen = (mode, portrait) => mode === "near" ? nearHomeDist(portrait) : null;
 
 const viewEase = t => 1 - Math.pow(1 - t, 3);
+/** 움직임 줄이기: 설정(html[data-motion])이 있으면 그것, 없으면 기기 설정 */
+export function reducedMotion() {
+  const m = typeof document !== "undefined" ? document.documentElement?.dataset?.motion : null; if (m) return m === "reduce";
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 /**
- * camera(position.set·lookAt·fov), controls(target·enableRotate·minDistance·maxDistance), quarterCam(locked·tween·saved·rotateWas·minWas)
- * main.js 순서: controls.update() → quarterCam.tick() → viewCam.tick()
+ * camera(position.set·lookAt·fov), controls(target·enableRotate·minDistance·maxDistance)
+ * main.js 순서: controls.update() → viewCam.tick(). 건설 모드도 같은 카메라(들어가고 나올 때 아무것도 안 바꿈)
  */
 export class ViewCam {
-  constructor({ camera, controls, quarterCam, mode = "near", portrait = () => true, quick = null }) {
-    Object.assign(this, { camera, controls, quarterCam, portrait });
+  constructor({ camera, controls, mode = "near", portrait = () => true, quick = null }) {
+    Object.assign(this, { camera, controls, portrait });
     this.mode = VIEW_MODES.includes(mode) ? mode : "near"; this.yaw = 0; this.tw = null; this.last = undefined;
-    this.quick = quick || (() => quarterCam?.quick?.() || false);
+    this.quick = quick || reducedMotion;
   }
   get locked() { return this.mode === "near"; }
   orbit() { const c = this.camera.position, t = this.controls.target; return quarterOrbit({ x: c.x - t.x, y: c.y - t.y, z: c.z - t.z }); }
   place(r, yaw, pitch) { const t = this.controls.target, o = quarterOffset(r, yaw, pitch); this.camera.position.set(t.x + o.x, t.y + o.y, t.z + o.z); this.camera.lookAt(t.x, t.y, t.z); }
   /** 지금 시점 숫자(도) — 화면 확인·시험용 */
   state() { const o = this.orbit(); return { mode: this.mode, dist: +o.r.toFixed(2), elev: +(90 - o.pitch / VIEW_RAD).toFixed(2), yaw: +(o.yaw / VIEW_RAD).toFixed(2), fov: this.camera.fov, turning: !!this.tw }; }
-  /** 컨트롤 허용 범위(돌리기·거리)를 시점에 맞춤. 건설 모드(쿼터뷰) 중이면 끝낼 때 돌려놓을 값을 바꿔 둠 */
+  /** 컨트롤 허용 범위(돌리기·거리)를 시점에 맞춤 */
   applyLimits() {
-    const c = this.controls, near = this.locked, min = near ? NEAR_VIEW.min : FREE_VIEW.min, max = near ? NEAR_VIEW.max : FREE_VIEW.max, q = this.quarterCam;
-    c.maxDistance = max;
-    if (q?.locked) { q.rotateWas = !near; q.minWas = min; c.minDistance = Math.max(min, c.minDistance); }
-    else { c.enableRotate = !near; c.minDistance = min; }
+    const c = this.controls, near = this.locked;
+    c.maxDistance = near ? NEAR_VIEW.max : FREE_VIEW.max; c.minDistance = near ? NEAR_VIEW.min : FREE_VIEW.min; c.enableRotate = !near;
   }
   /** 처음 한 번: 가까운 비스듬히면 기본 거리·35°·지금 방향(90° 맞춤)으로 바로 */
   init() {
@@ -87,15 +91,14 @@ export class ViewCam {
     this.mode = mode; this.applyLimits();
     if (mode === "near") {
       const o = this.orbit(), p = this.portrait(), r = nearHomeDist(p); this.yaw = snap90(o.yaw);
-      if (this.quarterCam?.locked) { if (this.quarterCam.saved) this.quarterCam.saved = { yaw: this.yaw, pitch: nearPitch(r, p) }; return true; }   // 건설 모드를 끝낼 때 이 각도로
       this.go(o, this.yaw, nearPitch(r, p), r, 0.5);
     } else this.tw = null;
     return true;
   }
   go(o, yaw, pitch, r, d) { this.tw = { t: 0, y0: o.yaw, dy: quarterDelta(o.yaw, yaw), p0: o.pitch, dp: pitch - o.pitch, r0: o.r, dr: r == null ? 0 : r - o.r, d }; if (this.quick()) this.step(1e9); }
-  /** ⟲(−1) ⟳(+1): 90° 돌리기(가까운 비스듬히 · 둘러보기에서만) */
+  /** ⟲(−1) ⟳(+1): 90° 돌리기(가까운 비스듬히에서만 — 둘러보기·건설 모드 똑같이) */
   turn(dir) {
-    if (!this.locked || this.quarterCam?.locked) return false;
+    if (!this.locked) return false;
     this.yaw = quarterNorm(snap90(this.yaw) + Math.sign(dir || 1) * Math.PI / 2);
     const o = this.orbit(); this.go(o, this.yaw, nearPitch(o.r, this.portrait()), null, NEAR_VIEW.turnSec); return true;
   }
@@ -113,14 +116,13 @@ export class ViewCam {
     this.place(r, tw.y0 + tw.dy * k, tw.p0 + tw.dp * k);
     if (tw.t >= 1) this.tw = null;
   }
-  /** 매 프레임(controls.update · quarterCam.tick 뒤). 건설 모드 쿼터뷰가 잡고 있으면 손대지 않음 */
+  /** 매 프레임(controls.update 뒤) */
   tick(now) {
     const dt = this.last === undefined ? 0 : Math.min(0.25, Math.max(0, (now - this.last) / 1000)); this.last = now;
-    if (this.quarterCam?.locked || this.quarterCam?.tween) { this.tw = null; return; }
     if (this.tw) { this.step(dt); return; }
     if (!this.locked) return;
     const o = this.orbit(), pitch = nearPitch(o.r, this.portrait()), dy = Math.abs(quarterDelta(o.yaw, this.yaw));   // 확대·축소에 따라 각도를 거리 곡선에 맞춤, 방향은 90° 자리 그대로
-    if (dy > 0.05) { this.go(o, this.yaw, pitch, null, NEAR_VIEW.turnSec); return; }   // 크게 어긋남(건설 모드를 끝내며 되돌아가는 중에 ⟲ ⟳ 누름 등): 순간이동 말고 부드럽게
+    if (dy > 0.05) { this.go(o, this.yaw, pitch, null, NEAR_VIEW.turnSec); return; }   // 크게 어긋남(누가 카메라를 돌려 놓음 등): 순간이동 말고 부드럽게
     if (dy > 1e-4 || Math.abs(o.pitch - pitch) > 1e-4) this.place(o.r, this.yaw, pitch);
   }
 }

@@ -1,7 +1,7 @@
 // 두 손가락 손짓(휴대폰): 한 손가락을 축으로 다른 손가락을 돌리면(두 손가락을 잇는 선이 돌아가면) 화면이 그만큼 돌고,
 // 손가락 사이를 벌리거나 오므리면 확대·축소, 두 손가락을 같이 위·아래로 끌면 위아래로 기울임(위로 = 수평선 쪽, 아래로 = 내려다보기).
 // (OrbitControls의 두 손가락은 끄고 이것이 맡음 — tools.applyControls에서 touches.TWO = null)
-// 건설 모드(lock = true, 고정 쿼터뷰)·가까운 비스듬히 시점에서는 돌리기·기울이기를 하지 않고, 두 손가락을 같이 끌면 화면이 옮겨짐(벌리기 확대는 그대로).
+// 가까운 비스듬히 시점(lock = true, 둘러보기·건설 모드 같음)에서는 돌리기·기울이기를 하지 않고, 두 손가락을 같이 끌면 화면이 옮겨짐(벌리기 확대는 그대로).
 // 대신 비틀기를 모아 45°를 넘으면 onTurn(±1)으로 90° 돌리기(viewCam.twistTurn) — 비틀어도 아무 반응이 없던 것.
 import * as THREE from "three";
 import { twistTurn } from "./viewCam.js";
@@ -31,7 +31,7 @@ export class TwoFinger {
   /** da: 손가락이 돈 각도(화면, 시계 방향 +) → 땅이 같은 방향으로 돌아 보이게 카메라를 반대로 돌림. zoom: 1보다 크면 멀어짐 */
   apply(da, zoom, dy = 0, dx = 0) {
     const t = this.controls.target, off = this.camera.position.clone().sub(t);
-    if (this.lock) {                                                                // 고정 쿼터뷰: 두 손가락 끌기 = 화면 옮기기(땅이 손가락을 따라옴)
+    if (this.lock) {                                                                // 잠긴 시점: 두 손가락 끌기 = 화면 옮기기(땅이 손가락을 따라옴)
       const dist = off.length(), wpp = 2 * dist * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) / Math.max(1, innerHeight);   // 화면 1px = 땅 몇 m
       const fwd = new THREE.Vector3(-off.x, 0, -off.z).normalize(), right = new THREE.Vector3(-fwd.z, 0, fwd.x), cosP = Math.max(0.25, off.y / Math.max(1e-6, dist));
       t.addScaledVector(right, -dx * wpp).addScaledVector(fwd, dy * wpp / cosP);
