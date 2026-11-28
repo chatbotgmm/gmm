@@ -455,7 +455,7 @@ export class UnitViews {
     this.frameNo = (this.frameNo || 0) + 1; this.casting = 0;                       // casting: 실제 그림자를 드리우는(밖에 나와 있는) 갈매미 수
     this.world.units.forEach((u, i) => {
       const v = this.views[i]; if (!v) return;                                     // 막 소환돼 아직 모습이 안 만들어진 갈매미
-      if (!v.ch || (v.form !== formOf(u) && !u.evoFx)) this.attach(v, u);          // 모델이 아직 없으면(이론상 불러오는 중 화면 뒤엔 없음) 올 때까지 안 그림 · 변신한 모습(연출 중이면 빛이 가장 밝을 때 evolveFx가 바꿈)
+      if (!v.ch || v.form !== formOf(u)) this.attach(v, u);                        // 모델이 아직 없으면 올 때까지 안 그림 · 변신하면 새 모습으로(월드가 연출의 빛이 가장 밝을 때 form을 바꿈)
       const { g, ch, pick } = v; g.visible = !u.insideBuildingId && !!ch;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));

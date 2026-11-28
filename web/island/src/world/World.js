@@ -61,6 +61,8 @@ import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells
 export const KEEP_OLD_NAMES = false;
 /** 변신 연출 길이(초): 빙글 → 흰 빛이 커짐 → 가장 밝을 때(절반) 모습이 바뀜 → 반짝 */
 export const EVO_FX_SECS = 2.2;
+/** 성향 → 한가할 때 쌓이는 자란 방식(느긋은 없음: 고르게 지내 기본으로 남기 쉬움) */
+const DISP_FREE_KEY = { sea: "sea", night: "night", craft: "craft", green: "green", shiny: "shiny", big: "big", timid: "timid" };
 
 export function placeTownBank(w, R = 16) {
   const def = BUILDINGS.bank, g = w.grid, B = g.box, mid = { x: (B.x0 + B.x1) / 2, z: (B.z0 + B.z1) / 2 }, ax0 = mid.x - Math.floor(def.footprint.w / 2), az0 = mid.z - Math.floor(def.footprint.d / 2);
@@ -256,7 +258,7 @@ export class World {
     switch (ev) {
       case "fish": if (a.u) this.noteGrowth(a.u, "sea", 2, job(a.u, "fisher")); break;
       case "beachcomb": this.noteGrowth(a.u, "sea", 1); break;
-      case "ate": if ((a.full ?? 0) >= 110) this.noteGrowth(a, "big", 0.5); break;   // 배가 부른데 더 먹음(먹보의 "한 그릇 더") · 누구나 먹는 끼니는 안 셈
+      case "ate": { const fb = a.fullBefore; a.fullBefore = null; if ((fb ?? 0) >= 80) this.noteGrowth(a, "big", 0.5); break; }   // 포만감 80 넘는데 더 먹음(먹보의 "한 그릇 더") · 누구나 먹는 끼니는 안 셈
       case "trade": this.noteGrowth(a.u, "shiny", 1, job(a.u, "merchant")); break;
       case "barter": this.noteGrowth(a.a, "shiny", 1); this.noteGrowth(a.b, "shiny", 1); break;
       case "stashSale": this.noteGrowth(a.u, "shiny", 1); break;
@@ -293,7 +295,9 @@ export class World {
       if (this.isNight && !asleep) this.noteGrowth(u, "night", st / 60);
       if (resting && !u.insideBuildingId && !this.units.some(o => o !== u && !o.insideBuildingId && Math.hypot(o.x - u.x, o.z - u.z) < 4)) this.noteGrowth(u, "alone", st / 60);
       if (u.insideBuildingId && !asleep && (this.air ?? 15) < 10) this.noteGrowth(u, "warm", st / 60);
-      if (u.swimming) this.noteGrowth(u, "sea", st / 10);
+      if (u.swimming) this.noteGrowth(u, "sea", st / 30);
+      const key = DISP_FREE_KEY[u.disp];                                         // 타고난 끌림: 한가할 때(쉬기·산책) 성향대로 지냄 → 그쪽이 조금씩 쌓임
+      if (key && !asleep && !u.insideBuildingId && [UnitState.Idle, UnitState.Wander, UnitState.Sit, UnitState.Swim, UnitState.Curious].includes(u.state)) this.noteGrowth(u, key, st / 60);
       if (u.evoSoon === day && !asleep && !u.insideBuildingId && this.skyRnd && (u.itchT = (u.itchT ?? 0) - st) <= 0) { u.itchT = 90; emote(u, "몸이 근질근질…", 2.4); }   // 전날 예고
     }
   }
@@ -511,10 +515,10 @@ export class World {
   eatFood(u) {
     if (this.economy && u.inv) {                                                     // 경제가 있으면 자기 가방에서(음식 +35, 물고기 +30)
       const k = u.inv.food > 0 ? "food" : u.inv.fish > 0 ? "fish" : null; if (!k) return false;
-      u.inv[k]--; u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + (k === "food" ? 35 : 30)); this.emit("ate", u); return true;
+      u.fullBefore = u.full ?? 80; u.inv[k]--; u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + (k === "food" ? 35 : 30)); this.emit("ate", u); return true;
     }
     if (this.res.food < 1) return false;
-    this.res.food--; u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 35); this.emit("ate", u); return true;
+    u.fullBefore = u.full ?? 80; this.res.food--; u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 35); this.emit("ate", u); return true;
   }
 
   // ---- 경제: 공식은행(발행)·시장(회수)·물물교환
@@ -1398,7 +1402,7 @@ export class World {
     if (!t.alive) return;
     t.hp -= who ? 3 / J.chopsNeeded(who) : 1; this.emit("treeHit", t);
     if (t.hp > 1e-6) return;
-    t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got; this.noteGrowth(who, "big", 1, who?.job === "lumberjack" ? "job" : "free");
+    t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got; this.noteGrowth(who, "big", 0.5, "job");   // 벌목은 모두가 돕는 일(helpJobs)이라 직업 일처럼 ×0.4
     this.emit("treeFell", { tree: t, dir: [t.x + 0.5 - who.x, t.z + 0.5 - who.z] }); this.notice(t.x + 0.5, t.z + 0.5, "tree", who);
     this.after(25 + this.rnd() * 15, () => { if (t.removed) return; t.alive = true; t.hp = 3; this.emit("treeGrow", t); });   // 그사이 치운 나무(꾸미기)는 되살리지 않음
   }
@@ -1407,7 +1411,7 @@ export class World {
     o.hp--; this.emit("oreHit", o);
     if (o.hp > 0) return;
     o.alive = false; const got = who ? J.stoneYield(who) : 2; this.gain(who, "stone", got); o.lastYield = got;
-    o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron); this.noteGrowth(who, "big", 1, who?.job === "miner" ? "job" : "free");
+    o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron); this.noteGrowth(who, "big", 0.5, "job");
     this.emit("oreBroke", o);
     this.after(20 + this.rnd() * 12, () => { if (o.removed) return; o.alive = true; o.hp = 3; this.emit("oreGrow", o); });
   }

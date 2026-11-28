@@ -26,7 +26,7 @@ import { bankAppHtml, printAsk, printPick } from "./monView.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
-import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
+import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge, formLineOf, evoBoxHtml, FORM_ICONS } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
 import { readGridPref, saveGridPref } from "./gridView.js";
@@ -653,7 +653,7 @@ export class Hud {
       return `<g class="relnode" data-gull="${escHtml(nd.u.unitId)}"><circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${(R + 7).toFixed(1)}" fill="transparent"/>` +
       `<circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${R.toFixed(1)}" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
       `<text class="ico" x="${nd.x.toFixed(1)}" y="${nd.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central"${R < 14 ? ` font-size="${Math.round(R * 1.1)}"` : ""}>${JOBS[nd.u.job]?.icon ?? escHtml(nd.name[0])}</text>` +
-      (label ? `<text x="${nd.x.toFixed(1)}" y="${(nd.y + R + 14).toFixed(1)}" text-anchor="middle">${escHtml(nd.name)}</text>` : "") + `</g>`; }).join("");
+      (label ? `<text x="${nd.x.toFixed(1)}" y="${(nd.y + R + 14).toFixed(1)}" text-anchor="middle">${FORM_ICONS[nd.u.form] ?? ""}${escHtml(nd.name)}</text>` : "") + `</g>`; }).join("");
     let text;
     if (us.length === 1) text = `<p class="dim">${escHtml(us[0].name)} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
     else if (sel < 0) text = `<p class="dim av-tap">👆 갈매미를 누르면 누구와 친한지 보여 줘요</p>`;
@@ -1060,7 +1060,17 @@ export class Hud {
     const more = k.more = el("details", "more imore"), sum = el("summary"); k.moreN = el("span", "more-n"); sum.append(el("span", "more-t", "자세히 보기"), k.moreN);
     k.moreB = el("div", "more-b"); more.append(sum, k.moreB); more.open = !!this.infoMoreOpen;
     more.addEventListener("toggle", () => { this.infoMoreOpen = more.open; this.infoMoreHtml = null; if (more.open) this.syncInfo(); });
-    body.append(doing, needs, chips, more);
+    // 모습·성향 줄 + 성장 칸(evolve.js: 변신 전 = 성향 ??? · 관찰 노트 · 요즘 모습 · 예고 · 성향 맞히기 칩) · 이름을 누르면 이름 바꾸기
+    k.form = el("div", "iform"); k.evo = el("div", "ievo");
+    k.ren = el("form", "iren"); k.ren.hidden = true; k.renIn = el("input"); k.renIn.maxLength = 8; k.renIn.setAttribute("aria-label", "새 이름(1~8자)"); k.renIn.placeholder = "새 이름(1~8자)";
+    const renOk = el("button", "", "확인"), renNo = el("button", "ghost", "취소"); renOk.type = "submit"; renNo.type = "button"; k.renWhy = el("span", "dim"); k.ren.append(k.renIn, renOk, renNo, k.renWhy);
+    k.ren.onsubmit = e => { e.preventDefault(); const u = this.follow; if (!u) return; const r = this.world.renameGull(u.unitId, k.renIn.value);
+      if (!r.ok) { cardPut(k.renWhy, r.reason); return; } k.ren.hidden = true; this.status(`🏷 이제 ${r.name}예요`, { kind: "good" }); this.setWorld(this.world); this.syncInfo(); };
+    renNo.onclick = () => { k.ren.hidden = true; };
+    k.name.classList.add("iname"); k.name.tabIndex = 0; k.name.setAttribute("role", "button"); k.name.dataset.tip = "이름을 누르면 바꿀 수 있어요";
+    k.name.onclick = () => { const u = this.follow; if (!u) return; k.ren.hidden = !k.ren.hidden; if (!k.ren.hidden) { k.renIn.value = u.name; cardPut(k.renWhy, ""); k.renIn.focus(); k.renIn.select(); } };
+    k.evo.onclick = e => { const b = e.target.closest?.("[data-guess]"), u = this.follow; if (!b || !u) return; if (this.world.guessDisp(u.unitId, b.dataset.guess)) { this.evoHtml = null; this.syncInfo(); this.status("🎯 변신하는 날 맞았는지 알려 줄게요", { kind: "info" }); } };
+    body.append(k.ren, k.form, doing, k.evo, needs, chips, more);
     // 행동 줄: 관계 먼저, 그다음 선물 · 쓰다듬기 · 집 보기
     k.rel = el("button", "", "💞 관계"); k.rel.type = "button"; k.rel.dataset.tip = "이 갈매미의 친구 사이를 관계도에서 봐요";
     k.goHome = el("button", "", "🏠 집 보기"); k.goHome.type = "button"; k.goHome.dataset.tip = "이 갈매미의 집으로 화면을 옮겨요";
@@ -1080,7 +1090,7 @@ export class Hud {
     const open = this.infoOpen, job = JOBS[u.job], full = u.full ?? 80, sat = u.sat ?? 50;
     const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : stateLabelOf(u);
     if (c.classList.contains("mini") === open) c.classList.toggle("mini", !open);
-    cardPut(k.name, u.name); cardPut(k.job, `${job.icon} ${job.name}`); cardPut(k.hearts, bondHearts(u.bond));
+    cardPut(k.name, `${u.title ? u.title + " " : ""}${u.name}`); cardPut(k.job, `${job.icon} ${job.name}`); cardPut(k.hearts, bondHearts(u.bond));
     const stage = BOND_STAGES[bondStage(u.bond)].name; if (k.hearts.title !== stage) k.hearts.title = stage;
     const exp = String(open); if (k.tog.getAttribute("aria-expanded") !== exp) { k.tog.setAttribute("aria-expanded", exp); k.tog.setAttribute("aria-label", open ? "카드 접기" : "카드 펼치기"); k.tog.dataset.tip = open ? "접기" : "펼치기"; }   // 카드는 아래에 붙어 있어 위로 펼쳐지고 아래로 접힘
     const homeB = u.home && w.buildings.get(u.home); if (k.goHome.hidden !== !homeB) k.goHome.hidden = !homeB;
@@ -1090,6 +1100,8 @@ export class Hud {
     cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} · ${chronoLabel(u)}`);   // 체질: 🌅 아침형(밤에 더 빨리 지침) · 🌙 야행성(낮에)
     const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : chronoNote(u, w);   // 급한 것(게으름·배고픔)이 없으면 체질 영향("밤이라 더 빨리 지쳐요")
     cardPut(k.doing, doing);   /* 펼친 카드는 🤧·💸 칩과 체온 줄이 따로 알림 */ cardPut(k.note, note ? ` · ${note}` : "");
+    cardPut(k.form, formLineOf(u));
+    const eh = evoBoxHtml(u, w); if (eh !== this.evoHtml || k.evo.dataset.u !== u.unitId) { this.evoHtml = eh; k.evo.dataset.u = u.unitId; k.evo.innerHTML = eh; } if (k.evo.hidden !== !eh) k.evo.hidden = !eh;
     const bt = bodyTempOf(u), tp = k.temp; if (tp.row.hidden !== !bt) tp.row.hidden = !bt;
     if (bt) { const wd = `${bt.pct}%`; if (tp.fill.style.width !== wd) tp.fill.style.width = wd; cardPut(tp.num, bt.text); cardPut(tp.label, `${bt.tone === "cold" ? "🥶" : bt.tone === "hot" ? "🥵" : ""}체온`); tp.row.title = bt.word ? `체온 ${bt.text} · ${bt.word}` : `체온 ${bt.text}`;
       if ((tp.row.dataset.tone || null) !== bt.tone) { if (bt.tone) tp.row.dataset.tone = bt.tone; else delete tp.row.dataset.tone; } }

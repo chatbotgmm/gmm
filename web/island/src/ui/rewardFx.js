@@ -69,7 +69,7 @@ export function rewardOf(ev, a, world) {
       if (grew) bits.push(`이렇게 자랐어요: ${GROWTH_LABEL[grew]}`);
       if (a.calling) bits.push("천직 ✓"); if (a.first && !a.stayed) bits.push("📖 도감에 새 모습!"); if (a.guessHit) bits.push("🎯 성향을 맞혔어요! 도장 +1");
       if (a.stayed) return { tier: "big", icon: "🪨", kick: "✨ 변신의 날 ✨", title: `${josa(u.name, "은", "는")} 든든한 기본 갈매미!`, line: [`변신하지 않고 단단해졌어요 · 칭호 "든든한" · ♥ 정 +3`, ...bits].join(" · "), to: null, snd: "fanfare", key: `evolve:${u.unitId}` };
-      return { tier: "big", icon: FORM_EMOJI[a.to] || "🌟", kick: "🌟 변신! 🌟", title: `${josa(u.name, "이", "가")} ${a.to} 갈매미가 됐어요!`, line: [...bits, `희귀도 ${rarityName(u.rarity)}`].join(" · "), to: null, snd: "fanfare", key: `evolve:${u.unitId}` }; }
+      return { tier: "big", icon: FORM_EMOJI[a.to] || "🌟", kick: "🌟 변신! 🌟", title: `${josa(u.name, "이", "가")} ${a.to} 갈매미가 됐어요!`, line: [...bits, `✦ ${rarityName(u.rarity)} 등급`].join(" · "), to: null, snd: "fanfare", key: `evolve:${u.unitId}` }; }
     case "giantMove": { const u = a.u; if (!u) return null;
       return { tier: "medium", icon: "🗿", title: `${josa(u.name, "이", "가")} 자이언트의 집으로!`, line: "딱 맞는 집으로 이사했어요", to: null, snd: "chime", key: `giantMove:${u.unitId}` }; }
     case "wishDone": { const u = a.u; if (!u) return null;

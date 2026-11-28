@@ -3,7 +3,7 @@
 // 서버(island-save.js 판 3): GET /my/api/island(목록) · GET /my/api/island/0 · POST /my/api/island/0 {baseRev, data, savedAt, summary, replace}
 //   · POST …/0/restore {baseRev} · POST …/0/delete {confirm:"지우기", baseRev}. 머리글 x-gmm: 1, 쿠키 gmm_s(같은 출처).
 // 켜는 곳: cloudWhere(location)(같은 출처 /village3d/)이고 CompressionStream이 있을 때. 첫 GET이 404·네트워크 실패면 끈다(그 뒤 요청 없음).
-import { CLOUD_META_KEY, CLOUD_EVERY_MS, CLOUD_API, CLOUD_LOGIN, HIDE_GAP_MS, RETRY_MAX, ISLAND_B64_LIMIT, CLOUD_AWAY_MIN_MS, emptyMeta, metaFromSave, isPristine, decideSync, dueUpload, afterPush, overwriteRequest, afterTombstone, checkPulled, writeWithBackup, awayFor, afterGrant, withGrant, loginNotice, returnCookie, summaryOf, cloudWhere, keepaliveOk } from "./cloudSync.js";
+import { CLOUD_META_KEY, CLOUD_EVERY_MS, CLOUD_API, CLOUD_LOGIN, HIDE_GAP_MS, RETRY_MAX, ISLAND_B64_LIMIT, CLOUD_AWAY_MIN_MS, emptyMeta, metaFromSave, isPristine, decideSync, dueUpload, afterPush, overwriteRequest, afterTombstone, checkPulled, gullDrop, writeWithBackup, awayFor, afterGrant, withGrant, loginNotice, returnCookie, summaryOf, cloudWhere, keepaliveOk } from "./cloudSync.js";
 
 /** gzip + base64(브라우저 CompressionStream). 없으면 null */
 export async function gzipB64(text, CS = globalThis.CompressionStream) {
@@ -194,6 +194,8 @@ export class CloudSaver {
       catch { this.setMode("error", { err: "계정 섬을 읽을 수 없어요. 이 기기 섬은 그대로 둬요." }); return "bad"; }
       const c = checkPulled(j, this.o.gridW);
       if (!c.ok) { this.setMode("error", { err: c.why }); return "bad"; }
+      { let local = null; try { local = JSON.parse(this.o.storage?.getItem?.(this.o.saveKey) || "null"); } catch {}   // 갈매미가 크게 줄어든 계정 섬(옛 판 기기가 덮어씀?)은 묻고 받음
+        const ask = this.o.confirm ?? globalThis.confirm; if (gullDrop(local, j) && typeof ask === "function" && !ask(`계정 섬의 갈매미가 ${local.units.length}마리 → ${j.units.length}마리로 줄었어요. 다른 기기가 예전 판일 수 있어요. 그래도 계정 섬을 받을까요? (취소하면 이 기기 섬을 그대로 둬요)`)) { this.setMode("paused", { conflict: null }); return "kept"; } }
       let w; try { w = this.o.fromJSON(j); } catch { this.setMode("error", { err: "계정 섬을 열 수 없어요. 이 기기 섬은 그대로 둬요." }); return "bad"; }
       const wr = writeWithBackup(this.o.storage, this.o.saveKey, text);
       if (!wr.ok) { this.setMode("error", { err: "이 기기에 쓸 자리가 없어 계정 섬을 받지 못했어요." }); return "bad"; }

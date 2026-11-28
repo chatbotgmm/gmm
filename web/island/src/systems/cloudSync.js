@@ -101,9 +101,19 @@ export function checkPulled(j, gridW) {
   if (j.version === 3 ? !gridV3Ok(j.grid) : j.grid?.w !== gridW) return { ok: false, why: "계정 섬이 예전 판(지도 크기가 다름)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
   if (!j.wild) return { ok: false, why: "계정 섬이 예전 판(작은 섬)이라 열 수 없어요. 이 기기 섬은 그대로 둬요." };
   if (!Array.isArray(j.buildings) || !Array.isArray(j.units)) return { ok: false, why: "계정 섬 저장이 망가져 열 수 없어요." };
+  if (!clientOk(j)) return { ok: false, why: "계정 섬이 더 새 판에서 저장됐어요. 게임을 새로 고침해 주세요. 이 기기 섬은 그대로 둬요." };
   return { ok: true };
 }
 
+/** 받은 섬의 갈매미가 이 기기 섬보다 크게 줄었나(옛 판 기기가 새 저장(gulls: 1)을 열어 갈매미를 잃고 올렸을 때 덮어쓰기 전에 묻기).
+ *  local·pulled: 저장 JSON. 이 기기 갈매미 2마리 이상인데 받은 섬이 0마리이거나 절반 아래로 줄면 true */
+export function gullDrop(local, pulled) {
+  const a = Array.isArray(local?.units) ? local.units.length : 0, b = Array.isArray(pulled?.units) ? pulled.units.length : 0;
+  return a >= 2 && (b === 0 || b < a / 2);
+}
+/** 이 저장을 열려면 필요한 판(minClient): 새 저장은 "gulls1" — 이 판은 안다 */
+export const KNOWN_CLIENT = new Set(["gulls1"]);
+export const clientOk = j => !j?.minClient || KNOWN_CLIENT.has(j.minClient);
 /** 받은 섬을 이 기기에 쓰기(B4-2): .bak은 따로 try. .bak이 실패해도(한도 초과 등) 본 저장은 시도하고,
  *  본 저장이 실패하면 예전 섬은 그대로 남는다(setItem 실패는 기존 값을 지우지 않음).
  *  storage: localStorage 같은 것. 반환 {ok, bak} */

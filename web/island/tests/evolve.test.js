@@ -255,3 +255,10 @@ test("옛 저장 옮기기: 이름 = 모습이던 저장(u1~u9 · 친구 이름 
   assert.equal(again.renamed, null, "옮기기는 한 번만");
   void base;
 });
+
+test("다른 기기 안전: 받은 계정 섬의 갈매미가 크게 줄면 묻기(gullDrop) · 새 판 표시(minClient)는 이 판이 앎", async () => {
+  const CS = await import("../src/systems/cloudSync.js");
+  const u = n => ({ units: Array.from({ length: n }, () => ({})) });
+  assert.equal(CS.gullDrop(u(5), u(0)), true); assert.equal(CS.gullDrop(u(6), u(2)), true); assert.equal(CS.gullDrop(u(6), u(4)), false); assert.equal(CS.gullDrop(u(1), u(0)), false);
+  assert.equal(CS.clientOk({ minClient: "gulls1" }), true); assert.equal(CS.clientOk({}), true); assert.equal(CS.clientOk({ minClient: "gulls9" }), false);
+});

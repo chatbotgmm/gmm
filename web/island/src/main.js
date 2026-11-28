@@ -64,6 +64,7 @@ import { stepGridLines } from "./render/gridLines.js";
 import { gridShown } from "./ui/gridView.js";
 import { loadCharacterSet, loadCharacter, loadTools, playAnim, WALK_SCALE, RUN_SCALE, loadProgress } from "./render/characters.js";
 import { GullPool, loadingView, failReason } from "./render/gullLoad.js";
+import { EvolveFx } from "./render/evolveFx.js";
 import { installCloud } from "./ui/cloudView.js";
 import { RewardView } from "./ui/rewardView.js";
 import { rewardOf, REWARD_EVENTS } from "./ui/rewardFx.js";
@@ -106,6 +107,7 @@ const daylight = new Daylight({ scene, renderer, sun, hemi, water, clouds, skyTe
 const toon = new Toon(scene); let lastToon = 0;
 // 계절·날씨: 계절은 기기 날짜(설정에서 바꿔 볼 수 있음), 날씨는 마을 안에서 바뀜 → 비·눈·번개·땅 색
 const weatherViews = new WeatherViews(scene, daylight), skyShow = new SkyShow(scene);
+const evolveFx = new EvolveFx(scene);                                                    // 🌟 변신 연출(빛 공 · 반짝이, render/evolveFx.js)
 const storyFx = new StoryFx({ scene, daylight, camera });                                  // 🗝 메인 스토리 장면: 등대 불(꺼짐·다시 켜짐) · 수평선 깜빡임 · 엔딩 연출(render/storyFx.js)   // + 드문 하늘(무지개·유성우)
 const festaView = new FestaView(scene);                                           // 축제 색종이
 let seasonPick = null;                                                            // null = 실제 날짜
@@ -204,6 +206,7 @@ function mount(w) {
   chunks = new GroundChunks(worldRoot, view); chunks.sync(); stream = new ChunkStream(worldRoot, chunks, view);   // 바깥 땅 조각은 보는 곳 둘레만 올리고 내림
   waterWin = new WaterWindow(water, view, waterSize()); waterWin.update(controls.target, true); world.on("ground", () => { waterDirty = true; });   // 물 깊이 창(얕은 물빛·물거품): 보는 곳을 따라감
   buildingViews = new BuildingViews(worldRoot, world, overlay);
+  world.maxGulls = quality.cfg.maxGulls ?? 20;                                  // 갈매미 상한은 화질 설정(population.js)
   unitViews = new UnitViews(worldRoot, world, charPool); unitViews.setShadowDist(quality.cfg.shadows ? quality.cfg.gullShadowDist : 0);
   lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
   sparkleView?.dispose(); sparkleView = new SparkleView(worldRoot);             // ✨ 반짝이(world.sparkles) · 주운 것은 위로 떠오르며 사라짐
@@ -585,6 +588,7 @@ function frameBody() {
   keyCamera(dt);
   unitViews.sync(ready ? dt * steps : dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt, controls.target);
+  evolveFx.update(world, dt);
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
   sparkleEdge.update(dt, ready && tools.mode === "view" && !roomView.isOpen, edgeBox);
@@ -637,7 +641,7 @@ const seasonText = () => seasonPick ? SEASONS[seasonPick].name : `실제 날짜(
 hud.onSeasonMode = to => { seasonPick = to !== undefined && SEASON_PICKS.includes(to) ? to : SEASON_PICKS[(SEASON_PICKS.indexOf(seasonPick) + 1) % SEASON_PICKS.length]; world.setSeason(seasonNow()); return seasonText(); };
 hud.setSeasonLabel(seasonText());
 hud.settingNow = () => ({ season: seasonPick || "real", time: daylight.mode, mult: daylight.mult, toon: toon.style, edition: edition.edition, speed: edition.speed });   // 설정 고르기 칸의 ✓
-hud.onQuality = mode => { quality.set(mode); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
+hud.onQuality = mode => { quality.set(mode); world.maxGulls = quality.cfg.maxGulls ?? 20; hud.setSummon(world); hud.status(`그래픽: ${quality.cfg.name} · 갈매미 모델 정밀도는 다음에 열 때부터`); return quality.mode; };
 hud.setQuality(quality.mode);
 requestAnimationFrame(frame);
 
