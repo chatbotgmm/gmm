@@ -5,6 +5,7 @@
 //  · 톡 터뜨리면: 기억 하나로 잠꼬대 한 줄 + 좋아하는 것(PERSONA.likes) 또는 꿈에서 본 내일 소원(u.dreamWish → World.makeWish가 먼저 고름).
 //  · 보상은 말풍선·알림 글뿐(돈·정·재미를 바꾸지 않음). 월드 난수(rnd·wrnd)를 쓰지 않음 → 마을 진행 순서가 그대로.
 import { PERSONA, CLOTHES } from "../data/catalog.js";
+import { personaOf } from "./evolve.js";
 import { newsDay, NEWS_DAY_SECS } from "./news.js";
 import { WISHES, wishText } from "./wishes.js";
 import { GIFT_CAT_NAME, BOND_STAGES } from "./bond.js";
@@ -71,15 +72,15 @@ const DREAM_TALK_EMPTY = ["…zZ… 바다 냄새…", "음냐… 구름 위를 
 export function dreamWishFor(world, u) {
   if (world.wishes?.some(x => x.unitId === u.unitId && x.id !== "festival")) return null;   // 이미 빌고 있는 소원이 있으면 미리 보기 없음
   const cands = WISHES.filter(d => d.id !== "festival" && !world.wishes?.some(x => x.id === d.id) && d.ok(world, u));
-  return cands.length ? dreamPick(cands, `${u.name}|${newsDay(world.time)}`) : null;
+  return cands.length ? dreamPick(cands, `${u.unitId}|${newsDay(world.time)}`) : null;
 }
 
 /** 방울을 터뜨린 결과: { talk: 잠꼬대, like: 좋아하는 갈래 이름|null, wish: { id, icon, text }|null, line: 알림 줄 글 }
  *  wish가 있으면 u.dreamWish = { id, t }로 적어 둠(World.makeWish가 먼저 고름). n = 그날 몇째 방울(0부터): 첫 방울은 소원, 둘째는 좋아하는 것을 먼저 */
 export function dreamTalk(world, u, n = 0) {
-  const time = world.time || 0, mem = freshMemories(u, time), key = `${u.name}|${newsDay(time)}|${n}`;
+  const time = world.time || 0, mem = freshMemories(u, time), key = `${u.unitId}|${newsDay(time)}|${n}`;
   const talk = mem.length ? dreamPick(DREAM_TALK_WRAP, key)(mem[n % mem.length].f) : dreamPick(DREAM_TALK_EMPTY, key);
-  const likes = (PERSONA[u.name] || {}).likes || [], like = likes.length ? GIFT_CAT_NAME[dreamPick(likes, key)] ?? null : null;
+  const likes = personaOf(u).likes || [], like = likes.length ? GIFT_CAT_NAME[dreamPick(likes, key)] ?? null : null;
   const wd = n % 2 === 0 || !like ? dreamWishFor(world, u) : null;
   let wish = null;
   if (wd) { wish = { id: wd.id, icon: wd.icon, text: wishText(wd, world, u, { base: wd.base ? wd.base(world, u) : world.units.length }) }; u.dreamWish = { id: wd.id, t: time }; }

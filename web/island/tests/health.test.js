@@ -6,6 +6,7 @@ import { seededRandom } from "../src/util.js";
 import { BUILDINGS } from "../src/data/catalog.js";
 import * as CLIM from "../src/world/climate.js";
 import * as CH from "../src/units/chrono.js";
+import { newsFor } from "../src/world/news.js";
 
 /** 넓은 섬 + 기본 갈매미(첫 집 주인) · 낮 · 겨울 날씨 고정 */
 function winterVillage(seed = 3, weather = "snow", snow = 1) {
@@ -206,7 +207,7 @@ test("당번 의사(world.setDoctor): 플레이어가 마을 갈매미를 정하
   const { w, u } = winterVillage(13, "clear", 0); const doc = w.addUnitByName("목수"); for (const o of w.units) { o.full = 90; o.needs.energy = 90; }
   const cl = placeNear(w, "clinic", u.x, u.z);
   assert.equal(w.setDoctor("nope", doc.unitId).ok, false); assert.equal(w.setDoctor(cl.id, "nobody").ok, false);
-  const r = w.setDoctor(cl.id, doc.unitId); assert.equal(r.ok, true); assert.equal(cl.doctor, "목수"); assert.equal(w.dutyClinic(doc), cl); assert.equal(w.canEnter(doc, cl), true, "당번은 의원에 들어감");
+  const r = w.setDoctor(cl.id, doc.unitId); assert.equal(r.ok, true); assert.equal(cl.doctor, "u9"); assert.equal(w.dutyClinic(doc), cl); assert.equal(w.canEnter(doc, cl), true, "당번은 의원에 들어감");
   assert.equal(w.newsLog.at(-1).text, "목수가 일반병원 당번 의사가 됐어요");
   u.sick = { kind: "cold", left: 300, med: false }; u.coins = 20; u.state = "Idle"; u.timer = 0; doc.state = "Idle"; doc.timer = 5; doc.coins = 0;
   const v0 = w.bank.vault, healed = []; w.on("healed", e => healed.push(e)); let docIn = false, docOut = false, med = null;
@@ -219,7 +220,7 @@ test("당번 의사(world.setDoctor): 플레이어가 마을 갈매미를 정하
   assert.equal(u.coins, 20 - 3 - 4, "진료비 3 + 약 4"); assert.equal(doc.coins, 2, "의사 품삯 2"); assert.equal(Math.round(w.bank.vault - v0), 3 + 4 - 2, "금고 +5"); assert.ok(docOut, "환자가 없으면 나옴");
   assert.equal(w.newsLog.some(n => n.text === "기본이 목수 선생님 덕분에 감기가 다 나았어요"), true);
   // 당번 비우기 · 다른 의원 당번이 되면 앞 의원은 풀림
-  const cl2 = placeNear(w, "clinic", u.x + 8, u.z + 8); w.setDoctor(cl2.id, "목수"); assert.equal(cl.doctor, null); assert.equal(cl2.doctor, "목수");
+  const cl2 = placeNear(w, "clinic", u.x + 8, u.z + 8); w.setDoctor(cl2.id, "u9"); assert.equal(cl.doctor, null); assert.equal(cl2.doctor, "u9");
   assert.equal(w.setDoctor(cl2.id, null).ok, true); assert.equal(cl2.doctor, null);
 });
 
@@ -241,7 +242,7 @@ test("저장·불러오기: 병·면역·당번 의사·병 기록 · 예전 저
   w.setDoctor(cl.id, doc.unitId); u.sick = { kind: "cold", left: 123.4, med: true }; doc.immune = 250.4; w.makeSick(w.units[1]) ;
   const j = JSON.parse(JSON.stringify(w.serialize())); const back = World.fromJSON(j, seededRandom(1));
   const bu = back.units.find(o => o.name === "기본"), bd = back.units.find(o => o.name === "목수");
-  assert.deepEqual(bu.sick, { kind: "cold", left: 123, med: true }); assert.equal(bd.immune, 250); assert.equal(back.buildings.get(cl.id).doctor, "목수"); assert.equal(back.healthStats.sick, w.healthStats.sick);
+  assert.deepEqual(bu.sick, { kind: "cold", left: 123, med: true }); assert.equal(bd.immune, 250); assert.equal(back.buildings.get(cl.id).doctor, "u9"); assert.equal(back.healthStats.sick, w.healthStats.sick);
   const o = JSON.parse(JSON.stringify(j)); for (const x of o.units) { delete x.sick; delete x.immune; } delete o.healthStats; for (const b of o.buildings) delete b.doctor; for (const e of o.bank.ledger) delete e.clinic;
   const old = World.fromJSON(o, seededRandom(1)); assert.ok(old.units.every(x => !x.sick && !x.immune)); assert.equal(old.healthStats.sick, 0); assert.equal(old.buildings.get(cl.id).doctor, null); assert.equal(old.bank.ledger.every(e => e.clinic === 0), true);
   const gone = JSON.parse(JSON.stringify(j)); gone.units = gone.units.filter(x => x.name !== "목수"); assert.equal(World.fromJSON(gone, seededRandom(1)).buildings.get(cl.id).doctor, null);
@@ -313,4 +314,12 @@ test("빈도 상한: 눈 오는 겨울 낮 9마리 · 굴림이 늘 걸려도(hr
   };
   const a = run(true); assert.equal(a.sick, 0, `옷 다 입음: 걸림 ${a.sick}`); assert.deepEqual([...a.chilly], ["미니"], "체감 −1 + 12 = 11°C → 추운 날 아님(작은 몸 미니만 −2 → 9°C)");
   const b = run(false); assert.ok(b.sick >= 1 && b.most <= 3, `옷 없음: 걸림 ${b.sick} · 최대 동시 ${b.most}`);
+});
+
+test("당번 비우기 소식은 갈매미 이름으로(b.doctor는 unitId라 'u9 선생님'이 되지 않게)", () => {
+  const { w, u } = winterVillage(13, "clear", 0); const doc = w.addUnitByName("목수"); doc.name = "앵두";
+  const cl = placeNear(w, "clinic", u.x, u.z);
+  assert.equal(w.setDoctor(cl.id, doc.unitId).ok, true);
+  const ev = []; w.on("doctor", e => ev.push(e)); assert.equal(w.setDoctor(cl.id, null).ok, true);
+  assert.equal(ev[0].was, "앵두"); assert.equal(newsFor("doctor", ev[0], w).text, "앵두 선생님의 일반병원 당번이 끝났어요");
 });

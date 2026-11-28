@@ -13,6 +13,7 @@ import { residentsText } from "../world/homes.js";
 import { furnitureModel } from "./furniture.js";
 import { Toon } from "./toon.js";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { formOf } from "../world/evolve.js";
 import { roomLight, ROOM_DARK_WHY } from "./roomLight.js";
 
 // 마을 가방 가구가 어디서 왔는지(가구 버튼 설명용): 도장 가게 · 계절 축제 · 수족관 기념 선물 · 낚시
@@ -304,7 +305,8 @@ export class RoomView {
   gullModel(u) {
     let v = this.gulls.get(u.unitId);
     if (!v) { v = { root: null }; this.gulls.set(u.unitId, v); }
-    if (!v.root) { const ch = this.chars?.get?.(u.name); if (ch) this.useModel(v, ch); }
+    if (v.root && v.form !== formOf(u)) { v.root.parent?.remove(v.root); v.blanket?.parent?.remove(v.blanket); v.root = null; }   // 변신했으면 새 모습으로
+    if (!v.root) { const ch = this.chars?.get?.(formOf(u)); if (ch) { this.useModel(v, ch); v.form = formOf(u); } }
     return v;
   }
   useModel(v, ch) {

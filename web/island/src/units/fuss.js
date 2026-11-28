@@ -13,7 +13,8 @@ import { PERSONA } from "../data/catalog.js";
 import { UnitState } from "../data/types.js";
 import { seededRandom } from "../util.js";
 import { emote, setIdle } from "./unitBrain.js";
-import { sleepBelow, isNocturnal } from "./chrono.js";
+import { sleepBelow, isNocturnal, nightOwl } from "./chrono.js";
+import { personaOf, addNote } from "../world/evolve.js";
 import { isAsleep } from "../world/dreams.js";
 import { newsDay } from "../world/news.js";
 import { PAVED } from "../world/roads.js";
@@ -122,12 +123,14 @@ export class Fuss {
     if (this.rnd() >= FUSS_CHANCE) return null;
     const cands = [], at = this.near?.();                                        // 화면 중심(격자 좌표, main.js) — 없으면(시험) 섬 전체
     for (const u of w.units) {
-      if (!fussAwake(u, w) || (at && Math.hypot(u.x - at.x, u.z - at.z) > FUSS_SEE)) continue; const p = PERSONA[u.name] || {};
+      if (!fussAwake(u, w) || (at && Math.hypot(u.x - at.x, u.z - at.z) > FUSS_SEE)) continue; const p = personaOf(u) || {};   // 소심 성향인 기본도 바위 위로(단서)
       if (p.timid && w.units.some(o => o !== u && !o.insideBuildingId && (o.scale || 1) > 1.5 && Math.hypot(o.x - u.x, o.z - u.z) < FUSS_RANGE) && perchRock(w, u, u)) cands.push(["perch", u]);
-      if (isNocturnal(u) && w.isNight === false) cands.push(["doze", u]);
+      if (nightOwl(u) && w.isNight === false) cands.push(["doze", u]);   // 밤 성향인 기본도 낮에 졺(단서)
     }
     if (!cands.length) return null;
-    const [kind, u] = cands[Math.floor(this.rnd() * cands.length)]; return this.start(kind, u);
+    const [kind, u] = cands[Math.floor(this.rnd() * cands.length)], r = this.start(kind, u);
+    if (r && !u.evo && u.disp) addNote(u, kind === "perch" ? "큰 갈매미를 피해 바위로 숨었어요" : "낮에 길에서 꾸벅 졸았어요");   // 변신 전이면 소동도 단서
+    return r;
   }
 
   /** 매 프레임(월드를 돌린 뒤·unitControl.update 뒤). dt = 이 프레임에 흐른 마을 시간(소동 수명·살펴보기), real = 실제 초(흔들기·어질어질 — 느린 기기에서도 2초) */

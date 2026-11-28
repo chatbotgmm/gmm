@@ -204,23 +204,24 @@ test("헤엄: 물가로 가서 얕은 물에서 헤엄치다 땅으로 올라오
   void real;
 });
 
-test("소환: 빈 섬에서 시작해 한 마리씩 무작위로(겹치지 않게) 종류 수만큼, 건축 갈매미가 없으면 못 지음, 저장하면 소환한 갈매미만", () => {
+test("소환: 빈 섬(공식은행 없음)에서 한 마리씩 UNGATED_CAP마리까지 모두 기본 모습·이름은 모두 다름, 건축 갈매미가 없으면 못 지음, 저장하면 소환한 갈매미만", () => {
   const w = World.create(7, seededRandom(8), { empty: true });
   assert.equal(w.units.length, 0);
   assert.equal(w.placeBuilding("house", 38, 26, 0).ok, false, "갈매미가 없으면 못 지음");
   const added = []; w.on("unitAdded", u => added.push(u.name));
-  const N = UNITS.length;
-  for (let i = 0; i < N; i++) { const u = w.summon(); assert.ok(u); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z))); }
-  assert.equal(w.summon(), null, "다 모이면 더 안 옴");
-  assert.equal(new Set(added).size, N, "겹치지 않음");
+  const N = 9;
+  for (let i = 0; i < N; i++) { const u = w.summon(); assert.ok(u); assert.equal(u.form, "기본"); assert.ok(w.grid.isWalkable(Math.floor(u.x), Math.floor(u.z))); }
+  assert.equal(w.summon(), null, "상한이면 더 안 옴");
+  assert.equal(new Set(added).size, N, "이름이 겹치지 않음");
   const w2 = World.create(7, seededRandom(8), { empty: true });
-  let u = w2.summon(); while (u.job === "builder") { w2.units.length = 0; u = w2.summon(); }   // 건축가가 아닌 갈매미 하나
+  w2.addUnitByName("미니");                                                   // 건축가가 아닌 갈매미 하나
   assert.equal(w2.placeBuilding("house", 38, 26, 0).reason, "건축 갈매미가 있어야 지을 수 있어요. 🥚 소환으로 불러요");
-  while (!w2.units.some(o => o.job === "builder")) w2.summon();
+  assert.equal(w2.summon().job, "builder", "건축가가 없으면 건축가부터");
   assert.equal(w2.placeBuilding("house", 38, 26, 0).ok, true, "건축 갈매미가 오면 지을 수 있음");
   const names = w2.units.map(o => o.name), back = World.fromJSON(JSON.parse(JSON.stringify(w2.serialize())));
   assert.deepEqual(back.units.map(o => o.name).sort(), names.sort());
 });
+
 
 test("계단 건축물: 뒤가 높아야 놓이고, 다 지으면 앞뒤로만 오르내리며 디딤판을 밟음", async () => {
   const { findPath } = await import("../src/world/pathfinding.js");
@@ -856,14 +857,14 @@ test("친구 사이: 단계(서먹·친구·단짝)가 오르면 알리고, 이�
   assert.equal(seen.filter(s => s[2] === 2).length, 1, "단짝은 한 번만 알림"); assert.equal(M.affinity(a, b), 10, "최대 10");
   assert.equal(M.bestieOf(a, w.units), b); assert.equal(M.bestieOf(c, w.units), null); assert.equal(M.bestiePairs(w.units), 1);
   M.befriend(a, c, 4);
-  // 저장은 이름으로
+  // 저장은 id로(이름은 바뀔 수 있음)
   const j = JSON.parse(JSON.stringify(w.serialize()));
-  assert.deepEqual(j.units.find(u => u.name === a.name).friends, { [b.name]: 10, [c.name]: 4 });
+  assert.deepEqual(j.units.find(u => u.name === a.name).friends, { [b.unitId]: 10, [c.unitId]: 4 });
   const back = World.fromJSON(j, seededRandom(9)), by = n => back.units.find(u => u.name === n);
   assert.equal(M.affinity(by(a.name), by(b.name)), 10); assert.equal(M.affinity(by(b.name), by(a.name)), 10); assert.equal(M.affinity(by(c.name), by(a.name)), 4);
   assert.equal(M.affinity(by(b.name), by(c.name)), 0);
   // 마을에 없는 이름·이상한 값은 버림, friends가 없는 예전 저장도 열림
-  j.units[0].friends = { "없는갈매미": 5, [b.name]: 99, [c.name]: "x" }; for (const u of j.units.slice(1)) delete u.friends;
+  j.units[0].friends = { "u999": 5, [b.unitId]: 99, [c.unitId]: "x" }; for (const u of j.units.slice(1)) delete u.friends;
   const old = World.fromJSON(j, seededRandom(9)), o0 = old.units.find(u => u.name === j.units[0].name);
   assert.deepEqual(Object.values(o0.friends), [10], "없는 이름·숫자 아닌 값은 버리고 10까지만");
   assert.ok(old.units.slice(1).every(u => Object.keys(u.friends).length === 0));
@@ -890,7 +891,7 @@ test("소원: 단짝 옆집에 살고 싶어요 — 둘 다 가까운 집이 생
   assert.equal(d.ok(w, a), false, "단짝이 없으면 안 빎");
   w.befriend(a, b, 8); assert.equal(d.ok(w, a), true); assert.equal(d.ok(w, c), false);
   assert.equal(rankScore(w).score, score0 + 3, "단짝 한 쌍 = 3점");
-  const wish = { id: "neighbor", unitId: a.unitId, base: d.base(w, a), age: 0 }; assert.equal(wish.base, b.name);
+  const wish = { id: "neighbor", unitId: a.unitId, base: d.base(w, a), age: 0 }; assert.equal(wish.base, b.unitId);
   assert.equal(wishText(d, w, a, wish), `${b.name} 옆집에 살고 싶어`); assert.equal(wishText(WISH_BY_ID.home, w, a, null), "내 집이 생기면 좋겠다");
   const sites = []; const c0 = w.center;
   for (let r = 5; r < 60 && sites.length < 40; r += 2) for (let k = 0; k < 48; k++) { const an = k / 48 * 6.28, x = Math.floor(c0.x + Math.cos(an) * r), z = Math.floor(c0.z + Math.sin(an) * r); if (w.check("house", x, z, 0).ok) { const q = w.placeBuilding("house", x, z, 0, null, 1e9); if (q.ok) sites.push(q.building); } }

@@ -44,7 +44,7 @@ test("돈의 합: 찍기·짓기·↶ 되돌리기·철거·2층집 같이 살�
 
   // 짓기 → 첫 망치질(공사 시작 = 건축가에게 설계비) → ↶는 안 됨 → 철거: 그 건축가가 가진 만큼만 되돌려 받음(새 돈 없음)
   const s2 = spotFor(w, "house"), h2 = w.placeBuilding("house", s2[0], s2[1], 0).building, boss = w.units.find(u => u.job === "builder"), bc = boss.coins || 0, hf = h2.fee;
-  w.hammer(h2, boss); assert.equal(boss.coins - bc, hf, "공사 시작 → 건축가"); assert.equal(h2.feeTo, boss.name); expect("공사 시작");
+  w.hammer(h2, boss); assert.equal(boss.coins - bc, hf, "공사 시작 → 건축가"); assert.equal(h2.feeTo, boss.unitId); expect("공사 시작");
   assert.ok(!w.undoBuild(h2.id).ok, "공사가 시작돼서 되돌릴 수 없음");
   put(boss, "coins", 4); const vb = w.bank.vault; w.removeBuilding(h2.id); assert.equal(h2.refunded, Math.min(hf, 4), "가진 만큼만"); assert.equal(w.bank.vault, vb + h2.refunded); expect("철거");
 
@@ -86,7 +86,7 @@ test("재료를 먼저 쓴 공사(망치질 전)도 공사 시작: 설계비가 
   const v = o.bank.vault; o.removeBuilding(h2.id); assert.equal(o.bank.vault, v + h.fee, "시작 전 철거는 맡아 둔 설계비 그대로 금고로");
   const boss = w.units.find(u => u.job === "builder"), bc = boss.coins || 0; h.used = true; w.releaseFee(h);
   assert.equal(boss.coins - bc, h.fee); assert.ok(!h.feeHeld);
-  const j2 = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j2.buildings.find(b => b.id === h.id).feeTo, boss.name, "받은 갈매미 이름 저장");
+  const j2 = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j2.buildings.find(b => b.id === h.id).feeTo, boss.unitId, "받은 갈매미 id 저장");
 });
 
 test("⚡ 바로 완공(finishAll)도 공사 시작: 맡아 둔 설계비가 건축가에게 감 → 다 지은 뒤 철거해도 돈이 사라지지 않음 · 예전 저장(다 지었는데 맡아 둠)은 불러올 때 건축가에게", () => {

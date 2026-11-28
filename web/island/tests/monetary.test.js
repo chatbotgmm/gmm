@@ -103,7 +103,7 @@ test("설계비는 지을 갈매미에게(집 = 건축가, 시설 = 목수) → 
   const total = () => w.units.reduce((a, u) => a + (u.coins || 0), 0) + w.bank.vault + w.feesHeld();
   const t0 = total(), b0 = boss.coins || 0, v0 = w.bank.vault, f0 = w.bank.fees, s = spot("house"), h = w.placeBuilding("house", s[0], s[1], 0).building;
   assert.ok(h.fee > 0); assert.equal(w.bank.vault, v0 - h.fee, "금고에서"); assert.equal(boss.coins || 0, b0, "놓기만 해서는 아직(↶ 되돌리기가 정확하게 — 금고가 맡아 둠)"); assert.ok(h.feeHeld); assert.equal(total(), t0, "돈의 합 그대로(맡아 둔 설계비 포함)");
-  w.hammer(h, boss); assert.equal(boss.coins - b0, h.fee, "첫 망치질 = 공사 시작 → 집 설계비는 건축가에게"); assert.ok(!h.feeHeld); assert.equal(h.feeTo, boss.name); assert.equal(total(), t0, "돈의 합 그대로");
+  w.hammer(h, boss); assert.equal(boss.coins - b0, h.fee, "첫 망치질 = 공사 시작 → 집 설계비는 건축가에게"); assert.ok(!h.feeHeld); assert.equal(h.feeTo, boss.unitId); assert.equal(total(), t0, "돈의 합 그대로");
   assert.equal(w.bank.issued, 0); assert.equal(todayOf(w).fees, h.fee, "장부는 그대로 '설계비'");
   w.rank = 3; const c0 = carp.coins || 0, s2 = spot("cafe"), cf = w.placeBuilding("cafe", s2[0], s2[1], 0).building; assert.ok(cf.fee > 0); w.hammer(cf, carp); assert.equal(carp.coins - c0, cf.fee, "시설은 목수에게");
   const hf = h.fee, cff = cf.fee; boss.coins = 3; const v1 = w.bank.vault; w.removeBuilding(h.id);

@@ -98,6 +98,8 @@ export function bestiePairs(units) {
   for (let i = 0; i < units.length; i++) for (let k = i + 1; k < units.length; k++) if (friendStage(affinity(units[i], units[k])) >= 2) n++;
   return n;
 }
+/** 관계도 원 반지름: 9마리까지 19, 많을수록 작게(최소 9) */
+export const relNodeR = n => Math.max(9, Math.min(19, 19 * 9 / Math.max(1, n)));
 /** 관계도: 갈매미를 원 위에 고르게 놓고(한 마리면 가운데), 호감이 0보다 큰 쌍을 선으로 이음. size = 그림 한 변, pad = 가장자리 여백 */
 export function relationGraph(units, size = 300, pad = 52) {
   const c = size / 2, r = units.length > 1 ? c - pad : 0;
@@ -112,6 +114,11 @@ export function relationGraph(units, size = 300, pad = 52) {
 export const friendsToNames = (u, units) => Object.fromEntries(units.filter(o => o !== u && u.friends?.[o.unitId]).map(o => [o.name, u.friends[o.unitId]]));
 export function friendsFromNames(u, saved, units) {
   for (const [name, v] of Object.entries(saved || {})) { const o = units.find(x => x.name === name); if (o && o !== u && Number.isFinite(v)) u.friends[o.unitId] = clamp(v, -5, 10); }
+}
+/** 새 저장(gulls: 1): 호감을 id로(이름은 바뀔 수 있음) · 불러오기: 마을에 있는 id만 */
+export const friendsToIds = (u, units) => Object.fromEntries(units.filter(o => o !== u && u.friends?.[o.unitId]).map(o => [o.unitId, u.friends[o.unitId]]));
+export function friendsFromIds(u, saved, units) {
+  for (const [id, v] of Object.entries(saved || {})) { const o = units.find(x => x.unitId === id); if (o && o !== u && Number.isFinite(v)) u.friends[o.unitId] = clamp(v, -5, 10); }
 }
 export function bestFriend(u, units) {
   let best = null, bv = 0.5;

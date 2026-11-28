@@ -40,6 +40,10 @@ const NEWS_MAKERS = {
   sparkle: ({ item }) => ({ icon: "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
   // 해변 줍기: 마을에서 처음 주운 물건만 소식지에(같은 물건을 또 주운 것은 말풍선으로 충분)
   beachcomb: ({ u, item, first }) => ({ icon: "✨", text: `${josa(u.name, "이", "가")} 바닷가에서 ${josa(item.name, "을", "를")} 주웠어요`, weight: first ? 2 : 0 }),
+  evolve: ({ u, to, stayed }) => ({ icon: stayed ? "🪨" : "🌟", text: stayed ? `${josa(u.name, "은", "는")} 변신하지 않고 든든한 기본 갈매미가 됐어요` : `${josa(u.name, "이", "가")} ${to} 갈매미가 됐어요!`, weight: 5 }),
+  giantWait: ({ u }) => ({ icon: "🗿", text: `${u.name}에게 맞는 자이언트의 집이 필요해요`, weight: 3 }),
+  giantMove: ({ u }) => ({ icon: "🗿", text: `${josa(u.name, "이", "가")} 자이언트의 집으로 이사했어요`, weight: 3 }),
+  rename: ({ from, to }) => ({ icon: "🏷", text: `${josa(from, "이", "가")} 이제 ${to}예요`, weight: 0 }),
   wishDone: ({ wish, u, def }, w) => ({ icon: "♥", text: `${u.name}의 소원 "${wishText(def, w, u, wish)}"이 이루어졌어요!`, weight: 5 }),
   rank: ({ def }) => ({ icon: "🏅", text: `마을 등급이 올랐어요: ${def.icon} ${def.name}!`, weight: 8 }),
   friendship: ({ a, b, stage }) => { const d = FRIEND_STAGES[stage]; return { icon: d.icon, text: `${josa(a.name, "과", "와")} ${josa(b.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!`, weight: stage >= 2 ? 5 : 3 }; },
