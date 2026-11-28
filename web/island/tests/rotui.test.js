@@ -54,3 +54,11 @@ test("화면 배치: 알약 하나(왼쪽 | 나침반 | 오른쪽) · 둘러보�
   assert.match(html, /html\[data-motion="reduce"\] :is\(\.camPill \.cpHalf\.spin \.arc, \.rotObj\.spin \.ring\) \{ animation: none; \}/);
   assert.match(room, /addRot\(\)/); assert.ok(!/"↻ 돌리기"/.test(room));
 });
+
+test("건설 판: 화면 돌리기 알약과 ✋ ↶ ↷가 도구 탭을 덮지 않게 — 중간 화면 1100px 밑은 보조 줄을 탭 위로, 넓은 화면 1240px 밑은 탭을 짧은 이름으로", () => {
+  const hud = src("src/ui/hud.js"), html = src("index.html");
+  assert.match(hud, /toggleAttribute\("data-narrow", f === "medium" \? innerWidth \/ k < 1100 : f === "wide" && innerWidth \/ k < 1240\)/);
+  assert.match(html, /html\[data-form="medium"\]\[data-narrow\] #top \{ grid-template-columns: minmax\(0, 1fr\); grid-template-areas: "sub" "ebar" "tools"; \}/);
+  assert.match(html, /html\[data-form="wide"\]\[data-narrow\] #tools \.tbtn \.tl \{ display: none; \} html\[data-form="wide"\]\[data-narrow\] #tools \.tbtn \.ts \{ display: inline-block;/);
+  assert.ok(!/R로 방향을 돌려/.test(src("src/world/World.js") + src("src/world/placement.js")), "못 놓는 까닭은 터치에도 맞게 돌리기 단추로");
+});

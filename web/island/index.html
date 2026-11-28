@@ -534,11 +534,12 @@
   #stat > #chipVault:has(> .vspend:not([hidden])) { overflow: visible; }   /* 칩 밖으로 뜨는 −n이 잘리지 않게(그동안만: 평소엔 좁은 폭 말줄임 그대로) */
   #chipVault .vv { transition: color var(--t-fast); } #chipVault.spent .vv { color: var(--c-danger-ink); }   /* 설계비·품삯이 나가면 숫자가 잠깐 빨간 글(0.7초, 흔들지 않음) + 줄어드는 숫자(hud.js countVault) */
   #sub[data-kind="build"] { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, calc(98*var(--u))); grid-auto-columns: calc(104*var(--u)); gap: var(--s-1); overflow-x: auto; align-items: stretch; }   /* 태블릿·PC: 두 줄 격자 */
-  /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 900px보다 좁으면 보조 줄을 탭 위 한 줄로 */
+  /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 1100px보다 좁으면 보조 줄을 탭 위 한 줄로, 넓은 화면도 1240px보다 좁으면 탭을 짧은 이름으로(hud.js setForm의 data-narrow) */
   html[data-form="medium"] #top { grid-template-columns: max-content minmax(0, 1fr); }
   html[data-form="wide"] #tools .tbtn { flex: none; } html[data-form="wide"] #top { grid-template-columns: max-content minmax(0, 1fr); }   /* 도구 탭은 제 폭(일곱 개), 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림) — 건물 갤러리가 넓으면 탭이 보조 줄 밑으로 깔리던 것 */
   html[data-form="medium"] #tools .tbtn { flex: none; } html[data-form="medium"] #tools .tbtn .tl { display: none; } html[data-form="medium"] #tools .tbtn .ts { display: inline; }
   html[data-form="medium"][data-narrow] #top { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sub" "ebar" "tools"; } html[data-form="medium"][data-narrow] #tools .tbtn { flex: 1 1 auto; }
+  html[data-form="wide"][data-narrow] #tools .tbtn .tl { display: none; } html[data-form="wide"][data-narrow] #tools .tbtn .ts { display: inline-block; vertical-align: bottom; }
   /* 세로 폰: 아래에 한 판 — 트레이(한 줄, 옆으로 밀기, 오른쪽 끝이 흐려짐) → 보조 줄 → 도구 탭 */
   html[data-form="portrait"] #top { width: auto; max-width: none; margin: 0; display: flex; flex-direction: column; align-items: stretch; gap: var(--s-1); }
   html[data-form="portrait"] #sub { order: 1; } html[data-form="portrait"] #ebar { order: 2; } html[data-form="portrait"] #tools { order: 3; }

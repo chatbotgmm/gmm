@@ -272,7 +272,7 @@ export class Hud {
     if (this.uiAuto !== auto) { this.uiAuto = auto; if (auto === 1) root.style.removeProperty("--ui-auto"); else root.style.setProperty("--ui-auto", String(auto)); }
     const f = hudFormNow(k); this.form = f; this.phoneForm = f === "portrait" || f === "landscape";
     if (root.dataset.form !== f) root.dataset.form = f;
-    root.toggleAttribute("data-narrow", f === "medium" && innerWidth / k < 900);   // 중간 화면 가운데 좁은 창(건설 판을 한 칸으로)
+    root.toggleAttribute("data-narrow", f === "medium" ? innerWidth / k < 1100 : f === "wide" && innerWidth / k < 1240);   // 도구 탭과 보조 줄이 한 줄에 다 안 들어가는 창: 중간 화면은 보조 줄을 탭 위 한 줄로, 넓은 화면 앞쪽은 탭을 짧은 이름으로(키 힌트까지 보이면 ✋ ↶ ↷와 화면 돌리기 알약이 탭을 덮던 것 — 1920 화면 반쪽 창 960px 등)
     root.toggleAttribute("data-short", !this.phoneForm && innerHeight / k < 1000);  // 키가 아주 크지 않은 태블릿·PC 창은 건물 갤러리를 한 줄로(건설 판이 화면 높이의 4분의 1을 넘지 않게)
   }
   // ---- 화면 맞춤 설정(글자·버튼 크기 · 키 힌트 · 왼손 배치 · 움직임 줄이기 · 진동)
@@ -766,7 +766,7 @@ export class Hud {
     const html = p.relocate ? relocHtml(info) : p.move ? moveHtml(info) : planHtml(info);
     const goText = p.relocate ? "↔ 옮기기" : p.move ? "🚚 옮기기" : "🔨 건설", cfGo = document.getElementById("cfBuild"); if (cfGo.firstChild?.nodeType === 3 && cfGo.firstChild.nodeValue !== goText) cfGo.firstChild.nodeValue = goText;   // 키 힌트(.kbd)는 그대로
     if (html !== this.planHtmlNow) { this.planHtmlNow = html; box.innerHTML = html; }
-    const rl = p.move ? "방향 돌리기" : "건물 방향 돌리기"; if (this.cfRot.getAttribute("aria-label") !== rl) this.cfRot.setAttribute("aria-label", rl);   // 지형지물(동굴·등대·선착장)은 그냥 방향
+    const rl = p.move ? "방향 돌리기" : "건물 방향 돌리기"; if (this.cfRot.getAttribute("aria-label") !== rl) { this.cfRot.setAttribute("aria-label", rl); this.cfRot.dataset.tip = p.move ? "시계 방향으로 90° 돌려요" : "건물을 시계 방향으로 90° 돌려요"; }   // 지형지물(동굴·등대·선착장)은 그냥 방향(풍선 도움말도)
     const cfBuild = document.getElementById("cfBuild"); if (cfBuild.disabled !== !info.ok) cfBuild.disabled = !info.ok;
     box.parentElement.classList.toggle("bad", !info.ok);
   }

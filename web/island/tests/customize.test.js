@@ -145,9 +145,9 @@ test("동굴 옮기기: 평평한 2×2 + 입구 앞이 걸을 수 있어야 함,
   assert.equal(log.length, 1); assert.equal(log[0][1].module, cave);
   const one = w.moveLandmark("cave", x + 1, z, 0); assert.ok(one.ok, `한 칸 옆(자기 칸과 겹침): ${one.reason}`);
   const turned = w.moveLandmark("cave", x + 1, z, 1); assert.ok(turned.ok, turned.reason); assert.deepEqual(w.landmarkFront("cave"), { x: x + 3, z }, "rot 1 = +x로 열림(입구 앞 칸 중 z·x가 작은 쪽)");
-  // 입구 앞을 물로 막으면 거절(R로 돌리면 됨)
+  // 입구 앞을 물로 막으면 거절(돌리기 · R로 돌리면 됨)
   setWater(w, [[x + 1, z - 3], [x + 2, z - 3]]);
-  const blocked = w.moveLandmark("cave", x + 1, z - 5, 0); assert.equal(blocked.reason, "동굴 입구 앞이 막혀 있어요. R로 방향을 돌려 봐요");
+  const blocked = w.moveLandmark("cave", x + 1, z - 5, 0); assert.equal(blocked.reason, "동굴 입구 앞이 막혀 있어요. 돌리기로 방향을 바꿔 봐요");
   assert.ok(w.moveLandmark("cave", x + 1, z - 5, 2).ok, "반대로 돌리면 됨");
   assert.equal(w.modules.filter(m => m.defId === "cave").length, 1, "하나뿐");
   const sea = find(w, (a, b) => w.grid.isWater(a, b) && w.grid.isWater(a + 1, b + 1) && w.grid.isWater(a + 1, b) && w.grid.isWater(a, b + 1));
