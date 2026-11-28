@@ -18,7 +18,7 @@ import { initMind, befriend, FRIEND_STAGES, friendStage, affinity, friendsToName
 import { seededRandom, josa } from "../util.js";
 import * as E from "./economy.js";
 import * as S from "./season.js";
-import { WISHES, WISH_BY_ID, WISH_REWARD } from "./wishes.js";
+import { WISHES, WISH_BY_ID, WISH_REWARD, WISH_RESCUE } from "./wishes.js";
 import { dreamWishId } from "./dreams.js";
 import { RANKS, RANK_REWARD, rankScore, rankNeed } from "./rank.js";
 import * as F from "./furniture.js";
@@ -30,7 +30,7 @@ import { newsFor, addNews, newsFromSave, awayHours, awayCasts, newsDay, awayBuil
 import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, STAR_CHECK_SECS, STAR_CHANCE, STAR_MAX, STAR_ITEM, SKY_LOOK_CHANCE, skySeenFromSave } from "./skywatch.js";
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
-import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText } from "./daily.js";
+import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText, STAMP_COINS } from "./daily.js";
 import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
@@ -226,8 +226,8 @@ export class World {
   noteDaily(ev, arg) {
     const d = this.daily; if (!d) return;
     for (const req of dailyNote(d, ev, arg, this)) {
-      const all = !d.stamped && dailyAllDone(d); if (all) { d.stamped = true; this.stamps++; }
-      this.emit("dailyDone", { req, all, stamps: this.stamps, left: d.reqs.filter(r => r.have < r.need).length });
+      const all = !d.stamped && dailyAllDone(d), coins = all ? this.vaultBonus(STAMP_COINS) : 0; if (all) { d.stamped = true; this.stamps++; }   // 도장과 함께 금고에 동전(금고가 말라도 손쓸 길)
+      this.emit("dailyDone", { req, all, stamps: this.stamps, left: d.reqs.filter(r => r.have < r.need).length, coins });
     }
   }
   /** 도장 가게: 도장으로 한정 가구(STAMP_SHOP)나 귀한 선물(STAMP_GIFTS)을 사서 내 가방에 넣음
@@ -510,7 +510,12 @@ export class World {
     if (!this.economy) return 0;
     if (BUILDINGS[defId]?.market && ![...this.buildings.values()].some(b => BUILDINGS[b.defId].market)) return 0;   // 첫 시장은 설계비 없음: 금고로 돈이 돌아오는 첫 건물이라, 금고가 바닥나도 빠져나올 길을 남김
     const fee = BK.scaled(BK.feeOf(defId), this.priceMult());
-    return this.rescueHouse(defId, fee) ? 0 : fee;
+    return this.rescueHouse(defId, fee) || this.rescueDeco(defId, fee) ? 0 : fee;
+  }
+  /** 막힘 풀기(금고가 말라도 할 일 하나는 남게): 값싼 장식(설계비 BK.DECO_FREE_MAX 이하 — 벤치·화단·가로등·깃발 줄…)은 금고가 그 설계비도 안 되면 설계비 없이.
+   *  재료·품삯은 그대로(품삯은 밀렸다가 돈이 들어오면 갚음) */
+  rescueDeco(defId, fee = BK.scaled(BK.feeOf(defId), this.priceMult())) {
+    return !!(this.economy && BUILDINGS[defId]?.deco && BK.feeOf(defId) <= BK.DECO_FREE_MAX && this.bank.vault < fee);
   }
   /** 막힘 풀기(인구 = 집 수): 금고가 작은 집 설계비도 안 되고, 집이 모자라 소환이 막혀 있고, 짓는 중인 보통 집이 없으면 작은 집 한 채는 설계비 없이 놓을 수 있음.
    *  (금고 0 · 갈매미 수 = 집 수에서 영영 못 빠져나오는 일을 막음. 품삯은 그대로 금고에서 → 밀렸다가 돈이 들어오면 갚음) */
@@ -668,6 +673,14 @@ export class World {
     mon.printed += n; bk.vault += n; bk.issued += n; bk.printed += n; this.led("printed", n);
     if (bk.vault >= BK.VAULT_REARM) bk.low = 0;
     this.emit("monPrint", { n, today: mon.printed, left: MON.printLeftOf(mon.printed) }); this.settleOwed(); return n;
+  }
+  /** 보상으로 금고에 넣는 새 돈(도장 · 금고가 바닥일 때 소원 축하금): 중앙은행이 켜진 섬은 찍은 돈 장부(printed)에 — 찍기 하루 한도와는 따로.
+   *  돈의 합 M은 찍은 돈만큼만 바뀜(monconserve). 경제가 없으면 0. 넣은 양 */
+  vaultBonus(n) {
+    const bk = this.bank; n = Math.floor(n || 0); if (!this.economy || !(n > 0)) return 0;
+    bk.vault += n; bk.issued += n; if (this.monOn()) { bk.printed += n; this.led("printed", n); }
+    if (bk.vault >= BK.VAULT_REARM) bk.low = 0;
+    this.settleOwed(); return n;
   }
   /** 오늘 더 찍을 수 있는 양 */
   printLeft() { const mon = this.bank?.mon; if (!this.monOn()) return 0; return MON.printLeftOf(mon.printDay === newsDay(this.time) ? mon.printed : 0); }
@@ -1202,9 +1215,11 @@ export class World {
       if (!d.done(this, u, wish) && d.lost?.(this, u, wish)) { this.wishes.splice(this.wishes.indexOf(wish), 1); this.emit("wishLost", { wish, u, def: d }); continue; }   // 이제 이룰 수 없는 소원은 접음
       if (d.done(this, u, wish)) {
         this.wishes.splice(this.wishes.indexOf(wish), 1); this.wishDone++;
+        const low = this.economy && this.bank.vault < BK.VAULT_LOW;
         if (this.economy) this.issue(u, WISH_REWARD * (this.postB() ? 2 : 1));   // 우체국이 있으면 축하 편지와 함께 두 배
+        const rescue = low ? this.vaultBonus(WISH_RESCUE) : 0;                    // 금고가 바닥이면 중앙은행이 금고에도 축하금(구제 — 갈매미 몫은 금고에서 나가 금고를 못 채움)
         u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘다!", 3);
-        this.emit("wishDone", { wish, u, def: d });
+        this.emit("wishDone", { wish, u, def: d, rescue });
         if (wish.id === "festival") this.startFestival(wish.base);                // "축제 하자!"가 이루어지면 바로 축제가 열림
       } else if (wish.age >= WISH_NAG_AFTER && !u.insideBuildingId && this.wishNagOk()) emote(u, `💭 ${d.icon}`, 2.5);   // 다시 알림 말풍선: 마을 전체에서 하루 WISH_NAG_DAY번까지
     }

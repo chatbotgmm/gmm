@@ -8,7 +8,7 @@ import { FRIEND_STAGES } from "../units/mind.js";
 import { josa } from "../util.js";
 import { BOND_STAGES, GIFT_TIERS } from "./bond.js";
 import { MEDALS } from "./medals.js";
-import { askNotice } from "./roadAsk.js";
+import { askNotice, askNoticeMany, roadWant } from "./roadAsk.js";
 import { STEPS, STEP_NAME } from "./monetary.js";
 
 const stepName = v => STEP_NAME[STEPS.indexOf(v)] ?? `${v}`;
@@ -87,8 +87,9 @@ const NEWS_MAKERS = {
   // 건물 업그레이드(World.startUpgrade): 시작 · 완료
   upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? `. 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },
   upgraded: ({ b, from }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏥", text: `${josa(f.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!${d.beds ? ` 침대 ${d.beds}개` : ""}`, weight: 6 } : null; },
-  // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄에만 · 같은 갈매미 하루 한 번은 ALERTS가 거름)
-  roadAsk: ({ u, label }) => ({ icon: "🛣", text: askNotice(u.name, label), weight: 0 }),
+  // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄은 마을 하루 한 번 — ALERTS가 거름. 바라는 갈매미가 여럿이면 "갈매미 N마리가…" 한 줄)
+  roadAsk: ({ u, label }, w) => { const n = w?.units ? w.units.filter(o => roadWant(w, o)).length : 1;   // 여러 마리가 같은 길을 바라면 한 줄로(알림 줄은 마을 하루에 한 번)
+    return { icon: "🛣", text: n >= 2 ? askNoticeMany(n, label) : askNotice(u.name, label), weight: 0 }; },
   // 중앙은행(monetary.js): 손잡이(찍어내기·매입 예산·금리·축하) · 물가 사태(사태마다 한 번) · 예산 참·자동(알림 줄에만)
   monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 하루에 사들이는 가공품을 '${stepName(to)}'${to > from ? "으로 늘렸어요" : to < from ? "으로 줄였어요" : "으로 정했어요"}`, weight: 3 }),
   monRate: ({ from, to }) => ({ icon: "🏦", text: `금리를 ${from}% → ${to}%로 ${to > from ? "올렸어요. 갈매미들이 저금을 늘려요" : "내렸어요. 갈매미들이 저금을 덜 해요"}`, weight: 4 }),

@@ -1,4 +1,4 @@
-// 「전기 없음」 배지: 다 지은 가로등·등불 건물(카페·잡화점·우체국)·집(작은 집·2층집·큰 집·자이언트의 집) 가운데 풍차 전기 범위 밖인 것 위에 작은 말풍선(⚡✕).
+// 「전기 없음」 배지(풍차가 열린 뒤에만 — 🏘 어촌 전에는 고칠 길이 없어 숨김, power.js powerOpen): 다 지은 가로등·등불 건물(카페·잡화점·우체국)·집(작은 집·2층집·큰 집·자이언트의 집) 가운데 풍차 전기 범위 밖인 것 위에 작은 말풍선(⚡✕).
 // 누구에게 띄울지는 world/power.js 한 곳(unpowered — world.powerRev가 바뀔 때만 다시 셈). 풍차가 범위 안에 다 지어지면 바로 사라지고 철거하면 다시 뜸. 짓는 중인 건물에는 안 띄움(🔨 진행률 표시가 있음).
 //  · 자리: 건물 표시(views.js .badge — 🪧 값·🐦 안에 있는 수)와 같은 점. 그 표시가 떠 있으면 그 위로 NP_STACK px 올려 쌓음
 //    다른 건물의 표시·땅 이름·갈매미 말풍선과 겹칠 때는 배지가 아래(overlay의 맨 앞 자식) — 글자는 늘 읽힘
@@ -8,7 +8,7 @@
 //  · 건물을 누르면(main.js onTapGround) 카드(#houseCard)에 까닭을 적음: hud가 카드를 열었으면(집·잡화점) 그 글 뒤에 덧붙이고, 아니면(가로등·카페·우체국) 카드를 따로 엶
 import * as THREE from "three";
 import { BUILDINGS } from "../data/catalog.js";
-import { POWER_RANGE, lacksPower, unpowered } from "../world/power.js";
+import { POWER_RANGE, lacksPower, unpowered, powerOpen } from "../world/power.js";
 
 const NP_NEAR = 34, NP_MIN_S = 0.62, NP_LAMP_FADE = 60, NP_LAMP_HIDE = 75, NP_HOUSE_FADE = 105, NP_HOUSE_HIDE = 125, NP_GAP = 24, NP_STACK = 25;
 export const NO_POWER_WHY = `⚡ 전기가 닿지 않아요 — 풍차 발전소를 ${POWER_RANGE}칸 안에 지어 주세요`;
@@ -19,6 +19,7 @@ const NP_CSS = `.nopw { position: absolute; left: 0; top: 0; width: 40px; height
 .nopw[hidden] { display: none; } .nopw svg { position: absolute; left: 1px; top: 0; width: 34px; height: 22px; }
 .nopw::before { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: #4a3a2acc; }
 .nopw::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -4px; border: 4px solid transparent; border-bottom: 0; border-top-color: #fffdf8; }`;
+const NP_NONE = [];                                                               // 풍차가 아직 안 열린 마을(powerOpen): 배지 없음
 const NP_EMOJI = { streetlamp: "💡", cafe: "☕", shop: "🏪", post: "📮" };
 
 export class NoPowerBadges {
@@ -31,7 +32,7 @@ export class NoPowerBadges {
   }
   /** 섬에서 건물을 눌렀을 때(main.js: hud.houseCard · powerRange.tap 다음). 전기가 안 닿는 불 달린 건물이면 카드에 까닭을 적음 */
   tap(b) {
-    const c = this.card, w = this.getWorld(); this.sel = null; if (!c || !b || !lacksPower(w, b)) return;
+    const c = this.card, w = this.getWorld(); this.sel = null; if (!c || !b || !powerOpen(w) || !lacksPower(w, b)) return;
     const def = BUILDINGS[b.defId], span = c.querySelector("span"), mine = c.hidden;
     if (!mine) span.textContent += ` · ${NO_POWER_WHY}`;                           // hud가 연 카드(집: 주인·아늑함 · 잡화점: 가구·옷) 뒤에
     else { c.querySelector("b").textContent = `${NP_EMOJI[def.id] || "🏠"} ${def.name}`; span.textContent = NO_POWER_WHY;
@@ -47,7 +48,7 @@ export class NoPowerBadges {
   update(vw, vh) {
     const w = this.getWorld(), views = this.getViews(); if (!w || !views) return;
     if (!this.root.isConnected) { this.root.textContent = ""; this.els.clear(); this.list = null; this.overlay.insertBefore(this.root, this.overlay.firstChild); }   // 새 섬·불러오기: main.js가 overlay를 비움. 맨 아래에 둠 → 값표·진행률·땅 이름·갈매미 말풍선이 겹치면 그 글자가 위(배지가 글을 안 가림)
-    const list = unpowered(w), cam = this.camera;
+    const list = powerOpen(w) ? unpowered(w) : NP_NONE, cam = this.camera;
     let same = list === this.list; if (!same) { this.list = list; this.sync(list, views); this.cardSync(w); }
     const k = this.cam, e = cam.matrixWorld.elements, pe = cam.projectionMatrix.elements;   // 카메라·화면 크기가 그대로인지(글자열을 만들지 않고 숫자로 견줌)
     for (let i = 0; i < 20; i++) { const x = i < 16 ? e[i] : i === 16 ? pe[0] : i === 17 ? pe[5] : i === 18 ? vw : vh; if (k[i] !== x) { k[i] = x; same = false; } }

@@ -56,7 +56,7 @@ export function rewardOf(ev, a, world) {
       const unlock = (def.unlock || []).map(id => BUILDINGS[id]?.name).filter(Boolean);
       return { tier: "big", icon: def.icon || "🏅", title: `마을 등급 UP! ${def.name}`, line: unlock.length ? `🔓 새 건물: ${unlock.join(", ")}` : "🏅 마을이 한층 자랐어요", to: null, snd: "fanfare", key: `rank:${a.rank}` }; }
     case "dailyDone": {
-      if (a.all) return { tier: "big", icon: "💮", title: "도장 획득!", line: `📋 오늘의 부탁 모두 완료 · 모은 도장 ${a.stamps ?? 1}개`, to: "bag", snd: "fanfare", key: "dailyAll" };
+      if (a.all) return { tier: "big", icon: "💮", title: "도장 획득!", line: a.coins > 0 ? `📋 모은 도장 ${a.stamps ?? 1}개 · 금고에 🪙${a.coins}` : `📋 오늘의 부탁 모두 완료 · 모은 도장 ${a.stamps ?? 1}개`, to: "bag", snd: "fanfare", key: "dailyAll" };
       return { tier: "medium", icon: a.req?.icon || "📋", title: "오늘의 부탁 완료!", line: `${a.req?.text ?? ""}${a.left ? ` · ${a.left}개 남음` : ""}`.trim(), to: null, snd: "chime", key: `daily:${a.req?.id ?? ""}` }; }
     case "bondStage": { const u = a.u, g = a.gift, st = BOND_STAGES[a.stage]; if (!u || !st) return null;
       const title = `${josa(u.name, "과", "와")} ${st.name}!`;
@@ -64,7 +64,7 @@ export function rewardOf(ev, a, world) {
       const furni = g.kind === "furniture";
       return { tier: furni || a.stage >= 3 ? "big" : "medium", icon: itemIcon(g.id), title: got(g.name), line: `💝 ${title} 답례 · ${furni ? `${u.name}네 ${g.where ?? "집"}에 들여놨어요` : "🎁 내 주머니로"}`, to: furni ? null : "bag", snd: furni || a.stage >= 3 ? "fanfare" : "chime", key: `bond:${u.name}:${a.stage}` }; }
     case "wishDone": { const u = a.u; if (!u) return null;
-      return { tier: "medium", icon: "💖", title: "소원 성취!", line: `${u.name}의 소원이 이루어졌어요`, to: null, snd: "chime", key: `wish:${u.name}` }; }
+      return { tier: "medium", icon: "💖", title: "소원 성취!", line: a.rescue > 0 ? `${u.name}의 소원이 이루어져 금고에 🪙${a.rescue}` : `${u.name}의 소원이 이루어졌어요`, to: a.rescue > 0 ? "vault" : null, snd: a.rescue > 0 ? "coins" : "chime", key: `wish:${u.name}` }; }
     case "fussSolved": { const u = a.u; if (!u) return null;
       return { tier: "medium", icon: "💕", title: `${josa(u.name, "이", "가")} 고마워해요!`, line: a.kind === "perch" ? "바위에서 내려 줬어요" : "포근한 곳으로 옮겨 줬어요", to: null, snd: "chime", key: `fuss:${u.name}` }; }
     case "donate": { const f = a.fish; if (!f) return null;

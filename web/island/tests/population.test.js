@@ -117,8 +117,10 @@ test("막힘 방지: 건축가가 없으면 기본은 집 수와 상관없이 �
   const w2 = fresh(); w2.addUnitByName("미니"); assert.equal(w2.summonInfo().next, "기본"); assert.equal(w2.summon().name, "기본"); assert.equal(w2.summon(), null);
   // 금고 0 · 갈매미 1 = 집 1: 작은 집 한 채는 설계비 0(그 밖의 건물은 그대로 못 놓음)
   const w3 = fresh(); w3.summon(); w3.bank.vault = 0;
-  assert.equal(w3.rescueHouse("house"), true); assert.equal(w3.feeFor("house"), 0); assert.equal(w3.feeFor("cottage"), 15); assert.equal(w3.feeFor("bench"), 2);
-  const sb = spotFor(w3, "bench"); assert.equal(w3.placeBuilding("bench", sb[0], sb[1], 0).ok, false, "장식은 금고가 있어야");
+  assert.equal(w3.rescueHouse("house"), true); assert.equal(w3.feeFor("house"), 0); assert.equal(w3.feeFor("cottage"), 15); assert.equal(w3.feeFor("fountain"), 8, "비싼 장식은 그대로");
+  assert.equal(w3.feeFor("bench"), 0, "금고가 말라도 값싼 장식은 설계비 없이(할 일 하나는 늘 남게)");
+  const sb = spotFor(w3, "bench"), rb = w3.placeBuilding("bench", sb[0], sb[1], 0); assert.ok(rb.ok); assert.equal(rb.building.fee, 0); assert.equal(w3.bank.vault, 0);
+  w3.removeBuilding(rb.building.id); w3.bank.vault = 5; assert.equal(w3.feeFor("bench"), 2, "금고가 되면 그대로 냄"); w3.bank.vault = 0;
   const s = spotFor(w3, "house"), r = w3.placeBuilding("house", s[0], s[1], 0); assert.ok(r.ok); assert.equal(r.building.fee, 0); assert.equal(w3.bank.vault, 0); assert.equal(w3.bank.fees, 0);
   assert.equal(w3.rescueHouse("house"), false, "짓는 중인 집이 있으면 한 채만"); assert.equal(w3.feeFor("house"), 10);
   const s2 = spotFor(w3, "house"); assert.equal(w3.placeBuilding("house", s2[0], s2[1], 0).ok, false);
@@ -137,7 +139,7 @@ test("공식은행이 없는 예전 섬은 예전 그대로(집 수와 상관없
   for (let k = 0; k < UNITS.length; k++) assert.ok(old.summon()); assert.equal(old.summon(), null);
   // 오늘의 부탁
   const has = w => { for (let d = 1; d <= 28; d++) if (D.rollDaily(`2027-04-${d}`, w).reqs.some(x => x.id === "summon")) return true; return false; };
-  const w = fresh(); assert.equal(has(w), true, "새 섬: 첫 갈매미를 부를 수 있음");
+  const w = fresh(); assert.equal(has(w), false, "새 섬: 첫 갈매미는 처음 안내에서 부르니 부탁에 안 나옴");
   w.summon(); assert.equal(has(w), false, "집 1 = 갈매미 1 → 부탁에 안 나옴");
   ready(w); assert.equal(has(w), true); w.summon(); assert.equal(has(w), false);
   ready(w); ready(w); w.summon(); w.summon(); ready(w); assert.equal(w.units.length, 4); assert.equal(w.summonInfo().can, true); assert.equal(has(w), false, "4마리부터는 예전처럼 안 나옴");

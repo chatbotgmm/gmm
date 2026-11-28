@@ -1,7 +1,7 @@
 // 오늘의 부탁(순수 계산: 화면·기기 시계를 모름).
 // 실제 날짜 열쇠 "YYYY-MM-DD"(화면이 기기 날짜로 넣어 줌)마다 부탁 DAILY_COUNT개를 고름. 고르는 난수는 날짜 열쇠로만 만듦(월드 난수를 쓰지 않음).
 // 부탁은 내가 직접 할 수 있는 일만: 월드가 알리는 일(emit)을 세어서 나아감. 이 마을에서 아직 할 수 없는 부탁(ok가 false)은 고르지 않음.
-// 모두 들어주면 도장 하나(world.stamps) → 도장 가게에서 한정 가구(STAMP_SHOP)나 귀한 선물(STAMP_GIFTS)로 바꿈. 날짜가 바뀌면 새 부탁으로(못 끝낸 부탁은 사라짐).
+// 모두 들어주면 도장 하나(world.stamps)와 금고에 🪙STAMP_COINS → 도장 가게에서 한정 가구(STAMP_SHOP)나 귀한 선물(STAMP_GIFTS)로 바꿈. 날짜가 바뀌면 새 부탁으로(못 끝낸 부탁은 사라짐).
 import { BUILDINGS, FISH, ITEMS, UNITS } from "../data/catalog.js";
 import { seededRandom } from "../util.js";
 import { PAVED } from "./roads.js";
@@ -10,6 +10,7 @@ import { rankNeed } from "./rank.js";
 import { available } from "./furniture.js";
 
 export const DAILY_COUNT = 3;            // 하루에 고르는 부탁 수
+export const STAMP_COINS = 20;           // 도장을 받을 때 금고에 함께 들어오는 동전(World.vaultBonus — 금고가 말라도 손쓸 길)
 
 /** 손으로 놓을 가구가 있는 다 지은 집이 있나(그 집 창고 또는 마을 가방) — 없으면 「가구 놓기」 부탁은 못 들어주니 고르지 않음(편의성 점검 10번) */
 const furniReady = w => [...w.buildings.values()].some(b => BUILDINGS[b.defId].house && w.isDone(b) && Object.keys(available(w, b)).length > 0);
@@ -33,7 +34,7 @@ export const DAILY_POOL = [
   { id: "furniture", icon: "🛋", need: 1, text: () => "아무 집에나 가구 하나 놓기",
     ok: furniReady, hit: (ev, e) => ev === "furniture" && e?.kind === "place" ? 1 : 0 },
   { id: "summon", icon: "🥚", need: 1, text: () => "새 갈매미 한 마리 부르기",
-    ok: w => w.units.length < Math.min(4, UNITS.length) && (w.summonInfo?.().can ?? true), hit: ev => ev === "unitAdded" ? 1 : 0 },
+    ok: w => w.units.length > 0 && w.units.length < Math.min(4, UNITS.length) && (w.summonInfo?.().can ?? true), hit: ev => ev === "unitAdded" ? 1 : 0 },   // 갈매미가 없는 새 섬은 고르지 않음: 첫 갈매미는 처음 안내에서 부르니 저절로 끝나 버림
   { id: "seasonFish", icon: "🎣", need: 1, group: "fish", text: w => `제철 물고기 한 마리 낚기(${seasonFish(w).map(f => f.name).join("·")})`,
     ok: w => canFish(w) && seasonFish(w).length > 0, hit: (ev, e) => ev === "fish" && e?.fish?.season ? 1 : 0 },
   { id: "fish3", icon: "🐟", need: 3, group: "fish", text: () => "물고기 3마리 낚기",

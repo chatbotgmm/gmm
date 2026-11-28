@@ -1468,7 +1468,7 @@ test("오늘의 부탁: 날짜 열쇠로만 고르고(월드 난수 안 씀), �
   assert.ok(D.rollDaily("2026-11-25", w).reqs.every(x => x.id !== "seasonFish" || /전어|꽃게/.test(x.text)), "제철 물고기 이름이 글에 들어감");
   // 갈매미가 없는 섬: 할 수 있는 것만(3개가 안 될 수도 있음), 낚시·쓰다듬기·장식은 없음
   const none = World.create(7, seededRandom(3), { empty: true });
-  for (let d = 1; d <= 20; d++) { const r = D.rollDaily(`2027-03-${d}`, none); assert.ok(r.reqs.length >= 1 && r.reqs.every(x => ["road", "summon"].includes(x.id)), r.reqs.map(x => x.id).join()); }
+  for (let d = 1; d <= 20; d++) { const r = D.rollDaily(`2027-03-${d}`, none); assert.ok(r.reqs.length >= 1 && r.reqs.every(x => ["road"].includes(x.id)), r.reqs.map(x => x.id).join()); }   // 「새 갈매미 부르기」도 없음: 첫 갈매미는 처음 안내에서 부름
   // 조건이 생기면 나옴: 가방에 진주 → 선물, 소원이 걸려 있음 → 소원
   w.items.pearl = 1; w.wishes.push({ id: "bench", unitId: w.units[0].unitId, base: 0, age: 0 });
   const later = new Set(); for (let d = 1; d <= 28; d++) for (const x of D.rollDaily(`2027-05-${d}`, w).reqs) later.add(x.id);

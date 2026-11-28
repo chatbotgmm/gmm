@@ -20,7 +20,7 @@ import { SKY_EVENTS } from "../world/skywatch.js";
 import { DAILY_COUNT } from "../world/daily.js";
 import { CoachMarks } from "./coach.js";
 import { josa } from "../util.js";
-import { moreBox, vaultChipOf, townChipOf, tempChipOf } from "./hudParts.js";
+import { moreBox, vaultChipOf, townChipOf, tempChipOf, hungerCall, HUNGER_CHIP } from "./hudParts.js";
 import { makeSpendSum, chipSpendText, countAt, VF_SUM_MS, VF_COUNT_MS, VF_FLASH_MS } from "./vaultFx.js";
 import { bankAppHtml, printAsk, printPick } from "./monView.js";
 import { VIEW, setAdv, moodFace } from "./viewPrefs.js";
@@ -1053,8 +1053,8 @@ export class Hud {
       if ((p.wt.dataset.tone || null) !== t.tone) { if (t.tone) p.wt.dataset.tone = t.tone; else delete p.wt.dataset.tone; } }
     const nw = this.world.wishes.length; this.wishBtn.hidden = !nw; this.wishBtn.textContent = small ? `💭${nw}` : `💭 소원 ${nw}`;
     if (this.app === "wish" || this.app === "market") { this.appT = (this.appT || 0) + 1; if (this.appT % 5 === 0) this.refreshApp(); }
-    const hungry = w.units.filter(u => (u.full ?? 80) < J.HUNGRY).sort((a, b) => a.full - b.full)[0];
-    this.hungry = hungry; this.alertBtn.hidden = !hungry; if (hungry) this.alertBtn.textContent = `😣 ${hungry.name} 배고파요`;
+    const hungry = hungerCall(w, J.HUNGRY);                                         // 배고파요 칩: 내가 손쓸 수 있을 때만(시장·저장고가 없을 때) — 있으면 갈매미가 알아서 먹으러 감
+    this.hungry = hungry; this.alertBtn.hidden = !hungry; if (hungry) cardPut(this.alertBtn, HUNGER_CHIP);
     if (!this.phone.hidden && this.app && this.app !== "gulls" && this.app !== "dex" && this.app !== "menu") this.refreshApp();
     w.units.forEach((u, i) => { if (!this.rows[i]) return; const b = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
       this.rows[i].querySelector(".act").textContent = b ? (u.useFurni ? `🏠 ${FURNITURE[u.useFurni.id].useLabel}` : `${BUILDINGS[b.defId].name} 안`) : stateLabelOf(u);

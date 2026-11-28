@@ -1,5 +1,5 @@
 // 처음 안내: 첫 세션 3단계 말풍선(둘러보기 → 갈매미 누르기 → 집 한 채 짓기)과, 앱·상호작용을 처음 만날 때 한 번 뜨는 짧은 안내.
-// 화면을 막지 않는 말풍선(버튼만 눌림)이고 저절로 닫히지 않음(「처음이에요」는 몇 초 뒤 한 줄로 접히고 건설·방 화면에선 숨음 — coachRules.js). 상태는 이 기기에만(galmaemiman-hints) — 섬 저장과는 따로.
+// 화면을 막지 않는 말풍선(버튼만 눌림)이고 저절로 닫히지 않음(「처음이에요」·「처음 안내 끝」은 몇 초 뒤 한 줄로 접히고 건설·방 화면에선 숨음 — coachRules.js). 상태는 이 기기에만(galmaemiman-hints) — 섬 저장과는 따로.
 // 매 프레임 돌지 않음: 안내가 떠 있거나 기다릴 때만 0.4초마다 살핌(글자·자리는 바뀔 때만 고침).
 import { BUILDINGS } from "../data/catalog.js";
 import { pickMoment, momentFolded } from "./coachRules.js";
@@ -30,9 +30,9 @@ export class CoachMarks {
     box.innerHTML = `<div class="ctop"><span class="cstep"></span><span class="cdots" aria-hidden="true"></span><button class="cexp ghost" type="button" hidden>펼치기</button><button class="cskip ghost" type="button">건너뛰기</button></div><div class="cmain"><p class="ctext" aria-live="polite"></p><button class="cok go" type="button">알겠어요</button></div>`;
     document.body.append(box);
     this.stepEl = box.querySelector(".cstep"); this.dots = box.querySelector(".cdots"); this.text = box.querySelector(".ctext"); this.skipBtn = box.querySelector(".cskip"); this.okBtn = box.querySelector(".cok"); this.expBtn = box.querySelector(".cexp");
-    this.expBtn.onclick = () => { if (this.momentK) this.momentKeep[this.momentK] = 1; this.key = null; this.tick(); };   // 접힌 안내를 다시 펼침(그 안내는 더 안 접음)
+    this.expBtn.onclick = () => { if (this.shown === "done") this.doneKeep = true; else if (this.momentK) this.momentKeep[this.momentK] = 1; this.key = null; this.tick(); };   // 접힌 안내를 다시 펼침(그 안내는 더 안 접음)
     this.skipBtn.onclick = () => this.finish("skip");
-    this.okBtn.onclick = () => { if (this.shown === "moment" && this.momentK) { this.moments = this.moments.filter(k => k !== this.momentK); } else if (this.done) { this.done = false; this.step = 0; } this.key = null; this.tick(); };
+    this.okBtn.onclick = () => { if (this.shown === "moment" && this.momentK) { this.moments = this.moments.filter(k => k !== this.momentK); } else if (this.done) { this.done = false; this.step = 0; this.doneAt = null; this.doneKeep = false; } this.key = null; this.tick(); };
     // ① 둘러보기: 화면(캔버스)을 끌거나 휠·키로 옮기면 넘어감. 갈매미를 누르는 짧은 탭(조금 움직임)은 세지 않음
     let down = null;
     addEventListener("pointerdown", e => { down = this.step === 1 && e.target?.tagName === "CANVAS" ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null; }, true);
@@ -69,7 +69,7 @@ export class CoachMarks {
   }
   advance(n) {
     if (this.step !== n) return;
-    this.state.coach = n; if (n >= COACH_STEPS) { this.state.coach = "done"; this.step = 0; this.done = true; } else this.step = n + 1;
+    this.state.coach = n; if (n >= COACH_STEPS) { this.state.coach = "done"; this.step = 0; this.done = true; this.doneAt = null; this.doneKeep = false; } else this.step = n + 1;
     this.save(); this.key = null; this.hud.sfx?.chime?.([784, 988], 0.06, 0.1); this.tick();
   }
   run() { if (!this.timer) this.timer = setInterval(() => this.tick(), 400); this.tick(); }
@@ -102,7 +102,8 @@ export class CoachMarks {
         want = this.stepView();
       }
     }
-    if (!want && this.done && !blocked && !inRoom) want = { kind: "done", text: "🔨 첫 공사장이 섰어요. 갈매미들이 나무를 날라 오면 망치질이 시작돼요. 더 궁금하면 📱 ❓ 도움말을 봐요." };
+    if (!want && this.done && !blocked && !inRoom) { const now = performance.now(); this.doneAt ??= now;   // 「처음 안내 끝」도 몇 초 뒤 한 줄로 접음(화면 위를 오래 가리지 않게)
+      want = { kind: "done", text: "🔨 첫 공사장이 섰어요. 갈매미들이 나무를 날라 오면 망치질이 시작돼요. 더 궁금하면 📱 ❓ 도움말을 봐요.", fold: momentFolded(this.doneAt, now, !!this.doneKeep) }; }
     this.show(want);
     if (!want && !this.step && !this.done && !this.moments.length && this.timer) { clearInterval(this.timer); this.timer = 0; }
   }

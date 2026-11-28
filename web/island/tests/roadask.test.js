@@ -63,7 +63,7 @@ test("깔기 좋은 길: ㄱ자 두 가지가 다 막히면 ㄹ자(가운데 줄
   const t = RA.suggestRoute([0, 0], [4, 0], open, step); assert.ok(t.turns >= 2, "턱을 돌아감");
 });
 
-test("월드: 갈매미는 바닥을 바꾸지 않고, 집이 시장과 안 이어졌으면 말풍선으로 부탁(알림은 같은 갈매미 하루 한 번), 길을 깔면 부탁이 사라짐", () => {
+test("월드: 갈매미는 바닥을 바꾸지 않고, 집이 시장과 안 이어졌으면 말풍선으로 부탁(알림 줄은 마을 하루 한 번), 길을 깔면 부탁이 사라짐", () => {
   const w = World.create(7, seededRandom(5), { wild: true, firstGull: true }); w.instantBuild = true; w.addUnitByName("목수"); w.addUnitByName("불씨");
   const c = w.center, spot = (d, x0, z0) => { for (let r = 0; r < 30; r++) for (let k = 0; k < 64; k++) { const a = k / 64 * 6.28, x = Math.floor(x0 + Math.cos(a) * r), z = Math.floor(z0 + Math.sin(a) * r); if (w.check(d, x, z, 0).ok) return [x, z]; } return null; };
   const hq = spot("house", c.x + 12, c.z + 10), h = w.placeBuilding("house", hq[0], hq[1], 0).building, mq = spot("market", c.x + 2, c.z + 14), mk = w.placeBuilding("market", mq[0], mq[1], 0).building;
@@ -80,9 +80,9 @@ test("월드: 갈매미는 바닥을 바꾸지 않고, 집이 시장과 안 이�
   const a = mine.at(-1); assert.equal(a.label, "시장"); assert.ok(a.cells.length >= 2);
   assert.deepEqual(a.cells[0], [h.door.x, h.door.z]); assert.deepEqual(a.cells.at(-1), [mk.door.x, mk.door.z]);
   assert.ok(w.roadAsks.get(u.unitId), "world.roadAsks에 부탁한 길");
-  // 알림 줄: 같은 갈매미는 마을 하루에 한 번
-  const pass = makeGate();
-  assert.equal(alertLine("roadAsk", a, w), "🛣 불씨: 집에서 시장까지 길을 깔아 주세요", "덧말 없이 한 줄(누르면 그 갈매미로)");
+  // 알림 줄: 마을 하루에 한 번(바라는 갈매미가 여럿이면 "갈매미 N마리가…" 한 줄로 묶음)
+  const pass = makeGate(), many = w.units.filter(o => RA.roadWant(w, o)).length;
+  assert.equal(alertLine("roadAsk", a, w), many >= 2 ? `🛣 갈매미 ${many}마리가 집에서 시장까지 길을 바라요` : "🛣 불씨: 집에서 시장까지 길을 깔아 주세요", "덧말 없이 한 줄(누르면 그 갈매미로)");
   assert.equal(pass("roadAsk", a, 100), true); assert.equal(pass("roadAsk", a, 300), false); assert.equal(pass("roadAsk", a, 100 + NEWS_DAY_SECS), true);
   // 플레이어가 알려 준 길대로 깔면 이어지고 더는 부탁하지 않음
   for (const [x, z] of a.cells) if (w.canPaint(x, z)) w.paint(x, z, GroundType.Cobble);

@@ -1,6 +1,6 @@
 // 일반 건물 카드(#houseCard 안쪽 칸)의 글(순수: DOM을 모름 → node 시험 가능).
 //  · bldKindOf: 누른 건물이 어떤 카드인가 — site(짓는 중) · house(다 지은 집, 예전 집 카드 그대로) · field(밭) · clinic(의원) · shop(잡화점) · null(카드 없음)
-//  · siteStepOf: 공사장 준비 단계 한 줄(🪵 3/5 모으는 중 · 🏦 재료 가지러 가는 중 · 🔨 짓는 중 · ⏳ 일꾼을 기다려요)
+//  · siteStepOf: 공사장 준비 단계 한 줄(🪵 3/5 모으는 중 · 🏦 재료 가지러 가는 중 · 🔨 짓는 중 · ⏳ 일꾼을 기다려요 · 🚧 길이 막혔어요)
 //  · siteCardOf · fieldCardOf · clinicCardOf · shopCardOf: { title, sub, parts } — title·sub는 카드를 열 때 한 번(b·span.dim: noPower가 span 뒤에 까닭을 덧붙임),
 //    parts는 따로따로 다시 그리는 칸들의 HTML(값이 같은 칸은 hud가 손대지 않음 → 당번 목록 단추를 누르는 중에 환자 시간이 바뀌어도 누름이 사라지지 않음)
 //  · 접기(자세히)는 more(key, title, html, opts)를 받아 씀(hud.more = 이번 실행 동안 펼침 기억)
@@ -37,7 +37,7 @@ export function bldKindOf(b, w) {
 /** 공사장 준비 단계 한 줄(배지·카드 같이). supply가 없으면(맡은 이 없음) 기다림 */
 export function siteStepOf(b, w) {
   const s = b.supply, by = s && bdUnit(w, s.by);
-  if (!s || !by) return { step: "wait", text: "⏳ 일꾼을 기다려요" };
+  if (!s || !by) return siteBlocked(b, w) ? { step: "blocked", text: "🚧 길이 막혔어요" } : { step: "wait", text: "⏳ 일꾼을 기다려요" };   // 일꾼이 문 앞까지 못 와서 못 맡은 것이면 기다림 대신 그 까닭을 바로
   if (s.step === "fetch") return { step: "fetch", text: "🏦 재료 가지러 가는 중" };
   if (s.step === "gather") {
     const parts = Object.keys(s.need).filter(k => s.need[k] > 0).map(k => `${bdIcon(k)} ${s.got[k] || 0}/${s.need[k]}`);
@@ -46,6 +46,8 @@ export function siteStepOf(b, w) {
   const n = s.cycles || 0;
   return { step: "build", text: `🔨 짓는 중${n > 0 ? ` · 망치질 ${n}번 남음` : ""}` };
 }
+/** 문 앞까지 길이 없어 일꾼이 못 오는 공사장인가(갈매미가 길찾기에 실패해 잠깐 적어 둔 noWay) */
+export const siteBlocked = (b, w) => w.units.some(u => u.noWay?.[b.id] > w.time);
 /** 재료 준비 n/m(이번 몫): 가방·짐에 든 것 합 / 이번 몫 합. 맡은 이가 없으면 null */
 export function siteReadyOf(b) {
   const s = b.supply; if (!s) return null;
@@ -55,10 +57,10 @@ export function siteReadyOf(b) {
 export function siteCardOf(b, w, more = bdMore) {
   const def = BUILDINGS[b.defId], pct = Math.floor(Math.max(0, Math.min(1, b.hits / (b.need || 1))) * 100);
   const st = siteStepOf(b, w), by = b.supply && bdUnit(w, b.supply.by), ready = siteReadyOf(b), job = JOBS[def.builtBy] || JOBS.builder;
-  const head = sumHead({ icon: "🔨", big: `${pct}%`, label: "지어짐", lineHtml: `<b>${bdEsc(st.text)}</b>`, bar: pct / 100, tone: st.step === "wait" ? "warn" : null });
+  const head = sumHead({ icon: "🔨", big: `${pct}%`, label: "지어짐", lineHtml: `<b>${bdEsc(st.text)}</b>`, bar: pct / 100, tone: st.step === "wait" || st.step === "blocked" ? "warn" : null });
   const who = by ? `<button type="button" class="bc-who" data-act="follow" data-id="${bdEsc(by.unitId)}">👷 ${bdEsc(by.name)} 맡음 · 따라가기</button>`
     : `<p class="bc-note">맡은 갈매미가 없어요. ${job.icon} ${bdEsc(job.name)}가 틈나면 와서 지어요</p>`;
-  const blocked = w.units.some(u => u.noWay?.[b.id] > w.time);
+  const blocked = siteBlocked(b, w);
   const lead = (ready && ready.need ? `<p class="bc-line">📦 이번에 쓸 재료 <b>${ready.got}/${ready.need}</b></p>` : "") +
     (blocked ? `<p class="bc-warn">🚧 문 앞까지 길이 없어서 일꾼이 못 와요. 길을 이어 주세요</p>` : "");
   // 자세히: 이번 몫 재료 표 · 끝까지 남은 재료 · 낸 설계비
