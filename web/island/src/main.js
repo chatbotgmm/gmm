@@ -564,6 +564,7 @@ function frame() {
 let fastDays = 0, fastPrevH = -1;                                              // '빠르게(1분=1시간)'는 날짜가 오늘에 고정된 채 시각만 돌아서, 자정을 넘길 때마다 하루씩 더한 시계를 숙박 키에 넘김
 function tickClock() {
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 잠은 기력으로(chrono.js) — 밤엔 아침형이, 낮엔 야행성이 피로가 1.5배로 쌓임
+  if (world.isNight && ready) hud?.coach?.night(world);                        // 첫 밤 안내(목수가 있고 풍차가 없을 때 한 번, coach.js)
   if (daylight.time) {
     const t = daylight.time, h = t.getHours() + t.getMinutes() / 60, fast = daylight.mode === "fast";
     if (fast && fastPrevH >= 0 && h < fastPrevH - 12) fastDays++; fastPrevH = fast ? h : -1;

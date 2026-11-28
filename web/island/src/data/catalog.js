@@ -77,9 +77,12 @@ export const BUILDINGS = {
   // 계절 장식: 지금 계절에 따라 모습이 달라짐(봄 꽃 아치 · 여름 파라솔 · 가을 호박 더미 · 겨울 눈사람)
   seasonDeco:  { id: "seasonDeco", builtBy: "builder", deco: true, festive: true, decoShape: "seasonDeco", cost: { wood: 1 }, tier: 1, name: "계절 장식", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0xf2a49a, roof: 0xf2a49a, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 풍차 발전소: 둘레 18칸(world/power.js POWER_RANGE) 안에 전기 — 가로등·건물 등불(lit: 카페·잡화점·우체국·수족관·종합병원, 집)·집 창가 불빛이 밤에 켜지고 집 만족도 +8
+  // 처음(🛖 갯마을)부터 지을 수 있음(예전 🏘 어촌부터): 목수는 둘째 갈매미(집 한 채 더 → 소환, 첫날 1분 안쪽)라 첫날 밤 전에 불을 켤 수 있음.
+  // 재료 cost는 공사 한 바퀴(망치질 3번)마다 드는 몫이라 예전 나무 3·돌 2 × 공사량 6(8바퀴) = 나무 24·돌 16을 빈 창고에서 모아야 했음(세 번 나르다 지쳐 자면 15~20분)
+  //  → 나무 2·돌 1 × 공사량 4(5바퀴) = 나무 10·돌 5, 한 번에 날라 시장(나무 8·돌 8)과 비슷한 품. 시장과 함께 지어도 첫날 10분 안쪽
   // 하얀 탑·남색 줄무늬 돛 풍차(사용자 제공, 문·날개 +z 그대로). 날개 4장+허브는 glb 안의 windBlades 노드(허브 중심 피벗, 로컬 z = 날개 축 — views.js가 rotation.z를 돌림).
   // 2×2칸에 비율 그대로 꽉 채우면 폭 1.90 m · 깊이 1.74 m · 높이 3.52 m(날개 끝 원 지름 2.17 m, 가장 낮은 날개 끝 1.17 m). 모델을 못 받으면 코드로 만든 풍차(windmillModel)
-  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등과 창에 불이 켜져요. 누르면 범위가 보여요", rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 3.5, asset: "assets/props/windmill_{T}.glb", placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
+  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등과 창에 불이 켜져요. 누르면 범위가 보여요", cost: { wood: 2, stone: 1 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 4, height: 3.5, asset: "assets/props/windmill_{T}.glb", placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
   bridge: {
     id: "bridge", builtBy: "carpenter", bridge: true, cost: { wood: 1 }, tier: 1, name: "다리", footprint: { w: 1, d: 1 }, work: 1, height: 0.15, asset: null,

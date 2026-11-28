@@ -1,8 +1,9 @@
 // 처음 안내: 첫 세션 3단계 말풍선(둘러보기 → 갈매미 누르기 → 집 한 채 짓기)과, 앱·상호작용을 처음 만날 때 한 번 뜨는 짧은 안내.
+// 첫 밤 안내도 같은 말풍선: 기기 시계로 처음 밤이 됐을 때 목수가 있고 풍차가 없으면 한 번(🔨 풍차 놓기 지름길 — night, 알림 줄이 아님).
 // 화면을 막지 않는 말풍선(버튼만 눌림)이고 저절로 닫히지 않음(「처음이에요」·「처음 안내 끝」은 몇 초 뒤 한 줄로 접히고 건설·방 화면에선 숨음 — coachRules.js). 상태는 이 기기에만(galmaemiman-hints) — 섬 저장과는 따로.
 // 매 프레임 돌지 않음: 안내가 떠 있거나 기다릴 때만 0.4초마다 살핌(글자·자리는 바뀔 때만 고침).
 import { BUILDINGS } from "../data/catalog.js";
-import { pickMoment, momentFolded } from "./coachRules.js";
+import { pickMoment, momentFolded, nightTipFits } from "./coachRules.js";
 
 const COACH_KEY = "galmaemiman-hints";
 /** 앱 페이지를 처음 열 때 위에 붙는 안내(2문장 이내, 도움말·화면에 있던 말을 줄여 씀) */
@@ -18,7 +19,10 @@ const COACH_MOMENT_HINTS = {
   room: { touch: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. 끌면 방이 돌아가요. 다 꾸몄으면 🚪 나가기.", mouse: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. R로 가구를 돌리고, 다 꾸몄으면 Esc." },
   tug: { touch: "❗ 입질이 오면 🎣 당기기!를 눌러요. 같이 당기면 귀한 물고기가 잘 걸려요.", mouse: "❗ 입질이 오면 스페이스나 🎣 당기기! 같이 당기면 귀한 물고기가 잘 걸려요." },
   gift: { touch: "🎁 주머니에 모은 ✨ 반짝이를 골라 건네요. 정이 조금 들면 좋아하는 걸 ♥로 알려 줘요.", mouse: "🎁 주머니에 모은 ✨ 반짝이를 골라 건네요. 정이 조금 들면 좋아하는 걸 ♥로 알려 줘요." },
+  // 첫 밤(night): 창·가로등은 풍차 전기가 있어야 켜짐. 지름길을 누르면 풍차를 고른 채 건설 모드
+  night: { touch: "🌙 밤이 깜깜하죠? 풍차를 지으면 창과 가로등이 켜져요", mouse: "🌙 밤이 깜깜하죠? 풍차를 지으면 창과 가로등이 켜져요", title: "첫 밤", go: { label: "🔨 풍차 놓기", build: "windmill" } },
 };
+const isPower = defId => !!BUILDINGS[defId]?.power;
 const COACH_STEPS = 3;
 
 export class CoachMarks {
@@ -27,11 +31,16 @@ export class CoachMarks {
     try { const j = JSON.parse(localStorage.getItem(COACH_KEY) || "null"); if (j && typeof j === "object") { if (j.coach !== undefined) this.state.coach = j.coach; if (j.seen && typeof j.seen === "object") this.state.seen = j.seen; } } catch { /* 저장을 못 쓰는 곳: 처음처럼 */ }
     this.step = 0; this.wait = null; this.moments = []; this.momentAt = {}; this.momentKeep = {}; this.timer = 0; this.key = null; this.hi = null; this.done = false;
     const box = this.box = document.createElement("div"); box.id = "coach"; box.hidden = true; box.setAttribute("role", "region"); box.setAttribute("aria-label", "처음 안내");
-    box.innerHTML = `<div class="ctop"><span class="cstep"></span><span class="cdots" aria-hidden="true"></span><button class="cexp ghost" type="button" hidden>펼치기</button><button class="cskip ghost" type="button">건너뛰기</button></div><div class="cmain"><p class="ctext" aria-live="polite"></p><button class="cok go" type="button">알겠어요</button></div>`;
+    box.innerHTML = `<div class="ctop"><span class="cstep"></span><span class="cdots" aria-hidden="true"></span><button class="cexp ghost" type="button" hidden>펼치기</button><button class="cskip ghost" type="button">건너뛰기</button></div><div class="cmain"><p class="ctext" aria-live="polite"></p><button class="cgo go" type="button" hidden></button><button class="cok go" type="button">알겠어요</button></div>`;
     document.body.append(box);
-    this.stepEl = box.querySelector(".cstep"); this.dots = box.querySelector(".cdots"); this.text = box.querySelector(".ctext"); this.skipBtn = box.querySelector(".cskip"); this.okBtn = box.querySelector(".cok"); this.expBtn = box.querySelector(".cexp");
+    this.stepEl = box.querySelector(".cstep"); this.dots = box.querySelector(".cdots"); this.text = box.querySelector(".ctext"); this.skipBtn = box.querySelector(".cskip"); this.okBtn = box.querySelector(".cok"); this.expBtn = box.querySelector(".cexp"); this.goBtn = box.querySelector(".cgo");
     this.expBtn.onclick = () => { if (this.shown === "done") this.doneKeep = true; else if (this.momentK) this.momentKeep[this.momentK] = 1; this.key = null; this.tick(); };   // 접힌 안내를 다시 펼침(그 안내는 더 안 접음)
     this.skipBtn.onclick = () => this.finish("skip");
+    this.goBtn.onclick = () => {                                                  // 안내의 지름길(첫 밤: 🔨 풍차 놓기): 안내를 닫고 그 건물을 고른 채 건설 모드
+      const k = this.momentK, go = k && COACH_MOMENT_HINTS[k]?.go; if (!go) return;
+      this.moments = this.moments.filter(x => x !== k); this.key = null; this.tick();
+      this.hud.closePhone?.(); this.hud.tools?.setMode("build", go.build);
+    };
     this.okBtn.onclick = () => { if (this.shown === "moment" && this.momentK) { this.moments = this.moments.filter(k => k !== this.momentK); } else if (this.done) { this.done = false; this.step = 0; this.doneAt = null; this.doneKeep = false; } this.key = null; this.tick(); };
     // ① 둘러보기: 화면(캔버스)을 끌거나 휠·키로 옮기면 넘어감. 갈매미를 누르는 짧은 탭(조금 움직임)은 세지 않음
     let down = null;
@@ -58,6 +67,14 @@ export class CoachMarks {
     const p = document.createElement("p"); p.textContent = t; const ok = document.createElement("button"); ok.type = "button"; ok.className = "go"; ok.textContent = "알겠어요";
     ok.onclick = () => { this.state.seen[app] = 1; this.save(); card.remove(); };
     card.append(p, ok); page.prepend(card);
+  }
+  /** 첫 밤 안내: main.js가 밤(world.isNight, 기기 시계)인 동안 부름(3초에 한 번만 살핌). 목수가 있고 풍차가 하나도 없으면 대기열에 넣음.
+   *  본 것으로 적는 때는 실제로 화면에 뜬 때(tick) — 건설 모드·불러오는 화면에 가려 못 본 채 지나가지 않게 */
+  night(w) {
+    if (this.state.seen.night || this.moments.includes("night")) return;
+    const now = performance.now(); if (now - (this.nightAt || 0) < 3000) return; this.nightAt = now;
+    if (!nightTipFits(w, isPower)) return;
+    this.moments.push("night"); this.key = null; this.run();
   }
   /** 상호작용을 처음 만났을 때(방 · 입질 · 선물): 말풍선으로 한 번 */
   moment(kind) {
@@ -86,11 +103,14 @@ export class CoachMarks {
     let want = null;                                                              // { kind, text, stepNo, target, fold }
     const blocked = this.blocked();
     if (!inRoom) this.moments = this.moments.filter(k => k !== "room");          // 방을 이미 나왔으면 방 안내는 안 보여 줌
+    if (this.moments.includes("night") && (!nightTipFits(h.world, isPower) || (!this.state.seen.night && !h.world?.isNight)))   // 풍차를 놓았거나, 못 본 채 아침이 됐으면 거둠(다음 밤에 다시)
+      this.moments = this.moments.filter(k => k !== "night");
     this.momentK = null;
     if (!blocked && this.moments.length) {
-      const k = pickMoment(this.moments, { inRoom, editMode });                  // 선물·입질 안내는 둘러보기에서만(건설 모드·방 안이면 기다림)
+      const k = pickMoment(this.moments, { inRoom, editMode, stepping: !!this.step });   // 선물·입질·첫 밤 안내는 둘러보기에서만(건설 모드·방 안이면 기다림)
       if (k) { const m = COACH_MOMENT_HINTS[k], now = performance.now(); this.momentK = k; this.momentAt[k] ??= now;
-        want = { kind: "moment", text: m[document.documentElement.dataset.input === "touch" ? "touch" : "mouse"], fold: momentFolded(this.momentAt[k], now, !!this.momentKeep[k]) }; }
+        if (k === "night" && !this.state.seen.night) { this.state.seen.night = 1; this.save(); }   // 화면에 뜬 첫 밤 안내: 다시는 안 띄움
+        want = { kind: "moment", text: m[document.documentElement.dataset.input === "touch" ? "touch" : "mouse"], title: m.title, go: m.go, fold: momentFolded(this.momentAt[k], now, !!this.momentKeep[k]) }; }
     }
     if (!want && this.step && !blocked && !inRoom) {
       // 편지·처음 알림이 지나간 뒤 시작: 알림이 비거나 8초가 지나면
@@ -118,18 +138,19 @@ export class CoachMarks {
   }
   show(want) {
     const box = this.box;
-    const key = want ? `${want.kind}|${want.stepNo || ""}|${want.text}|${want.target || ""}|${want.fold ? 1 : 0}|${document.documentElement.dataset.form}|${document.body.dataset.mode}` : "";
+    const key = want ? `${want.kind}|${want.stepNo || ""}|${want.text}|${want.go?.label || ""}|${want.target || ""}|${want.fold ? 1 : 0}|${document.documentElement.dataset.form}|${document.body.dataset.mode}` : "";
     if (key === this.key) { if (want) this.place(); return; }                     // 자리는 매번(알림이 뜨고 사라짐 · 0.4초마다 몇 군데만 잼)
     this.key = key;
     this.shown = want?.kind || null;
     const hiEl = want?.target ? document.querySelector(want.target) : null;
     if (this.hi !== hiEl) { this.hi?.classList.remove("coach-hi"); hiEl?.classList.add("coach-hi"); this.hi = hiEl; }
     if (!want) { box.hidden = true; return; }
-    this.stepEl.textContent = want.kind === "step" ? `처음 안내 ${want.stepNo}/${COACH_STEPS}` : want.kind === "done" ? "처음 안내 끝" : "처음이에요";
+    this.stepEl.textContent = want.kind === "step" ? `처음 안내 ${want.stepNo}/${COACH_STEPS}` : want.kind === "done" ? "처음 안내 끝" : want.title || "처음이에요";
     this.dots.textContent = want.kind === "step" ? Array.from({ length: COACH_STEPS }, (_, i) => i < want.stepNo ? "●" : "○").join("") : "";
     this.text.textContent = want.text;
     this.skipBtn.hidden = want.kind !== "step"; this.okBtn.hidden = want.kind === "step";
     this.okBtn.textContent = want.kind === "done" ? "좋아요" : "알겠어요";
+    this.goBtn.hidden = !want.go; this.goBtn.textContent = want.go?.label || "";   // 지름길(첫 밤: 🔨 풍차 놓기)은 접혀도 보임
     box.classList.toggle("cfold", !!want.fold); this.expBtn.hidden = !want.fold;   // 접힘: 「처음이에요 · 펼치기 · 알겠어요」 한 줄
     box.dataset.kind = want.kind; box.hidden = false; this.place();
   }
