@@ -966,6 +966,7 @@ export class Hud {
   /** 알림 대상으로 가기: 갈매미는 따라가기(+ 가까이), 건물은 그 건물로 + 카드. 건설 모드·방 안이면 먼저 둘러보기로. 이미 없으면 안내 */
   gotoAt(at) {
     const w = this.world; if (!at) return false;
+    if (at.app) { this.leaveRoom?.(); const bank = at.app === "bank" || at.app === "mon"; if (bank) this.bankTab = at.app === "mon" ? "mon" : "vault"; this.openPhone(); this.openApp(bank ? "bank" : at.app); return true; }   // 📱 앱(금고·물가 경보 → 은행 앱의 그 탭)
     if (at.x != null && at.z != null) { this.leaveRoom?.(); if (this.tools.mode !== "view") this.tools.setMode("view"); this.onGotoXZ?.(at.x, at.z); return true; }   // 🗝 칸 자리(이야기 반짝이·등대·동굴)
     const u = at.u != null ? w.units.find(o => o.unitId === at.u) : null, b = at.b != null ? w.buildings.get(at.b) : null;
     if (!u && !b) { this.status("그 갈매미·건물은 이제 없어요", { kind: "info" }); return false; }

@@ -257,7 +257,7 @@ function mount(w) {
     if (world !== mine || !hud || !gate(ev, arg, world.time)) return;
     const text = alertLine(ev, arg, world); if (!text) return;
     if (big(ev, arg)) { hud.logNote(text, a.kind, noteTarget(arg)); return; }                     // ✨ 반짝이 줍기 등: 보상 띠가 대신 보여 주고 소리도 냄
-    if (!a.batch) { const at = noteTarget(arg); if (a.now) hud.status(text, { kind: a.kind, at }); else post(ev, text, a.kind, at); ring(a, arg); return; }
+    if (!a.batch) { const at = a.app ? { app: a.app } : noteTarget(arg); if (a.now) hud.status(text, { kind: a.kind, at }); else post(ev, text, a.kind, at); ring(a, arg); return; }
     let b = batches.get(ev); if (!b) { b = { list: [], first: text }; batches.set(ev, b);
       setTimeout(() => { batches.delete(ev); if (world !== mine) return; const m = b.list.length > 1 && batchText(ev, b.list);
         post(ev, m ? `${m.icon} ${m.text}` : b.first, a.kind, m ? null : noteTarget(b.list[0])); ring(a, b.list[0]); }, BATCH_MS); }

@@ -67,11 +67,20 @@ test("조용히 넘김: 날씨는 폭풍·눈만 · 해변 줍기는 마을에�
 test("하루 알림 예산 6줄: 이야기 > 관계 > 소원 > 나머지 · 넘치면 지난 알림에만 · 다음 날 다시", () => {
   assert.equal(DAY_LINES, 6);
   assert.equal(alertTier("storySpark"), 0); assert.equal(alertTier("friendship"), 1); assert.equal(alertTier("wish"), 2); assert.equal(alertTier("weather"), 3);
-  const take = makeBudget(); const rest = [0, 1, 2, 3, 4, 5].map(i => take("faint", 10 + i));
+  for (const ev of ["vaultShort", "sick", "faint", "inflation", "deflation"]) assert.equal(alertTier(ev), 1, `${ev}: 손쓸 일은 줍기·물고기 소식에 안 밀림`);
+  const take = makeBudget(); const rest = [0, 1, 2, 3, 4, 5].map(i => take("fish", 10 + i));
   assert.deepEqual(rest, [true, true, true, true, false, false], "나머지는 4줄까지(관계·소원 자리를 남김)");
   assert.equal(take("wish", 20), true); assert.equal(take("wish", 21), false, "소원은 5줄까지");
   assert.equal(take("bondStage", 22), true); assert.equal(take("friendship", 23), false, "관계는 6줄까지");
   for (let i = 0; i < 5; i++) assert.equal(take("storyPiece", 30 + i), true, "이야기는 늘 뜸");
-  assert.equal(take("faint", 600), true, "다음 날은 처음부터");
+  assert.equal(take("fish", 600), true, "다음 날은 처음부터");
   assert.match(MAIN, /makeBudget\(\)/); assert.match(MAIN, /quietAlert\(ev, arg\)/);
+});
+
+test("갈매미·건물이 없는 금고·물가 경보는 누르면 은행 앱으로(덧말 '(📱 은행)' 대신)", async () => {
+  const { atKey, atParse, atLabel } = await import("../src/ui/qolViews.js");
+  for (const ev of ["vaultShort", "vaultLow"]) assert.equal(ALERTS[ev].app, "bank", ev);
+  for (const ev of ["inflation", "deflation", "monStart"]) assert.equal(ALERTS[ev].app, "mon", ev);
+  for (const app of ["bank", "mon"]) { const at = { app }; assert.deepEqual(atParse(atKey(at)), at); assert.ok(atLabel({ units: [], buildings: new Map() }, at), app); }
+  assert.match(MAIN, /a\.app \? \{ app: a\.app \}/);
 });

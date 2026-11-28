@@ -10,11 +10,12 @@ import { newsDay, newsFor, NEWS_DAY_SECS } from "../world/news.js";
 export const BATCH_MS = 400;   // 묶음 알림: 이 사이에 온 같은 알림은 한 줄로(밀린 품삯을 한꺼번에 치를 때 등)
 export const WAGE_GAP = 30;    // 같은 갈매미의 "품삯이 밀렸어요"는 마을 시간 30초에 한 번만
 
-/** 이벤트 → 알림 줄 모양. 한 줄에 일 하나만: 덧말(길안내·조언·금고 잔액)은 붙이지 않음 — 줄을 누르면 그 갈매미·건물로 감(hud data-go) */
+/** 이벤트 → 알림 줄 모양. 한 줄에 일 하나만: 덧말(길안내·조언·금고 잔액)은 붙이지 않음 — 줄을 누르면 그 갈매미·건물로 감(hud data-go)
+ *  app: 갈매미·건물이 없는 소식(금고·물가)은 누르면 그 📱 앱으로(bank = 은행 금고 탭, mon = 중앙은행 탭) — 예전 덧말 "(📱 은행 · 🏛 중앙은행)" 대신 */
 export const ALERTS = {
-  vaultShort: { kind: "warn", snd: "low" },
+  vaultShort: { kind: "warn", snd: "low", app: "bank" },
   vaultOk: { kind: "good", snd: "coins" },
-  vaultLow: { kind: "warn" },
+  vaultLow: { kind: "warn", app: "bank" },
   wageOwed: { kind: "warn", every: WAGE_GAP },
   wagePaid: { kind: "good", batch: true, snd: "coins" },
   loanRefused: { kind: "warn" },
@@ -34,10 +35,10 @@ export const ALERTS = {
   upgraded: { kind: "good", snd: "bell" },
   roadAsk: { kind: "info", every: NEWS_DAY_SECS },   // 갈매미 길 부탁: 같은 갈매미는 마을 하루에 한 번만
   // 🏛 중앙은행: 물가 사태(world가 사태마다 한 번만 냄) · 옛 저장에 판이 처음 생김
-  inflation: { kind: "warn" },
-  deflation: { kind: "warn" },
+  inflation: { kind: "warn", app: "mon" },
+  deflation: { kind: "warn", app: "mon" },
   priceStable: { kind: "good", snd: "bell" },
-  monStart: { kind: "info" },
+  monStart: { kind: "info", app: "mon" },
 };
 /** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 세금·숙박비 영수증은 금고 칩의 작은 +N(rewardFx small)과 소식지로 충분 · 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수·쓰러져 실려 감은 소식지만(쓰러짐 알림 한 줄이 이미 알림) */
 export const SILENT = ["tax", "lodging", "fee", "clinicVisit", "faintCarried", "monIssue", "monRate", "monGift", "monPrint", "capFull", "monAuto"];   // 중앙은행 손잡이(찍기·예산·금리·축하)는 플레이어가 누른 일 → 판의 상태 줄이 대답(hud.bankClick), 예산 참·자동 바꿈은 잦아서 소식지에만
@@ -79,10 +80,12 @@ export function quietAlert(ev, arg) {
 }
 /** 하루(마을 하루 newsDay) 알림 줄 예산. 넘치면 알림 줄 대신 지난 알림(hud.logNote)에만 — 소식지는 그대로 실림 */
 export const DAY_LINES = 6;
-/** 우선순위: 0 이야기 > 1 관계 > 2 소원 > 3 나머지. 낮은 단계는 예산을 다 쓰지 못하게 자리를 남겨 둠(늦게 온 이야기·관계 소식이 밀리지 않게) */
+/** 우선순위: 0 이야기 > 1 관계·손쓸 일 > 2 소원 > 3 나머지. 낮은 단계는 예산을 다 쓰지 못하게 자리를 남겨 둠(늦게 온 이야기·관계 소식이 밀리지 않게)
+ *  손쓸 일(금고 바닥·감기·쓰러짐·물가 사태·대출 거절)은 해변 줍기·물고기 같은 소식에 밀려 지난 알림으로 숨지 않게 관계와 같은 단계 */
 const TIER_OF = {
   storySpark: 0, storyPiece: 0, storySeed: 0, storyPostcard: 0, storyRestore: 0, storyEnd: 0, storyBlink: 0, festival: 0, festivalEnd: 0,
   friendship: 1, bondStage: 1,
+  vaultShort: 1, sick: 1, faint: 1, inflation: 1, deflation: 1, loanRefused: 1,
   wish: 2, wishDone: 2, wishLost: 2, dailyDone: 2,
 };
 export const alertTier = ev => TIER_OF[ev] ?? 3;
