@@ -132,7 +132,7 @@ export function storyOnEvent(s, ev, arg, w, day) {
   } else if (ev === "wave") {                                                      // 이야기 차례(STORY_WAVE_SECS 200초마다 — 보통 반짝이 회차 300초와 따로, 예전 빠르기 그대로)
     if (s.chapter === 0 && day >= 2 && !stSparkOf(s, "c1_sign")) out.push({ spark: "c1_sign", at: "lighthouse" });
     for (const id of s.queue.splice(0)) if (!s.found[id] && !stSparkOf(s, id)) out.push({ spark: id, at: STORY_PIECES[id].at });
-    if (stSeedsWanted(s) && s.seedDay !== day) { s.seedDay = day; out.push({ spark: "seed:B", at: "ring" }); }   // 둘째 길: 마을 날마다 아침 첫 반짝이 차례에 별씨 하나
+    if (stSeedsWanted(s) && s.seedDay !== day) { s.seedDay = day; out.push({ spark: "seed:B", at: "ring" }); }   // 둘째 길: 마을 날마다 첫 이야기 차례(아침, 하루 첫 반짝이와 대개 같은 때)에 별씨 하나
   } else if (ev === "away") {                                                      // 다녀온 사이 편지(10분 넘게 꺼 둠)
     if (canFind(s, "c1_card")) out.push({ grant: "c1_card", who: null, via: "away" }, { line: "📮 우체통에 낡은 엽서가 끼어 있었어요. 🗝 비밀 수첩에 끼워 뒀어요." });
     if (canFind(s, "c4_blink") && s.restored.lamp) out.push({ blink: false }, { grant: "c4_blink", who: null }, { line: "💫 어젯밤 수평선에서 불빛이 세 번 깜빡였대요. 🗝 비밀 수첩에 적어 뒀어요." });
