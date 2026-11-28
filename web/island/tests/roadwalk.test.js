@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Grid } from "../src/world/Grid.js";
 import { findPath, ROAD_COST, ROAD_H } from "../src/world/pathfinding.js";
-import { smoothPath, setIdle, _pokeApi, STROLL_ROAD, ROAD_SAY, SAME_BUBBLE_DAY, strollRoad } from "../src/units/unitBrain.js";
+import { smoothPath, setIdle, _pokeApi, STROLL_ROAD, ROAD_SAY, SAME_BUBBLE_DAY, strollRoad, ROAD_HUG, roadCellsNear } from "../src/units/unitBrain.js";
 import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import { GroundType } from "../src/data/types.js";
@@ -12,6 +12,18 @@ import { GroundType } from "../src/data/types.js";
 const roadRow = (g, z, x0, x1) => { const s = new Set(); for (let x = x0; x <= x1; x++) s.add(g.index(x, z)); return s; };
 const onRoad = (g, s, p) => p.filter(([x, z]) => s.has(g.index(x, z))).length;
 const len = (sx, sz, p) => { let L = 0, px = sx, pz = sz; for (const [x, z] of p) { L += x !== px && z !== pz ? Math.SQRT2 : 1; px = x; pz = z; } return L; };
+/** 다듬은 길의 곧은 구간이 모두 포장 칸 위(가장자리에서 ROAD_HUG칸 안)로 지남 */
+function assertHugs(g, paved, sx, sz, path) {
+  const near = (fx, fz) => { for (let z = Math.floor(fz - ROAD_HUG - 1e-6); z <= Math.floor(fz + ROAD_HUG + 1e-6); z++) for (let x = Math.floor(fx - ROAD_HUG - 1e-6); x <= Math.floor(fx + ROAD_HUG + 1e-6); x++) if (paved.has(g.index(x, z))) return true; return false; };
+  let [px, pz] = [sx, sz];
+  for (const [x, z] of path) { for (let i = 0; i <= 40; i++) { const fx = px + 0.5 + (x - px) * i / 40, fz = pz + 0.5 + (z - pz) * i / 40; assert.ok(near(fx, fz), `길 밖 ${fx.toFixed(2)},${fz.toFixed(2)}`); } [px, pz] = [x, z]; }
+}
+/** 꺾인 횟수(5° 넘게)와 꺾인 각도 합(도) */
+function turns(sx, sz, path) {
+  let prev = null, n = 0, deg = 0, px = sx, pz = sz;
+  for (const [x, z] of path) { const h = Math.atan2(z - pz, x - px); if (prev !== null) { let d = Math.abs(h - prev); if (d > Math.PI) d = 2 * Math.PI - d; deg += d * 180 / Math.PI; if (d > 0.09) n++; } prev = h; px = x; pz = z; }
+  return { n, deg };
+}
 /** 길의 모든 걸음이 걸을 수 있는 칸으로, 턱·모서리 가로지르기 없이 한 칸씩 */
 function assertLegal(g, sx, sz, p) {
   let px = sx, pz = sz;
@@ -88,8 +100,23 @@ test("길 다듬기: 길로 돌아온 구간을 풀밭 지름길로 다시 펴�
   const corner = ([x, z]) => Math.abs(x - 22) <= 1 && Math.abs(z - 4) <= 1;
   assert.ok(!plain.some(corner), `길을 모르면 모퉁이를 크게 가로지름: ${JSON.stringify(plain)}`);
   assert.ok(kept.some(corner), `모퉁이(한 칸 안)를 지남: ${JSON.stringify(kept)}`);
-  let [px, pz] = [2, 4];                                                                              // 직선 구간이 모두 포장 칸 위
-  for (const [x, z] of kept) { for (let i = 0; i <= 40; i++) { const cx = Math.floor(px + 0.5 + (x - px) * i / 40), cz = Math.floor(pz + 0.5 + (z - pz) * i / 40); assert.ok(paved.has(g.index(cx, cz)), `${cx},${cz}`); } [px, pz] = [x, z]; }
+  assertHugs(g, paved, 2, 4, kept);                                                                    // 직선 구간이 모두 포장 칸 위
+});
+
+test("길 다듬기: 길 도구로 칠한 1칸 너비 사선 길(칸이 계단처럼 엇갈림)에서도 칸마다 꺾지 않고 곧게, 길 위로", () => {
+  const g = new Grid(70, 50, 70);
+  for (const [s, e, maxTurns] of [[[3, 5], [63, 35], 1], [[3, 40], [60, 21], 1], [[5, 5], [60, 30], 9]]) {
+    // 2:1·3:1 계단 길(곧은 줄에 가장 가까운 칸) · 실제 길 도구(균일 A* 칸 목록)
+    const cells = maxTurns === 1 ? (() => { const out = [], n = Math.max(Math.abs(e[0] - s[0]), Math.abs(e[1] - s[1])); for (let i = 0; i <= n; i++) out.push([Math.round(s[0] + (e[0] - s[0]) * i / n), Math.round(s[1] + (e[1] - s[1]) * i / n)]); return out; })()
+      : [s, ...findPath(g, s[0], s[1], e[0], e[1], 30000)];
+    const paved = new Set(cells.map(([x, z]) => g.index(x, z)));
+    const raw = findPath(g, s[0], s[1], e[0], e[1], 30000, paved);
+    assert.equal(onRoad(g, paved, raw), raw.length, "길만 따라감");
+    const kept = smoothPath(g, s[0], s[1], raw, paved), t = turns(s[0], s[1], kept), cellTurns = turns(s[0], s[1], raw);
+    assert.ok(t.n <= maxTurns, `꺾임 ${t.n}번 ${t.deg.toFixed(0)}° (칸 목록 그대로면 ${cellTurns.n}번 ${cellTurns.deg.toFixed(0)}°): ${JSON.stringify(kept)}`);
+    assert.ok(t.deg < cellTurns.deg / 3, `꺾인 각도 합 ${t.deg.toFixed(0)}° / 칸마다 ${cellTurns.deg.toFixed(0)}°`);
+    assertHugs(g, paved, s[0], s[1], kept);
+  }
 });
 
 /** 넓은 섬 · 갈매미 하나 · 갈매미 옆을 지나는 돌길(가로 한 줄 + 세로 한 줄) */
@@ -128,6 +155,28 @@ test("산책: 길이 있으면 둘레 포장 칸으로 가는 일이 확실히 �
   const goals = (w, u, ux, uz) => { const rnd = seededRandom(5), out = []; for (let k = 0; k < 40; k++) { setIdle(u, rnd, w); u.x = ux + 0.5; u.z = uz + 0.5; w.time = k; out.push(_pokeApi.startActivity(u, "wander", w, rnd) ? `${u.goal.x},${u.goal.z}` : "-"); } return out; };
   const B2 = roadWorld(false), noRoads = goals(B2.w, B2.u, B2.ux, B2.uz);
   B2.w.roads = undefined; assert.deepEqual(goals(B2.w, B2.u, B2.ux, B2.uz), noRoads, "roads가 아직 없어도 같음");
+});
+
+test("산책: 길 산책 목적지에서 건물 문 앞 칸(길 끝이 문에 닿음)과 제자리·바로 옆 칸은 뺌", () => {
+  const w = World.create(7, seededRandom(4), { wild: true, firstGull: true }), u = w.units[0], bank = w.bankB(), d = bank.door;
+  for (let z = d.z - 6; z <= d.z + 6; z++) if (w.canPaint(d.x, z)) w.paint(d.x, z, GroundType.Cobble);       // 은행 문을 지나는 세로 돌길
+  for (let x = d.x - 6; x <= d.x + 6; x++) if (w.canPaint(x, d.z + 3)) w.paint(x, d.z + 3, GroundType.Cobble);
+  w.updateRoads(); const net = w.roads.net, g = w.grid;
+  assert.ok(net.has(g.index(d.x, d.z)) && g.doorOwner(d.x, d.z), "문 앞 칸도 포장됨");
+  for (const [sx, sz] of [[d.x, d.z + 1], [d.x, d.z + 3], [d.x + 2, d.z + 3]]) {
+    const cells = roadCellsNear(w, net, sx, sz, 8);
+    assert.ok(cells.length >= 10, `둘레 포장 칸 ${cells.length}`);
+    assert.ok(!cells.some(([x, z]) => g.doorOwner(x, z) != null), "문 앞 칸 없음");
+    assert.ok(!cells.some(([x, z]) => Math.max(Math.abs(x - sx), Math.abs(z - sz)) < 2), "제자리·바로 옆 칸 없음");
+  }
+  const rnd = seededRandom(3); let n = 0, atDoor = 0, still = 0;
+  for (let k = 0; k < 300; k++) {
+    setIdle(u, rnd, w); u.x = d.x + 0.5; u.z = d.z + 1.5; w.time = 2000 + k * 0.37;
+    if (!_pokeApi.startActivity(u, "wander", w, rnd)) continue; n++;
+    if (g.doorOwner(u.goal.x, u.goal.z) != null) atDoor++;
+    if (u.goal.x === d.x && u.goal.z === d.z + 1) still++;
+  }
+  assert.ok(n >= 250 && atDoor / n < 0.03 && still / n < 0.02, `산책 ${n}번 · 문 앞 ${atDoor} · 제자리 ${still}`);
 });
 
 test("산책 말풍선: 길 위로 산책을 나서면 가끔 흐뭇한 한마디, 같은 갈매미는 하루 3번까지(chatter)", () => {

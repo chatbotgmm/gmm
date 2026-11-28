@@ -165,15 +165,22 @@ function done(u, reward, rnd, world, secs = null) {
 }
 
 // ---- 길 다듬기: 격자 길(칸마다 꺾임)에서 곧게 갈 수 있는 중간 칸을 빼서 사선으로 곧게 걷게 함
-//  paved(포장 칸 모음)를 주면: 빼는 칸 중에 포장 칸이 있으면 곧은 줄도 포장 칸으로만 지나야 함(길로 돌아온 길을 풀밭 지름길로 다시 펴지 않게)
+//  paved(포장 칸 모음)를 주면: 빼는 칸 중에 포장 칸이 있으면 곧은 줄도 포장 칸 위(ROAD_HUG칸 안)로만 지나야 함(길로 돌아온 길을 풀밭 지름길로 다시 펴지 않게).
+//  ROAD_HUG: 길 도구로 칠한 1칸 너비 사선 길은 칸이 계단처럼 엇갈려서, 칸 안으로만 지나게 하면 칸마다 45°씩 꺾으며 비틀비틀 걸음
+//  → 곧은 줄이 포장 칸 가장자리에서 ROAD_HUG칸까지는 벗어나도 됨(2:1·3:1 계단 길도 한 줄로 곧게, 길 옆 칸 가운데까지는 못 감)
+export const ROAD_HUG = 0.3;
+function nearPaved(grid, paved, fx, fz) {
+  for (let z = Math.floor(fz - ROAD_HUG); z <= Math.floor(fz + ROAD_HUG); z++) for (let x = Math.floor(fx - ROAD_HUG); x <= Math.floor(fx + ROAD_HUG); x++) if (grid.inBounds(x, z) && paved.has(grid.index(x, z))) return true;
+  return false;
+}
 function lineClear(grid, ax, az, bx, bz, paved = null) {
   const x0 = ax + 0.5, z0 = az + 0.5, x1 = bx + 0.5, z1 = bz + 0.5, n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.2);
   let px = ax, pz = az;
   for (let i = 1; i <= n; i++) {
-    const cx = Math.floor(x0 + (x1 - x0) * i / n), cz = Math.floor(z0 + (z1 - z0) * i / n);
+    const fx = x0 + (x1 - x0) * i / n, fz = z0 + (z1 - z0) * i / n, cx = Math.floor(fx), cz = Math.floor(fz);
+    if (paved && !nearPaved(grid, paved, fx, fz)) return false;
     if (cx === px && cz === pz) continue;
     if (!grid.canStep(px, pz, cx, cz)) return false;
-    if (paved && !paved.has(grid.index(cx, cz))) return false;
     if (cx !== px && cz !== pz && !(grid.canStep(px, pz, cx, pz) && grid.canStep(px, pz, px, cz))) return false;   // 모서리 가로지르기 금지
     px = cx; pz = cz;
   }
@@ -337,11 +344,12 @@ export const STROLL_ROAD = 0.6, STROLL_DECO = 3, ROAD_SAY_CHANCE = 0.2;
 export const ROAD_SAY = ["길이 반듯하니 좋다", "돌길 산책 ♪", "발이 편하네", "길 따라 한 바퀴"];
 /** 이번 산책은 길 쪽으로 갈까(STROLL_ROAD 확률, 해시) */
 export const strollRoad = (u, world) => strHash(`${u.unitId}|stroll|${Math.floor((world.time || 0) * 4)}`) / 4294967296 < STROLL_ROAD;
-/** (sx,sz) 둘레 r칸 네모 안의 걸을 수 있는 포장 칸 [[x, z, 덤]]. 덤 = 다 지은 장식(벤치·화단·분수·가로등…) 문 둘레 3칸 안이면 STROLL_DECO */
+/** (sx,sz) 둘레 r칸 네모 안의 걸을 수 있는 포장 칸 [[x, z, 덤]]. 덤 = 다 지은 장식(벤치·화단·분수·가로등…) 문 둘레 3칸 안이면 STROLL_DECO.
+ *  건물 문 앞 칸(길 끝이 문에 닿아 가장 자주 뽑힘 — 모임·축제 자리처럼 문 앞에선 서성이지 않음)과 바로 옆 칸(제자리 산책)은 뺌 */
 export function roadCellsNear(world, net, sx, sz, r) {
   const g = world.grid, out = [], decos = [...world.buildings.values()].filter(b => BUILDINGS[b.defId].deco && world.isDone(b)).map(b => b.door);
   for (let z = sz - r; z <= sz + r; z++) for (let x = sx - r; x <= sx + r; x++) {
-    if (!g.inBounds(x, z) || !net.has(g.index(x, z)) || !g.isWalkable(x, z)) continue;
+    if (Math.max(Math.abs(x - sx), Math.abs(z - sz)) < 2 || !g.inBounds(x, z) || !net.has(g.index(x, z)) || !g.isWalkable(x, z) || g.doorOwner(x, z) != null) continue;
     out.push([x, z, decos.some(d => Math.max(Math.abs(d.x - x), Math.abs(d.z - z)) <= 3) ? STROLL_DECO : 0]);
   }
   return out;
