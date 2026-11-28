@@ -110,8 +110,8 @@ export class BuildingViews {
 /** 건물 종류 하나의 모델(문 = +z, 바닥 가운데가 원점). 섬에 놓인 건물과 건설 갤러리 사진(thumbs.js)이 같은 것을 씀.
  *  ramp: 계단 높이({ h0, h1 }), season: 계절 장식의 모습 */
 export async function buildingModel(def, { ramp = null, season = null } = {}) {
-  const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : def.power ? windmillModel() : await modelFor(def, () => buildingPlaceholder(def));
-  if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로
+  const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : await modelFor(def, () => def.power ? windmillModel() : buildingPlaceholder(def));   // 풍차: 사용자 모델(windBlades 노드가 돎), 못 받으면 코드로 만든 풍차
+  if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; model.position.x += def.modelShift ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로, 문이 문 칸 앞에 오게 옆으로(modelShift m, 칸 안에서)
   return model;
 }
 
@@ -230,7 +230,7 @@ function decoModel(shape, season = null) {
     dpart(g, new THREE.CylinderGeometry(0.16, 0.16, 0.04, 12), DM(0xd9574b), 0, 0.84, 0); }
   return g;
 }
-/** 풍차 발전소: 돌 몸통 + 지붕 + 돌아가는 날개 4장(정면 +z) */
+/** 풍차 발전소(모델을 못 받았을 때): 돌 몸통 + 지붕 + 돌아가는 날개 4장(정면 +z) */
 function windmillModel() {
   const g = new THREE.Group();
   dpart(g, new THREE.CylinderGeometry(0.6, 0.85, 3.0, 12), DM(0xf3ead8), 0, 1.5, 0);
