@@ -8,6 +8,8 @@ import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
 import { placeEl, showEl } from "../util.js";
 import { DRY_BELOW } from "../world/farming.js";
+/** 화면에 이름표를 띄울 구역: 건물 자리(은행·시장)만. 연못·숲·고지대·동굴·낚시터·밭·작은 섬 같은 자연·지형 이름표는 띄우지 않음(사용자 요청) */
+export const ZONE_LABELED = new Set(["bank", "market"]);
 
 const _lifeP = new THREE.Vector3(), _lifeM = new THREE.Matrix4(), _lifeC = new THREE.Color();
 // 밭 칸: 흙 판(촉촉함 색) · 자라는 단계 3가지 · 목마른 칸 위 💧 · 물 줄 때 물방울
@@ -66,7 +68,7 @@ export class LifeViews {
     this.emoteFor = i => this.emotes[i] ||= (() => { const e = document.createElement("div"); e.className = "emote"; e.hidden = true; overlay.appendChild(e); return e; })();
     this.sickEls = [];                                                             // 아픈 갈매미 머리 위 🤧(갈매미마다 하나, 처음 아플 때 만듦)
     this.sickFor = i => this.sickEls[i] ||= (() => { const e = document.createElement("div"); e.className = "sickb"; e.textContent = "🤧"; e.hidden = true; overlay.appendChild(e); return e; })();
-    this.zoneEls = world.zones.map(z => { const e = document.createElement("div"); e.className = "zone"; e.textContent = z.label; overlay.appendChild(e); return { z, e }; });
+    this.zoneEls = world.zones.filter(z => ZONE_LABELED.has(z.id)).map(z => { const e = document.createElement("div"); e.className = "zone"; e.textContent = z.label; overlay.appendChild(e); return { z, e }; });
     this.showZones = true;
   }
   attachModules(map) { this.objs = map; for (const [id, o] of map) this.attachModule(id, o); }
