@@ -1,7 +1,7 @@
 // 방 조명 판정(순수 계산, three.js·DOM 없이 시험 가능): 바깥 시간대(daylight.glow — 0 낮 ~ 1 밤, 섬 등불과 같은 곡선) × 그 집 전기(0 없음 ~ 1 있음, 바뀔 때 부드럽게)
 //  · 낮: 창으로 들어오는 햇빛(전기와 무관) — 전에 늘 쓰던 값(하늘빛 1.1 + 햇빛 1.6) 그대로
 //  · 저녁·밤 + 전기 있음: 실내등(따뜻한 빛, 거의 같은 밝기) + 스탠드 불빛 켜짐
-//  · 저녁·밤 + 전기 없음: 창으로 드는 푸른 달빛만(섬 밤의 달빛 색 0x9fb6ff·0xaebcff, 세기는 섬 밤 0.35에 맞춤) — 스탠드도 꺼짐
+//  · 저녁·밤 + 전기 없음: 창으로 드는 청회색 달빛만(섬 밤의 달빛 색 0xbcc0c8·0xc2c6ce, 세기는 섬 밤 0.35에 맞춤) — 스탠드도 꺼짐
 // 색은 선형 RGB(three.js Color.setRGB에 그대로). out 객체를 다시 써서 매 프레임 새 객체를 안 만듦
 import { POWER_RANGE } from "../world/power.js";
 
@@ -12,7 +12,7 @@ const rlKey = (sky, ground, hemi, key, keyI, win, winE, winI, bg, lamp) => ({ sk
 export const ROOM_KEYS = {
   day:  rlKey(0xfff4e2, 0x8a7a6a, 1.1,  0xfff0d8, 1.6,  0xbfe4f5, 0x9fd4f0, 0.35, 0x30343c, 0),   // 전에 늘 켜 두던 값
   lamp: rlKey(0xffe4bf, 0x7c6650, 1.2,  0xffd9a8, 1.8,  0x1e2c55, 0x2c3c6e, 0.7,  0x1c2029, 1),   // 실내등: 따뜻한 색(약 2900K 느낌), 밝기는 낮의 약 0.9배(눈 무게 밝기 roomLux)
-  moon: rlKey(0x9fb6ff, 0x1b2233, 0.42, 0xaebcff, 0.38, 0x1e2c55, 0x3a4f8a, 1.0,  0x12151d, 0),   // 달빛: 섬 밤(하늘빛 0.35·달빛 0.35)과 비슷한 세기, 창은 밤하늘 색으로 빛남
+  moon: rlKey(0xbcc0c8, 0x3c3026, 0.42, 0xc2c6ce, 0.38, 0x2e3446, 0x525a6a, 1.0,  0x14171f, 0),   // 달빛: 섬 밤(dayKeys NIGHT 청회색 하늘빛·따뜻한 땅빛, 달빛 0xc2c6ce)과 같은 색·비슷한 세기, 창은 밤하늘 색으로 빛남
 };
 /** 방을 그릴 때의 노출(섬 한낮 노출 1.12와 같게 고정 — 섬 노출은 시간·날씨로 바뀌므로 방 밝기가 그것에 끌려가지 않게. 어둠은 위 빛 세기로만) */
 export const ROOM_EXPOSURE = 1.12;

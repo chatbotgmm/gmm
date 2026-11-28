@@ -192,7 +192,7 @@ export const MODULES = {
 
 // 바닥 색(두 색을 칸마다 번갈아 칠함)과 이름. asset: 오토타일 조각 모델을 쓸 때 경로(1단계는 도형으로 그림).
 export const GROUND_STYLE = {
-  [GroundType.Grass]:    { label: "잔디",     colors: [0x9fd35b, 0x8cc44e] },
+  [GroundType.Grass]:    { label: "잔디",     colors: [0x9dcd7d, 0x90c070] },   // 수채 톤 풀빛(예전 0x9fd35b·0x8cc44e보다 채도 낮게, 형광 연두 아님). 한낮 따뜻한 햇빛·ACES를 거치면 노래지므로 바탕은 조금 푸르게. 밝기 L*77.5는 길 셋보다 15 넘게 밝게 유지
   // 길 셋은 잔디(밝기 L*79)·서로와 밝기부터 다르게(색맹도 구분): 돌길 푸른 회색 L*54 · 데크 진한 밤색 L*45 · 흙길 황토 L*62(바위 L*65와는 노란기로 구분)
   [GroundType.Cobble]:   { label: "돌길",     colors: [0x74829a, 0x6b788f] },
   [GroundType.WoodDeck]: { label: "나무 데크", colors: [0x935e38, 0x875533] },

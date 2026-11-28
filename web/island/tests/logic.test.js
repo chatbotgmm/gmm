@@ -1705,7 +1705,7 @@ import { sunPosition } from "../src/world/sun.js";
 
 test("하루 빛: 점심(햇빛 쉐이딩: 하늘빛 줄임)·밤 값, 아침 하늘과 저녁 하늘은 다른 빛", () => {
   const noon = dayLook(40, 180), night = dayLook(-30, 0);
-  assert.ok(Math.abs(noon[15] - 3.0) < 1e-6 && Math.abs(noon[18] - 1.0) < 1e-6 && Math.abs(noon[16] - 0.62) < 1e-6);   // 햇빛·노출·하늘빛 세기(점심)
+  assert.ok(Math.abs(noon[15] - 2.8) < 1e-6 && Math.abs(noon[18] - 0.96) < 1e-6 && Math.abs(noon[16] - 0.70) < 1e-6);   // 햇빛·노출·하늘빛 세기(점심, 수채 톤: 대비를 조금 낮춤)
   assert.ok(noon[15] / noon[16] > 3.3 / 0.85, "점심 햇빛 대 하늘빛 비가 전보다 큼(그늘이 또렷)");
   assert.ok(Math.abs(night[15] - 0.35) < 1e-6 && Math.abs(night[18] - 0.95) < 1e-6);
   const dawn = dayLook(-2, 90), dusk = dayLook(-2, 270);                          // 같은 해 높이, 동쪽(새벽) / 서쪽(저녁)
@@ -1717,7 +1717,7 @@ test("하루 빛: 점심(햇빛 쉐이딩: 하늘빛 줄임)·밤 값, 아침 �
 test("하루 빛: 1분마다 훑어도 색·세기·해/달 바뀜이 툭 튀지 않음(봄·여름·가을·겨울)", () => {
   const out = new Float32Array(DAY_CHANNELS), prev = new Float32Array(DAY_CHANNELS);
   const srgb = c => 255 * (c < 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
-  const MOON = [0xae, 0xbc, 0xff].map(v => Math.pow((v / 255) * 0.9478672986 + 0.0521327014, 2.4));   // daylight.js 달빛 0xaebcff(선형)
+  const MOON = [0xc2, 0xc6, 0xce].map(v => Math.pow((v / 255) * 0.9478672986 + 0.0521327014, 2.4));   // daylight.js 달빛 0xc2c6ce(선형)
   for (const ds of ["2026-03-20", "2026-06-21", "2026-09-23", "2026-12-21"]) {
     const t0 = new Date(ds + "T00:00:00").getTime(); let p = sunPosition(new Date(t0)); dayLook(p.elev, p.azim, prev); let pm = moonMix(p.elev), pa = p.azim;
     for (let i = 1; i <= 1440; i++) {

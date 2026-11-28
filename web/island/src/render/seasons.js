@@ -32,7 +32,7 @@ const LEAF = {
   winter: [0xf1f5f8, 0xe6edf2],
 };
 const PINE = { spring: null, summer: null, autumn: 0x5fb8b0, winter: 0xbfe0de };
-const BUSH = { spring: [0xffffff, 0x000000], summer: [0xe6f2d8, 0x000000], autumn: [0xffb066, 0x000000], winter: [0xffffff, 0x8f99a3] };   // [색 곱, 빛남(눈처럼 희게)]
+const BUSH = { spring: [0xffffff, 0x000000], summer: [0xf0f0dc, 0x000000], autumn: [0xffb066, 0x000000], winter: [0xffffff, 0x8f99a3] };   // [색 곱, 빛남(눈처럼 희게)]
 
 /** 땅 재질에 계절 셰이더를 붙임(툰으로 바뀌어도 toon.js가 그대로 옮김) */
 export function seasonalGround(mat) {

@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { toWorldX, toWorldZ } from "../config.js";
 import { seededRandom } from "../util.js";
 
-const TUFT_COLORS = [0x9cba5c, 0x88a94e, 0xb3c46a], BUSH_COLORS = [0x5aa845, 0x6bb84e, 0x4f9a3f], FLOWER_COLORS = [0xffe066, 0xffffff, 0xff9cc0, 0x9fd4ff], PEBBLE_COLORS = [0xb9b3a8, 0xa9a397, 0xc9c3b6];
+const TUFT_COLORS = [0x9cba5c, 0x88a94e, 0xb3c46a], BUSH_COLORS = [0x6a9a4c, 0x78a452, 0x5a8a48, 0x88a85a], FLOWER_COLORS = [0xffe066, 0xffffff, 0xff9cc0, 0x9fd4ff], PEBBLE_COLORS = [0xb9b3a8, 0xa9a397, 0xc9c3b6];
 // 놓은 꽃: 노란 작은 공은 씨앗(🌻)처럼 보여서 분홍·하양·하늘·보라 꽃송이(조금 납작하게)를 초록 덤불 덩이 위에 다섯 송이
 const ADD_FLOWER_COLORS = [0xff8fb8, 0xfff6f0, 0x8fc8ff, 0xc39bff], ADD_CELLS = 800, BUSH_PER = 2, BLOSSOM_PER = 5;
 /** 풀 덤불(모래 둔덕 풀): 가는 세모 뿔 다섯 개를 바깥으로 기울여 한 덩이(뚫린 뿔 → 덩이당 15 삼각형, 단순 모양은 셋 → 9) */
@@ -22,6 +22,14 @@ function tuftGeometry(blades) {
   }
   const out = new THREE.BufferGeometry(); out.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3)); return out;
 }
+// 덤불 무리(군집): 큰 값 노이즈(약 6칸)가 높은 곳에만 덤불이 몰리게 — 고르게 흩뿌린 '절차 생성' 느낌 대신 숲 가장자리·벽 밑에 덩어리로
+function dHash(ix, iz) { let h = (ix * 374761393 + iz * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function dNoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz, sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = dHash(ix, iz), b = dHash(ix + 1, iz), c = dHash(ix, iz + 1), d = dHash(ix + 1, iz + 1);
+  return (a + (b - a) * sx) * (1 - sz) + (c + (d - c) * sx) * sz;
+}
+export function bushCluster(x, z) { const n = dNoise(x * 0.17 + 11.3, z * 0.17 - 4.1), t = Math.max(0, Math.min(1, (n - 0.42) / 0.3)); return t * t * (3 - 2 * t) * 1.15; }
 const _dm = new THREE.Matrix4(), _dq = new THREE.Quaternion(), _dv = new THREE.Vector3(), _ds = new THREE.Vector3(), _dy = new THREE.Vector3(0, 1, 0), _dc = new THREE.Color();
 
 export class Decor {
@@ -41,12 +49,12 @@ export class Decor {
       if (c.groundType === "Grass") {
         const p = (treeNear.has(`${x},${z}`) ? 0.3 : 0) + (wallBase ? 0.3 : 0) + (wallTop ? 0.18 : 0) + (sandNear ? 0.1 : 0);
         const kb = keep() < opt.density, kf = keep() < opt.density, kp = keep() < opt.density;   // 양 줄이기(같은 자리는 늘 같은 결과)
-        if (rnd() < p && kb) cells.bush.push([x, z]);
+        if (rnd() < p * bushCluster(x, z) && kb) cells.bush.push([x, z]);
         const patch = Math.sin(x * 0.37 + z * 0.21) * Math.cos(x * 0.13 - z * 0.29);
         if (((patch > 0.55 && rnd() < 0.5) || rnd() < 0.02) && kf) void 0;              // 꽃(작은 점)은 씨앗처럼 보여서 없앰(난수 순서는 그대로)
         void kp;
         let rimRock = false; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const o = at(x + dx, z + dz); if (o && o.groundType === "Rock" && o.elevation > 0.3 && !g.isWater(x + dx, z + dz)) rimRock = true; }
-        if (rimRock && tr() < 0.4 * opt.density) cells.bush.push([x, z]);           // 풀 언덕 곶: 바위 테두리 안쪽 잔디에 덤불
+        if (rimRock && tr() < 0.4 * opt.density * bushCluster(x, z)) cells.bush.push([x, z]);           // 풀 언덕 곶: 바위 테두리 안쪽 잔디에 덤불
         if (sandNear && tr() < 0.3 * opt.density) cells.tuft.push([x, z]);          // 모래와 닿은 잔디 가장자리 풀
       } else if (c.groundType === "Sand" && c.elevation >= 0.14 && tr() < 0.75 * opt.density) { cells.tuft.push([x, z]); if (rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]); }   // 모래 둔덕 마루: 풀 덤불(바닷가 높낮이가 멀리서도 읽힘)
       else if (c.groundType === "Sand" && rnd() < 0.035 && keep() < opt.density) cells.pebble.push([x, z]);
@@ -54,7 +62,7 @@ export class Decor {
     }
     // 덤불: 둥근 덩이(위·아래로 약간 눌림), 꽃: 작은 공 셋이 한 송이, 자갈: 깎은 돌
     this.types = {
-      bush: { geo: new THREE.IcosahedronGeometry(0.3, opt.simple ? 0 : 1), per: 2, colors: BUSH_COLORS, size: [0.7, 1.25], squash: 0.78, shadow: !!opt.bushShadow },   // 단순: 80 → 20 삼각형
+      bush: { geo: new THREE.IcosahedronGeometry(0.3, opt.simple ? 0 : 1), per: 3, colors: BUSH_COLORS, size: [1.0, 1.4], squash: 0.8, shadow: !!opt.bushShadow, clump: true },   // 단순: 80 → 20 삼각형. 칸마다 큰 덩이 하나 + 옆에 작은 덩이 둘이 겹친 둥근 무더기
       flower: { geo: opt.simple ? new THREE.OctahedronGeometry(0.05, 0) : new THREE.SphereGeometry(0.045, 6, 4), per: 3, colors: FLOWER_COLORS, size: [0.8, 1.3], squash: 1, shadow: false },   // 단순: 48 → 8
       pebble: { geo: new THREE.DodecahedronGeometry(0.11, 0), per: 1, colors: PEBBLE_COLORS, size: [0.6, 1.6], squash: 0.6, shadow: false },
       tuft: { geo: tuftGeometry(opt.simple ? 3 : 5), per: 3, colors: TUFT_COLORS, size: [1.0, 1.6], squash: 1, shadow: false },
@@ -65,9 +73,12 @@ export class Decor {
       const list = cells[type], n = list.length * def.per;
       const mesh = new THREE.InstancedMesh(def.geo, new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 }), Math.max(1, n));
       mesh.castShadow = def.shadow; mesh.receiveShadow = false; mesh.count = n; mesh.frustumCulled = false;
-      let i = 0; const col = new THREE.Color();
+      let i = 0, it0 = null; const col = new THREE.Color();
       for (const [x, z] of list) for (let k = 0; k < def.per; k++, i++) {
-        const gx = x + 0.15 + rnd() * 0.7, gz = z + 0.15 + rnd() * 0.7, s = def.size[0] + rnd() * (def.size[1] - def.size[0]);
+        let gx = x + 0.15 + rnd() * 0.7, gz = z + 0.15 + rnd() * 0.7, s = def.size[0] + rnd() * (def.size[1] - def.size[0]);
+        if (def.clump) { const a = rnd() * 6.28, c = it0;                          // 무더기: 첫 덩이 둘레에 작은 덩이(겹쳐서 하나의 둥근 덤불로 읽힘)
+          if (k === 0) { gx = x + 0.35 + (gx - x) * 0.3; gz = z + 0.35 + (gz - z) * 0.3; it0 = [gx, gz, s]; }
+          else { s = c[2] * (0.62 + 0.12 * (s - def.size[0]) / (def.size[1] - def.size[0])); gx = c[0] + Math.cos(a) * 0.3 * c[2]; gz = c[1] + Math.sin(a) * 0.3 * c[2]; } }
         const it = { type, cell: `${x},${z}`, i, gx, gz, s, rot: rnd() * 6.28, lift: type === "flower" ? 0.14 + rnd() * 0.06 : type === "bush" ? 0.17 * s : type === "tuft" ? -0.02 : 0.03 };
         this.items.push(it); mesh.setColorAt(i, col.setHex(def.colors[Math.floor(rnd() * def.colors.length)]));
       }
