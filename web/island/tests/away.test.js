@@ -1,4 +1,4 @@
-// 다녀온 사이(World.applyAway) · 실제 날짜 쓰다듬기 · 오늘의 첫 인사 시험(three.js 없이)
+// 다녀온 사이(World.applyAway) · 쓰다듬기 쉬는 시간(실제 시간)·하루 정 상한(실제 날짜) · 오늘의 첫 인사 시험(three.js 없이)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { World } from "../src/world/World.js";
@@ -66,15 +66,60 @@ test("편지: 한 일을 하나하나 적고, 정말 아무 일 없을 때만 �
   assert.ok(part.includes("🔨 목수가 시장 공사를 0%에서 40%까지 해 뒀어요.")); assert.ok(part.includes("🏦 금고에 🪙+7 들어왔어요. 세금과 숙박비예요.")); assert.ok(part.includes("🔨 품삯으로 금고에서 🪙4 나갔어요."));
 });
 
-test("쓰다듬기는 실제 날짜로 하루 5번: 마을 날이 바뀌어도 그대로, 날짜가 바뀌면 다시 · 저장해도 그대로", () => {
-  assert.equal(B.PET_DAILY, 5);
-  const w = town(), u = w.units[0]; u.insideBuildingId = null; w.setDay("2026-11-28");
-  for (let i = 0; i < 5; i++) assert.equal(w.pet(u).ok, true); assert.equal(w.pet(u).reason, "cap");
-  w.time += N.NEWS_DAY_SECS * 3; assert.equal(w.pet(u).ok, false, "켜 두고 마을 하루가 지나도 그대로");
-  const w2 = World.fromJSON(JSON.parse(JSON.stringify(w.serialize(1))), seededRandom(1)), u2 = w2.units[0]; u2.insideBuildingId = null; w2.setDay("2026-11-28");
-  assert.equal(u2.petDay, "2026-11-28"); assert.equal(w2.pet(u2).ok, false, "불러와도 오늘은 다 씀");
-  w.setDay("2026-11-29"); assert.equal(w.pet(u).ok, true, "다음 날은 다시");
-  assert.equal(B.petsLeft({ petDay: 3, petN: 2 }, "2026-11-29"), 5, "예전 저장의 마을 날짜는 새 날로 봄");
+test("쓰다듬기 쉬는 시간: 횟수 제한 없이 한 번 쓰다듬으면 실제 1~2분 쉼 · 마을 시간·배속과 상관없음 · 갈매미마다 따로 · 시계가 뒤로 가도 막히지 않음", () => {
+  assert.ok(B.PET_COOL_MS >= 60_000 && B.PET_COOL_MS <= 120_000, "짧은 쉬는 시간(1~2분)");
+  assert.equal(B.PET_DAILY, undefined, "하루 횟수 제한은 없어짐"); assert.equal(B.petsLeft, undefined);
+  let t = NOON.getTime(); const w = town(), u = w.units[0]; u.insideBuildingId = null; w.setDay("2026-11-28"); w.realNow = () => t;
+  let r = w.pet(u); assert.equal(r.ok, true); assert.equal(r.wait, B.PET_COOL_MS); assert.equal(u.petAt, t);
+  assert.deepEqual(w.pet(u), { ok: false, reason: "cool", wait: B.PET_COOL_MS }, "바로 다시는 못 함"); assert.equal(u.petN, 1, "못 한 쓰다듬기는 안 셈");
+  w.time += N.NEWS_DAY_SECS * 3; assert.equal(w.pet(u).reason, "cool", "마을 시간이 흘러도(배속을 올려도) 실제 시간이 안 지나면 그대로");
+  t += B.PET_COOL_MS - 1; assert.deepEqual(w.pet(u), { ok: false, reason: "cool", wait: 1 });
+  t += 1; assert.equal(w.pet(u).ok, true, "쉬는 시간이 끝나면 다시");
+  for (let i = 0; i < 20; i++) { t += B.PET_COOL_MS; assert.equal(w.pet(u).ok, true, `${i}: 횟수 제한 없음`); }
+  const v = w.units.find(o => o !== u) ?? w.addUnitByName("목수"); v.insideBuildingId = null; assert.equal(w.pet(v).ok, true, "쉬는 시간은 갈매미마다 따로"); assert.equal(w.pet(u).reason, "cool");
+  t -= 3 * H; assert.equal(w.pet(u).ok, true, "기기 시계가 뒤로 가면 쉬었다고 봄(끝없이 막히지 않음)");
+  // 순수 계산
+  assert.equal(B.petCoolLeft({}, t), 0, "쓰다듬은 적 없음"); assert.equal(B.petCoolLeft({ petAt: 0 }, 5), 0);
+  assert.equal(B.petCoolLeft({ petAt: t }, t), B.PET_COOL_MS); assert.equal(B.petCoolLeft({ petAt: t }, t + B.PET_COOL_MS / 2), B.PET_COOL_MS / 2); assert.equal(B.petCoolLeft({ petAt: t }, t + B.PET_COOL_MS), 0);
+  assert.equal(B.petCoolLeft({ petAt: t }, t - 1), 0, "시계가 뒤로");
+  assert.equal(B.petCoolDone({ petAt: t }, t), 0); assert.equal(B.petCoolDone({ petAt: t }, t + B.PET_COOL_MS / 4), 0.25); assert.equal(B.petCoolDone({}, t), 1);
+});
+
+test("쓰다듬기 하루 정 상한: 실제 날짜마다 처음 PET_BOND_DAILY번만 정·성장, 그 뒤엔 기뻐하고 재미만 · 날짜가 바뀌면 다시 · 오늘의 부탁은 모두 셈", () => {
+  assert.equal(B.PET_BOND_DAILY, 5, "예전 하루 5번과 같은 하루 정 상한");
+  let t = NOON.getTime(); const w = town(), u = w.units[0]; u.insideBuildingId = null; w.setDay("2026-11-28"); w.realNow = () => t; w.isNight = false;
+  w.daily = { key: "2026-11-28", reqs: [{ id: "pet", icon: "♥", text: "갈매미 3번 쓰다듬기", need: 99, have: 0 }], stamped: false };
+  const ev = []; w.on("pet", e => ev.push(e.bond));
+  u.disp = "easy"; u.needs.fun = 0; const b0 = u.bond, social = () => u.growth?.social || 0; let r;   // 숨은 성향이 있어야 성장이 쌓임(첫 갈매미는 없음)
+  for (let i = 0; i < B.PET_BOND_DAILY; i++) { r = w.pet(u); t += B.PET_COOL_MS; assert.equal(r.bond, true); assert.equal(r.bondLeft, B.PET_BOND_DAILY - 1 - i); }
+  assert.equal(u.bond, b0 + B.PET_BOND_DAILY * B.PET_BOND); const s5 = social(); assert.ok(s5 > 0, "정이 오른 쓰다듬기는 성장(social)에 셈");
+  for (let i = 0; i < 7; i++) { u.emoteText = ""; r = w.pet(u); t += B.PET_COOL_MS; assert.equal(r.ok, true); assert.equal(r.bond, false, "오늘 정은 가득"); assert.equal(r.bondLeft, 0); assert.deepEqual(r.thanks, []); assert.match(u.emoteText, /♥/, "그래도 기뻐함"); }
+  assert.equal(u.bond, b0 + B.PET_BOND_DAILY * B.PET_BOND, "더 쓰다듬어도 정은 그대로"); assert.equal(social(), s5, "성장도 그대로(끝없이 쌓이지 않음)");
+  assert.equal(u.needs.fun, Math.min(100, 12 * B.PET_FUN), "재미는 쓰다듬을 때마다"); assert.equal(u.petN, 12);
+  assert.deepEqual(ev, [...Array(5).fill(true), ...Array(7).fill(false)]); assert.equal(w.daily.reqs[0].have, 12, "오늘의 부탁은 정과 상관없이 셈");
+  w.time += N.NEWS_DAY_SECS * 2; assert.equal(w.pet(u).bond, false, "마을 날이 바뀌어도 실제 날짜가 같으면 그대로"); t += B.PET_COOL_MS;
+  w.setDay("2026-11-29"); r = w.pet(u); assert.equal(r.bond, true, "다음 날은 다시 정이 오름"); assert.equal(r.bondLeft, B.PET_BOND_DAILY - 1); assert.equal(u.petN, 1);
+  assert.equal(B.petBondsLeft({}, "2026-11-29"), 5); assert.equal(B.petBondsLeft({ petDay: "2026-11-29", petN: 9 }, "2026-11-29"), 0);
+  assert.equal(B.petBondsLeft({ petDay: 3, petN: 2 }, "2026-11-29"), 5, "예전 저장의 마을 날짜는 새 날로 봄");
+});
+
+test("쓰다듬기 저장·불러오기: 쉬는 시간(petAt)·오늘 정 횟수가 이어지고, 예전 저장(petDay·petN만, petAt 없음)도 열림", () => {
+  let t = NOON.getTime(); const w = town(), u = w.units[0]; u.insideBuildingId = null; w.setDay("2026-11-28"); w.realNow = () => t;
+  for (let i = 0; i < B.PET_BOND_DAILY; i++) { assert.equal(w.pet(u).ok, true); t += B.PET_COOL_MS; }
+  t -= B.PET_COOL_MS / 3;   // 마지막 쓰다듬기에서 2/3 지남
+  const j = JSON.parse(JSON.stringify(w.serialize(1))); assert.equal(j.units[0].petAt, u.petAt); assert.equal(j.units[0].petN, 5); assert.equal(j.units[0].petDay, "2026-11-28");
+  const load = js => { const w2 = World.fromJSON(JSON.parse(JSON.stringify(js)), seededRandom(1)), u2 = w2.units[0]; u2.insideBuildingId = null; w2.realNow = () => t; w2.setDay("2026-11-28"); return [w2, u2]; };
+  let [w2, u2] = load(j);
+  assert.equal(u2.petAt, u.petAt); assert.deepEqual(w2.pet(u2), { ok: false, reason: "cool", wait: Math.round(B.PET_COOL_MS / 3) }, "불러와도 쉬는 시간이 이어짐");
+  t += B.PET_COOL_MS; const r = w2.pet(u2); assert.equal(r.ok, true); assert.equal(r.bond, false, "불러와도 오늘 정은 다 씀");
+  // 쓰다듬은 적 없는 갈매미는 petAt을 저장하지 않음(저장이 커지지 않게)
+  assert.equal("petAt" in town().serialize(1).units[0], false);
+  // 예전 저장: petAt 없음 → 바로 쓰다듬을 수 있고, 같은 날 이미 5번이었으면 정은 안 오름
+  const old = JSON.parse(JSON.stringify(j)); delete old.units[0].petAt;
+  [w2, u2] = load(old); assert.equal(u2.petAt, 0); assert.equal(w2.pet(u2).bond, false, "예전 저장의 오늘 5번은 정 상한으로 이어짐");
+  const older = JSON.parse(JSON.stringify(j)); delete older.units[0].petAt; older.units[0].petDay = 3; older.units[0].petN = 5;   // 마을 날짜로 셌던 저장
+  [w2, u2] = load(older); const r2 = w2.pet(u2); assert.equal(r2.ok, true); assert.equal(r2.bond, true, "마을 날짜로 센 예전 횟수는 새 날로 봄");
+  const bad = JSON.parse(JSON.stringify(j)); bad.units[0].petAt = "이상한 값"; [w2, u2] = load(bad); assert.equal(u2.petAt, 0); assert.equal(w2.pet(u2).ok, true);
 });
 
 test("오늘의 첫 인사: 실제 날짜마다 한 번, 같은 날·같은 섬이면 같은 갈매미와 물건, 저장해도 다시 안 줌", () => {

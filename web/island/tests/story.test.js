@@ -32,7 +32,7 @@ function toChapter(w, n) {
   if (n >= 3) { wave(w); pickKey(w, "c2_wall"); pickPlain(w, 5); w.addBond(w.units[0], 28);
     const f = w.landmarkFront("cave"); assert.ok(placeNear(w, "streetlamp", f) && placeNear(w, "streetlamp", f)); assert.ok(w.storyRestore(2).ok); }
   if (n >= 4) { for (let d = 0; d < 3; d++) { dayOf(w, newsDayOf(w) + 1); wave(w); pickKey(w, "seed:B"); }
-    pickPlain(w, 5); w.units[0].petDay = 0; w.pet(w.units[0]); w.res.iron += 1; assert.ok(w.storyRestore(3).ok); }
+    pickPlain(w, 5); w.units[0].petDay = 0; w.units[0].petAt = 0; w.pet(w.units[0]); w.res.iron += 1; assert.ok(w.storyRestore(3).ok); }
   assert.equal(w.story.chapter, n);
 }
 const newsDayOf = w => Math.floor(w.time / 600) + 1;
@@ -96,7 +96,7 @@ test("1장 고칠 곳: 조각 3 + 나무 2 → 등대 문 · 모자라면 안 �
 
 test("고칠 곳 재료가 창고에 없으면 갈매미 가방에서 시장 값으로 사 옴(창고에 철이 안 들어오는 마을도 안 막힘)", () => {
   const w = town(); toChapter(w, 3); for (let d = 0; d < 3; d++) { dayOf(w, newsDayOf(w) + 1); wave(w); pickKey(w, "seed:B"); }
-  pickPlain(w, 5); w.units[0].petDay = 0; w.pet(w.units[0]); w.res.iron = 0;
+  pickPlain(w, 5); w.units[0].petDay = 0; w.units[0].petAt = 0; w.pet(w.units[0]); w.res.iron = 0;
   for (const u of w.units) u.inv.iron = 0;
   let chk = ST.restoreCheck(w.story, w, 3); assert.ok(!chk.ok, "철이 어디에도 없으면 아직");
   const miner = addGull(w, "불씨"); miner.inv.iron = 4; miner.coins = 0; assert.ok(w.economy); w.bank.vault = 100;
@@ -130,9 +130,9 @@ test("3장: 별씨 두 길(유성우 밤 · 마을 날 아침, 하루 하나) ·
   dayOf(w, d + 1); wave(w); pickKey(w, "seed:B"); assert.equal(w.story.seeds, 3); assert.ok(w.story.found.c3_seed, "별씨 3개 = 조각 한 칸");
   dayOf(w, d + 2); wave(w); assert.ok(!sparkOf(w, "seed:B"), "다 모으면 더 안 생김");
   pickPlain(w, 5); assert.ok(w.story.found.c3_bottle);
-  const u = w.units[0]; w.units[0].petDay = 0;
-  const v = town(); toChapter(v, 3); const vu = v.units[0]; vu.petDay = 0; v.pet(vu); assert.ok(!v.story.found.c3_secret2, "3장이 열린 날엔 아님");
-  dayOf(v, newsDayOf(v) + 1); vu.petDay = 0; v.pet(vu); assert.equal(v.story.found.c3_secret2?.who, vu.name, "다음 마을 날");
+  const u = w.units[0]; w.units[0].petDay = 0; w.units[0].petAt = 0;
+  const v = town(); toChapter(v, 3); const vu = v.units[0]; vu.petDay = 0; vu.petAt = 0; v.pet(vu); assert.ok(!v.story.found.c3_secret2, "3장이 열린 날엔 아님");
+  dayOf(v, newsDayOf(v) + 1); vu.petDay = 0; vu.petAt = 0; v.pet(vu); assert.equal(v.story.found.c3_secret2?.who, vu.name, "다음 마을 날");
   w.firstSnow(true); assert.ok(w.story.found.c3_snow);
   assert.ok(!ST.storyLampLit(w.story)); w.res.iron = 1; const ok = w.storyRestore(3); assert.ok(ok.ok, ok.reason);
   assert.equal(w.res.iron, 0); assert.equal(w.story.seeds, 0); assert.ok(ST.storyLampLit(w.story)); assert.ok(w.story.found.c4_lit, "켜진 등대는 저절로");

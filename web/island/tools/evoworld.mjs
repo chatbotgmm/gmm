@@ -40,6 +40,7 @@ export function habitOf(mode, k) { return mode === "mix" ? HABITS[k % HABITS.len
 export function runVillage(seed, n = 12, mode = "mix", { dt = 0.25, maxDays = 30, only = null } = {}) {
   const w = World.create(seed, seededRandom(seed * 7 + 1), { wild: true, firstGull: false });
   w.vault = 1e6; if (w.bank) w.bank.vault = 1e6;
+  w.realNow = () => 1 + w.time * 1000;   // 쓰다듬기 쉬는 시간(실제 시간): 헤드리스라 마을 시간을 1배속 실제 시간으로 봄(결정적)
   for (let i = 0; i < n; i++) placeDone(w, "house");
   const cafe = placeDone(w, "cafe", 8), market = placeDone(w, "market", 8), field = placeDone(w, "field", 6);
   const sea = shoreSpot(w), fieldAt = field ? { x: field.door.x + 0.5, z: field.door.z + 1.5 } : null;
@@ -56,7 +57,7 @@ export function runVillage(seed, n = 12, mode = "mix", { dt = 0.25, maxDays = 30
       if (u.evo || u.insideBuildingId || u.evoFx || (done.get(u.unitId) || 0) >= TOUCHES || w.time - (u.dropAt ?? -1e9) < 60) continue;
       const h = habit.get(u.unitId);
       if (h === "none") continue;
-      if (h === "pet") { w.pet(u); done.set(u.unitId, (done.get(u.unitId) || 0) + 1); continue; }
+      if (h === "pet") { if (w.pet(u).ok) done.set(u.unitId, (done.get(u.unitId) || 0) + 1); continue; }   // 쉬는 중이면 다음에 다시 봄
       const at = h === "sea" ? sea : h === "field" ? fieldAt : h === "cafe" && cafe ? { x: cafe.door.x, z: cafe.door.z } : null;
       if (!at || !w.pickUpUnit(u)) continue;
       const r = w.dropUnit(u, Math.floor(at.x), Math.floor(at.z), h === "cafe" ? null : at);

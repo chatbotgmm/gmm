@@ -144,6 +144,15 @@
   #bondBar[hidden], #giftPick[hidden] { display: none; }
   #bondBar .brow { display: none; } #bondBar button { pointer-events: auto; min-height: max(calc(40*var(--u)), var(--hit-sm)); padding: calc(6*var(--u)) calc(12*var(--u)); font-size: var(--fs-body); border-radius: var(--r-md); touch-action: manipulation; }
   #petBtn { color: #b8355c; } #bondBar button:disabled { opacity: .55; }
+  /* ♥ 쓰다듬기 쉬는 시간(bond.js PET_COOL_MS · gullView petButtonOf): ♥ 둘레 동그라미가 12시부터 시계 방향으로 차오름(--pet 0→1, 숫자 없음). 다 차면 동그라미는 사라지고 ♥가 톡 */
+  #petBtn { display: inline-flex; align-items: center; justify-content: center; gap: calc(4*var(--u)); }
+  #petBtn .pet-ring { position: relative; flex: none; display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; margin-block: -.2em; border-radius: 50%; line-height: 1; }
+  #petBtn .pet-ring::before { content: ""; position: absolute; inset: 0; border-radius: 50%; opacity: 0; transition: opacity var(--t-med, .2s);
+    background: conic-gradient(#d94a78 calc(var(--pet, 1) * 1turn), rgba(184,53,92,.18) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - .22em), #000 calc(100% - .2em)); mask: radial-gradient(farthest-side, transparent calc(100% - .22em), #000 calc(100% - .2em)); }
+  #petBtn.cool .pet-ring::before { opacity: 1; } #petBtn.cool .pet-t { opacity: .7; } #petBtn.cool .pet-ring b { opacity: .6; }
+  #petBtn.pop .pet-ring b { animation: petPop .45s ease-out 1; } @keyframes petPop { 45% { transform: scale(1.45); } }
+  html[data-motion="reduce"] #petBtn.pop .pet-ring b { animation: none; } @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) #petBtn.pop .pet-ring b { animation: none; } }
   #giftPick { pointer-events: auto; background: var(--c-surface); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u)); box-shadow: var(--e-1); font-size: var(--fs-cap); max-height: 34vh; max-height: 34dvh; overflow: auto; overscroll-behavior: contain; box-sizing: border-box; }
   #giftPick p { margin: 0 0 calc(6*var(--u)); } #giftPick .gifts { display: flex; flex-wrap: wrap; gap: calc(5*var(--u)); } #giftPick .gifts button { min-height: max(calc(38*var(--u)), var(--hit-sm)); font-size: var(--fs-sm); }
   #info .hearts { color: #d6456e; letter-spacing: 1px; font-size: var(--fs-sm); }
@@ -986,7 +995,7 @@
 <div id="chips"><div id="stat" role="group" aria-label="마을 상태"><button id="chipTime" data-tip="⏩ 배속 (F)">☀️</button><button id="chipWeather" data-tip="계절·날씨·기온 보기"><span class="wl">🍂</span><span class="wt"></span></button><button id="chipVault" data-tip="내 금고: 설계비와 품삯을 내는 내 돈. 누르면 🏦 은행"><span class="vs"><span class="vv">🏦 0</span><span class="vt"></span></span></button><button id="chipTown" data-tip="마을 돈: 갈매미들이 가진 동전을 모두 더한 값이에요. 누르면 🏦 은행">🪙 0</button><button id="chipRank" data-tip="마을 등급·겨울 대비">🛖</button><span id="chipPop">🐦 0</span></div><button id="mapBtn" data-tip="미니맵 보이기/숨기기">🗺 지도</button><button id="menuBtn" aria-label="메뉴" data-tip="메뉴: 설정·저장·도움말·지난 알림">☰</button><i class="brk" aria-hidden="true"></i><button id="chipWish" hidden></button><button id="alert" hidden></button></div>
 <div id="info" hidden role="region" aria-label="따라가는 갈매미"></div>
 <button id="tugBtn" hidden aria-keyshortcuts="Space">🎣 당기기!</button>
-<div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" data-tip="주머니에 모은 반짝이와 도장 선물 가운데 골라 건네요">🎁 선물</button><button id="petBtn" data-tip="쓰다듬으면 정이 조금씩 들어요. 하루에 몇 번까지">♥ 쓰다듬기</button></div></div><!-- 두 버튼은 켜질 때 따라가기 카드의 행동 줄로 옮겨짐(hud.js buildInfoCard) -->
+<div id="bondBar" hidden><div id="giftPick" hidden></div><div class="brow"><button id="giftBtn" data-tip="주머니에 모은 반짝이와 도장 선물 가운데 골라 건네요">🎁 선물</button><button id="petBtn" aria-label="쓰다듬기" data-tip="쓰다듬으면 정이 조금씩 들어요. 한 번 쓰다듬으면 잠깐 쉬어요 — 하트 둘레 동그라미가 다 차면 다시"><span class="pet-ring" aria-hidden="true"><b>♥</b></span><span class="pet-t">쓰다듬기</span></button></div></div><!-- 두 버튼은 켜질 때 따라가기 카드의 행동 줄로 옮겨짐(hud.js buildInfoCard) -->
 <button id="phoneBtn" aria-label="갈매폰" data-tip="갈매폰: 소원·갈매미·소식지·도감과 마을 앱">📱<span class="badge-count" hidden></span><span class="dot" hidden></span></button>
 <div id="phone" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="phoneTitle">
   <div class="card">

@@ -397,9 +397,10 @@ hud.onGift = (u, id) => world.giveGift(u, id);
 // 도장 가게(오늘의 부탁을 모두 들어주고 받은 도장으로 한정 가구나 귀한 선물 사기)
 hud.onStampBuy = id => { const ok = world.buyStamp(id);   // 산 물건은 보상 카드(stampBuy → rewards)가 크게 보여 줌 · 알림은 지난 알림에만
   if (ok) hud.logNote(stampBuyText(id, ok, josa), "good"); else hud.status(stampBuyText(id, ok, josa)); return ok; };   // 가구·귀한 선물 둘 다(예전엔 가구 표만 찾아 선물을 사면 TypeError)
+// 쓰다듬기는 횟수 제한 없이 짧은 쉬는 시간(bond.js PET_COOL_MS, 실제 시간): 안내 글에도 남은 횟수·초 같은 숫자는 없음(♥ 둘레 동그라미로 보여 줌)
 hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
-  if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘은 여기까지예요`);
-  else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요. 내일 또 해요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
+  if (r.ok && !r.thanks.length) hud.status(r.bond && r.bondLeft === 0 ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘 정은 가득 들었어요. 그래도 쓰다듬으면 좋아해요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요`);
+  else if (!r.ok) hud.status(r.reason === "cool" ? `${josa(u.name, "은", "는")} 잠깐 쉬는 중이에요. 하트 둘레 동그라미가 다 차면 또 쓰다듬어 줘요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
   return r; };
 addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름

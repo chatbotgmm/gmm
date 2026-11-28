@@ -59,10 +59,19 @@ export function giftTier(who, id) {
   return cat && p.likes?.includes(cat) ? 2 : cat && p.dislikes?.includes(cat) ? 0 : 1;
 }
 
-// 쓰다듬기: 갈매미마다 하루(실제 날짜 열쇠 — 오늘의 부탁과 같은 daily.js dailyKey, World.petKey) PET_DAILY번까지
-export const PET_DAILY = 5, PET_BOND = 0.5, PET_FUN = 4;
-/** 오늘 더 쓰다듬을 수 있는 횟수(day = 날짜 열쇠, 글자 또는 예전 저장의 마을 날짜 수) */
-export const petsLeft = (u, day) => Math.max(0, PET_DAILY - (u.petDay === day ? u.petN || 0 : 0));
+// 쓰다듬기: 횟수 제한 없음. 한 번 쓰다듬으면 그 갈매미는 PET_COOL_MS(실제 1분 반) 동안 잠깐 쉼(♥ 둘레에 차오르는 동그라미, 숫자 없음).
+//  정(PET_BOND)은 갈매미마다 하루(실제 날짜 열쇠 — 오늘의 부탁과 같은 daily.js dailyKey, World.petKey) 처음 PET_BOND_DAILY번만 오름
+//  → 계속 쓰다듬어도 정을 끝없이 쌓을 수 없음(예전 하루 5번과 같은 하루 정 상한). 그 뒤로도 기뻐하는 반응과 재미(PET_FUN)는 그대로.
+//  쉬는 시간은 마을 시간(배속·멈춤에 따라 늘고 줄)이 아니라 실제 시간(World.nowMs, 기본 Date.now · 시험은 w.realNow로 바꿔 끼움):
+//  사람이 기다리는 시간이므로 배속·프레임과 상관없이 늘 같고, 저장했다 다시 열어도 이어짐(u.petAt = 마지막으로 쓰다듬은 실제 시각, ms).
+export const PET_COOL_MS = 90_000, PET_BOND_DAILY = 5, PET_BOND = 0.5, PET_FUN = 4;
+/** 오늘 정이 더 오를 수 있는 쓰다듬기 횟수(day = 날짜 열쇠, 글자 또는 예전 저장의 마을 날짜 수 — 다른 날이면 새로 셈) */
+export const petBondsLeft = (u, day) => Math.max(0, PET_BOND_DAILY - (u.petDay === day ? u.petN || 0 : 0));
+/** 다시 쓰다듬을 수 있을 때까지 남은 실제 시간(ms, 0~PET_COOL_MS). 쓰다듬은 적 없으면(petAt 0) 0.
+ *  기기 시계가 뒤로 갔으면(now < petAt) 쉬었다고 봄 → 시계를 되돌려도 쉬는 시간이 끝없이 이어지지 않음 */
+export const petCoolLeft = (u, now) => { const at = +u?.petAt || 0, d = now - at; return at > 0 && d >= 0 && d < PET_COOL_MS ? PET_COOL_MS - d : 0; };
+/** 쉬는 시간이 얼마나 지났는지(0 = 막 쓰다듬음 · 1 = 다시 쓰다듬을 수 있음): ♥ 둘레 동그라미가 차오르는 정도 */
+export const petCoolDone = (u, now) => 1 - petCoolLeft(u, now) / PET_COOL_MS;
 
 // 답례: 하트 단계(1~3)에 처음 닿았을 때 한 번. item = 마을 가방에 들어가는 물건(ITEMS의 id),
 // furniture = 그 갈매미 집 창고에 들어가는 가구(집이 없으면 대신 item을 마을 가방에)

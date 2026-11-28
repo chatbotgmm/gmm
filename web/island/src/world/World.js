@@ -33,7 +33,7 @@ import { SKY_EVENTS, skySeed, RAINBOW_CHANCE, METEOR_CHECK_SECS, METEOR_CHANCE, 
 import { FESTIVAL_RANK, FESTIVAL_SECS, FESTIVAL_CHEER_SECS, festivalOf, festivalGift, festivalPlaza, festiveCount, festivalFromSave, festivalsFromSave } from "./festival.js";
 import { paintableUnder, matchGround } from "./groundMatch.js";
 import { rollDaily, dailyNote, dailyAllDone, dailyFromSave, stampBoughtFromSave, STAMP_SHOP, STAMP_GIFTS, stampCost, hashText, STAMP_COINS, DAILY_COUNT, DAILY_GROUP, DAILY_POOL } from "./daily.js";
-import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, GIFT_CAT_NAME, giftDef, giftTier, PET_DAILY, PET_BOND, PET_FUN, petsLeft, thanksFor, gullForm, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
+import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, GIFT_CAT_NAME, giftDef, giftTier, PET_BOND, PET_FUN, PET_COOL_MS, petBondsLeft, petCoolLeft, thanksFor, gullForm, keepFromSave, STAMP_GIFT_BOND } from "./bond.js";
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import { undoBlock, feeUndoLedger } from "./buildUndo.js";
@@ -271,7 +271,7 @@ export class World {
       case "barter": this.noteGrowth(a.a, "shiny", 1); this.noteGrowth(a.b, "shiny", 1); break;
       case "stashSale": this.noteGrowth(a.u, "shiny", 1); break;
       case "friendship": this.noteGrowth(a.a, "social", 1); this.noteGrowth(a.b, "social", 1); break;
-      case "pet": this.noteGrowth(a.u, "social", 0.5, "player"); if (this.isNight) this.noteGrowth(a.u, "night", 0.5, "player"); break;
+      case "pet": if (a.bond === false) break; this.noteGrowth(a.u, "social", 0.5, "player"); if (this.isNight) this.noteGrowth(a.u, "night", 0.5, "player"); break;   // 정이 오르는 쓰다듬기(하루 PET_BOND_DAILY번)만 성장에 셈 — 쉬는 시간마다 끝없이 쌓이지 않게
       case "cocoa": this.noteGrowth(a.u, "warm", 2); break;
       case "starPiece": this.noteGrowth(a.u, "night", 3); break;
       case "fussSolved": this.noteGrowth(a.u, a.kind === "perch" ? "timid" : "night", 2); break;
@@ -476,7 +476,7 @@ export class World {
     s.disp = opts.disp ?? null; s.growth = {}; s.bornDay = opts.bornDay ?? newsDay(this.time); s.evo = opts.evo ?? null; s.title = null; s.guess = null;   // 숨은 성향 · 자란 방식 · 온 날 · 변신(evolve.js)
     s.coins = 0; s.inv = E.newBag(); s.home = null; s.stash = {};              // 돈·가방·내 집·소지품(잡거나 주운 것, belongings.js)
     s.loan = null; s.wageOwed = 0; s.loanRefused = false;                       // 집 대출 { left, per } · 밀린 품삯 · 금고가 비어 대출을 거절당함(bank.js)
-    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.cheer = 0;                     // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(실제 날짜 열쇠, petKey)과 그날 횟수
+    s.bond = 0; s.bondGifts = 0; s.petDay = 0; s.petN = 0; s.petAt = 0; s.cheer = 0;        // 나와의 정 · 받은 답례 수 · 쓰다듬은 날(실제 날짜 열쇠, petKey)과 그날 횟수 · 마지막으로 쓰다듬은 실제 시각(ms)
     s.raw = { wood: 0, stone: 0, iron: 0 }; s.goods = { wood: 0, stone: 0, iron: 0 };   // 상인: 사 들인 원자재 · 가공한 물건
     s.clothes = []; s.wear = CLO.emptyWear();                                   // 가진 옷 · 입은 옷(clothes.js)
     if (this.economy && s.job === "merchant" && !opts.restoring) this.issue(s, E.MERCHANT_START);  // 상인 창업 자금(중앙은행이 켜진 섬은 금고에서, issue)
@@ -1356,19 +1356,23 @@ export class World {
     const thanks = this.addBond(u, t.bond * (item.stampGift ? STAMP_GIFT_BOND : 1));
     return { item, tier, say: t.say, bond: u.bond, thanks };
   }
-  /** 쓰다듬기: 정·재미가 조금 오름. 갈매미마다 하루(실제 날짜, petKey)에 PET_DAILY번까지.
-   *  돌려주는 값: { ok, left: 오늘 남은 횟수, thanks } · 못 했으면 { ok: false, reason: "cap" | "away" } */
   /** 쓰다듬기 날짜 열쇠: 실제 날짜(오늘의 부탁과 같은 daily.key, 화면이 기기 날짜로 넣어 줌). 날짜를 모르면(시험 받침) 마을 날짜 */
   petKey() { return this.daily?.key ?? newsDay(this.time); }
+  /** 실제 시각(ms, 0보다 큼): 쓰다듬기 쉬는 시간용. 마을 시간·배속·프레임과 상관없음(기본 Date.now). 시험·헤드리스 도구는 w.realNow = () => t 로 바꿔 끼움 */
+  nowMs() { return this.realNow ? this.realNow() : Date.now(); }
+  /** 쓰다듬기: 재미가 조금 오르고 그 갈매미가 기뻐함. 횟수 제한 없이, 한 번 쓰다듬으면 PET_COOL_MS(실제 시간) 동안 쉼.
+   *  정은 하루(실제 날짜, petKey)에 처음 PET_BOND_DAILY번만 오름(bond.js 머리 글) — 그 뒤엔 기뻐하고 재미만 오름.
+   *  돌려주는 값: { ok, bond: 정이 올랐는지, bondLeft: 오늘 정이 더 오를 횟수, wait: 이제 쉬는 ms, thanks } · 못 했으면 { ok: false, reason: "cool"(wait = 남은 ms) | "away" } */
   pet(u) {
     if (!u || !this.units.includes(u) || u.insideBuildingId || u.state === UnitState.Held || u.sailing) return { ok: false, reason: "away" };
-    const day = this.petKey();
-    if (!petsLeft(u, day)) return { ok: false, reason: "cap", left: 0 };
-    if (u.petDay !== day) { u.petDay = day; u.petN = 0; }
-    u.petN++; if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + PET_FUN);
+    const now = this.nowMs(), wait = petCoolLeft(u, now);
+    if (wait > 0) return { ok: false, reason: "cool", wait };
+    const day = this.petKey(); if (u.petDay !== day) { u.petDay = day; u.petN = 0; }
+    const bond = petBondsLeft(u, day) > 0;
+    u.petAt = now; u.petN++; if (u.needs) u.needs.fun = Math.min(100, u.needs.fun + PET_FUN);
     emote(u, bondStage(u.bond) >= 2 ? "♥ 좋아" : "♥", 1.6);
-    const thanks = this.addBond(u, PET_BOND); this.emit("pet", { u });
-    return { ok: true, left: PET_DAILY - u.petN, thanks };
+    const thanks = bond ? this.addBond(u, PET_BOND) : []; this.emit("pet", { u, bond });
+    return { ok: true, bond, bondLeft: petBondsLeft(u, day), wait: PET_COOL_MS, thanks };
   }
 
   // ---- 계절 축제의 날(festival.js)
@@ -2667,7 +2671,7 @@ export class World {
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
       gulls: 1, minClient: "gulls1", nextGullNo: this.nextGullNo, gullsMade: this.gullsMade, formsSeen: [...this.formsSeen], evoDay: this.evoDay,
       evoPending: [...new Set(this.evoPending.concat(this.units.filter(u => u.evoFx && !u.evo).map(u => u.unitId)))],   // 연출 첫 절반(모습이 바뀌기 전)에 저장해도 차례를 잃지 않게
-      units: this.units.map(u => ({ id: u.unitId, name: u.name, form: EV.formOf(u), disp: u.disp || null, growth: Object.fromEntries(Object.entries(u.growth || {}).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])), ...(u.growthP && Object.values(u.growthP).some(v => v > 0) ? { gp: Object.fromEntries(Object.entries(u.growthP).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}), born: u.bornDay ?? 0, evo: u.evo || null, job: u.job, rarity: u.rarity, tribe: u.tribe, ...(u.title ? { title: u.title } : {}), ...(u.guess ? { guess: u.guess } : {}), ...(u.guessHit ? { guessHit: 1 } : {}), x: Math.round(u.x * 100) / 100, z: Math.round(u.z * 100) / 100, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToIds(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
+      units: this.units.map(u => ({ id: u.unitId, name: u.name, form: EV.formOf(u), disp: u.disp || null, growth: Object.fromEntries(Object.entries(u.growth || {}).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])), ...(u.growthP && Object.values(u.growthP).some(v => v > 0) ? { gp: Object.fromEntries(Object.entries(u.growthP).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}), born: u.bornDay ?? 0, evo: u.evo || null, job: u.job, rarity: u.rarity, tribe: u.tribe, ...(u.title ? { title: u.title } : {}), ...(u.guess ? { guess: u.guess } : {}), ...(u.guessHit ? { guessHit: 1 } : {}), x: Math.round(u.x * 100) / 100, z: Math.round(u.z * 100) / 100, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToIds(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, ...(u.petAt ? { petAt: u.petAt } : {}), lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought, greetDay: this.greetDay,
@@ -2696,7 +2700,7 @@ export class World {
     else w.spawnLegacy(saved ? saved.map(u => u.name) : undefined);                 // 예전 저장(이름 = 모습): 옛 차례 그대로(units 없음은 9마리 모두) → 아래 migrateGulls가 id로 옮김
     const byIdx = (s, k) => gulls ? w.units[k] : w.units.find(o => o.name === s.name);
     (saved || []).forEach((s, k) => { const u = byIdx(s, k); if (!u) return; u.coins = s.coins || 0; u.saved = Math.max(0, Math.floor(+s.saved || 0)); if (s.inv) u.inv = { ...E.newBag(), ...s.inv }; u.home = s.home || null; if (s.raw) u.raw = { ...u.raw, ...s.raw }; if (s.goods) u.goods = { ...u.goods, ...s.goods }; if (gulls) friendsFromIds(u, s.friends, w.units); else friendsFromNames(u, s.friends, w.units);
-      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.lodgeNight = typeof s.lodgeNight === "string" ? s.lodgeNight : null; u.petDay = typeof s.petDay === "string" ? s.petDay : s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
+      u.bond = Math.max(0, Math.min(BOND_MAX, +s.bond || 0)); u.bondGifts = Math.max(0, Math.min(BOND_STAGES.length - 1, s.bondGifts | 0)); u.lodgeNight = typeof s.lodgeNight === "string" ? s.lodgeNight : null; u.petDay = typeof s.petDay === "string" ? s.petDay : s.petDay | 0; u.petN = Math.max(0, s.petN | 0); u.petAt = Number.isFinite(+s.petAt) ? Math.max(0, +s.petAt) : 0; u.cheer = Math.max(0, Math.min(FESTIVAL_CHEER_SECS, +s.cheer || 0)); u.stash = stashFromSave(s.stash);
       u.loan = BK.loanFromSave(s.loan); u.wageOwed = Math.max(0, Math.floor(+s.wageOwed || 0)); u.loanRefused = !!s.loanRefused;   // 대출·밀린 품삯(예전 저장엔 없음 → 없음)                       // 정·답례·쓰다듬기(예전 저장엔 없음 → 0)   // 친구 사이는 이름으로(예전 저장엔 없음 → 처음부터)
       u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0);   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
       u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes);   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)

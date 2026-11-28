@@ -6,6 +6,7 @@
 //  · gullMoreHtml: [자세히 보기] 안쪽(만족도 내역 · 소지품 · 가방 · 가진 옷 · 면역 · 좋아하는 일·단짝)
 //  · giftPickHtml: 🎁 선물 판(내 주머니 개수 · 취향 · 주머니 목록 — 좋아하는 것 ♥ 먼저, 도장 선물 ⭐ 정 ×2)
 //  · stampShopHtml · stampBuyText: 📋 도장 가게(🎁 귀한 선물 8 · 🛋 한정 가구 4)와 산 뒤 안내 글
+//  · petButtonOf: ♥ 쓰다듬기 단추 — 쉬는 동안 ♥ 둘레 동그라미가 차오르는 정도(숫자 없음)와 글·읽어 주는 이름
 import { UnitState } from "../data/types.js";
 import { BUILDINGS, FURNITURE, PERSONA, CLOTHES, CLOTHES_ORDER } from "../data/catalog.js";
 import { residentsOf } from "../world/homes.js";
@@ -16,12 +17,21 @@ import { newsDay } from "../world/news.js";
 const housemate = (u, b, world) => { const o = residentsOf(b).filter(id => id !== u.unitId).map(id => world.units?.find(x => x.unitId === id)?.name).filter(Boolean); return o.length ? ` · 같이 사는 ${o.join(", ")}` : ""; };
 import { SICK, secsLeft } from "../world/health.js";
 import { bodyState, COLD_AT, HOT_AT } from "../world/climate.js";
-import { GIFT_CAT_NAME, giftables, pocketCount, giftTier, bondStage, giftDef, STAMP_GIFT_BOND } from "../world/bond.js";
+import { GIFT_CAT_NAME, giftables, pocketCount, giftTier, bondStage, giftDef, STAMP_GIFT_BOND, petCoolLeft, petCoolDone } from "../world/bond.js";
 import { stashList } from "../world/belongings.js";
 import { ITEMS_ORDER, ITEM_ICON } from "../world/economy.js";
 import { STAMP_SHOP, STAMP_GIFTS, stampCost } from "../world/daily.js";
 import { valueRows } from "./hudParts.js";
 import { VIEW, leftWord } from "./viewPrefs.js";
+
+/** ♥ 쓰다듬기 단추(따라가기 카드 행동 줄). now = 실제 시각(world.nowMs). away = 집 안·들고 있음(그땐 꺼짐).
+ *  쉬는 동안(bond.js PET_COOL_MS): cool = true, fill = 동그라미가 찬 정도 0~1(1/200 단위로 끊어 같은 값이면 화면을 안 건드림), 글은 "쉬는 중".
+ *  남은 초·횟수 같은 숫자는 보여 주지도 읽어 주지도 않음(사용자 선택: 남은 시간 원형 표시). 돌려줌 { cool, fill, text, aria, disabled } */
+export function petButtonOf(u, now, away = false) {
+  const cool = !!u && petCoolLeft(u, now) > 0, fill = cool ? Math.floor(petCoolDone(u, now) * 200) / 200 : 1;
+  return { cool, fill, disabled: !!away, text: cool ? "쉬는 중" : "쓰다듬기",
+    aria: away ? "쓰다듬기, 지금은 할 수 없어요" : cool ? "쓰다듬기, 잠깐 쉬는 중이에요. 하트 둘레 동그라미가 다 차면 다시 쓰다듬을 수 있어요" : "쓰다듬기" };
+}
 
 // 갈매미가 지금 하는 일(카드·목록). 모든 UnitState 키가 있어야 함(시험으로 고정) — 영문 상태 이름이 화면에 나오지 않게
 export const STATE_LABEL = { [UnitState.Forage]: "씨앗 찾는 중", [UnitState.Eat]: "냠냠", [UnitState.Visit]: "친구에게 가는 중", [UnitState.Greet]: "인사 중",

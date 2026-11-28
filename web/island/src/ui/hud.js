@@ -14,7 +14,7 @@ import { residentsText, residentsOf } from "../world/homes.js";
 import { DONATE_KINDS, DONATE_GIFTS, donatedCount } from "../world/aquarium.js";
 import { MEDALS, MEDAL_GIFTS, fishMedal, medalLine } from "../world/medals.js";
 import { newsDay } from "../world/news.js";
-import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftDef, petsLeft, PET_DAILY } from "../world/bond.js";
+import { BOND_STAGES, bondStage, bondHearts, GIFT_CAT_NAME, giftDef } from "../world/bond.js";
 import { stashTotals } from "../world/belongings.js";
 import { SKY_EVENTS } from "../world/skywatch.js";
 import { DAILY_COUNT } from "../world/daily.js";
@@ -28,7 +28,7 @@ import { appsVisible } from "./appUnlock.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
-import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge, formLineOf, evoBoxHtml, FORM_ICONS } from "./gullView.js";
+import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge, formLineOf, evoBoxHtml, FORM_ICONS, petButtonOf } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
 import { readGridPref, saveGridPref } from "./gridView.js";
@@ -160,7 +160,9 @@ export class Hud {
     // 선물·쓰다듬기: 버튼은 카드의 행동 줄에(뼈대를 한 번만 만드니 누르는 중에 사라지지 않음), 선물 고르는 판만 카드 위에 뜸
     this.bondBar = document.getElementById("bondBar"); this.giftPick = document.getElementById("giftPick"); this.giftBtn = document.getElementById("giftBtn"); this.petBtn = document.getElementById("petBtn");
     this.giftBtn.onclick = () => { this.giftPick.hidden = !this.giftPick.hidden; if (!this.giftPick.hidden) { this.drawGifts(); this.coach?.moment("gift"); } };
-    this.petBtn.onclick = () => { if (!this.follow) return; this.onPet?.(this.follow); this.showBond(this.follow); };   // 남은 횟수는 바로 고침(글자판은 1초에 5번만 그림)
+    this.petBtn.onclick = () => { if (!this.follow) return; this.onPet?.(this.follow); this.showBond(this.follow); };   // 쉬는 동그라미는 바로 고침(글자판은 1초에 5번만 그림) · 쉬는 동안 눌러도 안내 한 줄(aria-disabled, 꺼 두지 않음)
+    this.petRing = this.petBtn.querySelector(".pet-ring"); this.petText = this.petBtn.querySelector(".pet-t");
+    this.petRing?.addEventListener("animationend", () => this.petBtn.classList.remove("pop"));
     this.buildInfoCard();
     this.giftPick.onclick = e => { const b = e.target.closest?.("[data-gift]"), u = this.follow; if (!b || !u) return; this.onGift?.(u, b.dataset.gift); this.drawGifts(); };
     const zb = document.getElementById("zones"); zb.onclick = () => { zb.classList.toggle("off"); const on = !zb.classList.contains("off"); zb.setAttribute("aria-pressed", String(on)); this.onZones?.(on); };
@@ -897,14 +899,19 @@ export class Hud {
     if (on) b.style.setProperty("--tug", `${Math.max(0.1, secs).toFixed(2)}s`);   // 줄어드는 줄은 실제로 남은 시간만큼(자리는 CSS: 카드 바로 위)
     b.hidden = !on; this.giftBtn.disabled = on; if (on) { this.giftPick.hidden = true; this.coach?.moment("tug"); }   // 당기는 동안 선물 판은 비켜 줌(같은 자리)
   }
-  /** 🎁 선물 고르는 판(카드 바로 위, 당기기 버튼과 같은 자리라 그동안은 비켜 줌)과 ♥ 쓰다듬기 남은 횟수. 자주 불러도 바뀔 때만 손댐 */
+  /** 🎁 선물 고르는 판(카드 바로 위, 당기기 버튼과 같은 자리라 그동안은 비켜 줌)과 ♥ 쓰다듬기 쉬는 동그라미(gullView petButtonOf). 자주 불러도 바뀔 때만 손댐 */
   showBond(u) {
     const on = !!u && this.tugBtn.hidden, bar = this.bondBar;
     if (!on || u !== this.bondU) this.giftPick.hidden = true;                       // 다른 갈매미로 바꾸면 고르는 판은 닫음
     this.bondU = u; if (bar.hidden === on) bar.hidden = !on; if (!u) return;       // 자리는 CSS(카드 바로 위, 가로 폰은 카드 옆)
-    const left = petsLeft(u, this.world.petKey?.() ?? newsDay(this.world.time)), away = !!u.insideBuildingId || u.state === UnitState.Held, label = left ? `♥ 쓰다듬기 ${left}/${PET_DAILY}` : "♥ 내일 또 만나요";
-    if (this.petBtn.textContent !== label) this.petBtn.textContent = label;
-    if (this.petBtn.disabled !== (!left || away)) this.petBtn.disabled = !left || away;
+    const away = !!u.insideBuildingId || u.state === UnitState.Held || !!u.sailing, now = this.world.nowMs?.() ?? Date.now(), p = petButtonOf(u, now, away), b = this.petBtn;
+    const fill = p.fill.toFixed(3); if (this.petRing && this.petRing.style.getPropertyValue("--pet") !== fill) this.petRing.style.setProperty("--pet", fill);   // 동그라미가 차는 정도(CSS conic-gradient)
+    if (b.classList.contains("cool") !== p.cool) { if (!p.cool && u === this.petU) b.classList.add("pop"); b.classList.toggle("cool", p.cool); }   // 같은 갈매미가 다 쉬었으면 ♥가 톡(다른 갈매미로 바꿀 때는 안 함)
+    this.petU = u;
+    if (this.petText && this.petText.textContent !== p.text) this.petText.textContent = p.text;
+    if (b.getAttribute("aria-label") !== p.aria) b.setAttribute("aria-label", p.aria);
+    const dis = p.cool ? "true" : "false"; if (b.getAttribute("aria-disabled") !== dis) b.setAttribute("aria-disabled", dis);
+    if (b.disabled !== p.disabled) b.disabled = p.disabled;
   }
   /** 선물 고르는 판: 내 주머니(주운 반짝이·도장 선물·답례 물건). 조금 친해지면(하트 1개부터) 좋아하는 것을 ♥로 앞에(gullView.js giftPickHtml) */
   drawGifts() {
