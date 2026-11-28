@@ -845,14 +845,14 @@ export function exitBuilding(u, world, rnd) {
 }
 
 /** 건물을 옮겼을 때(world/relocate.js): 그 건물로 가던 갈매미는 새 문으로, 짓던 갈매미는 새 공사장 옆으로 길을 다시 찾음(못 찾으면 그만둠).
- *  망치질하던 갈매미는 이번 바퀴 재료를 이미 썼으므로 도착하면 재료를 또 쓰지 않고 바로 망치질(u.paidCycle) */
+ *  망치질하던 갈매미는 이번 바퀴 재료를 이미 썼으므로 도착하면 재료를 또 쓰지 않고 하던 바퀴의 남은 망치질부터(u.paidCycle · u.work) */
 export function rerouteMoved(u, world, b, rnd) {
   if (u.insideBuildingId || u.state === US.Held) return;
   if (u.state === US.GoToBuilding && u.targetBuildingId === b.id) { if (!startPath(u, world, b.door.x, b.door.z, u.running)) setIdle(u, rnd, world); return; }
   if (u.focus === b && (u.state === US.GoBuild || u.state === US.Build)) {
     const paid = u.state === US.Build || !!u.paidCycle, s = world.workSpot(b);
     if (!s || !startPath(u, world, s.x, s.z)) { setIdle(u, rnd, world); return; }
-    u.state = US.GoBuild; u.work = null; u.anim = null; u.tool = null; u.once = null; u.paidCycle = paid;
+    u.state = US.GoBuild; u.anim = null; u.tool = null; u.once = null; u.paidCycle = paid;   // u.work(이번 바퀴 망치질 몇 번째)는 남겨 둠 → 도착해서 남은 망치질만(새 바퀴로 셈하면 재료 없이 더 지어짐)
   }
 }
 // ---------------------------------------------------------------- 매 프레임

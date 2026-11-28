@@ -162,3 +162,38 @@ test("확인 카드 글: 공짜 · 못 놓는 까닭", () => {
   assert.match(relocStatus(def.name, "picked"), /옮길 자리/);
   const a = anchorFor(def, h.x + 1, h.z + 1, 0); assert.deepEqual([a.x, a.z], [h.x, h.z], "들면 고스트가 제자리에서 시작(가운데 칸 기준)");
 });
+
+test("검토: 망치질 2번째에 옮기면 새 자리에서 남은 1번만 치고 다음 바퀴 재료를 씀(옮기기로 공짜 망치질이 생기지 않음)", () => {
+  const w = town(); w.instantBuild = false; Object.assign(w.res, { wood: 50, stone: 50 });
+  const site = place(w, "cafe"), u = w.units.find(o => o.job === "builder");
+  u.committed = site.id; site.busy = u.unitId; u.focus = site; u.state = UnitState.Build; u.tool = "hammer"; u.work = { t: 0, done: 2 };
+  const s = moveSpot(w, site, site.rot, { x: site.x, z: site.z }, 5); assert.ok(w.moveBuilding(site.id, s[0], s[1], site.rot).ok);
+  assert.deepEqual(u.work, { t: 0, done: 2 }, "하던 바퀴는 그대로");
+  const hits0 = site.hits, res0 = w.res.wood + w.res.stone;
+  for (let t = 0; t < 60 && w.res.wood + w.res.stone === res0 && !w.isDone(site); t += 0.05) w.update(0.05);
+  assert.ok(w.res.wood + w.res.stone < res0, "다음 바퀴 재료를 씀");
+  assert.ok(site.hits - hits0 <= 1.5 + 1e-9, `남은 망치질 1번만(${site.hits - hits0})`);
+});
+
+test("검토: 문 앞 칸을 같이 쓰는 두 건물 — 하나를 옮겨도 남은 건물 문 앞은 비워 두고, 든 건물이 그 칸을 덮지 못함", () => {
+  const w = town(); let a = null, b = null;
+  for (let r = 3; r < 30 && !b; r++) for (let k = 0; k < 8 * r && !b; k++) {        // 마주 보는 두 집(문 앞 칸 하나를 같이 씀)
+    const ang = k / (8 * r) * 6.283, x = Math.floor(w.center.x + Math.cos(ang) * r), z = Math.floor(w.center.z + Math.sin(ang) * r);
+    if (!w.check("house", x, z, 0).ok) continue;
+    const t = w.placeBuilding("house", x, z, 0).building;
+    for (let dz = 1; dz <= 4 && !b; dz++) for (let dx = -3; dx <= 3 && !b; dx++) { const c = w.check("house", x + dx, t.door.z + dz - 1, 2); if (c.ok && c.door.x === t.door.x && c.door.z === t.door.z) { a = t; b = w.placeBuilding("house", x + dx, t.door.z + dz - 1, 2).building; } }
+    if (!b) w.removeBuilding(t.id);
+  }
+  assert.ok(b, "마주 보는 자리"); assert.equal(w.grid.doorOwner(a.door.x, a.door.z), b.id, "나중 건물 id가 적힘");
+  for (let rot = 0; rot < 4; rot++) { const c = anchorFor(BUILDINGS.house, a.door.x, a.door.z, rot); assert.doesNotMatch(w.moveBuilding(b.id, c.x, c.z, rot, { dry: true }).reason || "통과", /^통과$|길|갇혀요/, "남의 문 앞을 덮는 자리는 놓기 판정에서 막힘"); }
+  const s = moveSpot(w, b, 0, { x: b.x, z: b.z }, 8); assert.ok(s); assert.ok(w.moveBuilding(b.id, s[0], s[1], 0).ok);
+  assert.equal(w.grid.doorOwner(a.door.x, a.door.z), a.id, "남은 건물 문 앞은 그대로 비워 둠");
+});
+
+test("검토: 옮긴 공사장도 ↶ 짓기 되돌리기가 새 자리에서 맞춘 바닥을 되돌리고, ↶ 옮기기는 옛 기록을 되살림", () => {
+  const w = town(); w.instantBuild = false;
+  const site = place(w, "house"); assert.equal(site.undoable, true);
+  const s = moveSpot(w, site); const r = w.moveBuilding(site.id, s[0], s[1], site.rot); assert.ok(r.ok);
+  assert.deepEqual(site.matched, r.undo.ground.length ? r.undo.ground : null);
+  assert.ok(w.undoMove(r.undo).ok); assert.equal(site.matched, r.undo.matched);
+});
