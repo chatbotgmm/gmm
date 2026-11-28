@@ -1083,7 +1083,7 @@ test("수족관: 물고기 크기는 난수 없이 범위 안에서 정해지고
 test("수족관: 있을 때만 처음 낚은 희귀 이상 한 마리를 기증하고(팔지 않음), 3·6종·전설만 빼고 모두 기증하면 기념 가구를 준다", async () => {
   const { FISH, ITEMS, BUILDINGS } = await import("../src/data/catalog.js"); const A = await import("../src/world/aquarium.js");
   const { RANKS, rankScore } = await import("../src/world/rank.js");
-  assert.equal(BUILDINGS.aquarium.rank, 2); assert.ok(RANKS[2].unlock.includes("aquarium")); assert.equal(BUILDINGS.aquarium.asset, null);
+  assert.equal(BUILDINGS.aquarium.rank, 2); assert.ok(RANKS[2].unlock.includes("aquarium")); assert.equal(BUILDINGS.aquarium.asset, "assets/props/aquarium_{T}.glb"); assert.equal(BUILDINGS.aquarium.lit, true);
   const byId = id => FISH.find(f => f.id === id), rares = A.DONATE_KINDS, noLegend = rares.filter(f => f.rarity !== "legend");
   assert.ok(rares.every(f => f.rarity !== "common") && rares.length === FISH.filter(f => f.rarity !== "common").length);
   // 선물 단계(순수)
@@ -1685,7 +1685,7 @@ test("전기 없음 배지 규칙: 다 지은 가로등·등불 건물·집 가�
   const far = put("streetlamp", c.x + 34, c.z + 2);
   // 풍차가 없으면: 불 달린 다 지은 건물 모두(저장고처럼 불 없는 건물은 아님)
   assert.deepEqual(ids(), of(starter, lamp, house, cottage, cafe, far)); assert.equal(PW.lacksPower(w, store), false, "불 없는 건물"); assert.equal(PW.lacksPower(w, null), false);
-  for (const id of ["house", "cottage", "manor", "giantHouse", "cafe", "shop", "post", "streetlamp"]) assert.equal(PW.usesPower(BUILDINGS[id]), true, id);
+  for (const id of ["house", "cottage", "manor", "giantHouse", "cafe", "shop", "post", "streetlamp", "aquarium"]) assert.equal(PW.usesPower(BUILDINGS[id]), true, id);
   // 짓는 중인 건물에는 안 띄움(진행률 표시가 있음) → 다 지으면 뜸
   w.instantBuild = false; const site = put("streetlamp", c.x + 5, c.z - 4); assert.equal(PW.lacksPower(w, site), false, "짓는 중"); assert.ok(!ids().includes(site.id));
   w.finishAll(); assert.ok(ids().includes(site.id), "다 지은 뒤");

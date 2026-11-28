@@ -75,8 +75,10 @@ export const BUILDINGS = {
   festLantern: { id: "festLantern", builtBy: "builder", deco: true, festive: true, decoShape: "festLantern", cost: { wood: 1 }, tier: 1, name: "축제 등불", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0x8a6a45, roof: 0xffb35c, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
   // 계절 장식: 지금 계절에 따라 모습이 달라짐(봄 꽃 아치 · 여름 파라솔 · 가을 호박 더미 · 겨울 눈사람)
   seasonDeco:  { id: "seasonDeco", builtBy: "builder", deco: true, festive: true, decoShape: "seasonDeco", cost: { wood: 1 }, tier: 1, name: "계절 장식", footprint: { w: 1, d: 1 }, work: 1, height: 1.3, asset: null, placeholder: { wall: 0xf2a49a, roof: 0xf2a49a, roof_shape: "flat" }, interior: { w: 1, d: 1 } },
-  // 풍차 발전소: 둘레 18칸(world/power.js POWER_RANGE) 안에 전기 — 가로등·건물 등불(lit: 카페·잡화점·우체국, 집)·집 창가 불빛이 밤에 켜지고 집 만족도 +8
-  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등·건물 등불·집 창에 전기 · 누르면 범위가 보여요", rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 4.2, asset: null, placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
+  // 풍차 발전소: 둘레 18칸(world/power.js POWER_RANGE) 안에 전기 — 가로등·건물 등불(lit: 카페·잡화점·우체국·수족관·종합병원, 집)·집 창가 불빛이 밤에 켜지고 집 만족도 +8
+  // 하얀 탑·남색 줄무늬 돛 풍차(사용자 제공, 문·날개 +z 그대로). 날개 4장+허브는 glb 안의 windBlades 노드(허브 중심 피벗, 로컬 z = 날개 축 — views.js가 rotation.z를 돌림).
+  // 2×2칸에 비율 그대로 꽉 채우면 폭 1.90 m · 깊이 1.74 m · 높이 3.52 m(날개 끝 원 지름 2.17 m, 가장 낮은 날개 끝 1.17 m). 모델을 못 받으면 코드로 만든 풍차(windmillModel)
+  windmill:  { id: "windmill", builtBy: "carpenter", power: true, note: "둘레 18칸의 가로등·건물 등불·집 창에 전기 · 누르면 범위가 보여요", rank: 1, cost: { wood: 3, stone: 2 }, tier: 1, name: "풍차 발전소", footprint: { w: 2, d: 2 }, work: 6, height: 3.5, asset: "assets/props/windmill_{T}.glb", placeholder: { wall: 0xf3ead8, roof: 0xb5794a, roof_shape: "pyramid" }, interior: { w: 1, d: 1 } },
   // 다리: 물 위 1칸씩(두 번 눌러 줄로 놓기). 다 지으면 걸어서 건넘. 가까운 섬으로
   bridge: {
     id: "bridge", builtBy: "carpenter", bridge: true, cost: { wood: 1 }, tier: 1, name: "다리", footprint: { w: 1, d: 1 }, work: 1, height: 0.15, asset: null,
@@ -94,7 +96,9 @@ export const BUILDINGS = {
   },
   // 수족관: 희귀 이상 물고기를 처음 낚으면 한 마리를 기증받아 보여 줌(도감에 기증됨·크기 기록). 누구나 구경(재미가 차오름)
   aquarium: {
-    id: "aquarium", builtBy: "carpenter", rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "수족관", footprint: { w: 4, d: 3 }, work: 7, height: 2.4, asset: null,
+    // 둥근 돔·금빛 날개 지붕·청록 수조 창 수족관(사용자 제공, 문 +x → +z). 4×3칸에 비율 그대로 꽉 채우면 폭 2.80 m · 깊이 2.85 m · 높이 2.96 m(카페 3.0 m와 비슷).
+    // 문이 모델 가운데라 문 칸(칸 가운데에서 오른쪽 0.5 m)에 맞춰 오른쪽으로 0.5 m 옮김(modelShift, 칸 안). 문 옆 등불 2개 + 수조 창이 밤에 빛남(lit: 풍차 전기가 닿을 때)
+    id: "aquarium", builtBy: "carpenter", lit: true, rank: 2, cost: { wood: 2, stone: 2 }, tier: 1, name: "수족관", footprint: { w: 4, d: 3 }, work: 7, height: 3.0, asset: "assets/props/aquarium_{T}.glb", modelYaw: -Math.PI / 2, modelShift: 0.5,
     placeholder: { wall: 0xe6f4f7, roof: 0x4fa3c7, roof_shape: "flat", awning: 0x7fd0e0, tank: 0x3f9fd0 }, interior: { w: 7, d: 5 },
   },
   // 일반병원(id "clinic" 그대로 — 예전 저장 호환, health.js): 아픈 갈매미가 침대에서 쉼(침대 beds개 = 동시에 환자 수). 의사는 처음엔 없고, 플레이어가 마을 갈매미 하나를 당번으로 정하면(world.setDoctor) 더 빨리 나음.

@@ -5,6 +5,7 @@
 
 | 모델 | 삼각형(모든 단계 같음) | 원본 파일 |
 |---|---|---|
+| aquarium (수족관) | 29,223 (+등불 2·수조 창 발광 색 마스크 512px) | underwater_dome_house_3d_model.glb (2026-11-28, 아래) |
 | bank (공식은행) | 14,834 | dome_house_3d_model.glb (2026-11-25 교체, 아래) |
 | bench | 9,070 | wooden_bench_3d_model.glb |
 | cafe (카페) | 14,246 (+등불 발광 마스크 512px, 등불 2) | coffee_shop_3d_model.glb (2026-11-25, 아래) |
@@ -24,6 +25,7 @@
 | stairs_stone | 9,850 | tripo_convert_ca8a87b0… |
 | storehouse | 9,375 | stone_house_3d_model.glb |
 | street_lamp | 9,561 (+발광 마스크 256px) | tripo_convert_8a67f70c… |
+| windmill (풍차 발전소) | 44,733 = 몸통 33,108 + 날개 11,625 (+등불 발광 마스크 512px, 등불 1) | windmill_3d_model.glb (2026-11-28, 아래) |
 
 만든 방법: 모양은 이전 게임용 파일(원본 모양 그대로, 노멀·금속도 텍스처 뺌) 그대로 두고, 기본색 텍스처만 원본 4096px 그림에서
 4096 / 2048 / 1024px(JPEG 품질 92)로 다시 끼움. 원본을 이전 텍스처 크기로 줄여 비교한 평균 색 차이 1.2~4.5/255(같은 그림·같은 방향 확인).
@@ -106,4 +108,30 @@ Kenney building-type-d·b와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/
   폭 4.75 m · 깊이 3.43 m · 높이 3.96 m(def.height 4.0). 은행(4.3 m)보다 조금 낮고 일반병원의 1.43배. (원본 accessor의 min/max는 x 0.672라고 적혀 있지만 실제 정점은 0.722 — 게임은 실제 정점으로 맞춤)
 - 등불: 종합병원에만 문 옆 금빛 등불 4개(앞뒤 두 문 × 2) → 발광 마스크(`python3 tools/glow_mask.py hospital 0.2838,-0.2877,0.101,0.03 0.2852,-0.2852,-0.1009,0.03 -0.2846,-0.2874,-0.101,0.03 -0.2856,-0.285,0.1009,0.03`,
   밝은 텍셀 28개, 마스크 PNG 669 bytes) · catalog `lit: true`(풍차 전기가 닿을 때만 밤에 켜짐). 일반병원은 등불이 없어 그대로
+
+## 풍차 발전소(windmill_4k / 2k / 1k) · 수족관(aquarium_4k / 2k / 1k), 2026-11-28
+사용자가 컨셉 그림으로 만든 Tripo 모델 두 개. 같은 방법(면 그대로, 기본색만 4096 / 2048 / 1024px JPEG 92, metallic 0.1·roughness 0.8, KHR_mesh_quantization —
+위치 float · 노멀 int8 · UV float · 인덱스 u16, 노멀·금속도 텍스처 없음·doubleSided 뺌). 만든 스크립트: `tools/import_windmill_aquarium.py`(수족관은 meshopt를 먼저 풀어 넣음) → 그다음 glow_mask.py.
+- 파일: windmill_4k 4,153,056 / 2k 2,358,868 / 1k 1,707,824 bytes · aquarium_4k 3,425,024 / 2k 1,787,528 / 1k 1,269,452 bytes(발광 마스크 포함)
+- 풍차: 원본 windmill_3d_model.glb(받은 파일 393b8a1c-…, 압축 없음, 메시 54개 tripo_part_0~53 · 텍스처 1장 4096px, 44,733면 · 44,155 정점). 바닥판 없음(가장 넓은 조각 part_12도 탑 몸통).
+  - 메시 둘로 합침: 몸통(windmillBody, 재질 lanternGlow — 등불) + 날개(**windBlades** 노드, 재질 windBladesMat — 등불 빛 번짐이 날개를 따라 돌지 않게 재질을 나눔).
+  - 날개 조각(조각마다 중심·각도를 재서 고름): part 1(날개 틀 4개 + 오른쪽 아래 돛) · 8 · 9 · 10(돛 3장) · 11(허브) · 25 · 30 · 31 · 32 · 33 · 38 · 39 · 40(안쪽 금빛 마개 8) ·
+    34 · 35 · 36 · 37 · 41 · 42 · 43 · 44(바깥 끝 마개 8) · 53(작은 조각). 허브 뒤 굴대(part 49)는 몸통 속이라 몸통에 둠.
+  - 피벗 = 허브 중심(0.0005, 0.6560, 0.2252 — 바깥·안쪽 마개 16개가 놓인 원의 중심). 축 = 마개 16개가 놓인 면의 법선(+z에서 0.3° 기욺) → 노드 rotation으로 로컬 z를 이 축에 맞춤.
+    views.js가 `rotation.z += dt × 1.6`(로컬 z, 앞에서 보아 반시계)으로 돌리니 허브를 중심으로 흔들림 없이 돎(0.6 rad 돌린 그림에서 허브 자리 그대로 확인).
+  - 문·날개 모두 원본 +z → modelYaw 없음(0). 2×2칸에 비율 그대로 꽉 채움(fit 없음) → 폭 1.90 m · 깊이 1.74 m · 높이 3.52 m(def.height 4.2 → 3.5, 이전 코드 풍차는 몸통 3.9 m + 날개),
+    날개 끝 원 지름 2.17 m(옆으로 0.09 m씩 칸 밖 공중), 가장 낮은 날개 끝 1.17 m. 문은 탑 가운데라 문 칸(오른쪽 칸 앞)보다 0.5 m 왼쪽(탑 폭이 칸에 꽉 차 옮기지 않음).
+  - 등불: 문 오른쪽 등불 유리가 연노랑으로 그려져 문턱을 낮춤 — `python3 tools/glow_mask.py windmill 0.1421,0.1737,0.2062,0.035 --pane 0.85,0.95,0.82,0.88`.
+    풍차는 다 지으면 제 전기로 켜짐(lit 표시 없음 — 「불 켜진 건물」 수·전기 없음 배지에 들지 않음, 전기 범위 규칙은 그대로).
+  - 모델을 못 받으면 예전처럼 코드로 만든 풍차(views.js windmillModel)를 씀.
+- 수족관: 원본 underwater_dome_house_3d_model.glb(받은 파일 24c9c1e0-…, gltfpack 1.2, EXT_meshopt_compression + KHR_mesh_quantization, 29,223면 · 29,844 정점, 기본색 4096px 1장).
+  meshopt 압축만 풂(노멀 바이트 그대로). 둥근 돔 · 금빛 날개 지붕 · 조개 왕관 · 줄무늬 차양 문 · 청록 수조 창(앞 두 칸 + 옆).
+  - 정문(차양·나무 문, 문 옆 등불 2) 원본 +x → modelYaw −π/2. 4×3칸에 비율 그대로 꽉 채움(fit 없음) → 폭 2.80 m · 깊이 2.85 m · 높이 2.96 m(def.height 2.4 → 3.0, 카페 3.0 m와 같은 키).
+  - 문은 모델 가운데(두 등불 사이 z ≈ 0)인데 4칸 건물의 문 칸은 가운데에서 오른쪽 0.5 m → 새 값 `modelShift: 0.5`로 모델을 오른쪽으로 0.5 m 옮겨 문이 문 칸 앞에 옴
+    (render/views.js buildingModel, 칸 안: 왼쪽 빈자리 1.1 m · 오른쪽 0.1 m). 컨셉 그림처럼 문 왼쪽엔 차양 끝, 오른쪽엔 수조 창이 보임. 방(interior 7×5)은 그대로.
+  - 발광: 등불 2 + 수조 창. 수조 유리는 노란 등불과 색이 달라 glow_mask.py에 `--tanks k[,ymax]`를 더함 — 청록 텍셀(모델이 쓰는 텍셀 중 높이 ymax 아래)이 제 색 × k로 빛남,
+    마스크는 색 PNG(등불 텍셀에 따뜻한 색), emissiveFactor [1, 1, 1].
+    `python3 tools/glow_mask.py aquarium 0.3724,-0.2714,0.1668,0.04 0.3714,-0.2942,-0.1675,0.04 --tanks 0.45,-0.1` (마스크 PNG 57,168 bytes — 수조 면이 넓어 다른 등불 마스크보다 큼).
+    세기는 다른 건물 등불과 같음(daylight.js lantern(): 낮 0.15 → 밤 2.35) → 낮에는 수조가 조금 더 맑아 보이는 정도, 밤에 물빛으로 빛남. catalog `lit: true`(풍차 전기가 닿을 때만 켜짐, 범위 밖이면 「전기 없음」 배지).
+- 갤러리 사진: `node tools/thumbs.cjs windmill aquarium`(assets/thumbs/windmill.webp 3,540 · aquarium.webp 3,928 bytes)
 
