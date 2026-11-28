@@ -6,6 +6,7 @@ import { seededRandom } from "../src/util.js";
 import { BUILDINGS } from "../src/data/catalog.js";
 import * as CLIM from "../src/world/climate.js";
 import * as CH from "../src/units/chrono.js";
+import { newsFor } from "../src/world/news.js";
 
 /** 넓은 섬 + 기본 갈매미(첫 집 주인) · 낮 · 겨울 날씨 고정 */
 function winterVillage(seed = 3, weather = "snow", snow = 1) {
@@ -313,4 +314,12 @@ test("빈도 상한: 눈 오는 겨울 낮 9마리 · 굴림이 늘 걸려도(hr
   };
   const a = run(true); assert.equal(a.sick, 0, `옷 다 입음: 걸림 ${a.sick}`); assert.deepEqual([...a.chilly], ["미니"], "체감 −1 + 12 = 11°C → 추운 날 아님(작은 몸 미니만 −2 → 9°C)");
   const b = run(false); assert.ok(b.sick >= 1 && b.most <= 3, `옷 없음: 걸림 ${b.sick} · 최대 동시 ${b.most}`);
+});
+
+test("당번 비우기 소식은 갈매미 이름으로(b.doctor는 unitId라 'u9 선생님'이 되지 않게)", () => {
+  const { w, u } = winterVillage(13, "clear", 0); const doc = w.addUnitByName("목수"); doc.name = "앵두";
+  const cl = placeNear(w, "clinic", u.x, u.z);
+  assert.equal(w.setDoctor(cl.id, doc.unitId).ok, true);
+  const ev = []; w.on("doctor", e => ev.push(e)); assert.equal(w.setDoctor(cl.id, null).ok, true);
+  assert.equal(ev[0].was, "앵두"); assert.equal(newsFor("doctor", ev[0], w).text, "앵두 선생님의 일반병원 당번이 끝났어요");
 });

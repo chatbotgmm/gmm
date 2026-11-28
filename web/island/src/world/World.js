@@ -1004,7 +1004,7 @@ export class World {
    *  돌려주는 값: { ok, reason } */
   setDoctor(clinicId, unitId) {
     const b = this.buildings.get(clinicId); if (!b || !BUILDINGS[b.defId].clinic) return { ok: false, reason: "병원이 아니에요" };
-    if (unitId == null) { const was = b.doctor; b.doctor = null; if (was) this.emit("doctor", { b, u: null, was }); return { ok: true, reason: "" }; }
+    if (unitId == null) { const was = this.doctorOf(b)?.name; b.doctor = null; if (was) this.emit("doctor", { b, u: null, was }); return { ok: true, reason: "" }; }   // was = 이름(b.doctor는 unitId)
     const u = this.units.find(o => o.unitId === unitId); if (!u) return { ok: false, reason: "그런 갈매미가 없어요" };
     for (const o of this.buildings.values()) if (o !== b && o.doctor === u.unitId) o.doctor = null;
     b.doctor = u.unitId; emote(u, "🩺 오늘은 내가 당번!", 2.4); this.emit("doctor", { b, u }); return { ok: true, reason: "" };
