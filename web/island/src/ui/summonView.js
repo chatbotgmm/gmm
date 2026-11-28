@@ -35,7 +35,7 @@ export function summonHtml(info, units, more = (k, t, h, o) => moreBox(k, t, h, 
   else head = sumHead({ icon: "🥚", big: `${info.count}마리`, label: info.can ? "지금 부를 수 있어요" : "지금은 못 불러요", tone: info.can ? "ok" : "warn",
     toneText: info.can ? "부를 수 있어요" : "집이 모자라요",
     lineHtml: `🏠 집 <b>${info.homes ?? info.houses}</b>채${info.homes != null && info.homes !== info.houses ? ` (자리 <b>${info.houses}</b>)` : ""} · 🐦 갈매미 <b>${info.gulls}</b>마리`, bar: info.houses ? Math.min(1, info.gulls / info.houses) : 1 });
-  const lines = [`<p class="sm-next">새 친구는 모두 <b>🥚 기본 갈매미</b>로 와요 · 지내는 동안 무엇이 될지 몰라요</p>`];
+  const lines = [`<p class="sm-next">새 친구는 모두 <b>🥚 기본 갈매미</b>로 와요. 지내는 동안 무엇이 될지 몰라요</p>`];
   if (info.can && info.nextJob) { const j = JOBS[info.nextJob] || JOBS.builder, why = NEXT_WHY[j.id]; lines.push(`<p class="sm-next">다음 친구는 <b>${j.icon} ${svEsc(j.name)}</b> 일을 맡아요${why ? ` — ${why}` : ""}</p>`); }
   if (units.length <= 1) lines.push(`<p class="sm-tip">🔍 ${svEsc(SEARCH_TIP)}</p>`);
   lines.push(dexHtml(seen || new Set(units.map(formOf))));

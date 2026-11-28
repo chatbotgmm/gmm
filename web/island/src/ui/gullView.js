@@ -92,13 +92,13 @@ export function gullChips(u, world) {
 
 // ---- 모습·성향(evolve.js): 카드 머리 아래 한 줄 + 성장 칸(관찰 노트 · 요즘 모습 · 예고 · 성향 맞히기)
 export const FORM_ICONS = { "기본": "🥚", "물방울": "💧", "그림자": "🌑", "불씨": "🔥", "목수": "🪚", "꽃": "🌼", "황금": "👑", "자이언트": "🗿", "미니": "🐣" };
-/** 모습 줄: 변신 전 "🥚 기본 · 성향 ???" · 변신 뒤 "💧 물방울 · 🌊 물가 성향 · 모습 특기: 낚시 · 천직 ✓" · 든든한 기본 */
+/** 모습 줄: 변신 전 "🥚 기본 갈매미, 성향은 아직 몰라요" · 변신 뒤 "💧 물방울 갈매미, 🌊 물가 성향. 낚시꾼 일이 잘 맞아요" · 든든한 기본 */
 export function formLineOf(u) {
   const f = formOf(u), icon = FORM_ICONS[f] || "🥚";
-  if (!u.evo) return `${icon} ${f} · 성향 ???`;
-  const d = DISP_INFO[u.disp], fj = JOBS[formJob(f)];
-  if (u.evo.stayed) return `🪨 든든한 기본${d ? ` · ${d.icon} ${d.name} 성향` : ""}`;
-  return `${icon} ${f}${d ? ` · ${d.icon} ${d.name} 성향` : ""}${fj ? ` · 모습 특기: ${fj.name}` : ""}${isCalling(f, u.job) ? " · 천직 ✓" : ""}`;
+  if (!u.evo) return `${icon} ${f} 갈매미, 성향은 아직 몰라요`;
+  const d = DISP_INFO[u.disp], fj = JOBS[formJob(f)], disp = d ? `, ${d.icon} ${d.name} 성향` : "";
+  if (u.evo.stayed) return `🪨 든든한 기본 갈매미${disp}`;
+  return `${icon} ${f} 갈매미${disp}${fj ? `. ${fj.name} 일이 ${isCalling(f, u.job) ? "천직이에요 ✓" : "잘 맞아요"}` : ""}`;
 }
 /** 성장 칸 HTML(변신 전만): 🌱 예고 · 요즘 모습(가장 많이 쌓인 자란 방식) · 🔍 관찰 노트(최근 단서 3개) · 성향 맞히기 칩(data-guess). 변신했으면 "" */
 export function evoBoxHtml(u, world) {
