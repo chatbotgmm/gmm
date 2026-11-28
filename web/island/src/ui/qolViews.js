@@ -36,7 +36,7 @@ export function atParse(s) {
 }
 /** 대상 이름(누르면 어디로 가는지 알려 주는 짧은 글) */
 /** 알림 줄 → 📱 앱으로(덧말 "(📱 은행)" 대신 누르면 열림) */
-const APP_GO = { bank: "📱 은행 열기", mon: "📱 중앙은행 열기" };
+const APP_GO = { bank: "📱 은행 열기", mon: "📱 중앙은행 열기", story: "🗝 비밀 수첩 열기" };
 export function atLabel(w, at) {
   if (at?.u != null) { const u = w.units.find(o => o.unitId === at.u); return u ? `${u.name} 따라가기` : ""; }
   if (at?.b != null) { const b = w.buildings.get(at.b); if (!b) return ""; const n = BUILDINGS[b.defId]?.name ?? "건물"; return `${n}${qvRo(n)} 가기`; }

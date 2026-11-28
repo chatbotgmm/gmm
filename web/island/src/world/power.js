@@ -39,9 +39,13 @@ export function unpowered(world) {
   const list = []; for (const b of world.buildings.values()) if (lacksPower(world, b)) list.push(b);
   world._unpowered = { rev: world.powerRev, n: world.buildings.size, list }; return list;
 }
-/** 「전기 없음」을 알려도 되나: 풍차를 이 마을 등급에서 지을 수 있거나(🏘 어촌부터) 이미 놓은 풍차가 있음. 그 전에는 고칠 길이 없으니 배지·까닭 글을 숨김 */
+/** 「전기 없음」을 알려도 되나: 플레이어가 전기를 쓰기 시작했을 때 — 풍차나 가로등을 하나라도 놓았음(짓는 중 포함, 불러온 섬도).
+ *  풍차는 처음(🛖 갯마을)부터 지을 수 있지만, 그것만으로 열면 새 섬 첫 화면의 첫 집에 ⚡✕가 떠서(첫날 소음) 아직 전기를 모르는 동안은 배지·까닭 글을 숨김.
+ *  놓은 뒤에는 범위 밖의 불 달린 건물을 알려 줌(가로등만 놓았으면 풍차가 있어야 한다는 뜻, 풍차를 놓았으면 범위가 모자란 곳). 시계(밤)와 상관없이 정해짐.
+ *  noPower.js가 매 프레임 부르므로 건물이 바뀔 때(world.powerRev)만 다시 셈 */
 export function powerOpen(world) {
-  if (Object.values(BUILDINGS).some(d => d.power && (d.rank || 0) <= (world.rank || 0))) return true;
-  for (const b of world.buildings.values()) if (BUILDINGS[b.defId]?.power) return true;
-  return false;
+  const c = world._powerOpen;
+  if (c && c.rev === world.powerRev && c.n === world.buildings.size) return c.v;
+  let v = false; for (const b of world.buildings.values()) { const d = BUILDINGS[b.defId]; if (d && (d.power || d.id === "streetlamp")) { v = true; break; } }
+  world._powerOpen = { rev: world.powerRev, n: world.buildings.size, v }; return v;
 }

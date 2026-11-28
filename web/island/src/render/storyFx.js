@@ -1,5 +1,7 @@
-// 🗝 메인 스토리 장면(그리기만, 규칙은 world/story.js): 등대 불(꺼짐·다시 켜짐) · 수평선 끝 세 번 깜빡임 · 열린 등대 문 빛 · 반딧불 우체통 · 엔딩·불 켜는 연출.
-//  · daylight.lampLit = 3장 등불을 고쳤나(아니면 밤에도 꺼진 등대) · daylight.lampBoost = 연출 중 낮에도 불을 켬(0~1, 천천히 오르내림)
+// 🗝 메인 스토리 장면(그리기만, 규칙은 world/story.js): 등대 불(잠듦·다시 켜짐) · 수평선 끝 세 번 깜빡임 · 열린 등대 문 빛 · 반딧불 우체통 · 엔딩·불 켜는 연출.
+//  · daylight.lampLit = 3장 등불을 고쳤나(아니면 빛줄기 없이 불씨만 숨 쉬는 잠든 등대, render/lampLook.js) · daylight.lampBoost = 연출 중 낮에도 불을 켬(0~1, 천천히 오르내림)
+//  · daylight.lampFill = 3장 등불을 고친 순간 밤 불빛이 불씨에서 0 → 1로 차오름(LAMP_FILL_SECS)
+//  · 잠든 등대 열쇠(🗝): 등불을 고치기 전엔 등대 문 앞에 작은 열쇠 표가 떠 있음 — 누르면(hit) main.js가 왜 꺼져 있고 무엇을 하면 켜지는지 알려 줌(world/story.js lighthouseNote)
 //  · 깜빡임: 섬 가운데에서 등대를 지나 바다 쪽 먼 수평선에 빛 하나가 반짝·반짝·반짝(2.4초). 화면 난수를 쓰지 않음(정해진 모양)
 //  · 연출(moment): 카메라를 등대로 → 불이 차오름 → (엔딩이면) 깜빡임 → 편지. main.js가 onGo(칸)·onLetter()를 넣어 줌
 import * as THREE from "three";
@@ -14,6 +16,24 @@ function stGlowTex() {
   g.strokeStyle = "rgba(255,250,230,.8)"; g.lineWidth = 3; for (const [x0, y0, x1, y1] of [[64, 6, 64, 122], [6, 64, 122, 64]]) { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }   // 십자 빛살(멀리서도 '불빛'으로 읽히게)
   return (ST_GLOW = new THREE.CanvasTexture(c));
 }
+let ST_KEY = null;
+/** 잠든 등대 열쇠 표: 따뜻한 크림색 동그라미 + 금빛 열쇠(수첩의 🗝와 같은 뜻. 글꼴에 기대지 않고 그림으로 — 그림 글자가 없는 기기에서도 보이게) */
+function stKeyTex() {
+  if (ST_KEY) return ST_KEY; const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  const r = g.createRadialGradient(64, 64, 34, 64, 64, 64); r.addColorStop(0, "rgba(255,200,120,.5)"); r.addColorStop(1, "rgba(255,190,110,0)");
+  g.fillStyle = r; g.fillRect(0, 0, 128, 128);                                   // 둘레 옅은 빛(밤에도 찾기 쉽게)
+  g.beginPath(); g.arc(64, 64, 38, 0, Math.PI * 2); g.fillStyle = "#fff3d6"; g.fill(); g.lineWidth = 5; g.strokeStyle = "#c98a2e"; g.stroke();
+  g.save(); g.translate(64, 64); g.rotate(-Math.PI / 5); g.lineCap = "round"; g.lineJoin = "round";
+  const key = (col, wid) => { g.strokeStyle = col; g.lineWidth = wid;
+    g.beginPath(); g.arc(-15, 0, 10, 0, Math.PI * 2); g.stroke();                 // 고리
+    g.beginPath(); g.moveTo(-5, 0); g.lineTo(24, 0); g.moveTo(14, 0); g.lineTo(14, 10); g.moveTo(22, 0); g.lineTo(22, 12); g.stroke(); };   // 몸통 · 이 두 개
+  key("#7a4a14", 11); key("#e2a536", 6);                                          // 진한 테두리 위에 금빛
+  g.restore();
+  ST_KEY = new THREE.CanvasTexture(c); ST_KEY.colorSpace = THREE.SRGBColorSpace; return ST_KEY;   // sRGB로 읽어야 금빛·갈색 테두리가 바래지 않음(sparkles.js와 같이)
+}
+export const LAMP_FILL_SECS = 2.4;   // 3장 등불을 고친 뒤 밤 불빛이 다 차오르는 시간(실제 초)
+export const KEY_HIT_PX = 30;        // 열쇠 표를 누른 것으로 치는 화면 거리(px)
+const _kv = new THREE.Vector3(), _ndc = new THREE.Vector2(), _ray = new THREE.Raycaster();
 export const BLINK_SECS = 3.3;   // 세 번 깜빡이는 데 걸리는 시간(반짝 · 반짝 · 반짝)
 /** 깜빡임 세기(0~1): t초 → 1.1초마다 둥근 펄스 하나(가운데가 가장 밝고, 사이엔 꺼짐) */
 export const blinkAt = t => t < 0 || t >= BLINK_SECS ? 0 : Math.pow(Math.sin(Math.PI * ((t % 1.1) / 1.1)), 2);
@@ -21,7 +41,7 @@ export const blinkAt = t => t < 0 || t >= BLINK_SECS ? 0 : Math.pow(Math.sin(Mat
 export class StoryFx {
   constructor({ scene, daylight, camera = null }) {
     this.scene = scene; this.daylight = daylight; this.camera = camera; this.world = null; this.root = null;
-    this.blinkT = -1; this.boost = 0; this.boostGoal = 0; this.boostHold = 0; this.queue = [];
+    this.blinkT = -1; this.boost = 0; this.boostGoal = 0; this.boostHold = 0; this.queue = []; this.fill = 1;
     this.onGo = null; this.onLetter = null; this.onSound = null;
   }
   mount(world, root) {
@@ -38,6 +58,8 @@ export class StoryFx {
     box.add(post, body, lid); for (const m of [post, body, lid]) { m.castShadow = true; m.receiveShadow = true; }
     this.fly = mk(0xe8ff7a, 0.5); root.remove(this.fly); box.add(this.fly); this.fly.position.set(0.25, 1.35, 0); this.fly.visible = true;
     root.add(box); this.mailbox = box;
+    this.key = new THREE.Sprite(new THREE.SpriteMaterial({ map: stKeyTex(), transparent: true, depthWrite: false, fog: false, toneMapped: false }));   // 잠든 등대 열쇠 표(톤 매핑을 끄면 금빛이 하얗게 바래지 않음. 밤엔 update가 조금 어둡게 — 눈부신 흰 공처럼 보이지 않게)
+    this.key.scale.setScalar(0.85); this.key.renderOrder = 12; this.key.userData.noToon = true; this.key.raycast = () => {}; this.key.visible = false; root.add(this.key);
     world.on("storyBlink", e => { if (e.scene) this.playBlink(); });
     world.on("storyRestore", e => { if (e.n === 3) this.moment("relight"); });
     world.on("storyEnd", () => this.moment("ending"));
@@ -55,7 +77,7 @@ export class StoryFx {
   /** 연출: relight(3장 등불) · ending(보름의 답장) */
   moment(kind) {
     const f = this.world?.landmarkFront("lighthouse"); if (f) this.onGo?.(f.x, f.z, kind);
-    this.boostGoal = 1; this.boostHold = kind === "ending" ? 22 : 16;
+    this.boostGoal = 1; this.boostHold = kind === "ending" ? 22 : 16; if (kind === "relight") this.fill = 0;   // 3장 등불: 밤 불빛도 불씨에서 차오름
     this.queue = kind === "ending" ? [{ at: 2.6, fn: () => this.playBlink() }, { at: 6.6, fn: () => this.onLetter?.() }] : [];
     this.momentT = 0;
   }
@@ -67,6 +89,7 @@ export class StoryFx {
     if (this.boostHold > 0 && (this.boostHold -= dt) <= 0) this.boostGoal = 0;
     this.boost += Math.sign(this.boostGoal - this.boost) * Math.min(Math.abs(this.boostGoal - this.boost), dt / (this.boostGoal > this.boost ? 1.6 : 3));
     dl.lampBoost = this.boost;
+    if (this.fill < 1) this.fill = Math.min(1, this.fill + dt / LAMP_FILL_SECS); dl.lampFill = this.fill;
     // 깜빡임
     if (this.blinkT >= 0) {
       const p = this.blinkPos, k = blinkAt(this.blinkT); this.blinkT += dt;
@@ -81,10 +104,32 @@ export class StoryFx {
       this.mailbox.visible = !!s.restored.mailbox;
       if (this.mailbox.visible) { const mx = f.x + 1.5, mz = f.z + 0.5; this.mailbox.position.set(toWorldX(mx), w.standHeight(mx, mz), toWorldZ(mz)); this.fly.material.opacity = 0.3 + 0.7 * glow; }
     } else { this.door.visible = false; this.mailbox.visible = false; }
+    // 잠든 등대 열쇠 표: 등불을 고치기 전, 등대 문 앞 칸에서 탑 쪽으로 조금 다가간 자리 위에 살짝 떠서 천천히 오르내림
+    if (!(now - (this.keyAt ?? -1e9) < 500)) {                                     // 자리는 0.5초마다만 다시 셈(등대를 옮기면 따라감)
+      this.keyAt = now; const kf = !dl.lampLit && !w.storyOff && w.landmarkFront("lighthouse"), km = kf && w.landmark("lighthouse");
+      if (!kf) this.keyPos = null;
+      else {
+        const n = km?.cells.length || 0, tx = n ? km.cells.reduce((a, c) => a + c[0], 0) / n + 0.5 : kf.x + 0.5, tz = n ? km.cells.reduce((a, c) => a + c[1], 0) / n + 0.5 : kf.z + 0.5;
+        const kx = kf.x + 0.5 + (tx - kf.x - 0.5) * 0.3, kz = kf.z + 0.5 + (tz - kf.z - 0.5) * 0.3;
+        this.keyPos = [toWorldX(kx), w.standHeight(kf.x + 0.5, kf.z + 0.5) + 1.35, toWorldZ(kz)];
+      }
+    }
+    const kp = !dl.lampLit && this.keyPos; this.key.visible = !!kp;               // 고치는 순간엔 바로 숨김
+    if (kp) { this.key.position.set(kp[0], kp[1] + 0.07 * Math.sin(now / 650), kp[2]); this.key.material.color.setScalar(1 - 0.3 * (dl.glow ?? 0)); }   // 빛을 안 받는 그림이라 밤 정도만큼 직접 어둡게(밤 70%)
+  }
+  /** 화면 좌표(clientX/Y)가 등대(모델·임시 몸통)나 잠든 등대 열쇠 표를 눌렀나. dom = 그리는 캔버스. 빛줄기·빛 번짐은 안 침 */
+  hit(cx, cy, dom) {
+    const cam = this.camera, w = this.world; if (!cam || !w || !dom) return false;
+    const r = dom.getBoundingClientRect();
+    if (this.key?.visible) { this.key.getWorldPosition(_kv).project(cam); if (_kv.z >= -1 && _kv.z <= 1 && Math.hypot(r.left + (_kv.x + 1) / 2 * r.width - cx, r.top + (1 - _kv.y) / 2 * r.height - cy) <= KEY_HIT_PX) return true; }
+    const base = this.scene.getObjectByName("lighthouseLamp")?.parent; if (!base) return false;
+    const meshes = []; base.traverse(o => { if (o.isMesh && !o.material?.isShaderMaterial) meshes.push(o); });
+    _ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); _ray.setFromCamera(_ndc, cam);
+    return _ray.intersectObjects(meshes, false).length > 0;
   }
   dispose() {
-    for (const o of [this.blink, this.door, this.mailbox]) if (o) { o.parent?.remove(o); o.traverse?.(m => { m.geometry?.dispose?.(); m.material?.dispose?.(); }); }
-    this.blink = this.door = this.mailbox = null; this.world = null; this.queue = []; this.momentT = null; this.boost = this.boostGoal = this.boostHold = 0;
-    if (this.daylight) this.daylight.lampBoost = 0;
+    for (const o of [this.blink, this.door, this.mailbox, this.key]) if (o) { o.parent?.remove(o); o.traverse?.(m => { m.geometry?.dispose?.(); m.material?.dispose?.(); }); }
+    this.blink = this.door = this.mailbox = this.key = this.keyPos = null; this.keyAt = null; this.world = null; this.queue = []; this.momentT = null; this.boost = this.boostGoal = this.boostHold = 0; this.fill = 1;
+    if (this.daylight) { this.daylight.lampBoost = 0; this.daylight.lampFill = 1; }
   }
 }

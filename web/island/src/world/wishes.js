@@ -50,8 +50,9 @@ export const WISHES = [
     done: (w, u) => { const b = u.home && w.buildings.get(u.home); return !!b && allFurniture(b).some(o => o.id === "bed" || o.id === "shellBed"); } },
   { id: "bench", icon: "🪑", text: "걷다가 앉을 데가 없네…", hint: "🔨 건축가가 벤치를 지어요",
     ok: w => w.units.length >= 3 && !builtAny(w, d => d.id === "bench"), done: w => builtAny(w, d => d.id === "bench") },
-  { id: "power", icon: "⚡", text: "밤에도 창문이 환했으면", hint: "🪚 어촌이 되면 목수가 풍차 발전소를 지어요. 둘레의 등불과 창이 켜져요",
-    ok: (w, u) => w.rank >= 1 && !!u.home && !builtAny(w, d => d.power), done: w => builtAny(w, d => d.power) },
+  // 풍차는 처음부터 지을 수 있음(예전 🏘 어촌부터): 지을 목수가 있을 때 빎
+  { id: "power", icon: "⚡", text: "밤에도 창문이 환했으면", hint: "🪚 목수가 풍차 발전소를 지어요. 둘레의 등불과 창이 켜져요",
+    ok: (w, u) => !!u.home && w.units.some(o => o.job === "carpenter") && !builtAny(w, d => d.power), done: w => builtAny(w, d => d.power) },
   { id: "giant", icon: "🏯", text: "내 몸에 맞는 큰 집이 필요해", hint: "🔨 자이언트의 집을 지어 주세요",
     ok: (w, u) => formOf(u) === "자이언트" && !inGiantHouse(w, u), done: (w, u) => inGiantHouse(w, u) },
   // 단짝 옆집: 단짝이 있고 둘 중 하나라도 아직 집이 없을 때(집은 한 번 사면 못 옮기니까). base = 단짝 unitId(이름은 바뀔 수 있음).

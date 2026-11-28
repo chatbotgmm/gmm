@@ -1,4 +1,4 @@
-// 「전기 없음」 배지(풍차가 열린 뒤에만 — 🏘 어촌 전에는 고칠 길이 없어 숨김, power.js powerOpen): 다 지은 가로등·등불 건물(카페·잡화점·우체국)·집(작은 집·2층집·큰 집·자이언트의 집) 가운데 풍차 전기 범위 밖인 것 위에 작은 말풍선(⚡✕).
+// 「전기 없음」 배지(풍차나 가로등을 하나라도 놓은 뒤에만 — 그 전에는 첫 화면의 첫 집에 뜨지 않게 숨김, power.js powerOpen): 다 지은 가로등·등불 건물(카페·잡화점·우체국)·집(작은 집·2층집·큰 집·자이언트의 집) 가운데 풍차 전기 범위 밖인 것 위에 작은 말풍선(⚡✕).
 // 누구에게 띄울지는 world/power.js 한 곳(unpowered — world.powerRev가 바뀔 때만 다시 셈). 풍차가 범위 안에 다 지어지면 바로 사라지고 철거하면 다시 뜸. 짓는 중인 건물에는 안 띄움(🔨 진행률 표시가 있음).
 //  · 자리: 건물 표시(views.js .badge — 🪧 값·🐦 안에 있는 수)와 같은 점. 그 표시가 떠 있으면 그 위로 NP_STACK px 올려 쌓음
 //    다른 건물의 표시·땅 이름·갈매미 말풍선과 겹칠 때는 배지가 아래(overlay의 맨 앞 자식) — 글자는 늘 읽힘
@@ -19,7 +19,7 @@ const NP_CSS = `.nopw { position: absolute; left: 0; top: 0; width: 40px; height
 .nopw[hidden] { display: none; } .nopw svg { position: absolute; left: 1px; top: 0; width: 34px; height: 22px; }
 .nopw::before { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: #4a3a2acc; }
 .nopw::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -4px; border: 4px solid transparent; border-bottom: 0; border-top-color: #fffdf8; }`;
-const NP_NONE = [];                                                               // 풍차가 아직 안 열린 마을(powerOpen): 배지 없음
+const NP_NONE = [];                                                               // 아직 풍차·가로등을 안 놓은 마을(powerOpen): 배지 없음
 const NP_EMOJI = { streetlamp: "💡", cafe: "☕", shop: "🏪", post: "📮" };
 
 export class NoPowerBadges {

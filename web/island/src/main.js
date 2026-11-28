@@ -31,7 +31,8 @@ import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
 import { WISH_BY_ID, wishText } from "./world/wishes.js";
-import { newsFor, awayLetter, newsPages } from "./world/news.js";
+import { newsFor, awayLetter, newsPages, newsDay } from "./world/news.js";
+import { lighthouseNote } from "./world/story.js";
 import { dailyKey } from "./world/daily.js";
 import { stampBuyText } from "./ui/gullView.js";
 import { SEARCH_TIP } from "./ui/summonView.js";
@@ -441,10 +442,16 @@ hud.onDecorate = b => { unitControl.setFollow(null, true); roomView.open(world, 
 const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => world, card: document.getElementById("houseCard") });   // 풍차 전기 범위 고리(풍차를 누르거나 풍차·가로등 자리를 고를 때)
 // 땅을 한 번 누름: ✨ 반짝이가 있으면 먼저 줍고(손가락 판정 지름 48px 이상 또는 1.2칸 안) 카드는 안 엶. 갈매미를 누른 것은 unitControl이 먼저 받음
 // 건물이면 카드: 집·공사장·밭·의원·잡화점은 hud(bldView.js), 풍차는 powerRange, 전기 없는 가로등·가게는 noPower(열린 카드면 까닭만 덧붙임)
+// 🗼 등대(모델이나 문 앞 🗝 열쇠 표)를 누르면: 왜 꺼져 있고 무엇을 하면 켜지는지 한 줄(world/story.js lighthouseNote), 비밀 수첩이 생긴 뒤면 알림을 눌러 수첩으로
 unitControl.onTapGround = (c, e) => {
   const s = (e && sparkleView?.hit(e.clientX, e.clientY, camera, renderer.domElement)) || world.sparkleNear(c.gx, c.gz);
   if (s && world.pickSparkle(s.id)) { hud.houseCard(null); powerRange.tap(null); noPower.tap(null); return; }   // 빈 땅을 누른 것처럼 열린 카드는 닫음
-  const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b || null); powerRange.tap(b || null, tools.ray.ray, c); if (powerRange.sel) hud.moveBtnFor(powerRange.sel); noPower.tap(powerRange.sel ? null : b || null); };   // 풍차 카드에도 ↔ 옮기기
+  const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id);
+  if (!b && e && storyFx.hit(e.clientX, e.clientY, renderer.domElement)) {
+    hud.houseCard(null); powerRange.tap(null); noPower.tap(null);
+    const n = lighthouseNote(world.storyOff ? null : world.story, world, newsDay(world.time)); hud.status(n.text, { kind: "info", at: n.app ? { app: n.app } : null }); return;
+  }
+  hud.houseCard(b || null); powerRange.tap(b || null, tools.ray.ray, c); if (powerRange.sel) hud.moveBtnFor(powerRange.sel); noPower.tap(powerRange.sel ? null : b || null); };   // 풍차 카드에도 ↔ 옮기기
 const noPower = new NoPowerBadges({ camera, overlay, getWorld: () => world, getViews: () => buildingViews, card: document.getElementById("houseCard") });   // 전기 범위 밖 가로등·등불 건물 위 「전기 없음」 말풍선
 // 첫 탭 규칙(갈매미·땅보다 먼저): 💤 꿈방울을 누르면 터뜨려 잠꼬대 → ✨ 반짝이를 누르면 줍기. 아니면 unitControl이 하던 대로(갈매미 따라가기·땅 누르기)
 unitControl.onTapFirst = e => {
@@ -564,6 +571,7 @@ function frame() {
 let fastDays = 0, fastPrevH = -1;                                              // '빠르게(1분=1시간)'는 날짜가 오늘에 고정된 채 시각만 돌아서, 자정을 넘길 때마다 하루씩 더한 시계를 숙박 키에 넘김
 function tickClock() {
   world.isNight = (daylight.night ?? 0) > 0.5;                                 // 밤(해가 진 뒤): 잠은 기력으로(chrono.js) — 밤엔 아침형이, 낮엔 야행성이 피로가 1.5배로 쌓임
+  if (world.isNight && ready) hud?.coach?.night(world);                        // 첫 밤 안내(목수가 있고 풍차가 없을 때 한 번, coach.js)
   if (daylight.time) {
     const t = daylight.time, h = t.getHours() + t.getMinutes() / 60, fast = daylight.mode === "fast";
     if (fast && fastPrevH >= 0 && h < fastPrevH - 12) fastDays++; fastPrevH = fast ? h : -1;

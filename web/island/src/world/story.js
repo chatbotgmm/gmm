@@ -55,6 +55,20 @@ export const foundCount = s => Object.keys(s.found).length;
 export const restoredOf = n => STORY_CHAPTERS[n - 1].restore;
 /** 등대 등불이 켜졌나(3장 고칠 곳). 화면(daylight.js)이 밤 불빛을 켤지 봄 */
 export const storyLampLit = s => !!s?.restored?.lamp;
+/** 등대를 눌렀을 때 한 줄: 왜 꺼져 있고 무엇을 하면 켜지는지(3장 「등대 등불」 전) · 켜진 뒤엔 그 모습. app = 누르면 열 앱(비밀 수첩이 생긴 뒤에만 "story").
+ *  w = 월드(3장 체크리스트에 창고·가방을 봄), day = 마을 날(news.js newsDay) */
+export function lighthouseNote(s, w, day) {
+  if (!s) return { text: "🗼 밤마다 등대 빛줄기가 바다를 비춰요", app: null, lit: true };
+  if (storyLampLit(s)) return { text: "🗼 등대에 불이 켜져 있어요. 밤마다 빛줄기가 돌며 바다를 비춰요", app: storyStarted(s) ? "story" : null, lit: true };
+  const asleep = "🗼 등대는 불이 꺼진 채 잠들어 있어요";
+  if (!storyStarted(s)) return { text: `${asleep}. ${stSparkOf(s, "c1_sign") ? "발치의 ✨ 반짝이를 주워 보세요" : day >= 2 ? "곧 발치에 ✨ 반짝이가 생겨요" : "내일쯤 발치에 ✨ 반짝이가 생겨요"}. 🗝 이야기를 따라가면 다시 켤 수 있어요`, app: null, lit: false };
+  const r = restoredOf(3);
+  if (!chapterOpen(s, 3)) return { text: `${asleep}. 🗝 비밀 수첩 3장 「${r.title}」을 고치면 다시 켜져요. 지금은 ${s.chapter}장이에요`, app: "story", lit: false };
+  const chk = restoreCheck(s, w || {}, 3);
+  if (chk.ok) return { text: `🗼 등불을 고칠 준비가 됐어요. 🗝 비밀 수첩 3장에서 🔧 고치기를 누르면 다시 켜져요`, app: "story", lit: false };
+  const need = chk.rows.filter(x => !x.ok).map(x => `${x.icon} ${x.k ? x.text.split(":")[0] : x.text} ${x.have}/${x.need}`).join(", ");
+  return { text: `${asleep}. 🗝 3장 「${r.title}」을 고치면 켜져요. 남은 것: ${need}`, app: "story", lit: false };
+}
 /** 새로 얻었지만 수첩에서 아직 안 본 조각 수(📱 배지) */
 export const unreadCount = s => Object.keys(s.found).filter(id => !s.read[id]).length;
 /** 덤 조각을 다 모았나(수첩 그림) */

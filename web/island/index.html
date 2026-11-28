@@ -720,6 +720,8 @@
   #coach .cexp[hidden] { display: none; }
   #coach .ctext { flex: 1 1 calc(170*var(--u)); margin: calc(2*var(--u)) 0 calc(2*var(--u)); font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
   #coach .cok { margin-left: auto; }
+  #coach .cgo[hidden] { display: none; } #coach .cgo:not([hidden]) { margin-left: auto; } #coach .cgo:not([hidden]) + .cok { margin-left: 0; }   /* 안내의 지름길(첫 밤: 🔨 풍차 놓기) */
+  #coach:not(.cfold) .cmain:has(.cgo:not([hidden])) .ctext { flex-basis: 100%; }   /* 지름길이 있으면 글은 한 줄 다 쓰고, 단추 둘은 아래 오른쪽에 나란히 */
   #coach button { flex: none; pointer-events: auto; min-height: var(--hit-sm); padding: calc(4*var(--u)) calc(12*var(--u)); font-size: var(--fs-sm); }
   @keyframes coachIn { from { opacity: 0; transform: translate(-50%, calc(-6*var(--u))); } to { opacity: 1; transform: translateX(-50%); } }
   body.inroom #coach { z-index: calc(var(--z-room) + 1); }

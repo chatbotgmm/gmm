@@ -724,9 +724,16 @@ export class World {
   /** 화면용: 이 건물을 놓을 때 금고에서 낼 설계비(경제가 없으면 0) */
   feeFor(defId) {
     if (!this.economy) return 0;
-    if (BUILDINGS[defId]?.market && ![...this.buildings.values()].some(b => BUILDINGS[b.defId].market)) return 0;   // 첫 시장은 설계비 없음: 금고로 돈이 돌아오는 첫 건물이라, 금고가 바닥나도 빠져나올 길을 남김
+    if (this.firstFree(defId)) return 0;
     const fee = BK.scaled(BK.feeOf(defId), this.priceMult());
     return this.rescueHouse(defId, fee) || this.rescueDeco(defId, fee) ? 0 : fee;
+  }
+  /** 설계비 없는 첫 건물: 짓는 중 포함해 아직 하나도 없으면 0(철거하면 다시 첫 건물). 돈이 오가지 않을 뿐이라 돈의 합은 그대로
+   *  · 첫 시장: 금고로 돈이 돌아오는 첫 건물이라, 금고가 바닥나도 빠져나올 길을 남김
+   *  · 첫 풍차: 첫날 밤 불을 켜는 일이 금고 걱정과 엮이지 않게(둘째부터 설계비 15). 풍차는 처음부터 지을 수 있음(data/catalog.js) */
+  firstFree(defId) {
+    const def = BUILDINGS[defId], key = def?.market ? "market" : def?.power ? "power" : null;
+    return !!key && ![...this.buildings.values()].some(b => BUILDINGS[b.defId]?.[key]);
   }
   /** 막힘 풀기(금고가 말라도 할 일 하나는 남게): 값싼 장식(설계비 BK.DECO_FREE_MAX 이하 — 벤치·화단·가로등·깃발 줄…)은 금고가 그 설계비도 안 되면 설계비 없이.
    *  재료·품삯은 그대로(품삯은 밀렸다가 돈이 들어오면 갚음) */

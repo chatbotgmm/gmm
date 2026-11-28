@@ -6,9 +6,16 @@ import { setFountainSky } from "./fountain.js";
 import { sunPosition } from "../world/sun.js";
 import { dayLook, moonMix, nightLook, lightElev, shadeTint } from "./dayKeys.js";
 import { TOON_SHADE_COL } from "./toon.js";
+import { setLampPools } from "./lampPool.js";
+import { lighthouseLook, LH_LIT, LH_EMBER, LH_HALO_LIT, LH_HALO_EMBER, LH_BEACON_LIT, LH_BEACON_EMBER } from "./lampLook.js";
 const DEG = Math.PI / 180;
 const C = (h) => new THREE.Color(h);
-const LAMP_HALO = 0xffb060, LAMP_POOL = 0xff9e4c;                                   // 가로등·등불 빛: 따뜻한 주황(예전 0xffc870·0xffb860 더하기)
+const LH_C = { lit: C(LH_LIT), ember: C(LH_EMBER), haloLit: C(LH_HALO_LIT), haloEmber: C(LH_HALO_EMBER), beaconLit: C(LH_BEACON_LIT), beaconEmber: C(LH_BEACON_EMBER) };   // 등대 불빛 색(render/lampLook.js)
+const rooted = (o, root) => { while (o.parent) o = o.parent; return o === root; };
+const LAMP_HALO = 0xffb868;                                                        // 가로등·등불 빛 번짐: 따뜻한 주황(예전 0xffb060)
+// 가로등: 실제 빛(PointLight) 세기 0.8 → 1.3 · 닿는 거리 10 → 8 m(멀리 번지면 풀빛과 섞여 올리브가 됨), 머리 빛 번짐 지름 1.6 → 2.3 m · 불투명도 0.8 → 0.95.
+// 발밑 빛 웅덩이는 원판(반지름 3.2 m · 불투명도 0.28)을 덮던 것 → 땅 셰이더(lampPool.js, 반지름 4.2 m)가 땅 색을 보고 칠함: 풀 위에서도 연두·올리브 원판이 안 생김
+const LAMP_LIGHT = 0xffb060, LAMP_I = 1.3, LAMP_RANGE = 8, LAMP_HALO_M = 2.3, LAMP_HALO_A = 0.95;
 let HALO = null;                                                                  // 가운데가 밝고 가장자리로 사라지는 둥근 빛(한 번만 만듦)
 function haloTex() {
   if (HALO) return HALO; const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -36,14 +43,21 @@ export class Daylight {
     if (this.mode === "fast") this.fastT = (this.fastT + dt / 60) % 24;
     if (this.mult > 1 && this.vMs != null) this.vMs += dt * 1000 * this.mult;
     const wlMoved = Math.abs(this.wl - this.wlShown) > 0.003;                       // 날씨 밝기가 움직이는 동안(1~2초)은 0.5초 간격을 안 기다림: 계단처럼 툭툭 어두워지지 않게
-    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) { if (wlMoved && this.elev != null) this.light(); this.beam(dt); if (this.lampBoost > 0 || this.lampBoostWas > 0 || this.lampLit !== this.lampLitWas) { this.lampBoostWas = this.lampBoost || 0; this.lampLitWas = this.lampLit; this.lamp(); } return; }   // 🗝 등불 켜는 연출 중엔 매 프레임   // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
+    if (nowMs - this.last < (this.mult > 60 ? 0 : 500)) {                          // 빨리 감을 땐 해가 뚝뚝 끊기지 않게 매 프레임
+      if (wlMoved && this.elev != null) this.light(); this.beam(dt);
+      const fill = this.lampFill ?? 1;                                              // 🗝 등불 켜는 연출·차오름 중, 잠든 등대 불씨가 숨 쉬는 밤엔 매 프레임
+      if (this.lampBoost > 0 || this.lampBoostWas > 0 || this.lampLit !== this.lampLitWas || fill < 1 || this.lampFillWas < 1 || (this.lampLit === false && (this.glow ?? 0) > 0.005)) {
+        this.lampBoostWas = this.lampBoost || 0; this.lampLitWas = this.lampLit; this.lampFillWas = fill; this.lamp(nowMs);
+      }
+      return;
+    }
     this.last = nowMs;
     const d = this.now(), { elev, azim } = sunPosition(d);
     this.elev = elev; this.azim = azim; this.time = d;
     this.night = Math.max(0, Math.min(1, (2 - elev) / 8));                          // 0 낮 ~ 1 밤(해 높이 2° → -6°). 마을 규칙(world.isNight)이 쓰는 값이라 그대로
     this.glow = nightLook(this.night);                                              // 보이는 것(등불·창 불빛·그늘)은 이 부드러운 곡선으로 켜지고 꺼짐(약 30분)
     this.light();
-    this.lamp(); this.streetLamps();
+    this.lamp(nowMs); this.streetLamps();
     this.beam(dt);
   }
   /** 해 높이·방위와 날씨 밝기로 빛·하늘·안개·바다·구름 색을 정함(dayKeys.js 키프레임, 새 객체 없음) */
@@ -76,25 +90,36 @@ export class Daylight {
   }
   /** 날씨 밝기(0.45~1). 움직이는 동안은 다음 프레임에 바로, 그 밖에는 0.5초마다 하는 다시 계산 때 반영 */
   setWeatherLight(v) { this.wl = v; }
-  /** 등대: 램프 발광(밤에 세게), 둘레를 비추는 불빛, 회전하는 빛줄기 */
-  lamp() {
-    const lamp = this.scene.getObjectByName("lighthouseLamp"); if (!lamp) return;
-    const n = this.lampGlow(), v = this.lampLit === false && !(this.lampBoost > 0) ? 0.12 : 0.9 + 3.5 * n, m = lamp.material;   // 🗝 이야기: 등불을 고치기 전엔 꺼진 유리 m.emissiveIntensity = v; if (m.userData.src) m.userData.src.emissiveIntensity = v;   // 툰 재질이면 원래 재질도
-    if (!this.beacon) this.beacon = new THREE.PointLight(0xffd27a, 0, 26, 1.6);
+  /** 등대: 램프 발광(밤에 세게), 둘레를 비추는 불빛, 회전하는 빛줄기. 세기·색은 render/lampLook.js(🗝 등불을 고치기 전엔 빛줄기 없이 숨 쉬는 불씨) */
+  lamp(nowMs = performance.now()) {
+    const lamp = this.lhFind("lighthouseLamp"); if (!lamp) return;
+    const k = this.lhLook(nowMs), m = lamp.material, src = m.userData.src;
+    for (const x of src ? [m, src] : [m]) { x.emissiveIntensity = k.glass; x.emissive?.copy(LH_C.ember).lerp(LH_C.lit, k.warm); }   // 툰 재질이면 원래 재질도
+    if (!this.beacon) this.beacon = new THREE.PointLight(LH_BEACON_LIT, 0, 26, 1.6);
     if (this.beacon.parent !== lamp) lamp.add(this.beacon);                          // 새 섬·불러오기로 등대가 새로 생기면 불빛도 새 램프로 옮김
-    this.beacon.intensity = 30 * n;
+    this.beacon.intensity = k.beacon; this.beacon.color.copy(LH_C.beaconEmber).lerp(LH_C.beaconLit, k.warm);
     if (!this.lampHalo) {                                                          // 램프 둘레 빛 번짐(밤에 보임)
-      this.lampHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: 0xffd98a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
-      this.lampHalo.scale.setScalar(4.5); this.lampHalo.renderOrder = 3; this.lampHalo.userData.noToon = true;
+      this.lampHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: LH_HALO_LIT, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+      this.lampHalo.renderOrder = 3; this.lampHalo.userData.noToon = true; this.lampHalo.raycast = () => {};
     }
     if (this.lampHalo.parent !== lamp) lamp.add(this.lampHalo);
-    this.lampHalo.visible = n > 0.005; this.lampHalo.material.opacity = 0.85 * n;   // 보일락 말락 할 때 켜짐(툭 나타나지 않게)
+    this.lampHalo.visible = k.halo > 0.005; this.lampHalo.material.opacity = k.halo;   // 보일락 말락 할 때 켜짐(툭 나타나지 않게)
+    this.lampHalo.scale.setScalar(k.haloScale); this.lampHalo.material.color.copy(LH_C.haloEmber).lerp(LH_C.haloLit, k.warm);
   }
-  /** 가로등: 풍차 전기가 닿으면 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛 + 발밑 빛 웅덩이(빛 계산 없이 더하기 색으로, 가벼움) */
+  /** 등대 불빛 값(render/lampLook.js): 밤(glow) · 🗝 등불을 고쳤나(lampLit, 모르면 켜진 것으로) · 연출(lampBoost) · 고친 뒤 차오름(lampFill) */
+  lhLook(nowMs = performance.now()) { return lighthouseLook({ glow: this.glow ?? 0, lit: this.lampLit !== false, boost: this.lampBoost || 0, fill: this.lampFill ?? 1, t: nowMs / 1000 }); }
+  /** 등대 램프·빛줄기 찾기: 장면 전체를 매 프레임 훑지 않게 기억해 두고, 장면에서 빠졌으면(새 섬·불러오기) 다시 찾음. 없으면 0.5초마다만 다시 봄 */
+  lhFind(name) {
+    const c = this.lhSeen || (this.lhSeen = new Map()), hit = c.get(name);
+    if (hit?.o && rooted(hit.o, this.scene)) return hit.o;
+    const now = performance.now(); if (hit && !hit.o && now - hit.t < 500) return null;
+    const o = this.scene.getObjectByName(name) || null; c.set(name, { o, t: now }); return o;
+  }
+  /** 가로등: 풍차 전기가 닿으면 유리(발광 마스크)가 밤에 빛나고, 머리에 번지는 빛(더하기 색 스프라이트) + 발밑 빛 웅덩이(땅 셰이더, lampPool.js) + 가까운 몇 개는 실제 빛 */
   /** 가로등 실제 빛 개수(그래픽 설정). 빛 개수가 바뀌면 재질을 다시 만들어야 해서 늘 같은 개수를 두고 안 쓰는 빛은 0으로 */
   setLampLights(k) {
     for (const l of this.lampLights || []) l.parent?.remove(l);
-    this.lampLights = Array.from({ length: k }, () => { const l = new THREE.PointLight(0xffb060, 0, 10, 1); l.castShadow = false; this.scene.add(l); return l; });
+    this.lampLights = Array.from({ length: k }, () => { const l = new THREE.PointLight(LAMP_LIGHT, 0, LAMP_RANGE, 1); l.castShadow = false; this.scene.add(l); return l; });
   }
   /** 건물 등불(집·우체국·카페·잡화점 문 옆 등): 유리(발광 마스크, tools/glow_mask.py)가 가로등과 같은 세기로 밤에 빛나고 등불마다 작은 빛 번짐.
    *  풍차 전기가 닿는 건물만 켜짐(hasPower). 짓는 중(모델이 아래에서 솟는 동안 — 세로로 눌려 있음)에는 끔. 실제 빛은 안 씀 */
@@ -125,28 +150,26 @@ export class Daylight {
       if (src.name !== "lampBody") return;
       const on = this.hasPower(o), v = on ? glow : 0.15 * (1 - n);                 // 가로등도 풍차 전기가 닿아야 켜짐: 없으면 밤에 유리가 꺼지고 빛 번짐·빛 웅덩이·실제 빛도 없음(낮 모습은 같음)
       m.emissiveIntensity = v; src.emissiveIntensity = v;
-      if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 빛 두 개를 붙임
+      if (!o.userData.halo) {                                                      // 처음 볼 때 한 번: 모델 크기에 맞춰 머리에 빛 번짐을 붙이고 발밑 자리를 적어 둠
         o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, s = o.getWorldScale(new THREE.Vector3()).y || 1, hgt = bb.max.y - bb.min.y;
         const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(), color: LAMP_HALO, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: true }));
-        halo.position.set(0, bb.min.y + hgt * 0.88, 0);   // 등불 유리 높이(가는 가로등) halo.scale.setScalar(1.6 / s); halo.userData.noToon = true; o.add(halo);
-        // 발밑 빛 웅덩이: 더하기 합성이면 풀빛 위에서 연두 원판이 됐음 → 보통 합성(따뜻한 주황을 살짝 덮음)·반지름 5.5 → 3.2 m
-        const pool = new THREE.Mesh(new THREE.CircleGeometry(3.2 / s, 32), new THREE.MeshBasicMaterial({ map: haloTex(), color: LAMP_POOL, transparent: true, depthWrite: false }));
-        pool.rotation.x = -Math.PI / 2; pool.position.set(0, bb.min.y + 0.04 / s, 0); pool.userData.noToon = true; o.add(pool);
-        o.userData.halo = [halo, pool];
+        halo.position.set(0, bb.min.y + hgt * 0.88, 0);                            // 등불 유리 높이(가는 가로등)
+        halo.scale.setScalar(LAMP_HALO_M / s); halo.userData.noToon = true; halo.raycast = () => {}; o.add(halo);   // 예전엔 이 줄이 주석 끝에 붙어 있어 빛 번짐이 장면에 없었고, 실제 빛도 섬 가운데(원점)에 몰려 있었음
+        o.userData.halo = halo; o.userData.lampFoot = new THREE.Vector3(0, bb.min.y, 0);
       }
-      const [halo, pool] = o.userData.halo; halo.visible = pool.visible = on && n > 0.005; halo.material.opacity = 0.8 * n; pool.material.opacity = 0.28 * n;
-      if (on) lamps.push(halo);
+      const halo = o.userData.halo; halo.visible = on && n > 0.005; halo.material.opacity = LAMP_HALO_A * n;   // 예전 0.8
+      if (on) lamps.push(o);
     });
-    // 실제 빛: 화면 중심(보는 곳)에서 가까운 가로등부터 빛을 하나씩 옮겨 붙임
-    const L = this.lampLights || []; if (!L.length) return;
-    const c = this.focus || new THREE.Vector3(), p = new THREE.Vector3();
-    const near = lamps.map(h => { h.getWorldPosition(p); return [p.clone(), p.distanceToSquared(c)]; }).sort((a, b) => a[1] - b[1]);
-    L.forEach((l, i) => { const it = near[i]; if (it && n > 0.005) { l.position.copy(it[0]).y += 0.6; l.intensity = 0.8 * n; } else l.intensity = 0; });   // 실제 빛은 약하게(예전 1.1: 풀빛 위에서 연두로 번지지 않게), 따뜻한 느낌은 빛 웅덩이가
+    // 화면 중심(보는 곳)에서 가까운 켜진 가로등부터: 땅 빛 웅덩이(LAMP_POOL_MAX개 — 그래픽 설정과 상관없이) · 실제 빛(그래픽 설정 개수, 성능 우선이면 0)
+    const c = this.focus || new THREE.Vector3();
+    const near = lamps.map(o => { const head = o.userData.halo.getWorldPosition(new THREE.Vector3()); return [head, o.localToWorld(o.userData.lampFoot.clone()), head.distanceToSquared(c)]; }).sort((a, b) => a[2] - b[2]);
+    setLampPools(near.map(it => it[1]), n);
+    (this.lampLights || []).forEach((l, i) => { const it = near[i]; if (it && n > 0.005) { l.position.copy(it[0]).y += 0.6; l.intensity = LAMP_I * n; } else l.intensity = 0; });
   }
-  /** 등대 불빛 세기(0~1): 밤(glow) · 🗝 이야기 등불을 아직 안 고쳤으면(lampLit === false) 0 · 엔딩·불 켜는 연출(lampBoost)은 낮에도 */
-  lampGlow() { return Math.max(this.lampLit === false ? 0 : this.glow ?? 0, Math.min(1, this.lampBoost || 0)); }
+  /** 등대 불빛 세기(0~1): 밤(glow) · 🗝 이야기 등불을 아직 안 고쳤으면(lampLit === false) 0 · 엔딩·불 켜는 연출(lampBoost)은 낮에도 · 고친 순간엔 차오름(lampFill) */
+  lampGlow() { return this.lhLook().n; }
   beam(dt) {
-    const b = this.scene.getObjectByName("lighthouseBeam"); if (!b) return;
+    const b = this.lhFind("lighthouseBeam"); if (!b) return;
     const n = this.lampGlow(); b.rotation.y += dt * 0.9; b.visible = n > 0.005;
     for (const m of b.children) m.material.uniforms.uOpacity.value = 0.75 * n;
   }
