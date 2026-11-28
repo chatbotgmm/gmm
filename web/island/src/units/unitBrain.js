@@ -165,11 +165,20 @@ function done(u, reward, rnd, world, secs = null) {
 }
 
 // ---- 길 다듬기: 격자 길(칸마다 꺾임)에서 곧게 갈 수 있는 중간 칸을 빼서 사선으로 곧게 걷게 함
-function lineClear(grid, ax, az, bx, bz) {
+//  paved(포장 칸 모음)를 주면: 빼는 칸 중에 포장 칸이 있으면 곧은 줄도 포장 칸 위(ROAD_HUG칸 안)로만 지나야 함(길로 돌아온 길을 풀밭 지름길로 다시 펴지 않게).
+//  ROAD_HUG: 길 도구로 칠한 1칸 너비 사선 길은 칸이 계단처럼 엇갈려서, 칸 안으로만 지나게 하면 칸마다 45°씩 꺾으며 비틀비틀 걸음
+//  → 곧은 줄이 포장 칸 가장자리에서 ROAD_HUG칸까지는 벗어나도 됨(2:1·3:1 계단 길도 한 줄로 곧게, 길 옆 칸 가운데까지는 못 감)
+export const ROAD_HUG = 0.3;
+function nearPaved(grid, paved, fx, fz) {
+  for (let z = Math.floor(fz - ROAD_HUG); z <= Math.floor(fz + ROAD_HUG); z++) for (let x = Math.floor(fx - ROAD_HUG); x <= Math.floor(fx + ROAD_HUG); x++) if (grid.inBounds(x, z) && paved.has(grid.index(x, z))) return true;
+  return false;
+}
+function lineClear(grid, ax, az, bx, bz, paved = null) {
   const x0 = ax + 0.5, z0 = az + 0.5, x1 = bx + 0.5, z1 = bz + 0.5, n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.2);
   let px = ax, pz = az;
   for (let i = 1; i <= n; i++) {
-    const cx = Math.floor(x0 + (x1 - x0) * i / n), cz = Math.floor(z0 + (z1 - z0) * i / n);
+    const fx = x0 + (x1 - x0) * i / n, fz = z0 + (z1 - z0) * i / n, cx = Math.floor(fx), cz = Math.floor(fz);
+    if (paved && !nearPaved(grid, paved, fx, fz)) return false;
     if (cx === px && cz === pz) continue;
     if (!grid.canStep(px, pz, cx, cz)) return false;
     if (cx !== px && cz !== pz && !(grid.canStep(px, pz, cx, pz) && grid.canStep(px, pz, px, cz))) return false;   // 모서리 가로지르기 금지
@@ -177,11 +186,12 @@ function lineClear(grid, ax, az, bx, bz) {
   }
   return true;
 }
-export function smoothPath(grid, sx, sz, path) {
+export function smoothPath(grid, sx, sz, path, paved = null) {
+  const onRoad = p => paved.has(grid.index(p[0], p[1])), road = !!paved?.size && path.some(onRoad);
   const out = []; let ax = sx, az = sz, i = 0;
   while (i < path.length) {
-    let j = i;
-    while (j + 1 < path.length && j - i < 12 && lineClear(grid, ax, az, path[j + 1][0], path[j + 1][1])) j++;
+    let j = i, cut = road && onRoad(path[i]);                                     // cut: 빼려는 칸(path[i..j])에 포장 칸이 있음
+    while (j + 1 < path.length && j - i < 12 && lineClear(grid, ax, az, path[j + 1][0], path[j + 1][1], cut ? paved : null)) { j++; if (road && onRoad(path[j])) cut = true; }
     out.push(path[j]); [ax, az] = path[j]; i = j + 1;
   }
   return out;
@@ -192,14 +202,14 @@ function startPath(u, world, gx, gz, run = null) {
   // 다른 섬(걸어서 안 이어진 땅): 선착장이 있으면 배를 타고, 없으면 바로 포기(넓은 지도에서 헛된 길찾기를 하지 않게)
   if (world.compAt && world.grid.isWalkable(sx, sz) && world.compAt(sx, sz) !== world.compAt(gx, gz)) {
     const fr = world.ferryRoute?.(sx, sz, gx, gz); if (!fr) return false;
-    const rawA = findPath(world.grid, sx, sz, fr.A.door.x, fr.A.door.z, 30000); if (!rawA) return false;
+    const rawA = findPath(world.grid, sx, sz, fr.A.door.x, fr.A.door.z, 30000, world.roads?.net); if (!rawA) return false;
     u.path = rawA; u.pathIndex = 0; u.goal = { x: fr.A.door.x, z: fr.A.door.z }; u.moveT = 0; u.running = !!u.runSpeed;
     u.ferry = { A: fr.A.id, B: fr.B.id, gx, gz }; u.giveUp = 9999; return true;
   }
   u.ferry = null;
-  const raw = findPath(world.grid, sx, sz, gx, gz, 30000);
+  const raw = findPath(world.grid, sx, sz, gx, gz, 30000, world.roads?.net);     // 포장도로가 있으면 조금 돌아가더라도 길로(pathfinding.js ROAD_COST)
   if (!raw) return false;
-  const path = smoothPath(world.grid, sx, sz, raw);
+  const path = smoothPath(world.grid, sx, sz, raw, world.roads?.net);
   if (Math.hypot(u.x - (sx + 0.5), u.z - (sz + 0.5)) > 0.2) path.unshift([sx, sz]);   // 칸 모서리에 서 있으면 먼저 칸 가운데로
   u.path = path; u.pathIndex = 0; u.goal = { x: gx, z: gz }; u.moveT = 0;
   u.running = run ?? (!!u.runSpeed && raw.length > 7);            // 먼 길은 달림
@@ -294,7 +304,7 @@ function sail(u, dt, world) {
   }
   if (s.i < s.pts.length) return false;
   const { gx, gz } = u.ferry; u.sailing = null; u.ferry = null; u.x = B.door.x + 0.5; u.z = B.door.z + 0.5; u.y = world.standHeight(u.x, u.z);
-  const raw = findPath(world.grid, B.door.x, B.door.z, gx, gz, 30000); if (!raw) { u.path = null; return true; }
+  const raw = findPath(world.grid, B.door.x, B.door.z, gx, gz, 30000, world.roads?.net); if (!raw) { u.path = null; return true; }
   u.path = raw; u.pathIndex = 0; u.goal = { x: gx, z: gz }; u.giveUp = Math.max(GIVE_UP, raw.length + 10);
   return raw.length === 0;
 }
@@ -327,6 +337,29 @@ export function maybeHint(u, world) {
   u.hintAt = t; addNote(u, HINT_NOTE[u.disp]);
   world.emit?.("hint", { u, disp: u.disp }); return true;
 }
+// ---- 길 산책: 포장도로가 있으면 산책 목적지를 STROLL_ROAD 확률로 둘레의 포장 칸으로(장식 둘레 광장은 STROLL_DECO칸만큼 더 끌림).
+//  고르기는 월드 난수를 더 쓰지 않음: 길로 갈지는 갈매미 id·마을 시간 해시, 어느 칸인지는 원래 뽑던 무작위 자리에 가장 가까운 포장 칸.
+//  길 위로 산책을 나서면 가끔(ROAD_SAY_CHANCE, chatter "road" — 하루 3번까지) 흐뭇한 말풍선.
+export const STROLL_ROAD = 0.6, STROLL_DECO = 3, ROAD_SAY_CHANCE = 0.2;
+export const ROAD_SAY = ["길이 반듯하니 좋다", "돌길 산책 ♪", "발이 편하네", "길 따라 한 바퀴"];
+/** 이번 산책은 길 쪽으로 갈까(STROLL_ROAD 확률, 해시) */
+export const strollRoad = (u, world) => strHash(`${u.unitId}|stroll|${Math.floor((world.time || 0) * 4)}`) / 4294967296 < STROLL_ROAD;
+/** (sx,sz) 둘레 r칸 네모 안의 걸을 수 있는 포장 칸 [[x, z, 덤]]. 덤 = 다 지은 장식(벤치·화단·분수·가로등…) 문 둘레 3칸 안이면 STROLL_DECO.
+ *  건물 문 앞 칸(길 끝이 문에 닿아 가장 자주 뽑힘 — 모임·축제 자리처럼 문 앞에선 서성이지 않음)과 바로 옆 칸(제자리 산책)은 뺌 */
+export function roadCellsNear(world, net, sx, sz, r) {
+  const g = world.grid, out = [], decos = [...world.buildings.values()].filter(b => BUILDINGS[b.defId].deco && world.isDone(b)).map(b => b.door);
+  for (let z = sz - r; z <= sz + r; z++) for (let x = sx - r; x <= sx + r; x++) {
+    if (Math.max(Math.abs(x - sx), Math.abs(z - sz)) < 2 || !g.inBounds(x, z) || !net.has(g.index(x, z)) || !g.isWalkable(x, z) || g.doorOwner(x, z) != null) continue;
+    out.push([x, z, decos.some(d => Math.max(Math.abs(d.x - x), Math.abs(d.z - z)) <= 3) ? STROLL_DECO : 0]);
+  }
+  return out;
+}
+/** 무작위 자리(ax,az)에 가장 가까운 포장 칸(덤만큼 더 가깝게 봄) */
+function nearestRoad(cells, ax, az) {
+  let best = null, bd = Infinity;
+  for (const c of cells) { const d = Math.hypot(c[0] - ax, c[1] - az) - c[2]; if (d < bd) { bd = d; best = c; } }
+  return best;
+}
 function startActivity(u, kind, world, rnd) {
   maybeHint(u, world);
   const ok = startActivityInner(u, kind, world, rnd);
@@ -343,10 +376,16 @@ function startActivityInner(u, kind, world, rnd) {
     }
     case "sleep": return startSleep(u, world, rnd);                              // 지치면 잠(밤낮과 상관없이): 내 집 → 빈 집 손님 → 밖
     case "wander": {
-      const [sx, sz] = cellOf(u), r = Math.round(reach(u));
+      const [sx, sz] = cellOf(u), r = Math.round(reach(u)), net = world.roads?.net;
+      const roadCells = net?.size && strollRoad(u, world) ? roadCellsNear(world, net, sx, sz, r) : null;   // 길 산책(위 STROLL_ROAD)
       for (let k = 0; k < 12; k++) {
-        const gx = sx + Math.round((rnd() * 2 - 1) * r), gz = sz + Math.round((rnd() * 2 - 1) * r);
-        if (g.isWalkable(gx, gz) && startPath(u, world, gx, gz, !!persona.timid && rnd() < 0.6)) { u.state = US.Wander; return true; }
+        let gx = sx + Math.round((rnd() * 2 - 1) * r), gz = sz + Math.round((rnd() * 2 - 1) * r);
+        const onRoad = roadCells?.length ? nearestRoad(roadCells, gx, gz) : null; if (onRoad) [gx, gz] = onRoad;
+        if (g.isWalkable(gx, gz) && startPath(u, world, gx, gz, !!persona.timid && rnd() < 0.6)) {
+          u.state = US.Wander;
+          if (onRoad && strHash(`${u.unitId}|roadsay|${Math.floor(world.time || 0)}`) / 4294967296 < ROAD_SAY_CHANCE) chatter(u, vary(ROAD_SAY, u, world), world, 2, "road");
+          return true;
+        }
       }
       return false;
     }
