@@ -5,6 +5,9 @@ import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import * as MON from "../src/world/monetary.js";
 import { monHtml, monArrow, printAsk, printPick, printRise, flowWeek, bankAppHtml } from "../src/ui/monView.js";
+import { setAdv } from "../src/ui/viewPrefs.js";
+/** 🔧 자세히 보기(관리자)를 켠 채로 fn을 돌림(끝나면 쉬운 보기로 되돌림) */
+const withAdv = fn => { setAdv(true); try { return fn(); } finally { setAdv(false); } };
 
 function town() {
   const w = World.create(7, seededRandom(3), { wild: true, firstGull: true });
@@ -38,10 +41,12 @@ test("🖨 찍어내기: 단계 50·100·200, 하루 300을 넘는 단계는 꺼
 });
 
 test("확인창 글: 물가가 오를 수 있다는 말 + 예상(마을 돈 → +n, 몇 %) + 찍은 뒤 남은 양", () => {
-  const a = printAsk(100, { pocket: 1000, printLeft: 300 });
-  assert.equal(a.title, "🖨 새 돈 🪙100을 찍을까요?");
-  assert.match(a.body, /물가가 오를 수 있어요/); assert.match(a.body, /🪙1,000 → 🪙1,100\(\+10%\)면 물가도 그만큼 오르는/); assert.match(a.body, /오늘 더 찍을 수 있는 돈 🪙200/);
-  assert.equal(printRise(50, 0), null); assert.ok(!/예상/.test(printAsk(50, { pocket: 0, printLeft: 300 }).body), "마을 돈이 0이면 % 예상은 뺌");
+  const a = printAsk(100, { pocket: 1000, printLeft: 300 }, { easy: false });
+  const e = printAsk(100, { pocket: 1000, printLeft: 300 });   // 쉬운 보기(기본): 물가 셈 없이 한 문장
+  assert.equal(e.title, "🖨 동전 🪙100을 찍을까요?"); assert.ok(!/%|물가/.test(e.body)); assert.equal(e.ok, "🖨 🪙100 찍기");
+  assert.equal(a.title, "🖨 새 동전 🪙100을 찍을까요?");
+  assert.match(a.body, /물가가 오를 수 있어요/); assert.match(a.body, /🪙1,000에서 🪙1,100까지 10% 늘면, 물가도/); assert.match(a.body, /오늘 더 찍을 수 있는 돈 🪙200/);
+  assert.equal(printRise(50, 0), null); assert.ok(!/예상/.test(printAsk(50, { pocket: 0, printLeft: 300 }, { easy: false }).body), "마을 돈이 0이면 % 예상은 뺌");
 });
 
 test("물가 화살표: 오름 ▲ · 내림 ▼ · 그대로 → · 적응 중 ⏸", () => {
@@ -63,9 +68,15 @@ test("돈 흐름 표: 찍은 돈은 새 돈, 품삯은 금고 → 마을, 탭은
   const w = town(); w.print(100); w.led("wages", 7); w.led("tax", 3);
   const f = flowWeek(w);
   assert.equal(f.neu[0][1], 100); assert.equal(f.out.find(r => r[0].includes("품삯"))[1], 7); assert.equal(f.back.find(r => r[0].includes("세금"))[1], 3);
-  assert.match(bankAppHtml(w), /data-banktab="vault" aria-selected="true"/);
-  assert.match(bankAppHtml(w, undefined, { tab: "mon" }), /data-banktab="mon" aria-selected="true"[\s\S]*mon-kpis/);
-  const old = World.create(7, seededRandom(3)); assert.ok(!/data-banktab/.test(bankAppHtml(old)), "예전 섬은 탭 없음");
+  withAdv(() => {
+    assert.match(bankAppHtml(w), /data-banktab="vault" aria-selected="true"/);
+    assert.match(bankAppHtml(w, undefined, { tab: "mon" }), /data-banktab="mon" aria-selected="true"[\s\S]*mon-kpis/);
+    const old = World.create(7, seededRandom(3)); assert.ok(!/data-banktab/.test(bankAppHtml(old)), "예전 섬은 탭 없음");
+  });
+  // 쉬운 보기(기본): 탭·중앙은행 판·세금·물가 없이 금고 하나 + 🖨 동전 찍기(새 돈이 생기는 유일한 길이라 남김)
+  for (const tab of ["vault", "mon"]) { const h = bankAppHtml(w, undefined, { tab });
+    assert.ok(!/data-banktab|mon-kpis|금리|물가|세금|숙박|대출|마을에 도는 돈|×\d/.test(h), `쉬운 은행(${tab})엔 속사정 없음`);
+    assert.match(h, /내 금고/); assert.match(h, /data-mon="print" data-v="100"/); assert.match(h, /갈매미들이 낸 돈/); }
 });
 
 test("🎁 축하 단추: 금고에 품삯 몫(BUY_KEEP × P)이 남을 때만 켜짐, 모자라면 까닭 한 줄", () => {

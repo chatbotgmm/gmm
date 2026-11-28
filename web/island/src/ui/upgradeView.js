@@ -23,8 +23,8 @@ export function upgradeButtonInfo(w, b, r = w.upgradeCheck(b)) {
 /** 확인창 글: { title, body, ok } */
 export function upgradeAsk(w, b, r = w.upgradeCheck(b)) {
   const from = BUILDINGS[b.defId], to = r.to, fp = to.footprint;
-  const body = [w.economy ? `설계비 🪙${fmtNum(r.fee)}을 금고에서 내요(금고 🪙${fmtNum(Math.floor(w.bank.vault))} → 🪙${fmtNum(Math.floor(w.bank.vault - r.fee))}).` : "",
-    `${fp.w}×${fp.d}칸으로 넓혀 다시 지어요 · 재료 ${materialsOf(w, to.id).map(([ic, n]) => `${ic}${n}`).join(" ")}(목수가 모아 와요).`,
+  const body = [w.economy ? `설계비 🪙${fmtNum(r.fee)}을 금고에서 내요. 금고는 🪙${fmtNum(Math.floor(w.bank.vault - r.fee))}이 남아요.` : "",
+    `${fp.w}×${fp.d}칸으로 넓혀 다시 지어요. 재료 ${materialsOf(w, to.id).map(([ic, n]) => `${ic}${n}`).join(" ")}은 목수가 모아 와요.`,
     `공사하는 동안 ${from.name}은 문을 닫고 누워 있던 환자는 나와요. 당번 의사는 그대로예요.`,
     to.beds ? `다 지으면 침대 ${BUILDINGS[b.defId].beds || 0} → ${to.beds}개.` : ""].filter(Boolean).join(" ");
   return { title: `${UP_ICON[to.id] || "⬆"} ${to.name}으로 업그레이드할까요?`, body, ok: "업그레이드" };
@@ -54,7 +54,7 @@ export function mountUpgrade(card, hud, w, b, after = null) {
     const ref = after?.nextSibling || card.querySelector(".hx"); card.insertBefore(btn, ref); card.insertBefore(why, ref);
   }
   btn.hidden = false; btn.textContent = info.text; btn.disabled = info.disabled;
-  btn.setAttribute("aria-label", info.disabled ? `${info.text} (못 해요: ${info.why})` : info.text);
+  btn.setAttribute("aria-label", info.disabled ? `${info.text}. 못 하는 까닭: ${info.why}` : info.text);
   why.textContent = info.why; why.hidden = !info.why;
   btn.onclick = async () => { const res = await runUpgrade(hud, w, b); if (res.ok) card.hidden = true; };
   return info;

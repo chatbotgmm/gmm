@@ -9,7 +9,7 @@
 import { newsDay } from "./news.js";
 import { newMon, monFromSave } from "./monetary.js";
 
-export const VAULT_START = 300;      // 새 섬 금고 기본 돈(사용자 요청 "처음에 주는 조개 넉넉히" → 60에서 300. 집 한 채 = 설계비 10 + 품삯 약 10 → 처음 열다섯 채 몫. 첫 집 한 채는 섬에 지어져 있음)
+export const VAULT_START = 300;      // 새 섬 금고 기본 돈(사용자 요청 "처음에 주는 돈 넉넉히" → 60에서 300. 집 한 채 = 설계비 10 + 품삯 약 10 → 처음 열다섯 채 몫. 첫 집 한 채는 섬에 지어져 있음)
 export const VAULT_LEGACY = 100;     // 금고가 생기기 전 저장을 불러올 때의 금고(예전 새 섬 값 그대로)
 export const VAULT_LOW = 30;         // 이보다 적으면 "얼마 안 남음" 알림(규칙은 그대로)
 export const VAULT_REARM = 60;       // 이만큼 다시 차면 "얼마 안 남음"을 또 알릴 수 있음
@@ -48,7 +48,7 @@ export const FEE = {
 };
 export const feeOf = defId => FEE[defId] ?? FEE_UNKNOWN;
 /** 금고가 모자랄 때 놓기 실패 사유(tools.js가 상태 줄에 그대로 띄움) */
-export const feeReason = (fee, vault) => `🏦 금고에 조개가 모자라요 (설계비 🪙${fee} · 금고 🪙${Math.floor(vault)})`;
+export const feeReason = (fee, vault) => `🏦 금고에 동전이 모자라요. 설계비 🪙${fee}, 금고 🪙${Math.floor(vault)}`;
 
 // ---- 물가(값 오름): 마을이 커질수록 설계비·집값이 오름(갈매미 돈과 세금이 늘어 금고가 금방 넘치지 않게)
 //  배수 = 1 + 0.15 × (마을 등급 − 1, 0 이상) + 0.06 × (다 지은 집·시설 수 − 8, 0 이상), 최대 3. 소수 둘째 자리에서 반올림.

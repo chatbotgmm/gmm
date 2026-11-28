@@ -33,13 +33,13 @@ export const GROUND_OK = {
   tree: [G.Grass, G.Dirt], palm: [G.Sand, G.Grass], beachRock: [G.Sand, G.Grass, G.Rock, G.Dirt], ore: [G.Grass, G.Dirt, G.Rock, G.Sand],
   bush: [G.Grass, G.Dirt], flower: [G.Grass],
 };
-const GROUND_WORD = { tree: "나무는 잔디·흙에 심어요", palm: "야자수는 모래·잔디에 심어요", beachRock: "바위는 모래·잔디·바위·흙에 놓아요",
-  ore: "광석 바위는 잔디·흙·바위·모래에 놓아요", bush: "덤불은 잔디·흙에 놓아요", flower: "꽃은 잔디에 놓아요" };
+const GROUND_WORD = { tree: "나무는 잔디·흙에 심어요", palm: "야자수는 모래·잔디에 심어요", beachRock: "바위는 물이 아닌 땅에 놓아요",
+  ore: "광석 바위는 물이 아닌 땅에 놓아요", bush: "덤불은 잔디·흙에 놓아요", flower: "꽃은 잔디에 놓아요" };
 export const pavedGround = type => type === G.Cobble || type === G.WoodDeck;
 /** 이 바닥에 놓을 수 없으면 까닭(한국어), 되면 "" */
 export function groundReason(kind, type) {
   if (GROUND_OK[kind]?.includes(type)) return "";
-  if (pavedGround(type)) return kind === "tree" || kind === "palm" ? "길(돌길·데크)에는 심지 않아요" : "길(돌길·데크)에는 놓지 않아요";
+  if (pavedGround(type)) return kind === "tree" || kind === "palm" ? "포장된 길에는 심지 않아요" : "포장된 길에는 놓지 않아요";
   return GROUND_WORD[kind] || "여기에는 놓을 수 없어요";
 }
 /** "auto" 나무: 모래면 야자수, 아니면 나무 */
@@ -52,7 +52,7 @@ export function customCostOf(op, kind, economy = true, mult = 1) {
   return CUSTOM_SCALE && base > 0 ? Math.max(1, Math.round(base * mult)) : base;
 }
 /** 금고가 모자랄 때 실패 글(bank.js feeReason과 같은 꼴) */
-export const customReason = (cost, vault) => `🏦 금고에 조개가 모자라요 (꾸미기 🪙${cost} · 금고 🪙${Math.floor(vault)})`;
+export const customReason = (cost, vault) => `🏦 금고에 동전이 모자라요. 꾸미기 🪙${cost}, 금고 🪙${Math.floor(vault)}`;
 
 /** 칸 좌표 해시(views.js 나무 크기 해시와 같은 식). 난수 대신 씀 */
 export const cellHash = (x, z) => ((x * 73856093) ^ (z * 19349663)) >>> 0;

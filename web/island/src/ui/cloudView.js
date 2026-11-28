@@ -30,7 +30,7 @@ export class CloudCard {
     acts.append(this.bLogin, this.bResolve, this.bResume, this.bNow, this.bPull, this.bRestore, this.bLogout);
     this.logout = cvEl("div", "cc-note cc-logout"); this.logout.hidden = true;
     const lp = cvEl("p", "", "로그아웃은 계정 페이지(/my)에서 해요. 로그아웃해도 이 기기 섬은 그대로 남고, 계정 섬도 지워지지 않아요.");
-    const la = cvEl("a", "cc-link", "/my 열기(새 탭)"); la.href = CLOUD_MY; la.target = "_blank"; la.rel = "noopener"; la.onclick = () => cloud.wantRecheck();
+    const la = cvEl("a", "cc-link", "/my 새 탭에서 열기"); la.href = CLOUD_MY; la.target = "_blank"; la.rel = "noopener"; la.onclick = () => cloud.wantRecheck();
     this.logout.append(lp, la);
     // 자세히 보기(접기)
     const more = this.more = cvEl("details", "more cc-more"); const ms = cvEl("summary", "", "자세히 보기"); more.append(ms);
@@ -51,7 +51,7 @@ export class CloudCard {
   async pull() {
     const c = this.cloud, srv = c.server;
     if (srv && srv.rev !== c.meta.baseRev && c.meta.dirty) { c.setMode("conflict", { conflict: { kind: "ask", server: srv } }); return this.ask(); }   // 둘 다 바뀜 → 고르기 창
-    const ok = await this.confirm({ title: "⬇️ 계정 섬을 받을까요?", body: "이 기기 섬이 계정 섬으로 바뀌어요. 계정에 올린 뒤 이 기기에서 바뀐 것은 사라져요(이 브라우저에 한 벌 남겨 둬요).", ok: "받기" });
+    const ok = await this.confirm({ title: "⬇️ 계정 섬을 받을까요?", body: "이 기기 섬이 계정 섬으로 바뀌어요. 계정에 올린 뒤 이 기기에서 바뀐 것은 사라지지만, 이 브라우저에 한 벌 남겨 둬요.", ok: "받기" });
     if (ok) await this.run(() => c.pull(), "계정 섬을 받았어요");
   }
   async restore() {
@@ -74,7 +74,7 @@ export class CloudCard {
     const n = c.notice, showN = n && m !== "off" && (m === "checking" || (m === "logout" && n.key !== "ok" && n.key !== "linked"));
     this.note.hidden = !showN; this.note.textContent = showN ? n.text : "";
     const open = showN && m === "logout" ? n.open : null; this.link.hidden = !open;
-    if (open) { this.link.textContent = `🔗 ${open.label ?? LINK_OPEN.label}(새 탭)`; this.link.href = open.href; this.note.textContent = `${n.text} ${open.after}`; }
+    if (open) { this.link.textContent = `🔗 ${open.label ?? LINK_OPEN.label}`; this.link.href = open.href; this.note.textContent = `${n.text} ${open.after}`; }
     this.acts.hidden = m === "off" || m === "checking";
     this.bLogin.hidden = m !== "logout";
     this.bResolve.hidden = m !== "conflict";
@@ -96,7 +96,7 @@ export class CloudCard {
       li("여기서는 지금처럼 이 브라우저에 1분마다 저장돼요.");
       b.append(ul); return;
     }
-    li("로그인하면 5분마다, 그리고 화면을 떠날 때 계정에 올려요(이 브라우저 저장은 1분마다 그대로).");
+    li("로그인하면 5분마다, 그리고 화면을 떠날 때 계정에 올려요. 이 브라우저에는 그대로 1분마다 저장해요.");
     li("다른 기기에서 같은 카카오 계정으로 열면 이어서 해요. 새 기기의 손대지 않은 새 섬은 묻지 않고 계정 섬을 받아요.");
     li("두 기기에서 둘 다 바뀌면 어느 섬을 쓸지 물어요. 고르지 않은 섬은 [한 단계 되돌리기]로 한 번 되찾을 수 있어요.");
     li("계정에서 섬을 지우면 다른 기기도 조용히 되살리지 않고 다시 올릴지 물어요.");
@@ -104,11 +104,11 @@ export class CloudCard {
     const t = cvEl("table", "tbl cc-tbl"), row = (k, v) => { const tr = cvEl("tr"); tr.append(cvEl("td", "", k), cvEl("td", "", v)); t.append(tr); };
     const srv = c.server;
     if (c.nickname) row("계정", c.nickname);
-    row("계정 섬 판", srv ? (srv.deleted ? `${srv.rev}(지움)` : String(srv.rev)) : "없음");
-    row("이 기기가 맞춘 판", String(c.meta.baseRev));
-    row("이 기기에서 바뀜", c.meta.dirty ? "예(아직 안 올림)" : "아니요");
+    row("계정 섬 버전", srv ? (srv.deleted ? `${srv.rev}, 지움` : String(srv.rev)) : "없음");
+    row("이 기기가 맞춘 버전", String(c.meta.baseRev));
+    row("이 기기에서 바뀜", c.meta.dirty ? "예, 아직 안 올렸어요" : "아니요");
     const ps = readSummary(srv?.prev?.summary);
-    row("바로 전 계정 섬", srv?.prev ? (srv.prev.deleted ? "지운 섬" : ps ? `갈매미 ${ps.pop ?? "?"}마리 · 건물 ${ps.bld ?? "?"}채` : `판 ${srv.prev.rev}`) : "없음");
+    row("바로 전 계정 섬", srv?.prev ? (srv.prev.deleted ? "지운 섬" : ps ? `갈매미 ${ps.pop ?? "?"}마리 · 건물 ${ps.bld ?? "?"}채` : `버전 ${srv.prev.rev}`) : "없음");
     b.append(t);
     if (srv && !srv.deleted && srv.rev > 0 && m !== "conflict" && m !== "logout") { this.bDelete.disabled = c.busy; b.append(this.bDelete); }
   }
@@ -135,7 +135,7 @@ export class CloudAsk {
     this.body.textContent = del ? "이 기기 섬을 계정에 다시 올릴까요? 올리지 않으면 이 기기에만 저장하고 자동으로 올리지 않아요." : "이 기기와 계정의 섬이 둘 다 바뀌었어요. 쓸 섬을 골라 주세요.";
     this.cards.textContent = "";
     this.cards.append(this.card("📱 이 기기 섬", mine, "ca-mine"));
-    if (del) { const d = cvEl("section", "ca-card ca-theirs"); d.append(cvEl("h5", "", "☁️ 계정 섬"), cvEl("p", "ca-gone", "지움(묘비)")); this.cards.append(d); }
+    if (del) { const d = cvEl("section", "ca-card ca-theirs"); d.append(cvEl("h5", "", "☁️ 계정 섬"), cvEl("p", "ca-gone", "지운 섬")); this.cards.append(d); }
     else this.cards.append(this.card("☁️ 계정 섬", readSummary(c.server?.summary), "ca-theirs"));
     this.btns.textContent = "";
     const go = (choice, text) => async () => { this.close(true); const r = await this.cloud.resolve(choice); if (r === "done") this.status?.(`☁️ ${text}`); else if (this.cloud.mode === "error") this.status?.(`⏸ ${this.cloud.err}`, { kind: "warn" }); };

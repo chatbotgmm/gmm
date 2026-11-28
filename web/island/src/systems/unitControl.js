@@ -71,14 +71,14 @@ export class UnitControl {
     if (!p.unit) return;
     if (!this.getWorld().pickUpUnit(p.unit)) return;
     this.held = p.unit; p.long = true; try { navigator.vibrate?.(12); } catch {}
-    this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요 · 옮길 곳으로 끌어서 떼세요`);
+    this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요. 옮길 곳까지 끌고 가서 놓아요`);
     this.move({ clientX: p.lx ?? p.x, clientY: p.ly ?? p.y, isPrimary: true });
   }
   move(e) {
     const p = this.press; if (!p || !e.isPrimary) return;
     p.lx = e.clientX; p.ly = e.clientY;
     if (p.unit && !this.held && Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_PX) {
-      if (this.getWorld().pickUpUnit(p.unit)) { this.held = p.unit; this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요 · 내려놓을 곳에서 떼세요`); }
+      if (this.getWorld().pickUpUnit(p.unit)) { this.held = p.unit; this.onStatus(`${josa(p.unit.name, "을", "를")} 들었어요. 내려놓을 곳에서 손을 떼요`); }
     }
     if (this.held) {
       const c = this.tools.pickPoint(e.clientX, e.clientY), w = this.getWorld();
@@ -145,7 +145,7 @@ export class UnitControl {
   /** keepDist: 그만둘 때 거리는 그대로(🏠 집 보기·방 꾸미기·새 섬 — 그곳을 보러 가는 것이라 멀리 물러나지 않음) */
   setFollow(u, keepDist = false) {
     this.follow = u; this.onFollow?.(u);
-    if (u) this.onStatus(`${josa(u.name, "을", "를")} 따라가요 · 빈 땅을 누르면 그만`);
+    if (u) this.onStatus(`${josa(u.name, "을", "를")} 따라가요`);
     else if (this.backLen != null) { if (!this.held && !keepDist) this.zoom = { to: null, len: this.backLen }; this.backLen = null; }   // ✕·Esc·땅 누르기: 다가가기 전 거리로
   }
   /** 🏝 마을 전체 보기(편의성 점검 9번): 따라가기를 풀고 처음 시점(높이·거리·중심)으로 부드럽게. 보던 가로 방향은 그대로.

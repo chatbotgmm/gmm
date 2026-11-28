@@ -7,17 +7,17 @@ import { pickMoment, momentFolded } from "./coachRules.js";
 const COACH_KEY = "galmaemiman-hints";
 /** 앱 페이지를 처음 열 때 위에 붙는 안내(2문장 이내, 도움말·화면에 있던 말을 줄여 씀) */
 const COACH_APP_HINTS = {
-  rel: "친한 사이는 선으로 이어져요(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로 보여 줘요.",
+  rel: "친한 갈매미끼리는 선으로 이어져요. 선이 굵고 따뜻한 색일수록 더 친해요.",
   news: "마을에서 일어난 큰일을 하루에 몇 건씩 골라 실어요. 🔔 지난 알림에서 지나간 알림도 다시 볼 수 있어요.",
-  dex: "낚은 물고기와 바닷가에서 건진 물건이 여기에 모여요. 계절 한정 물고기·물건도 있어요.",
+  dex: "낚은 물고기와 바닷가에서 건진 물건이 여기에 모여요. 그 계절에만 나오는 것도 있어요.",
   wish: "갈매미가 바라는 걸 들어주면 기뻐하고 축하금을 받아요. 맨 위 오늘의 부탁을 모두 들어주면 도장을 하나 받아요.",
-  decor: "집에 들어가 가구를 놓고 바닥·벽지를 바꿔요. 놓은 가구는 그 집 갈매미가 써요.",
+  decor: "집에 들어가 가구를 놓고 바닥과 벽지를 바꿔요. 놓은 가구는 그 집 갈매미가 써요.",
 };
 /** 화면에서 처음 만나는 상호작용(말풍선으로) */
 const COACH_MOMENT_HINTS = {
-  room: { touch: "🛋 누르기 = 고르기·놓기, 끌기 = 방 돌리기예요. 다 꾸몄으면 🚪 나가기를 눌러요.", mouse: "🛋 누르기 = 고르기·놓기, 끌기 = 방 돌리기, R = 돌리기예요. 다 꾸몄으면 🚪 나가기(Esc)." },
-  tug: { touch: "❗ 입질이 오면 🎣 당기기!를 눌러요. 같이 당기면 귀한 물고기가 올 가능성이 커져요.", mouse: "❗ 입질이 오면 🎣 당기기!를 누르거나 스페이스 키. 같이 당기면 귀한 물고기가 올 가능성이 커져요." },
-  gift: { touch: "🎁 내 주머니(주운 ✨ 반짝이·도장 선물)에서 골라 건네요. 조금 친해지면 좋아하는 걸 ♥로 알려 줘요.", mouse: "🎁 내 주머니(주운 ✨ 반짝이·도장 선물)에서 골라 건네요. 조금 친해지면 좋아하는 걸 ♥로 알려 줘요." },
+  room: { touch: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. 끌면 방이 돌아가요. 다 꾸몄으면 🚪 나가기.", mouse: "🛋 가구를 눌러 고르고, 놓을 자리를 눌러요. R로 가구를 돌리고, 다 꾸몄으면 Esc." },
+  tug: { touch: "❗ 입질이 오면 🎣 당기기!를 눌러요. 같이 당기면 귀한 물고기가 잘 걸려요.", mouse: "❗ 입질이 오면 스페이스나 🎣 당기기! 같이 당기면 귀한 물고기가 잘 걸려요." },
+  gift: { touch: "🎁 주머니에 모은 ✨ 반짝이를 골라 건네요. 정이 조금 들면 좋아하는 걸 ♥로 알려 줘요.", mouse: "🎁 주머니에 모은 ✨ 반짝이를 골라 건네요. 정이 조금 들면 좋아하는 걸 ♥로 알려 줘요." },
 };
 const COACH_STEPS = 3;
 
@@ -102,18 +102,18 @@ export class CoachMarks {
         want = this.stepView();
       }
     }
-    if (!want && this.done && !blocked && !inRoom) want = { kind: "done", text: "🎉 잘했어요! 갈매미들이 재료를 날라 집을 지어요. 더 궁금하면 📱 → ❓ 도움말을 봐요." };
+    if (!want && this.done && !blocked && !inRoom) want = { kind: "done", text: "🔨 첫 공사장이 섰어요. 갈매미들이 나무를 날라 오면 망치질이 시작돼요. 더 궁금하면 📱 ❓ 도움말을 봐요." };
     this.show(want);
     if (!want && !this.step && !this.done && !this.moments.length && this.timer) { clearInterval(this.timer); this.timer = 0; }
   }
   stepView() {
     const h = this.hud, tools = h.tools, touch = document.documentElement.dataset.input === "touch";
-    if (this.step === 1) return { kind: "step", stepNo: 1, text: touch ? "👆 화면을 한 손가락으로 끌어 마을을 둘러봐요. 두 손가락으로 벌리면 가까이 봐요." : "🖱 화면을 끌어 마을을 둘러봐요. 휠로 가까이 보고, W·A·S·D로도 옮겨요." };
-    if (this.step === 2) return { kind: "step", stepNo: 2, text: h.world?.units?.length ? "🐦 갈매미를 눌러 봐요. 따라가며 무얼 하는지 볼 수 있어요(📱 → 🐦 갈매미에서 골라도 돼요)." : "🐦 아직 갈매미가 없어요. 📱 → 🥚 소환으로 불러서 눌러 봐요." };
+    if (this.step === 1) return { kind: "step", stepNo: 1, text: touch ? "👆 화면을 한 손가락으로 끌어 마을을 둘러봐요. 두 손가락으로 벌리면 가까이 봐요." : "🖱 화면을 끌어 마을을 둘러봐요. 휠로 가까이 보고, WASD로도 옮겨요." };
+    if (this.step === 2) return { kind: "step", stepNo: 2, text: h.world?.units?.length ? "🐦 갈매미를 눌러 봐요. 따라가며 무얼 하는지 볼 수 있어요." : "🐦 아직 갈매미가 없어요. 📱 → 🥚 소환으로 불러서 눌러 봐요." };
     if (tools.mode === "view") return { kind: "step", stepNo: 3, text: "🔨 이제 집을 한 채 지어 봐요. 「🔨 건설」을 눌러요.", target: "#editBtn" };
     if (tools.mode !== "build") return { kind: "step", stepNo: 3, text: "🏠 「짓기」를 골라요.", target: '#tools [data-mode="build"]' };
     if (tools.plan) return { kind: "step", stepNo: 3, text: "🔨 「건설」을 누르면 갈매미들이 지어요.", target: "#cfBuild" };
-    return { kind: "step", stepNo: 3, text: touch ? "🏠 집을 고르고 지을 땅을 톡 눌러요(끌면 화면이 옮겨져요)." : "🏠 집을 고르고 지을 땅을 눌러요(끌면 화면 이동 · R = 돌리기)." };
+    return { kind: "step", stepNo: 3, text: touch ? "🏠 집을 고르고 지을 땅을 톡 눌러요." : "🏠 집을 고르고 지을 땅을 눌러요. R로 돌릴 수 있어요." };
   }
   show(want) {
     const box = this.box;

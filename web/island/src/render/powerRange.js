@@ -69,7 +69,7 @@ export class PowerRange {
     const c = this.card, b = this.sel, w = this.getWorld(); if (!c || !b) return;
     const p = centerOf(b), n = litInRange(w, p.x, p.z).length;
     c.querySelector("b").textContent = `🌬 ${BUILDINGS[b.defId].name}`;
-    c.querySelector("span").textContent = w.isDone(b) ? `⚡ 전기 범위 ${POWER_RANGE}칸 · 불 켜진 건물 ${n}` : `🔨 짓는 중 — 다 지으면 둘레 ${POWER_RANGE}칸에 전기(불 켜질 건물 ${n})`;
+    c.querySelector("span").textContent = w.isDone(b) ? `⚡ 전기 범위 ${POWER_RANGE}칸 · 불 켜진 건물 ${n}` : `🔨 짓는 중. 다 지으면 둘레 ${POWER_RANGE}칸에 불이 켜져요`;
   }
   /** 매 프레임(main.js): 무엇을 보여 줄지 정하고, 바뀌었을 때(또는 1.5초마다 — 땅 높이·건물이 바뀌었을 수 있음)만 다시 만듦 */
   update(tools) {

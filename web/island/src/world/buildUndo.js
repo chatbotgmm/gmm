@@ -11,7 +11,7 @@ export function undoBlock(b, done = false) {
   if (!b) return "이미 없어요";
   if (!b.undoable) return "되돌릴 수 없는 건물이에요";
   if (done) return "다 지어져서 되돌릴 수 없어요";
-  if (b.hits > 0 || b.used) return "공사가 시작돼서 되돌릴 수 없어요 · 🧹 철거하면 설계비는 돌려받아요(쓴 재료·품삯은 그대로)";
+  if (b.hits > 0 || b.used) return "공사가 시작돼서 되돌릴 수 없어요. 🧹 철거하면 설계비는 돌려받아요";
   return "";
 }
 /** 설계비를 되돌릴 때 장부에 적을 것: { key, n } (World.led(key, n)) */

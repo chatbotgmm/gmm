@@ -73,7 +73,7 @@ export class Tools {
     this.cancelStroke(); this.applyControls();
     this.onStatus(""); if (mode === "build") this.prePlace(near); this.refresh(); this.onMode?.(mode, arg);
     this.askT = 0; this.tickAsks();
-    if (mode === "paint" && this.askMesh.count) this.onStatus("🛣 노란 칸 = 갈매미가 부탁한 길(돌길·데크로 칠하면 집과 이어져요)");
+    if (mode === "paint" && this.askMesh.count) this.onStatus("🛣 노란 칸은 갈매미가 부탁한 길이에요. 돌길이나 데크로 칠해 주세요");
   }
   /** 부탁받은 길 칸 다시 그리기(바닥 칠하기 중 0.5초마다): 이어졌거나 바라지 않게 된 부탁은 지우고, 이미 포장된 칸은 뺌 */
   tickAsks() {
@@ -216,7 +216,7 @@ export class Tools {
       if (ok.length) this.redoStack.push({ ...s, items: ok }); text = undoText({ n: ok.length, refund, fails });
     } else {
       const r = this.cellsTo(s, false); if (r.ok.length) this.redoStack.push(r.ok);
-      text = r.ok.length ? `↶ 되돌렸어요(${r.ok.length}칸)${r.paid ? ` · 땅↔물 🪙${r.paid}` : ""}${r.fails.length ? ` · ${r.fails.length}칸은 못 되돌렸어요(${r.fails[0]})` : ""}` : `🚫 ${r.fails[0] || "되돌릴 수 없어요"}`;
+      text = r.ok.length ? `↶ ${r.ok.length}칸 되돌렸어요${r.paid ? ` · 땅↔물 🪙${r.paid}` : ""}${r.fails.length ? `. ${r.fails.length}칸은 못 되돌렸어요: ${r.fails[0]}` : ""}` : `🚫 ${r.fails[0] || "되돌릴 수 없어요"}`;
     }
     this.onUndoSound?.(); this.refresh(); this.natLast = text; this.onStatus(text); this.onHistory?.();
   }
@@ -229,7 +229,7 @@ export class Tools {
       if (ok.length) this.history.push({ ...s, items: ok }); text = redoText({ n: ok.length, cost, fails });
     } else {
       const r = this.cellsTo(s, true); if (r.ok.length) this.history.push(r.ok);
-      text = r.ok.length ? `↷ 다시 했어요(${r.ok.length}칸)${r.paid ? ` · 땅↔물 🪙${r.paid}` : ""}${r.fails.length ? ` · ${r.fails.length}칸은 못 했어요(${r.fails[0]})` : ""}` : `🚫 ${r.fails[0] || "다시 할 수 없어요"}`;
+      text = r.ok.length ? `↷ ${r.ok.length}칸 다시 했어요${r.paid ? ` · 땅↔물 🪙${r.paid}` : ""}${r.fails.length ? `. ${r.fails.length}칸은 못 했어요: ${r.fails[0]}` : ""}` : `🚫 ${r.fails[0] || "다시 할 수 없어요"}`;
     }
     this.refresh(); this.natLast = text; this.onStatus(text); this.onHistory?.();
   }
@@ -435,7 +435,7 @@ export class Tools {
     const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.placeBuilding(this.buildId, a.x, a.z, this.rot);
     if (r.ok) this.plan = null;
     const paid = r.ok && r.building.fee ? ` · 설계비 🪙${r.building.fee} → 금고 🪙${Math.floor(this.world.bank.vault)}` : "", s = r.ok ? this.pushBuild(def.name, [r.building]) : null;
-    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요${paid}` : `${def.name} 공사를 시작했어요${paid}${s ? " · ↶ 누르면 되돌리기" : " · 갈매미가 나무·돌로 지어요"}`, s && this.undoAct(s));
+    this.refresh(); this.onStatus(!r.ok ? r.reason : r.building.hits >= r.building.need ? `${josa(def.name, "을", "를")} 지었어요${paid}` : `${def.name} 공사를 시작했어요${paid}`, s && this.undoAct(s));
   }
   /** 알림을 누르면 이 짓기를 되돌림(hud.status의 act) */
   undoAct(s) { return { act: { label: "↶ 되돌리기", run: () => this.undoEntry(s) } }; }
@@ -469,7 +469,7 @@ export class Tools {
       this.ghost.visible = true; this.ghost.rotation.y = 0; this.ghost.position.set(toWorldX((ax + bx) / 2 + 0.5), 0, toWorldZ((az + bz) / 2 + 0.5));
       this.ghostBox.scale.set(horiz ? len : 0.9, 0.15, horiz ? 0.9 : len); this.ghostBox.position.y = 0.05; this.ghostFloor.scale.set(horiz ? len : 1, horiz ? 1 : len, 1); this.ghostFloor.position.y = 0.04;
       this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
-      this.onStatus(plan.done ? `다리 ${L.ok.length}칸(나무 ${L.ok.length}) · 🔨 건설을 누르면 지어요 · 다시 누르면 새로 정하기` : "다리 끝 칸을 누르세요(가로나 세로로 곧게)");
+      this.onStatus(plan.done ? `다리 ${L.ok.length}칸, 나무 ${L.ok.length}개 · 🔨 건설을 누르면 지어요` : "다리 끝 칸을 가로나 세로로 곧게 눌러요");
     } else if (this.mode === "build") {
       const def = BUILDINGS[this.buildId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.check(this.buildId, a.x, a.z, this.rot);
       const y = r.ok ? r.elevation : Math.max(0, cell.elevation), col = r.ok ? OK : BAD;
@@ -478,9 +478,9 @@ export class Tools {
       this.ghostFloor.scale.set(def.footprint.w, def.footprint.d, 1); this.ghostFloor.position.y = 0.04;
       this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
       this.doorMark.visible = true; this.doorMark.position.set(toWorldX(r.door.x + 0.5), y + 0.35, toWorldZ(r.door.z + 0.5));
-      this.onStatus(!r.ok ? r.reason : plan?.auto ? `${def.name}: 화면 가운데 가까운 빈 자리에 놓아 봤어요 · 🔨 건설을 누르면 지어요 (다른 곳을 톡 누르면 옮김 · ↻ 돌리기)`
+      this.onStatus(!r.ok ? r.reason : plan?.auto ? `${def.name}: 가까운 빈 자리에 놓아 봤어요. 다른 곳을 누르면 옮겨요`
         : plan?.snapped ? `${def.name}: 누른 곳은 못 지어서 바로 옆 빈 자리로 옮겼어요 · 🔨 건설을 누르면 지어요`
-        : plan ? `${def.name} 자리를 정했어요 · 🔨 건설을 누르면 지어요 (다른 곳을 톡 누르면 옮김 · 끌면 화면 이동 · ↻ 돌리기)` : `${def.name} · 톡 눌러서 자리 정하기 · 끌면 화면 이동 · R 돌리기`);
+        : plan ? `${def.name} 자리를 정했어요. 🔨 건설을 누르면 지어요` : `${def.name}: 지을 자리를 눌러요`);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);

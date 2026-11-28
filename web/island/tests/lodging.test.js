@@ -120,7 +120,7 @@ test("합계 소식: 밤이 끝날 때(아침) 그 밤 숙박비 한 줄(손님�
   at(w, 2026, 11, 28, 4, true); assert.equal(got.length, 0, "새벽도 같은 밤");
   at(w, 2026, 11, 28, 7, false); assert.deepEqual(got, [{ total: 2, n: 2, free: 1 }], "아침에 한 번");
   at(w, 2026, 11, 28, 8, false); assert.equal(got.length, 1, "한 번만");
-  assert.match(newsFor("lodging", got[0]).text, /지난밤.*숙박비 🪙2.*2마리 · 공짜 1/);
+  assert.match(newsFor("lodging", got[0]).text, /지난밤 손님 2마리가 빈 집에 묵고 숙박비 🪙2/);
   nextNight(w); at(w, 2026, 11, 30, 7, false); assert.equal(got.length, 1, "손님 없는 밤은 조용");
   at(w, 2026, 11, 30, 22, true); w.lodge(o, h); at(w, 2026, 12, 1, 7, false); assert.equal(got.length, 1, "모두 공짜(들어온 돈 0)인 밤도 조용 — 매일 🪙0 줄이 뜨지 않게");
   assert.equal(newsFor("lodging", { total: 0, n: 1, free: 1 }), null);

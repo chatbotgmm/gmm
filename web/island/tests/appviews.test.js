@@ -9,14 +9,18 @@ import { FRIEND_STAGES } from "../src/units/mind.js";
 import { factRow } from "../src/ui/hudParts.js";
 import { townAppHtml, granaryFact, daysToWinter, marketAppHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml,
   dexCounts, dexHeadHtml, newsAppHtml, toastParts, toastHtml, TOAST_TAIL_MAX, avRo } from "../src/ui/appViews.js";
+import { setAdv } from "../src/ui/viewPrefs.js";
+/** 🔧 자세히 보기(관리자)를 켠 채로 fn을 돌림(끝나면 쉬운 보기로 되돌림) */
+const withAdv = fn => { setAdv(true); try { return fn(); } finally { setAdv(false); } };
 
 const fresh = () => World.create(7, seededRandom(3), { wild: true, firstGull: true });
 const details = html => [...html.matchAll(/<details class="more" data-more="([^"]+)"( open)?/g)].map(m => [m[1], !!m[2]]);
 const first = (html, re) => html.search(re);
 
 test("마을: 머리(등급·점수/다음 점수·남은 점수·막대)가 맨 앞, 한눈 칸(겨울·저장고), 세부는 여섯 접기(처음엔 닫힘 · 맨 앞은 🔎 건물 찾기)", () => {
-  const w = fresh(), html = townAppHtml(w, { today: new Date(2026, 10, 26) });
+  const w = fresh(), html = withAdv(() => townAppHtml(w, { today: new Date(2026, 10, 26) }));
   assert.equal(first(html, /<div class="sum"/), 0, "맨 앞은 핵심 요약 머리");
+  assert.ok(!/ × \d+ = /.test(townAppHtml(w, { today: new Date(2026, 10, 26) })), "쉬운 보기: 점수 내역에 곱셈 셈 없이 점수만");
   const nxt = RANKS[w.rank + 1];
   assert.match(html, new RegExp(`class="sum-big">\\d+ / ${nxt.need}<`), "큰 숫자: 점수 / 다음 등급 점수");
   assert.match(html, /다음 .+까지 <b>\d+점<\/b>/);

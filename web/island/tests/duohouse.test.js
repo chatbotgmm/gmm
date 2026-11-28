@@ -52,7 +52,7 @@ test("소환: 다 지은 2층집 한 채 = 두 자리(작은 집 1 + 2층집 2 =
   w.finishAll(); i = w.summonInfo(); assert.deepEqual([i.houses, i.homes, i.free, i.count], [3, 2, 3, 3]);
   for (let k = 0; k < 3; k++) assert.ok(w.summon(), `${k + 1}마리째`);
   assert.equal(w.summon(), null); i = w.summonInfo(); assert.equal(i.can, false);
-  assert.match(i.reason, /집 2채\(자리 3\) · 갈매미 3마리/);
+  assert.match(i.reason, /집 2채, 자리 3 · 갈매미 3마리/);
   assert.match(summonHtml(i, w.units).head, /자리 <b>3<\/b>/); assert.match(RULES[0], /2층집은 두 마리/);
   assert.equal(P.houseSlots([{ defId: "cottage" }, { defId: "cottage" }, { defId: "giantHouse" }]), 4, "자이언트의 집은 보통 자리 아님");
 });

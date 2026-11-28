@@ -217,7 +217,7 @@ test("당번 의사(world.setDoctor): 플레이어가 마을 갈매미를 정하
   }
   assert.ok(docIn, "당번이 의원에 들어감"); assert.ok(med !== null && med <= 180, `약을 먹어 −120(${med})`); assert.equal(healed.length, 1); assert.equal(healed[0].doctor, "목수");
   assert.equal(u.coins, 20 - 3 - 4, "진료비 3 + 약 4"); assert.equal(doc.coins, 2, "의사 품삯 2"); assert.equal(Math.round(w.bank.vault - v0), 3 + 4 - 2, "금고 +5"); assert.ok(docOut, "환자가 없으면 나옴");
-  assert.equal(w.newsLog.some(n => n.text === "기본이 감기가 다 나았어요 (당번 목수 선생님 덕분)"), true);
+  assert.equal(w.newsLog.some(n => n.text === "기본이 목수 선생님 덕분에 감기가 다 나았어요"), true);
   // 당번 비우기 · 다른 의원 당번이 되면 앞 의원은 풀림
   const cl2 = placeNear(w, "clinic", u.x + 8, u.z + 8); w.setDoctor(cl2.id, "목수"); assert.equal(cl.doctor, null); assert.equal(cl2.doctor, "목수");
   assert.equal(w.setDoctor(cl2.id, null).ok, true); assert.equal(cl2.doctor, null);

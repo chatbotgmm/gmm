@@ -78,7 +78,7 @@ export class CloudSaver {
     const loc = this.o.location;
     if (!cloudWhere(loc)) return this.off(OFF_WHERE);
     if (typeof (this.o.CompressionStream ?? globalThis.CompressionStream) !== "function" || typeof (this.o.DecompressionStream ?? globalThis.DecompressionStream) !== "function")
-      return this.off("이 브라우저는 압축(CompressionStream)을 못 해서 계정 저장을 쓸 수 없어요. 크롬·사파리 최신판에서 열어 보세요.");
+      return this.off("이 브라우저는 섬을 압축하지 못해서 계정 저장을 쓸 수 없어요. 크롬이나 사파리 최신 버전에서 열어 보세요.");
     this.notice = loginNotice(loc.search);
     if (this.notice) { try { const u = new URL(loc.href); u.searchParams.delete("login"); this.o.replaceUrl?.(u.pathname + u.search + u.hash); } catch { /* 주소 정리 실패는 무시 */ } }
     if (this.notice?.open?.recheckOnReturn) this.recheck = true;
@@ -130,7 +130,7 @@ export class CloudSaver {
       if (opt.resume) this.setMeta({ ...this.meta, paused: false, dirty: true });
       const enc = opt.enc || await this.encode();
       if (!enc) { this.setMode("error", { err: "압축하지 못해 올리지 못했어요." }); return "later"; }
-      if (enc.data.length > ISLAND_B64_LIMIT) { this.setMode("error", { err: "섬이 너무 커서 계정에 올릴 수 없어요(256KB 넘음)." }); return "later"; }
+      if (enc.data.length > ISLAND_B64_LIMIT) { this.setMode("error", { err: "섬이 너무 커서 계정에 올릴 수 없어요." }); return "later"; }
       const replace = opt.req ? opt.req.replace === true : this.meta.replaceNext === true;
       const body = { baseRev: opt.req ? opt.req.baseRev : this.meta.baseRev, data: enc.data, savedAt: enc.savedAt, summary: enc.summary };
       if (replace) body.replace = true;

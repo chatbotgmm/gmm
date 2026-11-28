@@ -43,6 +43,11 @@ export const ALERTS = {
 /** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 세금·숙박비 영수증은 금고 칩의 작은 +N(rewardFx small)과 소식지로 충분 · 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수·쓰러져 실려 감은 소식지만(쓰러짐 알림 한 줄이 이미 알림) */
 export const SILENT = ["tax", "lodging", "fee", "clinicVisit", "faintCarried", "monIssue", "monRate", "monGift", "monPrint", "capFull", "monAuto"];   // 중앙은행 손잡이(찍기·예산·금리·축하)는 플레이어가 누른 일 → 판의 상태 줄이 대답(hud.bankClick), 예산 참·자동 바꿈은 잦아서 소식지에만
 
+/** 🔧 자세히 보기(관리자)에서만 알림 줄에 띄우는 살림 속사정: 물가 사태·중앙은행 창구·대출·품삯 하나하나. 쉬운 보기(기본)에서는 지난 알림에만 남김
+ *  (금고가 바닥나 품삯이 밀리는 일은 vaultShort 한 줄이 이미 알림 — 손쓸 길은 은행 앱의 🖨 동전 찍기) */
+export const ADV_ALERTS = ["inflation", "deflation", "priceStable", "monStart", "loanRefused", "loanPaid", "wageOwed", "wagePaid"];
+export const advOnlyAlert = (ev, adv = false) => !adv && ADV_ALERTS.includes(ev);
+
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */
 export function batchText(ev, list) {
   const n = list.length;

@@ -11,8 +11,11 @@ import { waterFactor, waterEdges, DRY_BELOW, MOIST_OK } from "../world/farming.j
 import { DOCTOR_WAGE, SICK } from "../world/health.js";
 import { owns } from "../world/furniture.js";
 import { newsDay } from "../world/news.js";
-import { fmtLeft, sickLeftOf, stateLabelOf } from "./gullView.js";
+import { fmtLeft, sickLeftOf, stateLabelOf, sickLeftText } from "./gullView.js";
+import { VIEW, leftWord } from "./viewPrefs.js";
 import { sumHead, moreBox, fmtNum } from "./hudParts.js";
+/** 밭이 다 자라기까지: 쉬운 보기는 낱말, 🔧 자세히 보기는 분·초 */
+const growLeft = s => VIEW.adv ? `${fmtLeft(s)} 남음` : { "곧": "곧 다 자라요", "조금 더": "조금 더 자라야 해요", "한참": "한참 자라야 해요" }[leftWord(s)];
 
 const bdEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const bdMore = (key, title, html, opts) => moreBox(key, title, html, opts);
@@ -41,7 +44,7 @@ export function siteStepOf(b, w) {
     return { step: "gather", text: `${parts.join(" · ")} 모으는 중` };
   }
   const n = s.cycles || 0;
-  return { step: "build", text: `🔨 짓는 중${n > 0 ? ` · ${n}바퀴 남음` : ""}` };
+  return { step: "build", text: `🔨 짓는 중${n > 0 ? ` · 망치질 ${n}번 남음` : ""}` };
 }
 /** 재료 준비 n/m(이번 몫): 가방·짐에 든 것 합 / 이번 몫 합. 맡은 이가 없으면 null */
 export function siteReadyOf(b) {
@@ -54,16 +57,16 @@ export function siteCardOf(b, w, more = bdMore) {
   const st = siteStepOf(b, w), by = b.supply && bdUnit(w, b.supply.by), ready = siteReadyOf(b), job = JOBS[def.builtBy] || JOBS.builder;
   const head = sumHead({ icon: "🔨", big: `${pct}%`, label: "지어짐", lineHtml: `<b>${bdEsc(st.text)}</b>`, bar: pct / 100, tone: st.step === "wait" ? "warn" : null });
   const who = by ? `<button type="button" class="bc-who" data-act="follow" data-id="${bdEsc(by.unitId)}">👷 ${bdEsc(by.name)} 맡음 · 따라가기</button>`
-    : `<p class="bc-note">맡은 갈매미가 없어요 — ${job.icon} ${bdEsc(job.name)}가 시간이 나면 와서 지어요</p>`;
+    : `<p class="bc-note">맡은 갈매미가 없어요. ${job.icon} ${bdEsc(job.name)}가 틈나면 와서 지어요</p>`;
   const blocked = w.units.some(u => u.noWay?.[b.id] > w.time);
-  const lead = (ready && ready.need ? `<p class="bc-line">📦 재료 준비 <b>${ready.got}/${ready.need}</b> <span class="dim">(이번 몫)</span></p>` : "") +
-    (blocked ? `<p class="bc-warn">🚧 문 앞까지 길이 없어 일꾼이 건너뛰어요 — 길을 이어 주세요</p>` : "");
+  const lead = (ready && ready.need ? `<p class="bc-line">📦 이번에 쓸 재료 <b>${ready.got}/${ready.need}</b></p>` : "") +
+    (blocked ? `<p class="bc-warn">🚧 문 앞까지 길이 없어서 일꾼이 못 와요. 길을 이어 주세요</p>` : "");
   // 자세히: 이번 몫 재료 표 · 끝까지 남은 재료 · 낸 설계비
   const s = b.supply, total = s?.total || siteNeed(b).total, cycles = s ? s.cycles : siteNeed(b).cycles;
-  const trip = s ? Object.keys(s.need).filter(k => s.need[k] > 0).map(k => `<tr><td>${bdIcon(k)} 이번 몫</td><td>${s.got[k] || 0} / ${s.need[k]}</td></tr>`).join("") : "";
+  const trip = s ? Object.keys(s.need).filter(k => s.need[k] > 0).map(k => `<tr><td>${bdIcon(k)} 이번에 쓸 것</td><td>${s.got[k] || 0} / ${s.need[k]}</td></tr>`).join("") : "";
   const left = Object.keys(total).filter(k => total[k] > 0).map(k => `${bdIcon(k)} ${total[k]}`).join(" · ") || "없음";
-  const fee = b.fee > 0 ? `🪙${fmtNum(b.fee)} (다 짓기 전에 철거하면 돌려받아요)` : "없음";
-  const body = `<table class="tbl bc-tbl">${trip}<tr><td>끝까지 남은 재료</td><td>${left}</td></tr><tr><td>남은 망치질</td><td>${cycles}바퀴</td></tr><tr><td>낸 설계비</td><td>${fee}</td></tr></table>`;
+  const fee = b.fee > 0 ? `🪙${fmtNum(b.fee)}, 다 짓기 전에 철거하면 돌려받아요` : "없음";
+  const body = `<table class="tbl bc-tbl">${trip}<tr><td>끝까지 남은 재료</td><td>${left}</td></tr><tr><td>남은 망치질</td><td>${cycles}번</td></tr><tr><td>낸 설계비</td><td>${fee}</td></tr></table>`;
   return { title: `🔨 ${def.name}`, sub: "공사장", parts: [head, who + lead, more(`site.more`, "📦 재료·설계비", body)] };
 }
 
@@ -99,13 +102,13 @@ export function fieldCardOf(b, w, more = bdMore) {
   const hasFarmer = w.units.some(u => u.job === "farmer");
   const who = farmers.length ? `<p class="bc-line">🌾 지금 일하는 농부: <b>${farmers.map(u => bdEsc(u.name)).join(", ")}</b></p>`
     : hasFarmer ? `<p class="bc-note">🌾 농부가 틈나면 와서 심고 거두고 물을 줘요</p>` : `<p class="bc-warn">🌾 농부 갈매미가 있어야 심고 거둬요</p>`;
-  const dry = fieldNearWater(b, w) ? "" : `<p class="bc-warn">🌧 물가가 멀어 물을 못 길어요 — 비가 올 때만 젖어요</p>`;
+  const dry = fieldNearWater(b, w) ? "" : `<p class="bc-warn">🌧 물가가 멀어서 물을 못 길어요. 비가 와야 젖어요</p>`;
   const rows = plots.map((p, i) => {
     const m = Math.round(Math.max(0, Math.min(1, p.moisture ?? 1)) * 20) * 5, ph = plotPhaseOf(p), left = plotLeftOf(p, w);
     const tone = (p.moisture ?? 1) < DRY_BELOW ? "dry" : (p.moisture ?? 1) < MOIST_OK ? "low" : "ok";
-    return `<tr><td>${i + 1}. ${PLOT_PHASE[ph]}</td><td><span class="bc-moist" data-tone="${tone}"><i style="width:${m}%"></i></span> 💧${m}%</td><td>${ph === "empty" || ph === "ripe" ? "" : `${fmtLeft(left)} 남음`}</td></tr>`;
+    return `<tr><td>${i + 1}. ${PLOT_PHASE[ph]}</td><td><span class="bc-moist" data-tone="${tone}"><i style="width:${m}%"></i></span> 💧${VIEW.adv ? `${m}%` : { dry: "말랐어요", low: "목말라요", ok: "촉촉해요" }[tone]}</td><td>${ph === "empty" || ph === "ripe" ? "" : growLeft(left)}</td></tr>`;
   }).join("");
-  const body = `<table class="tbl bc-tbl bc-plots">${rows}</table><p class="bc-note">💧 ${Math.round(MOIST_OK * 100)}% 아래로 마르면 천천히 자라요(죽지는 않아요)</p>`;
+  const body = `<table class="tbl bc-tbl bc-plots">${rows}</table><p class="bc-note">💧 ${Math.round(MOIST_OK * 100)}% 아래로 마르면 천천히 자라요. 시들지는 않아요</p>`;
   return { title: "🌱 밭", sub: `${plots.length}칸`, parts: [head, who + dry, more("field.plots", "칸별 촉촉함·남은 시간", body, { note: n.thirsty ? `목마름 ${n.thirsty}` : "" })] };
 }
 
@@ -120,19 +123,19 @@ export function clinicBedsOf(b, w) {
 }
 export function clinicCardOf(b, w, more = bdMore) {
   const def = BUILDINGS[b.defId], beds = clinicBedsOf(b, w), used = beds.filter(Boolean).length, doc = w.doctorOf(b), docIn = w.doctorIn?.(b);
-  const head = sumHead({ icon: "🛏", big: `${used}/${def.beds || 0}`, label: "침대", line: doc ? `🩺 당번 의사: ${doc.name}${docIn ? " (병원에 있음)" : ""}` : "🩺 당번 없음 — 침대에서 쉬며 나아요" });
+  const head = sumHead({ icon: "🛏", big: `${used}/${def.beds || 0}`, label: "침대", line: doc ? `🩺 당번 의사: ${doc.name}${docIn ? ", 병원에 있어요" : ""}` : "🩺 당번이 없어도 침대에서 쉬며 나아요" });
   const slots = `<ul class="bc-beds">${beds.map(s => !s ? `<li class="dim">🛏 빈 침대</li>`
-    : `<li>${(SICK[s.u.sick.kind] || SICK.cold).icon} <b>${bdEsc(s.u.name)}</b> · ${s.coming ? "오는 중" : `${fmtLeft(sickLeftOf(s.u, w))} 남음`}</li>`).join("")}</ul>`;
+    : `<li>${(SICK[s.u.sick.kind] || SICK.cold).icon} <b>${bdEsc(s.u.name)}</b> · ${s.coming ? "오는 중" : sickLeftText(sickLeftOf(s.u, w))}</li>`).join("")}</ul>`;
   const list = [{ id: "", name: "당번 없음", note: "침대만 써요" }, ...w.units.filter(u => !u.sick || u.name === b.doctor).map(u => ({ id: u.unitId, name: u.name, note: `${(JOBS[u.job] || {}).icon || ""} ${(JOBS[u.job] || {}).name || ""}` }))];
-  const pick = `<p class="bc-note">당번은 환자가 오면 병원에 와서 약을 줘요(더 빨리 나아요) · 한 마리 낫게 할 때마다 품삯 🪙${DOCTOR_WAGE}(금고에서)</p><div class="bc-pick">` +
+  const pick = `<p class="bc-note">당번은 환자가 오면 병원에 와서 약을 줘요. 약을 먹으면 더 빨리 나아요. 한 마리 고칠 때마다 금고에서 품삯 🪙${DOCTOR_WAGE}을 줘요</p><div class="bc-pick">` +
     list.map(o => { const on = (o.id === "" && !doc) || (doc && o.id === doc.unitId);
       return `<button type="button" data-act="doctor" data-id="${bdEsc(o.id)}" aria-pressed="${on}"${on ? ` class="on"` : ""}>${on ? "✓ " : ""}${bdEsc(o.name)} <span class="dim">${bdEsc(o.note.trim())}</span></button>`; }).join("") + `</div>`;
   const L = w.bank?.ledger, last = L && L[L.length - 1], today = last && last.day === newsDay(w.time) ? last.clinic || 0 : 0;
   const sick = w.units.filter(u => u.sick).map(u => { const ib = u.insideBuildingId && w.buildings.get(u.insideBuildingId);
-    return `<li>${(SICK[u.sick.kind] || SICK.cold).icon} ${bdEsc(u.name)} · ${ib ? `${bdEsc(BUILDINGS[ib.defId].name)} 안` : bdEsc(stateLabelOf(u))} · ${fmtLeft(sickLeftOf(u, w))} 남음</li>`; }).join("");
-  const info = `<p class="bc-line">🏦 오늘 진료 수입 <b>🪙${fmtNum(today)}</b> <span class="dim">(금고로)</span></p>` +
-    `<b class="bc-sub">아픈 갈매미 (병원 밖 포함)</b>${sick ? `<ul class="bc-list">${sick}</ul>` : `<p class="dim">지금 아픈 갈매미가 없어요</p>`}` +
-    `<p class="bc-note">감기가 낫는 데: 밖에서 600초 · 집 300초 · 병원 침대 100초 · 당번 의사가 약을 주면 더 빨리</p>`;
+    return `<li>${(SICK[u.sick.kind] || SICK.cold).icon} ${bdEsc(u.name)} · ${ib ? `${bdEsc(BUILDINGS[ib.defId].name)} 안` : bdEsc(stateLabelOf(u))} · ${sickLeftText(sickLeftOf(u, w))}</li>`; }).join("");
+  const info = `<p class="bc-line">🏦 오늘 진료 수입 <b>🪙${fmtNum(today)}</b> <span class="dim">금고로 들어가요</span></p>` +
+    `<b class="bc-sub">아픈 갈매미</b>${sick ? `<ul class="bc-list">${sick}</ul>` : `<p class="dim">지금 아픈 갈매미가 없어요</p>`}` +
+    `<p class="bc-note">감기는 밖에서보다 집에서, 집보다 병원 침대에서 훨씬 빨리 나아요.</p>`;
   return { title: `🏥 ${def.name}`, sub: `침대 ${def.beds || 0}개`, parts: [head, slots,
     more("clinic.doc", "🩺 당번 정하기", pick, { note: doc ? doc.name : "없음" }), more("clinic.more", "자세히 보기", info)] };
 }
@@ -149,13 +152,13 @@ export function shopCardOf(b, w, tab = shopTabDefault(w)) {
   if (tab === "clothes") {
     body = `<ul class="bc-shop">${CLOTHES_ORDER.map(id => { const c = CLOTHES[id];
       return `<li><span class="bc-ico" aria-hidden="true">${c.icon}</span><div><b>${bdEsc(c.name)}</b> <span class="bc-price">🪙${c.price}</span><br><span class="dim">가진 갈매미 ${clothesOwners(w, id)}/${n} · ${c.below}° 아래에서 입어요 · 보온 +${c.warmth}°</span></div></li>`; }).join("")}</ul>` +
-      `<p class="bc-note">갈매미가 추웠던 적이 있고 돈이 모이면 자기 돈으로 사요(낸 돈은 🏦 금고로)</p>` +
+      `<p class="bc-note">추위를 겪어 본 갈매미가 돈이 모이면 자기 돈으로 사요</p>` +
       `<button type="button" class="bc-go" data-act="stamp">📋 도장 가게에서 손뜨개 목도리를 선물할 수 있어요</button>`;
   } else {
     const houses = [...w.buildings.values()].filter(h => BUILDINGS[h.defId].house && w.isDone(h));
     body = `<ul class="bc-shop">${SHOP_FURNITURE.map(id => { const f = FURNITURE[id], have = houses.filter(h => owns(h, id)).length;
       return `<li><div><b>${bdEsc(f.name)}</b> <span class="bc-price">🪙${f.price}</span> <span class="dim">· 아늑함 +${f.comfort} · 가진 집 ${have}/${houses.length}</span></div></li>`; }).join("")}</ul>` +
-      `<p class="bc-note">집주인이 돈이 모이면 자기 돈으로 사 와요(낸 돈은 🏦 금고로)</p>`;
+      `<p class="bc-note">집주인이 돈이 모이면 자기 돈으로 사 가요</p>`;
   }
   return { title: "🏪 잡화점", sub: "가구·옷을 팔아요", parts: [tabs, body] };
 }

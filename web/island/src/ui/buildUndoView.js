@@ -5,15 +5,15 @@ import { josa } from "../util.js";
 export function buildUndoText({ name = "건물", n = 0, total = 1, refund = 0, fails = [] } = {}) {
   if (!n) return `🚫 ${fails[0] || "되돌릴 수 없어요"}`;
   const what = total > 1 ? `${name} ${n}칸` : name, back = refund ? ` · 설계비 🪙${refund} 돌려받음` : "";
-  const cut = n < total ? ` · ${total - n}칸은 못 되돌렸어요(${fails[0] || "공사가 시작됨"})` : "";
+  const cut = n < total ? `. ${total - n}칸은 못 되돌렸어요: ${fails[0] || "공사가 시작됐어요"}` : "";
   return `↶ ${josa(what, "을", "를")} 되돌렸어요${back}${cut}`;
 }
 
 /** 철거 확인창 글: { title, body, ok }. name = 건물 이름, done = 다 지었나, fee = 돌려받을 설계비(다 짓기 전만), owner = 사는 갈매미 이름, loan = 남은 빚 */
 export function demolishAsk({ name = "건물", done = true, fee = 0, owner = "", loan = 0 } = {}) {
   const lines = [];
-  if (!done) lines.push(fee ? `공사 중이라 설계비(🪙${fee})는 금고로 돌려받아요. 이미 쓴 재료·품삯은 돌아오지 않아요.` : "공사 중인 자리를 치워요. 이미 쓴 재료·품삯은 돌아오지 않아요.");
-  else lines.push("다 지은 건물은 철거하면 되돌릴 수 없어요(설계비도 돌아오지 않아요).");
-  if (owner) lines.push(`${josa(owner, "은", "는")} 집을 잃어요${loan ? `(남은 빚 🪙${loan}은 없어져요)` : ""}.`);
+  if (!done) lines.push(fee ? `공사 중이라 설계비 🪙${fee}는 금고로 돌려받아요. 이미 쓴 재료와 품삯은 돌아오지 않아요.` : "공사 중인 자리를 치워요. 이미 쓴 재료와 품삯은 돌아오지 않아요.");
+  else lines.push("다 지은 건물은 철거하면 되돌릴 수 없고, 설계비도 돌아오지 않아요.");
+  if (owner) lines.push(`${josa(owner, "은", "는")} 집을 잃어요.${loan ? ` 남은 빚 🪙${loan}은 없어져요.` : ""}`);
   return { title: `🧹 ${josa(name, "을", "를")} 철거할까요?`, body: lines.join(" "), ok: "🧹 철거" };
 }

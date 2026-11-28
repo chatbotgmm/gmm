@@ -106,7 +106,7 @@ export function generateIsland(seed = 7, w = 64, h = 64) {
   if (!used.has("35,30") && !grid.isWater(35, 30)) { modules.push({ id: "stall-1", defId: "stall", cells: [[35, 30]], rot: 3 }); used.add("35,30"); }
   const zones = [{ id: "forest", label: "🌲 숲", x: forest.x, z: forest.z }, { id: "mine", label: "⛏ 광산", x: mine.x, z: mine.z },
                  { id: "fishing", label: "🎣 낚시터", x: 32, z: pierEnd - 1 }, { id: "farm", label: "🌾 밭", x: 26, z: 32 },
-                 { id: "market", label: "🐚 시장", x: 35, z: 30 }];
+                 { id: "market", label: "🛒 시장", x: 35, z: 30 }];
   grid.markAllDirty();
   return { grid, modules, spots, zones, plots, stall };
 }

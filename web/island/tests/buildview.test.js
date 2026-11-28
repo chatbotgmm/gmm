@@ -28,7 +28,7 @@ test("확인창: 금고가 모자라면 '착공 불가' + 모자란 만큼 + 돈
   assert.equal(r.ok, false); const info = planInfo(w, "cottage", r);
   assert.equal(info.moneyShort, true); const html = planHtml(info);
   assert.match(html, /🚫 착공 불가/); assert.match(html, /금고가 🪙10 모자라요/, "모자란 만큼(15 − 5)"); assert.ok(html.includes(MONEY_HINT));
-  assert.match(r.reason, /설계비 🪙15 · 금고 🪙5/, "자세한 까닭(check)은 상태 줄에");
+  assert.match(r.reason, /설계비 🪙15, 금고 🪙5/, "자세한 까닭(check)은 상태 줄에");
   assert.doesNotMatch(html, /→/);
   // 자리 때문에 못 지으면 돈 안내는 없음
   const bad = planInfo(w, "house", { ok: false, reason: "물 위에는 지을 수 없어요" });

@@ -82,12 +82,12 @@ test("여러 채를 놓고 거꾸로 되돌리면 낸 설계비를 다 합쳐 �
 
 test("글: 되돌린 알림 · 철거 확인", () => {
   assert.equal(buildUndoText({ name: "작은 집", n: 1, refund: 10 }), "↶ 작은 집을 되돌렸어요 · 설계비 🪙10 돌려받음");
-  assert.equal(buildUndoText({ name: "다리", n: 2, total: 3, refund: 2, fails: ["공사가 시작돼서 되돌릴 수 없어요"] }), "↶ 다리 2칸을 되돌렸어요 · 설계비 🪙2 돌려받음 · 1칸은 못 되돌렸어요(공사가 시작돼서 되돌릴 수 없어요)");
+  assert.equal(buildUndoText({ name: "다리", n: 2, total: 3, refund: 2, fails: ["공사가 시작돼서 되돌릴 수 없어요"] }), "↶ 다리 2칸을 되돌렸어요 · 설계비 🪙2 돌려받음. 1칸은 못 되돌렸어요: 공사가 시작돼서 되돌릴 수 없어요");
   assert.equal(buildUndoText({ n: 0, fails: ["다 지어져서 되돌릴 수 없어요"] }), "🚫 다 지어져서 되돌릴 수 없어요");
   const a = demolishAsk({ name: "카페", done: false, fee: 12 });
-  assert.equal(a.title, "🧹 카페를 철거할까요?"); assert.match(a.body, /설계비\(🪙12\)는 금고로 돌려받아요/); assert.equal(a.ok, "🧹 철거");
+  assert.equal(a.title, "🧹 카페를 철거할까요?"); assert.match(a.body, /설계비 🪙12는 금고로 돌려받아요/); assert.equal(a.ok, "🧹 철거");
   const h = demolishAsk({ name: "작은 집", done: true, owner: "미니", loan: 8 });
-  assert.match(h.body, /되돌릴 수 없어요/); assert.match(h.body, /미니는 집을 잃어요\(남은 빚 🪙8은 없어져요\)/);
+  assert.match(h.body, /되돌릴 수 없고/); assert.match(h.body, /미니는 집을 잃어요\. 남은 빚 🪙8은 없어져요/);
 });
 
 test("되돌리기는 자동 맞춤(matchGround)으로 바뀐 건물 밑 바닥도 놓기 전으로 · 그 뒤 손으로 칠한 칸은 그대로", async () => {

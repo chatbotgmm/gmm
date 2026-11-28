@@ -24,7 +24,7 @@ export const LAYOUTS = {
     { name: "1층 부엌", w: 4, d: 4, doors: [{ wall: "W", at: 2, to: 0 }], floor: "tile", role: "kitchen" },
   ],
   giantHouse: [
-    { name: "큰 방(천장 높음)", w: 8, d: 7, wallH: 3.6, doors: [{ wall: "W", at: 5, to: "exit" }, { wall: "E", at: 3, to: 1 }] },
+    { name: "천장 높은 큰 방", w: 8, d: 7, wallH: 3.6, doors: [{ wall: "W", at: 5, to: "exit" }, { wall: "E", at: 3, to: 1 }] },
     { name: "작은 방", w: 5, d: 4, wallH: 3.6, doors: [{ wall: "W", at: 1, to: 0 }], role: "bedroom" },
   ],
   manor: [

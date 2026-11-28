@@ -7,7 +7,7 @@ export const BOND_MAX = 40;
 export const BOND_STAGES = [
   { name: "처음 만난 사이", min: 0, held: "!?" },
   { name: "아는 사이", min: 5, held: "어, 어?" },
-  { name: "친한 사이", min: 14, held: "히히 ♪" },
+  { name: "정든 사이", min: 14, held: "히히 ♪" },
   { name: "소중한 사이", min: 28, held: "♥" },
 ];
 /** 정 → 하트 단계(0~3) */

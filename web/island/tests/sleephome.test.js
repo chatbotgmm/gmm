@@ -48,7 +48,7 @@ test("집 없고 빈 집도 없으면 밖에서 잠: 말풍선 + 만족도 −5(
   const w = World.create(7, seededRandom(4), { wild: true, firstGull: true }); w.instantBuild = true; w.isNight = true;
   const u = w.units[0]; for (const b of w.buildings.values()) if (BUILDINGS[b.defId].house) b.owner = 999;   // 빈 집 없음
   w.updateRoads(); const sat0 = u.sat; u.state = "Idle"; u.timer = 0; u.needs.energy = 10; let said = false;
-  for (let t = 0; t < 3 && u.state !== "Sleep"; t += 0.1) { u.full = 90; w.update(0.1); if (/밖에서 자요/.test(u.emoteText || "")) said = true; }
+  for (let t = 0; t < 3 && u.state !== "Sleep"; t += 0.1) { u.full = 90; w.update(0.1); if (/밖에서 자/.test(u.emoteText || "")) said = true; }
   assert.equal(u.state, "Sleep"); assert.ok(said, "집이 없어 밖에서 잔다는 말풍선"); assert.equal(u.insideBuildingId ?? null, null);
   w.updateRoads(); assert.ok(u.satParts.some(([k, v]) => /밖에서 잠/.test(k) && v === ROUGH_SAT), JSON.stringify(u.satParts)); assert.equal(u.sat, Math.max(0, sat0 + ROUGH_SAT));
   w.time += ROUGH_SECS + 1; w.updateRoads(); assert.equal(u.sat, sat0, "시간이 지나면 돌아옴");

@@ -35,7 +35,7 @@ const NEWS_MAKERS = {
   // 깜짝 소동(units/fuss.js)을 풀어 줌: 바위 위에서 못 내려오던 미니 · 길에서 꾸벅 졸던 야행성
   fussSolved: ({ u, kind }) => ({ icon: "🆘", text: kind === "perch" ? `바위 위에서 못 내려오던 ${josa(u.name, "을", "를")} 내려 줬어요!` : `길에서 꾸벅 졸던 ${josa(u.name, "을", "를")} 옮겨 줬어요!`, weight: 2 }),
   // 갈매미 소지품: 스스로 시장에 판 것(알림 줄에만)
-  stashSale: ({ u, items, coins, cut }) => ({ icon: "🐚", text: `${josa(u.name, "이", "가")} 소지품 ${items.reduce((s, x) => s + x.n, 0)}개를 팔았어요 🪙+${coins - cut}`, weight: 0 }),
+  stashSale: ({ u, items, coins, cut }) => ({ icon: "🎒", text: `${josa(u.name, "이", "가")} 소지품 ${items.reduce((s, x) => s + x.n, 0)}개를 팔았어요 🪙+${coins - cut}`, weight: 0 }),
   // ✨ 반짝이를 주움(알림 줄에만)
   sparkle: ({ item }) => ({ icon: "✨", text: `${josa(item.name, "을", "를")} 주웠어요`, weight: 0 }),
   // 해변 줍기: 마을에서 처음 주운 물건만 소식지에(같은 물건을 또 주운 것은 말풍선으로 충분)
@@ -44,7 +44,7 @@ const NEWS_MAKERS = {
   rank: ({ def }) => ({ icon: "🏅", text: `마을 등급이 올랐어요: ${def.icon} ${def.name}!`, weight: 8 }),
   friendship: ({ a, b, stage }) => { const d = FRIEND_STAGES[stage]; return { icon: d.icon, text: `${josa(a.name, "과", "와")} ${josa(b.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!`, weight: stage >= 2 ? 5 : 3 }; },
   // 나와의 정: 선물(알림 줄에만) · 하트 단계에 처음 닿아 받은 답례
-  gift: ({ u, item, tier }) => ({ icon: "🎁", text: `${u.name}에게 ${josa(item.name, "을", "를")} 선물했어요 · "${GIFT_TIERS[tier].say}"`, weight: 0 }),
+  gift: ({ u, item, tier }) => ({ icon: "🎁", text: `${u.name}에게 ${josa(item.name, "을", "를")} 선물했어요. "${GIFT_TIERS[tier].say}"`, weight: 0 }),
   bondStage: ({ u, stage, gift }) => ({ icon: "💝", text: `${josa(u.name, "과", "와")} ${josa(BOND_STAGES[stage].name, "이", "가")} 됐어요!${gift ? ` 답례로 ${josa(gift.name, "을", "를")} ${gift.where ? `${u.name}네 ${gift.where}에 들여놨어요` : "받았어요"}` : ""}`, weight: stage >= 3 ? 6 : 4 }),
   season: s => SEASONS[s] ? { icon: SEASONS[s].icon, text: `${SEASONS[s].name}이에요`, weight: 6 } : null,
   // 날씨: 폭풍만 소식지에(첫눈은 아래 드문 하늘에서)
@@ -58,15 +58,15 @@ const NEWS_MAKERS = {
   festivalEnd: ({ def, item, n }) => ({ icon: "🎁", text: `${josa(def.name, "이", "가")} 끝났어요. ${n ? `갈매미 ${n}마리가 즐겼고, ` : ""}기념으로 ${item ? josa(item.name, "을", "를") : "추억을"} 받았어요!`, weight: 7 }),
   buildingDone: b => { const d = BUILDINGS[b.defId]; return d ? { icon: d.house ? "🏠" : "🔨", text: `${josa(d.name, "이", "가")} 다 지어졌어요`, weight: builtWeight(d) } : null; },
   // 은행 금고(bank.js): 바닥 사태 시작·끝은 사태마다 한 번 · 세금·숙박비 영수증은 소식지에만(알림 줄엔 안 띄움, 금고 칩 +N) · 얼마 안 남음·설계비·품삯은 알림 줄에만
-  vaultShort: ({ kind }) => ({ icon: "🏦", text: kind === "loan" ? "은행 금고가 바닥나 가요 — 집 대출이 멈췄어요" : "은행 금고가 바닥났어요 — 품삯이 밀리고 집 대출이 멈췄어요", weight: 6 }),
+  vaultShort: ({ kind }) => ({ icon: "🏦", text: kind === "loan" ? "은행 금고가 바닥나 가서 집 대출이 멈췄어요" : "은행 금고가 바닥났어요. 품삯이 밀리고 집 대출도 멈췄어요", weight: 6 }),
   vaultOk: () => ({ icon: "🏦", text: "금고가 다시 찼어요. 밀린 품삯을 모두 치렀어요", weight: 4 }),
-  vaultLow: ({ vault }) => ({ icon: "🏦", text: `금고에 조개가 얼마 안 남았어요 (🪙${vault})`, weight: 0 }),
+  vaultLow: ({ vault }) => ({ icon: "🏦", text: `금고에 동전이 🪙${vault}밖에 안 남았어요`, weight: 0 }),
   // 인구 = 집 수: 집이 모자라 소환이 막힘(알림 줄에만. reason = population.js의 글)
   summonBlocked: ({ reason }) => reason ? { icon: "🥚", text: reason, weight: 0 } : null,
   loanPaid: ({ u }) => ({ icon: "🏠", text: `${josa(u.name, "이", "가")} 집값을 다 갚았어요`, weight: 3 }),
   loanRefused: ({ u }) => ({ icon: "🏦", text: `${josa(u.name, "은", "는")} 금고가 비어 집 대출을 못 받았어요`, weight: 0 }),
-  lodging: ({ total, n, free }) => total > 0 ? { icon: "🛏", text: `지난밤 빈 집 손님 숙박비 🪙${total}이 금고에 들어왔어요${n ? ` (${n}마리${free ? ` · 공짜 ${free}` : ""})` : ""}`, weight: 1 } : null,
-  tax: ({ total, n }) => total ? { icon: "🏦", text: `세금 🪙${total}이 금고에 들어왔어요 (${n}마리)`, weight: 1 } : null,
+  lodging: ({ total, n, free }) => total > 0 ? { icon: "🛏", text: `지난밤 ${n ? `손님 ${n}마리가 ` : ""}빈 집에 묵고 숙박비 🪙${total}을 냈어요`, weight: 1 } : null,
+  tax: ({ total, n }) => total ? { icon: "🏦", text: `갈매미 ${n}마리가 낸 세금 🪙${total}이 금고에 들어왔어요`, weight: 1 } : null,
   fee: ({ b, fee }) => BUILDINGS[b.defId] ? { icon: "🏦", text: `${BUILDINGS[b.defId].name} 설계비 🪙${fee}을 금고에서 냈어요`, weight: 0 } : null,
   wageOwed: ({ u, n }) => ({ icon: "💸", text: `${u.name}의 품삯 🪙${n}이 밀렸어요`, weight: 0 }),
   wagePaid: ({ u, n }) => ({ icon: "💸", text: `${josa(u.name, "이", "가")} 밀린 품삯 🪙${n}을 받았어요`, weight: 0 }),
@@ -78,55 +78,57 @@ const NEWS_MAKERS = {
   buyClothes: ({ u, id, price }) => CLOTHES[id] ? { icon: CLOTHES[id].icon, text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(CLOTHES[id].name, "을", "를")} 샀어요 🪙${price}`, weight: 1 } : null,
   // 병·의원(health.js): 걸림(마을 첫 병은 더 크게) · 나음 · 접수(알림 줄에만) · 당번 의사
   sick: ({ u, from, first, why }) => ({ icon: "🤧", text: first ? `${josa(u.name, "이", "가")} 감기에 걸렸어요. 따뜻한 데서 푹 쉬면 나아요` : `${josa(u.name, "이", "가")} ${from ? `${from.name}에게서 ` : why === "wet" ? "젖은 채 떨다가 " : why === "overwork" ? "추운 날 너무 오래 일하다 " : ""}감기${from ? "가 옮았어요" : "에 걸렸어요"}`, weight: first ? 3 : 2 }),
-  healed: ({ u, doctor }) => ({ icon: "😊", text: `${josa(u.name, "이", "가")} 감기가 다 나았어요${doctor ? ` (당번 ${doctor} 선생님 덕분)` : ""}`, weight: 1 }),
-  clinicVisit: ({ u, fee, medicine }) => ({ icon: "🏥", text: `${josa(u.name, "이", "가")} 병원에 누웠어요 · 진료비 🪙${fee}${medicine >= 0 ? ` · 약 🪙${medicine}` : ""}`, weight: 0 }),
+  healed: ({ u, doctor }) => ({ icon: "😊", text: `${josa(u.name, "이", "가")} ${doctor ? `${doctor} 선생님 덕분에 ` : ""}감기가 다 나았어요`, weight: 1 }),
+  clinicVisit: ({ u, fee, medicine }) => ({ icon: "🏥", text: `${josa(u.name, "이", "가")} 병원에 누웠어요. 진료비 🪙${fee}${medicine >= 0 ? `, 약값 🪙${medicine}` : ""}`, weight: 0 }),
   // 쓰러짐(chrono.js FAINT_AT): 기력이 0 가까이 → 그 자리에서 쓰러짐 · 병원에 실려 감(알림 줄엔 쓰러짐 한 줄만)
   faint: ({ u }) => ({ icon: "😵", text: `${josa(u.name, "이", "가")} 너무 지쳐 쓰러졌어요`, weight: 2 }),
-  faintCarried: ({ u, b, fee }) => ({ icon: "🚑", text: `${josa(u.name, "이", "가")} ${BUILDINGS[b?.defId]?.name || "병원"}에 실려 가 누웠어요 · 진료비 🪙${fee}`, weight: 1 }),
+  faintCarried: ({ u, b, fee }) => ({ icon: "🚑", text: `${josa(u.name, "이", "가")} ${BUILDINGS[b?.defId]?.name || "병원"}에 실려 가 누웠어요. 진료비 🪙${fee}`, weight: 1 }),
   doctor: ({ b, u, was }) => { const n = BUILDINGS[b?.defId]?.name || "병원"; return { icon: "🩺", text: u ? `${josa(u.name, "이", "가")} ${n} 당번 의사가 됐어요` : `${was} 선생님의 ${n} 당번이 끝났어요`, weight: u ? 2 : 0 }; },
   // 건물 업그레이드(World.startUpgrade): 시작 · 완료
-  upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? ` · 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },
+  upgradeStart: ({ b, from, fee }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏗", text: `${josa(f.name, "을", "를")} ${josa(d.name, "으로", "로")} 넓히는 공사를 시작했어요${fee ? `. 설계비 🪙${fee}` : ""}`, weight: 3 } : null; },
   upgraded: ({ b, from }) => { const d = BUILDINGS[b.defId], f = BUILDINGS[from]; return d && f ? { icon: "🏥", text: `${josa(f.name, "이", "가")} ${josa(d.name, "이", "가")} 됐어요!${d.beds ? ` 침대 ${d.beds}개` : ""}`, weight: 6 } : null; },
   // 길 부탁(roadAsk.js): 집이 시장·은행과 포장도로로 안 이어진 갈매미가 말풍선으로 부탁(알림 줄에만 · 같은 갈매미 하루 한 번은 ALERTS가 거름)
   roadAsk: ({ u, label }) => ({ icon: "🛣", text: askNotice(u.name, label), weight: 0 }),
   // 중앙은행(monetary.js): 손잡이(찍어내기·매입 예산·금리·축하) · 물가 사태(사태마다 한 번) · 예산 참·자동(알림 줄에만)
-  monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 하루 가공품 매입 예산을 '${stepName(from)}' → '${stepName(to)}'${to > from ? "으로 늘렸어요" : to < from ? "으로 줄였어요" : "으로 정했어요"}`, weight: 3 }),
+  monIssue: ({ from, to }) => ({ icon: "🖨", text: `은행이 하루에 사들이는 가공품을 '${stepName(to)}'${to > from ? "으로 늘렸어요" : to < from ? "으로 줄였어요" : "으로 정했어요"}`, weight: 3 }),
   monRate: ({ from, to }) => ({ icon: "🏦", text: `금리를 ${from}% → ${to}%로 ${to > from ? "올렸어요. 갈매미들이 저금을 늘려요" : "내렸어요. 갈매미들이 저금을 덜 해요"}`, weight: 4 }),
   monGift: ({ per }) => ({ icon: "🎁", text: `은행이 금고에서 모두에게 🪙${per}씩 축하금을 나눠 줬어요`, weight: 3 }),
-  inflation: ({ pi, P }) => ({ icon: "📈", text: `값이 하루에 ${Math.round(pi * 1000) / 10}% 올랐어요 — 물가 ${Math.round(P * 100)}`, weight: 6 }),
-  deflation: () => ({ icon: "🧊", text: "값이 계속 내려가요 — 재료를 못 파는 갈매미가 있을 수 있어요", weight: 5 }),
-  priceStable: () => ({ icon: "📊", text: "사흘째 물가 안정! 마을 점수 +10", weight: 5 }),
-  capFull: () => ({ icon: "🏦", text: "오늘 가공품 매입 예산(또는 금고 여윳돈)이 다 됐어요 — 상인은 내일 팔아요", weight: 0 }),
-  monAuto: ({ from, to, up }) => ({ icon: "🤖", text: `자동: 매입 예산 ${stepName(from)} → ${stepName(to)}(${up ? "값이 내려서" : "값이 올라서"})`, weight: 0 }),
-  monPrint: ({ n, left }) => ({ icon: "🖨", text: `은행이 새 돈 🪙${n}을 찍어 금고에 넣었어요 — 마을에 돈이 늘면 값이 올라요(오늘 더 찍을 수 있는 돈 🪙${left})`, weight: 3 }),
-  monStart: () => ({ icon: "🏛", text: "은행에 중앙은행 판이 생겼어요 — 처음엔 자동이 맡아요", weight: 5 }),
+  inflation: ({ pi, P }) => ({ icon: "📈", text: `값이 하루 새 ${Math.round(pi * 1000) / 10}% 올랐어요. 물가 ${Math.round(P * 100)}`, weight: 6 }),
+  deflation: () => ({ icon: "🧊", text: "값이 계속 내려가요. 재료를 못 파는 갈매미가 생길지도 몰라요", weight: 5 }),
+  priceStable: () => ({ icon: "📊", text: "사흘째 값이 그대로예요. 마을 점수가 올랐어요", weight: 5 }),
+  capFull: () => ({ icon: "🏦", text: "은행이 오늘 살 만큼 다 샀어요. 상인은 내일 팔아요", weight: 0 }),
+  monAuto: ({ from, to, up }) => ({ icon: "🏛", text: `은행장이 ${up ? "값이 내려서" : "값이 올라서"} 가공품을 '${stepName(to)}' 사기로 했어요`, weight: 0 }),
+  monPrint: ({ n, left }) => ({ icon: "🖨", text: `은행이 새 동전 🪙${n}을 찍어 금고에 넣었어요. 동전이 늘면 값도 올라요`, weight: 3 }),
+  monStart: () => ({ icon: "🏛", text: "은행에 중앙은행 창구가 열렸어요. 처음엔 은행장이 알아서 맡아요", weight: 5 }),
   // 🗝 메인 스토리(story.js): 조각 · 별씨(알림 줄에만) · 고칠 곳 · 깜빡이는 대답(머릿기사) · 엔딩 · 엽서 · 이야기 반짝이(알림 줄에만)
-  storyPiece: ({ piece, who }) => ({ icon: "🗝", text: `비밀 수첩에 새 쪽: ${piece.title}${who ? ` (${who}에게 들음)` : ""}`, weight: 4 }),
-  storySeed: ({ n }) => ({ icon: "🌟", text: `별씨를 주웠어요 (${n}/3)`, weight: 0 }),
+  storyPiece: ({ piece, who }) => ({ icon: "🗝", text: `비밀 수첩에 새 쪽: ${piece.title}${who ? `. ${who}에게 들었어요` : ""}`, weight: 4 }),
+  storySeed: ({ n }) => ({ icon: "🌟", text: `별씨를 주웠어요. ${n}/3`, weight: 0 }),
   storyRestore: ({ restore }) => ({ icon: restore.icon, text: `${josa(restore.title, "을", "를")} 고쳤어요! ${restore.done}`, weight: 7 }),
   storyBlink: ({ scene, first }) => first ? { icon: "💫", text: scene ? "수평선 끝에서 작은 불빛이 세 번 깜빡였어요" : "어젯밤 수평선에서 불빛이 깜빡였대요", weight: 8 } : { icon: "💫", text: "오늘 밤도 수평선 불빛이 세 번 깜빡였어요", weight: 1 },
   storyEnd: () => ({ icon: "💌", text: "바다 건너 보름 할머니의 답장이 왔어요! 이제 이 섬의 등불지기예요", weight: 9 }),
   storyPostcard: () => ({ icon: "📮", text: "반딧불 우체통에 보름 할머니의 엽서가 왔어요", weight: 5 }),
-  storySpark: ({ key, at, moved }) => ({ icon: "🗝", text: moved ? "조개섬의 말뚝 조각이 본섬 바닷가로 떠밀려 왔어요" : key.startsWith("seed:") ? "등대 둘레에 따뜻한 별빛이 떨어졌어요" : at === "cave" ? "동굴 입구에서 무언가 반짝여요" : at === "islet" ? "🐚 조개섬에서 무언가 반짝여요" : "등대 근처에서 무언가 반짝여요", weight: 0 }),
+  storySpark: ({ key, at, moved }) => ({ icon: "🗝", text: moved ? "조개섬의 말뚝 조각이 본섬 바닷가로 떠밀려 왔어요" : key.startsWith("seed:") ? "등대 둘레에 따뜻한 별빛이 떨어졌어요" : at === "cave" ? "동굴 입구에서 무언가 반짝여요" : at === "islet" ? "조개섬에서 무언가 반짝여요" : "등대 근처에서 무언가 반짝여요", weight: 0 }),
   furnitureBought: ({ u, id }) => FURNITURE[id] ? { icon: "🛋", text: `${josa(u.name, "이", "가")} 잡화점에서 ${josa(FURNITURE[id].name, "을", "를")} 사 왔어요`, weight: 2 } : null,
 };
 /** 소식 문장이 있는 이벤트 이름들(알림 줄 연결 시험이 main.js·ui/newsAlerts.js와 대조) */
 export const NEWS_EVENTS = Object.keys(NEWS_MAKERS);
 /** 이 일의 소식 한 줄(없으면 null) */
-export const newsFor = (ev, arg, world) => NEWS_MAKERS[ev]?.(arg, world) ?? null;
+/** 살림 속사정 소식(세금·숙박비·대출·물가·중앙은행 창구): 소식지에 eco 표시를 달아 둠 → 쉬운 보기(ui/viewPrefs.js)에서는 소식지가 거름. 규칙과 저장은 그대로 */
+export const ECO_NEWS = new Set(["lodging", "tax", "fee", "loanPaid", "loanRefused", "wageOwed", "wagePaid", "monIssue", "monRate", "monGift", "inflation", "deflation", "priceStable", "capFull", "monAuto", "monPrint", "monStart", "clinicVisit"]);   // faintCarried(🚑 실려 감)는 갈매미 일이라 남기고, 쉬운 보기에서는 진료비 꼬리만 뗌(ui/appViews.js)
+export const newsFor = (ev, arg, world) => { const n = NEWS_MAKERS[ev]?.(arg, world) ?? null; if (n && ECO_NEWS.has(ev)) n.eco = true; return n; };
 
 /** 소식 하나를 넣고 정리: 같은 날 같은 글은 한 번만, 오래된 날은 버리고, 너무 많으면 덜 중요한 것(같으면 오래된 것)부터 버림. 넣었으면 true. */
 export function addNews(log, time, n) {
   const day = newsDay(time);
   if (!n || !(n.weight > 0) || log.some(e => e.day === day && e.text === n.text)) return false;
-  log.push({ day, t: Math.round(time), icon: n.icon, text: n.text, weight: n.weight });
+  log.push({ day, t: Math.round(time), icon: n.icon, text: n.text, weight: n.weight, ...(n.eco ? { eco: true } : {}) });
   for (let i = log.length - 1; i >= 0; i--) if (log[i].day <= day - NEWS_KEEP_DAYS) log.splice(i, 1);
   while (log.length > NEWS_MAX) { let k = 0; for (let i = 1; i < log.length; i++) if (log[i].weight < log[k].weight) k = i; log.splice(k, 1); }
   return true;
 }
 /** 저장에서 읽은 소식(예전 저장엔 없음 → 빈 소식지). 모양이 맞는 것만. */
 export const newsFromSave = list => (Array.isArray(list) ? list : []).filter(e => e && e.day > 0 && typeof e.text === "string")
-  .map(e => ({ day: e.day, t: e.t || 0, icon: e.icon || "📰", text: e.text, weight: e.weight || 1 })).slice(-NEWS_MAX);
+  .map(e => ({ day: e.day, t: e.t || 0, icon: e.icon || "📰", text: e.text, weight: e.weight || 1, ...(e.eco ? { eco: true } : {}) })).slice(-NEWS_MAX);
 /** 날짜별 소식지(새 날부터): [{ day, heads: 중요한 순 top건, more: 그 밖의 소식 수 }] */
 export function newsPages(log, top = NEWS_HEADLINES) {
   const days = [...new Set(log.map(e => e.day))].sort((a, b) => b - a);
@@ -153,14 +155,14 @@ export function awaySpan(ms) {
 /** 편지: report = world.applyAway의 결과. 우체국이 있으면(post) 집배원이 자세히 적어 줌(낚은 물고기 하나하나·지난 소식·기다리는 소원).
  *  돌려주는 값: { title, lines: [글 줄], sign } */
 export function awayLetter(report, { post = false, news = [], wishes = [] } = {}) {
-  const { ms, hours, ripened, catches } = report, lines = [`${awaySpan(ms)} 만이에요. 마을은 잘 있었어요!`];
-  if (ms / 3600000 > hours) lines.push(`(오래 비운 날은 ${AWAY_CAP_HOURS}시간까지만 셈해요)`);
+  const { ms, hours, ripened, catches } = report, lines = [`${awaySpan(ms)} 만이에요.`];
+  if (ms / 3600000 > hours) lines.push(`오래 비운 날도 ${AWAY_CAP_HOURS}시간 치만 일해요.`);
   if (ripened) lines.push(`🌾 밭 ${ripened}칸이 다 익어서 거두기만 기다려요.`);
   if (catches.length) lines.push(`🎣 갈매미들이 물고기 ${catches.length}마리를 낚아 뒀어요.`);
   if (!ripened && !catches.length) lines.push("별일 없이 조용한 시간이었어요.");
   for (const l of report.story || []) lines.push(l);                            // 🗝 이야기: 우체통에 낀 엽서 · 수평선 깜빡임 소식
   if (post) {
-    for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? ` (${RARITY[c.fish.rarity]?.name ?? ""}!)` : ""}${c.item ? ` + ${c.item.name}` : ""}${c.donated ? " · 🐠 수족관에 기증" : ""}`);
+    for (const c of catches) lines.push(`· ${c.who}: ${c.fish.name}${c.fish.rarity !== "common" ? `, ${RARITY[c.fish.rarity]?.name ?? ""}!` : ""}${c.item ? ` + ${c.item.name}` : ""}${c.donated ? ", 수족관에 기증" : ""}`);
     if (news.length) { lines.push("📰 떠나기 전 마을 소식"); for (const n of news) lines.push(`· ${n.icon} ${n.text}`); }
     for (const x of wishes) lines.push(`💭 ${x.who}: "${x.text}" 소원이 기다리고 있어요.`);
     lines.push("📮 우체국이 있어서 꼼꼼히 적어 보냈어요.");

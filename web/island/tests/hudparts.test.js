@@ -34,14 +34,14 @@ test("valueRows: 큰 값 먼저, 0인 줄은 .zero로 맨 아래", () => {
   assert.equal((t.match(/class="zero"/g) || []).length, 1);
 });
 
-test("금고 칩: 화면 꼴마다 길이 · 얼마 안 남음/바닥 색 상태와 낱말 · 밀린 품삯 💸 · 예전 섬은 🐚", () => {
+test("금고 칩: 화면 꼴마다 길이 · 얼마 안 남음/바닥 색 상태와 낱말 · 밀린 품삯 💸 · 예전 섬은 🪙", () => {
   assert.deepEqual([P.vaultChipOf({ vault: 60 }, "portrait").text, P.vaultChipOf({ vault: 60 }, "medium").text, P.vaultChipOf({ vault: 60 }, "wide").text], ["🏦60", "🏦 금고 60", "🏦 내 금고 60"]);
   const low = P.vaultChipOf({ vault: 25, state: "low" }, "wide");
   assert.equal(low.tone, "low"); assert.equal(low.text, "🏦 내 금고 25 ⚠️ 얼마 안 남음");
   const empty = P.vaultChipOf({ vault: 1, owed: 4, state: "empty" }, "portrait");
   assert.equal(empty.tone, "empty"); assert.equal(empty.text, "🏦1🚨💸"); assert.match(empty.tip, /밀린 품삯 🪙4/);
   assert.equal(P.vaultChipOf({ vault: 1234.7 }, "wide").text, "🏦 내 금고 1,234", "천 단위 쉼표·내림");
-  assert.deepEqual(P.vaultChipOf({ economy: false, coins: 50 }, "wide"), { text: "🐚 50", tone: null, tip: "가진 조개 · 누르면 🏦 은행" });
+  assert.deepEqual(P.vaultChipOf({ economy: false, coins: 50 }, "wide"), { text: "🪙 50", tone: null, tip: "가진 동전. 누르면 🏦 은행" });
   assert.equal(P.townChipOf(1234, "portrait"), "🪙1234", "휴대폰은 쉼표 없이");
   assert.equal(P.vaultChipOf({ vault: 12345 }, "landscape").text, "🏦1.2만"); assert.equal(P.fmtShort(20000), "2만"); assert.equal(P.townChipOf(0, "wide"), "🪙 마을 돈 0");
 });

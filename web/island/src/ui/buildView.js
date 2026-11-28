@@ -12,7 +12,7 @@ import { fmtNum } from "./hudParts.js";
 const bvEsc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const bvWhoOf = def => def.builtBy === "carpenter" ? "🪚 목수" : "🔨 건축가";
 /** 돈만 모자랄 때 덧붙이는 한 줄 */
-export const MONEY_HINT = "세금·집값이 금고에 들어오면 지을 수 있어요";
+export const MONEY_HINT = "금고가 다시 차면 지을 수 있어요. 급하면 위쪽 🏦 금고를 눌러 동전을 찍어요";
 
 /** 공사 끝까지 드는 재료(가장 느린 건축가 기준): [[아이콘, 드는 수, 창고에 있는 수], …] */
 export function materialsOf(w, defId, times = 1) {
@@ -54,7 +54,7 @@ export function planHtml(info) {
   const nw = t => `<span class="cf-nw">${t}</span>`;   // 좁은 폭에서 '🪙'과 숫자, '금고 60 → 50'이 줄 사이로 갈라지지 않게(덩어리째 다음 줄로)
   if (info.kind === "bridge") main = `<b>🌉 다리 ${info.n}칸</b>` + (info.eco ? ` · ${nw(`설계비 합 <b>${coin(info.total)}</b>`)} · ${nw(`금고 ${coin(info.vault)}${info.k ? ` → <b>${coin(info.after)}</b>` : ""}`)}` : "");
   else main = `<b>${bvEsc(info.name)}</b>` + (info.eco ? ` · ${nw(`설계비 <b>${coin(info.fee)}</b>`)} · ${nw(`금고 ${coin(info.vault)}${info.ok ? ` → <b>${coin(info.after)}</b>` : ""}`)}` : "");
-  const mats = info.mats.length ? `재료 ${info.mats.map(([ic, n, have]) => `${ic}${n}${info.eco ? `<span class="cf-have">(창고 ${have})</span>` : ""}`).join(" ")}` : "";
+  const mats = info.mats.length ? `재료 ${info.mats.map(([ic, n, have]) => `${ic}${n}${info.eco ? `<span class="cf-have"> 창고 ${have}</span>` : ""}`).join(" ")}` : "";
   const sub = [mats, info.who, info.sell ? `다 지으면 🪙${fmtNum(info.sell)}에 팔려요` : "", info.freeWhy ? `설계비 🪙0: ${info.freeWhy}` : "",
     info.kind === "bridge" && info.k && info.k < info.n ? `금고가 모자라 앞 ${info.k}칸만 놓여요` : ""].filter(Boolean).join(" · ");
   const lack = info.fee - info.vault;   // 돈만 모자랄 때: 숫자는 위 줄에 있으니 모자란 만큼만(긴 까닭 글은 상태 줄에 그대로 뜸)
@@ -68,5 +68,5 @@ export function cardMeta(w, def) {
   const cost = Object.entries(def.cost || {}).filter(([, n]) => n > 0).map(([k, n]) => `${ITEM_ICON[k] ?? k}${n}`).join(" ") || "재료 없음";
   if (!w.economy) return { html: bvEsc(cost), text: cost, short: false, fee: 0 };
   const fee = w.feeFor(def.id), short = fee > Math.floor(w.bank?.vault || 0);
-  return { html: `<b class="${short ? "fee-short" : "fee"}">🪙${fmtNum(fee)}</b> · ${bvEsc(cost)}`, text: `설계비 🪙${fee}${short ? "(금고 모자람)" : ""} · 재료 ${cost}`, short, fee };
+  return { html: `<b class="${short ? "fee-short" : "fee"}">🪙${fmtNum(fee)}</b> · ${bvEsc(cost)}`, text: `설계비 🪙${fee}${short ? ", 금고가 모자라요" : ""} · 재료 ${cost}`, short, fee };
 }

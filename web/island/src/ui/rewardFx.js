@@ -10,6 +10,7 @@ import { BUILDINGS, ITEMS } from "../data/catalog.js";
 import { BOND_STAGES } from "../world/bond.js";
 import { MEDALS } from "../world/medals.js";
 import { josa } from "../util.js";
+import { VIEW } from "./viewPrefs.js";
 
 export const RF_MEDIUM_MS = 2600;   // 띠가 떠 있는 시간
 export const RF_BIG_MS = 4200;      // 큰 카드가 저절로 받아지는 시간(그 전에 누르면 바로)
@@ -74,11 +75,11 @@ export function rewardOf(ev, a, world) {
     case "storyRestore": { const r = a.restore; if (!r) return null;
       return { tier: "big", icon: r.icon, kick: "🔧 고쳤어요! 🔧", title: `${r.title} 완성!`, line: r.outro, to: null, snd: "fanfare", key: `storyFix:${r.id}`, story: true, ms: RF_STORY_MS }; }
     case "storyEnd":
-      return { tier: "big", icon: "💌", kick: "🌟 이야기 완결 🌟", title: "보름의 답장", line: `🏮 등불지기 도장 · 🪑 ${a.item?.name ?? "보름의 흔들의자"} 획득 (🏠 집 꾸미기에서 놓아요)`, to: "bag", snd: "fanfare", key: "storyEnd", story: true, ms: RF_STORY_MS };
+      return { tier: "big", icon: "💌", kick: "🌟 이야기 완결 🌟", title: "보름의 답장", line: `🏮 등불지기 도장 · 🪑 ${josa(a.item?.name ?? "보름의 흔들의자", "을", "를")} 받았어요`, to: "bag", snd: "fanfare", key: "storyEnd", story: true, ms: RF_STORY_MS };
     case "storySeed": return { tier: "medium", icon: "🌟", title: `별씨 ${a.n ?? 1}/3`, line: "🗝 비밀 수첩에 모아 둬요", to: "bag", snd: "glint", key: "storySeed" };
     case "storyPostcard": return { tier: "medium", icon: "📮", title: "할머니 엽서가 왔어요", line: "🗝 비밀 수첩 → 엽서함", to: "bag", snd: "chime", key: `postcard:${a.key ?? ""}` };
     case "tax": case "lodging": { const n = Math.floor(a.total || 0); if (!(n > 0) || !world?.economy) return null;   // 금고로 들어오는 돈: 작게(마을 하루에 한 번씩이라 잦지 않지만 늘 들어오는 돈)
-      return { tier: "small", icon: "🪙", n, title: `+${n}`, line: ev === "tax" ? "세금" : "숙박비", to: "vault", snd: "coins", key: "vault" }; }
+      return { tier: "small", icon: "🪙", n, title: `+${n}`, line: VIEW.adv ? (ev === "tax" ? "세금" : "숙박비") : "금고에 들어온 돈", to: "vault", snd: "coins", key: "vault" }; }
     default: return null;
   }
 }

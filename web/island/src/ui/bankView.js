@@ -5,13 +5,12 @@
 import * as E from "../world/economy.js";
 import * as BK from "../world/bank.js";
 import { newsDay } from "../world/news.js";
-import { RANKS } from "../world/rank.js";
 import { BUILDINGS } from "../data/catalog.js";
 import { sumHead, moreBox, valueRows, fmtNum } from "./hudParts.js";
 
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 /** 들어온 돈 몫 이름(장부 칸 → 글자). 'other' = returned − 몫 합(주문 장식 자재값 등) */
-export const IN_NAMES = { tax: "🧾 세금", house: "🏠 집값(계약금)", repay: "💳 대출 상환", clinic: "🏥 진료·약", clothes: "🧣 옷", shop: "☕ 코코아·저장고·가구", lodging: "🛏 숙박(빈 집 손님)", evening: "🧺 저녁 장보기(은행 가게)", other: "📦 그 밖(주문 자재값 등)", seig: "🖨 발행 수수료(옛 규칙)", printed: "🖨 찍어 낸 새 돈", refunds: "↩️ 설계비 환불(공사 취소)" };
+export const IN_NAMES = { tax: "🧾 세금", house: "🏠 집 계약금", repay: "💳 대출 상환", clinic: "🏥 진료·약", clothes: "🧣 옷", shop: "☕ 코코아·저장고·가구", lodging: "🛏 빈 집 숙박비", evening: "🧺 은행 가게 저녁 장보기", other: "📦 그 밖에 자재값", seig: "🖨 가공품 수수료", printed: "🖨 새로 찍은 동전", refunds: "↩️ 공사 취소로 돌려받은 설계비" };
 export const OUT_NAMES = { fees: "📐 설계비", wages: "🔨 품삯", custom: "🌳 섬 꾸미기", buy: "🧺 가공품·저장고·소지품 매입", interest: "🐷 예금 이자", grant: "🎁 축하금·창업 자금" };
 
 /** 하루 장부 → { inRows, outRows, inSum, outSum, lent }. 꾸미기 환불이 쓴 돈보다 많아 custom이 음수면 들어온 돈 쪽으로 */
@@ -38,17 +37,17 @@ export function weekRows(w) {
 const sign = (n, cls) => `<b class="${cls}">${cls === "up" ? "+" : "−"}${fmtNum(n)}</b>`;
 /** 은행 앱 HTML. more(key, title, html, opts) = 펼침을 기억하는 접기(hud.more), 없으면 늘 닫힌 moreBox */
 export function bankHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o)) {
-  if (!w.economy) return `<p class="dim">이 섬에는 공식은행이 없어요(예전 섬).</p>`;
+  if (!w.economy) return `<p class="dim">이 섬에는 공식은행이 없어요.</p>`;
   const bk = w.bank, state = w.vaultState(), owed = bk.owed || 0, t = dayFlow(todayOf(w)), pi = w.priceInfo();
   const toneText = state === "empty" ? "바닥" : state === "low" ? "얼마 안 남음" : "넉넉해요";
   const head = sumHead({ icon: "🏦", big: `🪙${fmtNum(bk.vault)}`, label: "내 금고", tone: state, toneText,
     lineHtml: `오늘 ${sign(t.inSum, "up")} · ${sign(t.outSum, "down")}${owed > 0 ? ` · 💸 밀린 품삯 🪙${fmtNum(owed)}` : ""}` });
   const mi = w.monInfo?.(), mpi = mi ? Math.round(mi.pi * 1000) / 10 : 0;
-  const sub = `<p class="bk-sub">${mi ? `📈 물가 ${mi.index}${mi.pi > 0.002 ? ` ▲+${mpi}%` : mi.pi < -0.002 ? ` ▼−${Math.abs(mpi)}%` : ""} · 🏘 마을 성장 ×${pi.mult.toFixed(2)}` : `📈 물가 ×${pi.mult.toFixed(2)}`} · 금고는 건설 설계비·품삯·꾸미기에 써요</p>`;
+  const sub = `<p class="bk-sub">${mi ? `📈 물가 ${mi.index}${mi.pi > 0.002 ? ` ▲+${mpi}%` : mi.pi < -0.002 ? ` ▼−${Math.abs(mpi)}%` : ""} · 🏘 마을 성장 ×${pi.mult.toFixed(2)}` : `📈 물가 ×${pi.mult.toFixed(2)}`} · 금고 돈은 설계비와 품삯, 꾸미기에 써요</p>`;
 
   const ledger = `<div class="bk-cols"><div><h4>들어온 돈 ${sign(t.inSum, "up")}</h4>${valueRows(t.inRows)}</div>` +
     `<div><h4>나간 돈 ${sign(t.outSum, "down")}</h4>${valueRows(t.outRows)}</div></div>` +
-    (t.lent ? `<p class="dim">🏠 오늘 빌려준 집값 🪙${fmtNum(t.lent)} — 바로 집값으로 돌아와 금고는 그대로예요.</p>` : "");
+    (t.lent ? `<p class="dim">🏠 오늘 빌려준 집값 🪙${fmtNum(t.lent)}. 바로 집값으로 돌아와서 금고는 그대로예요.</p>` : "");
 
   const week = weekRows(w), top = Math.max(1, ...week.map(d => Math.max(d.inSum, d.outSum)));
   const bar = (v, cls) => `<i class="${cls}" style="width:${Math.round(v / top * 100)}%"></i>`;
@@ -63,23 +62,23 @@ export function bankHtml(w, more = (k, t, h, o) => moreBox(k, t, h, o)) {
     return `<tr><td>🏠 ${esc(u.name)}${home ? ` <span class="dim">${esc(BUILDINGS[home.defId]?.name ?? "")}</span>` : ""}</td><td>남은 🪙${fmtNum(l.left)} · 하루 ${fmtNum(l.per)} · ${l.days}일</td></tr>`; }).join("")}</table>`
     : `<p class="dim">빌려준 돈이 없어요.</p>`) +
     (owing.length ? `<h4>💸 밀린 품삯</h4><table class="tbl">${owing.map(u => `<tr><td>${esc(u.name)}</td><td>🪙${fmtNum(u.wageOwed)}</td></tr>`).join("")}</table>` : "") +
-    `<p class="dim">갈매미는 집값의 일부(계약금)를 모으면 나머지를 금고에서 빌려 집을 사요. 날마다 벌이에서 갚고, 갚은 돈은 금고로 와요.</p>`;
+    `<p class="dim">갈매미는 계약금을 모으면 나머지를 금고에서 빌려 집을 사요. 날마다 번 돈에서 조금씩 갚아요.</p>`;
 
   const supply = w.moneySupply(), gulls = w.units.map(u => [u.name, Math.floor(u.coins || 0), `🪙${fmtNum(u.coins)}`]);
-  const townH = `<p class="bk-total">🪙 마을에 도는 돈 <b>${fmtNum(supply)}</b> <span class="dim">(갈매미 ${w.units.length}마리)</span></p>` +
+  const townH = `<p class="bk-total">🪙 마을에 도는 돈 <b>${fmtNum(supply)}</b> <span class="dim">갈매미 ${w.units.length}마리</span></p>` +
     (gulls.length ? valueRows(gulls) : `<p class="dim">아직 갈매미가 없어요.</p>`) +
-    `<table class="tbl"><tr><td>찍어 낸 돈 누계(발행)</td><td>🪙${fmtNum(bk.issued)}</td></tr><tr><td>금고로 돌아온 돈 누계</td><td>🪙${fmtNum(bk.returned)}</td></tr><tr><td>세금 누계</td><td>🪙${fmtNum(bk.taxed)}</td></tr></table>` +
-    `<p class="dim">갈매미 돈은 갈매미 것 — 건설비로 쓰지 않아요.</p>`;
+    `<table class="tbl"><tr><td>지금까지 찍어 낸 동전</td><td>🪙${fmtNum(bk.issued)}</td></tr><tr><td>지금까지 금고로 돌아온 돈</td><td>🪙${fmtNum(bk.returned)}</td></tr><tr><td>지금까지 걷은 세금</td><td>🪙${fmtNum(bk.taxed)}</td></tr></table>` +
+    `<p class="dim">갈매미 돈은 갈매미 것이라 공사에 쓰지 않아요.</p>`;
 
-  const r = w.res || {}, rk = RANKS[pi.rank];
+  const r = w.res || {};
   const goods = `<table class="tbl">${E.RAW.map(k => `<tr><td>${E.ITEM_ICON[k]} ${E.PROCESSED_NAME[k]}</td><td>창고 ${r[k] || 0}개 · 🪙${E.BANK_PROCESSED[k]}</td></tr>`).join("")}</table>` +
-    `<p class="dim">상인이 가공품을 가져오면 은행이 금고 돈으로 사요(새로 찍지 않아요). 창고의 가공품은 공사 재료로 써요.</p>` +
-    `<h4>🏘 마을 성장 ×${pi.mult.toFixed(2)}</h4><p class="dim">1 + ${esc(rk?.name ?? "마을")} ${pi.rankPart} + 집·시설 ${pi.n}채 ${pi.buildPart}${pi.nextAt ? ` · 다음 오름 ${pi.nextAt}채째` : " · 최대"}. 설계비와 집값에 곱해요${mi ? `(× 📈 물가 ${mi.index}, 🏛 중앙은행 탭)` : ""}.</p>`;
+    `<p class="dim">상인이 가공품을 가져오면 은행이 금고 돈으로 사요. 창고의 가공품은 공사 재료로 써요.</p>` +
+    `<h4>🏘 마을 성장 ×${pi.mult.toFixed(2)}</h4><p class="dim">마을 등급과 집, 시설이 늘수록 설계비와 집값이 조금씩 올라요.${pi.nextAt ? ` ${pi.nextAt}채째에 한 번 더 올라요.` : ""}${mi ? ` 물가 ${mi.index}도 함께 곱해요.` : ""}</p>`;
 
   return head + sub +
     more("bank.today", "📒 오늘 장부", ledger, { note: `+${fmtNum(t.inSum)} · −${fmtNum(t.outSum)}` }) +
     more("bank.week", "📊 최근 7일", weekH, { note: `${week.length}일` }) +
     more("bank.loan", "🏠 대출", loanH, { note: loans.length ? `${loans.length}건 · 남은 🪙${fmtNum(loanLeft)}` : "없음" }) +
     more("bank.town", "🪙 마을에 도는 돈", townH, { note: `🪙${fmtNum(supply)}` }) +
-    more("bank.goods", mi ? "🐚 가공품 · 마을 성장" : "🐚 가공품 · 물가", goods, { note: `×${pi.mult.toFixed(2)}` });
+    more("bank.goods", mi ? "📦 가공품과 마을 성장" : "📦 가공품과 물가", goods, { note: `×${pi.mult.toFixed(2)}` });
 }

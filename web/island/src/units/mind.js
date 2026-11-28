@@ -72,11 +72,11 @@ export function favorite(u) {
 
 // 사이 단계: 호감이 min 이상이면 그 단계(기준은 여기 한 곳에만 둠). 선 색·굵기는 📱 관계도에서 씀.
 export const FRIEND_STAGES = [
-  { name: "서먹", icon: "🙂", min: -Infinity, color: "#b9a88a", width: 1.5 },
+  { name: "친해지는 중", icon: "🙂", min: -Infinity, color: "#b9a88a", width: 1.5 },
   { name: "친구", icon: "🧡", min: 3, color: "#f0a04b", width: 3 },
   { name: "단짝", icon: "💞", min: 7, color: "#e0573e", width: 5 },
 ];
-/** 호감 값 → 사이 단계 번호(0 서먹 · 1 친구 · 2 단짝) */
+/** 호감 값 → 사이 단계 번호(0 친해지는 중 · 1 친구 · 2 단짝) */
 export const friendStage = v => { let s = 0; FRIEND_STAGES.forEach((d, i) => { if ((v || 0) >= d.min) s = i; }); return s; };
 /** 서로 친해짐(또는 멀어짐). 둘 사이 단계가 올랐으면 새 단계 번호를, 아니면 0을 돌려줌. */
 export function befriend(a, b, amt) {

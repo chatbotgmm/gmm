@@ -26,9 +26,9 @@ test("공사장: 맡은 이 없으면 ⏳ 기다림, 단계마다(가지러·모
   let c = V.siteCardOf(b, w); clean(c.parts.join("")); assert.match(c.parts[0], /0%/); assert.match(c.parts[0], /일꾼을 기다려요/); assert.match(c.parts[1], /맡은 갈매미가 없어요/);
   b.supply = { by: u.unitId, need: { wood: 5, stone: 5 }, got: { wood: 3, stone: 0 }, total: { wood: 10, stone: 10 }, cycles: 2, step: "gather" };
   assert.equal(V.siteStepOf(b, w).text, "🪵 3/5 · 🪨 0/5 모으는 중"); assert.deepEqual(V.siteReadyOf(b), { got: 3, need: 10 });
-  c = V.siteCardOf(b, w); clean(c.parts.join("")); assert.match(c.parts[1], /data-act="follow"/); assert.match(c.parts[1], /재료 준비 <b>3\/10<\/b>/);
+  c = V.siteCardOf(b, w); clean(c.parts.join("")); assert.match(c.parts[1], /data-act="follow"/); assert.match(c.parts[1], /이번에 쓸 재료 <b>3\/10<\/b>/);
   b.supply.step = "fetch"; assert.equal(V.siteStepOf(b, w).text, "🏦 재료 가지러 가는 중");
-  b.supply.step = "build"; assert.equal(V.siteStepOf(b, w).text, "🔨 짓는 중 · 2바퀴 남음");
+  b.supply.step = "build"; assert.equal(V.siteStepOf(b, w).text, "🔨 짓는 중 · 망치질 2번 남음");
   b.fee = 10; assert.match(V.siteCardOf(b, w).parts[2], /🪙10/);
   u.noWay = { [b.id]: w.time + 30 }; assert.match(V.siteCardOf(b, w).parts[1], /길이 없어/);
 });
@@ -48,7 +48,7 @@ test("밭: 칸 수 · 다 자람 · 목마름(촉촉함 0.2 아래) · 자라는
 
 test("의원: 침대 칸(누운 환자 · 빈 침대), 당번 고르기 단추 → setDoctor, 오늘 진료 수입", () => {
   const w = fresh(), u = w.units[0], cl = placeNear(w, "clinic", u.x, u.z);
-  let c = V.clinicCardOf(cl, w); clean(c.parts.join("")); assert.match(c.parts[0], /0\/3/); assert.match(c.parts[0], /당번 없음/);
+  let c = V.clinicCardOf(cl, w); clean(c.parts.join("")); assert.match(c.parts[0], /0\/3/); assert.match(c.parts[0], /당번이 없어도/);
   assert.equal((c.parts[1].match(/빈 침대/g) || []).length, 3);
   u.sick = { kind: "cold", left: 300 }; u.insideBuildingId = cl.id;
   c = V.clinicCardOf(cl, w); assert.match(c.parts[0], /1\/3/); assert.equal((c.parts[1].match(/빈 침대/g) || []).length, 2); assert.ok(c.parts[1].includes(u.name));
