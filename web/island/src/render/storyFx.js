@@ -29,7 +29,7 @@ function stKeyTex() {
     g.beginPath(); g.moveTo(-5, 0); g.lineTo(24, 0); g.moveTo(14, 0); g.lineTo(14, 10); g.moveTo(22, 0); g.lineTo(22, 12); g.stroke(); };   // 몸통 · 이 두 개
   key("#7a4a14", 11); key("#e2a536", 6);                                          // 진한 테두리 위에 금빛
   g.restore();
-  return (ST_KEY = new THREE.CanvasTexture(c));
+  ST_KEY = new THREE.CanvasTexture(c); ST_KEY.colorSpace = THREE.SRGBColorSpace; return ST_KEY;   // sRGB로 읽어야 금빛·갈색 테두리가 바래지 않음(sparkles.js와 같이)
 }
 export const LAMP_FILL_SECS = 2.4;   // 3장 등불을 고친 뒤 밤 불빛이 다 차오르는 시간(실제 초)
 export const KEY_HIT_PX = 30;        // 열쇠 표를 누른 것으로 치는 화면 거리(px)
@@ -58,7 +58,7 @@ export class StoryFx {
     box.add(post, body, lid); for (const m of [post, body, lid]) { m.castShadow = true; m.receiveShadow = true; }
     this.fly = mk(0xe8ff7a, 0.5); root.remove(this.fly); box.add(this.fly); this.fly.position.set(0.25, 1.35, 0); this.fly.visible = true;
     root.add(box); this.mailbox = box;
-    this.key = new THREE.Sprite(new THREE.SpriteMaterial({ map: stKeyTex(), transparent: true, depthWrite: false, fog: false }));   // 잠든 등대 열쇠 표(밤엔 장면과 같이 어두워짐 — 눈부신 흰 공처럼 보이지 않게)
+    this.key = new THREE.Sprite(new THREE.SpriteMaterial({ map: stKeyTex(), transparent: true, depthWrite: false, fog: false, toneMapped: false }));   // 잠든 등대 열쇠 표(톤 매핑을 끄면 금빛이 하얗게 바래지 않음. 밤엔 update가 조금 어둡게 — 눈부신 흰 공처럼 보이지 않게)
     this.key.scale.setScalar(0.85); this.key.renderOrder = 12; this.key.userData.noToon = true; this.key.raycast = () => {}; this.key.visible = false; root.add(this.key);
     world.on("storyBlink", e => { if (e.scene) this.playBlink(); });
     world.on("storyRestore", e => { if (e.n === 3) this.moment("relight"); });
@@ -115,7 +115,7 @@ export class StoryFx {
       }
     }
     const kp = !dl.lampLit && this.keyPos; this.key.visible = !!kp;               // 고치는 순간엔 바로 숨김
-    if (kp) this.key.position.set(kp[0], kp[1] + 0.07 * Math.sin(now / 650), kp[2]);
+    if (kp) { this.key.position.set(kp[0], kp[1] + 0.07 * Math.sin(now / 650), kp[2]); this.key.material.color.setScalar(1 - 0.3 * (dl.glow ?? 0)); }   // 빛을 안 받는 그림이라 밤 정도만큼 직접 어둡게(밤 70%)
   }
   /** 화면 좌표(clientX/Y)가 등대(모델·임시 몸통)나 잠든 등대 열쇠 표를 눌렀나. dom = 그리는 캔버스. 빛줄기·빛 번짐은 안 침 */
   hit(cx, cy, dom) {

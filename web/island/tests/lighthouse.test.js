@@ -69,14 +69,27 @@ test("등대를 누르면: 왜 꺼져 있고 무엇을 하면 켜지는지(장�
   w.time = 601; w.storyEvent("wave"); assert.ok(s.sparks.some(p => p.p === "c1_sign"), "둘째 날 문패 반짝이");
   assert.match(ST.lighthouseNote(s, w, 2).text, /발치의 ✨ 반짝이를 주워/);
   w.pickSparkle(w.sparkles.find(o => o.story === "c1_sign").id); assert.equal(s.chapter, 1);
-  n = ST.lighthouseNote(s, w, 2); assert.equal(n.app, "story"); assert.match(n.text, /3장 「등대 등불」을 고치면 다시 켜져요\(지금 1장\)/);
+  n = ST.lighthouseNote(s, w, 2); assert.equal(n.app, "story"); assert.match(n.text, /3장 「등대 등불」을 고치면 다시 켜져요\. 지금은 1장이에요/);
   s.chapter = 3; w.res.iron = 0; for (const u of w.units) if (u.inv) u.inv.iron = 0;
-  n = ST.lighthouseNote(s, w, 5); assert.match(n.text, /남은 것: 🧩 조각 0\/3 · 🌟 별씨 0\/3 · ⛓ 철 0\/1/); assert.equal(n.app, "story");
+  n = ST.lighthouseNote(s, w, 5); assert.match(n.text, /남은 것: 🧩 조각 0\/3, 🌟 별씨 0\/3, ⛓ 철 0\/1/); assert.equal(n.app, "story");
   for (const id of ["c3_seed", "c3_bottle", "c3_secret2"]) s.found[id] = { day: 3, who: null };
   s.seeds = 3; w.res.iron = 1;
   n = ST.lighthouseNote(s, w, 5); assert.match(n.text, /고칠 준비가 됐어요/); assert.equal(ST.restoreCheck(s, w, 3).ok, true);
   assert.ok(w.storyRestore(3).ok); n = ST.lighthouseNote(s, w, 5); assert.equal(n.lit, true); assert.match(n.text, /불이 켜져 있어요/);
   assert.equal(atLabel(w, { app: "story" }), "🗝 비밀 수첩 열기", "알림을 누르면 수첩으로");
+});
+
+test("등대 한 줄 글: 괄호·대괄호·가운뎃점 없음(한 줄 UI 글쓰기 규칙), 장면마다 다른 글", () => {
+  const w = town(), s = w.story, texts = [], see = (st, d) => texts.push(ST.lighthouseNote(st, w, d).text);
+  see(null, 1); see(s, 1); see(s, 2);
+  w.time = 601; w.storyEvent("wave"); see(s, 2);
+  w.pickSparkle(w.sparkles.find(o => o.story === "c1_sign").id); see(s, 2);
+  s.chapter = 3; w.res.iron = 0; for (const u of w.units) if (u.inv) u.inv.iron = 0; see(s, 5);
+  for (const id of ["c3_seed", "c3_bottle", "c3_secret2"]) s.found[id] = { day: 3, who: null };
+  s.seeds = 3; w.res.iron = 1; see(s, 5);
+  assert.ok(w.storyRestore(3).ok); see(s, 5);
+  assert.equal(new Set(texts).size, 8, texts.join("\n"));
+  for (const t of texts) assert.ok(!/[()\[\]（）·]/.test(t), t);
 });
 
 test("밤 불빛 코드가 주석에 묻히지 않음: 줄 끝 주석 안에 실행할 문장(대입·호출 + ;)이 없음(등대 유리·가로등 빛 번짐이 그렇게 꺼져 있었음)", () => {
