@@ -24,12 +24,11 @@ import { WeatherViews } from "./render/weather.js";
 import { SkyShow } from "./render/skyshow.js";
 import { SKY_EVENTS, winterYearOf } from "./world/skywatch.js";
 import { FestaView } from "./render/festa.js";
-import { festivalKey, FESTIVAL_SECS } from "./world/festival.js";
+import { festivalKey } from "./world/festival.js";
 import { SeasonLook, FallingLeaves } from "./render/seasons.js";
 import { Footprints } from "./render/footprints.js";
 import { SEASONS, WEATHER, seasonOf } from "./world/season.js";
-import { WISH_BY_ID, WISH_REWARD, wishText } from "./world/wishes.js";
-import { RANK_REWARD } from "./world/rank.js";
+import { WISH_BY_ID, wishText } from "./world/wishes.js";
 import { newsFor, awayLetter, newsPages } from "./world/news.js";
 import { dailyKey } from "./world/daily.js";
 import { stampBuyText } from "./ui/gullView.js";
@@ -59,7 +58,7 @@ import { DreamView } from "./render/dreamView.js";
 import { Dreams } from "./world/dreams.js";
 import { Poke } from "./units/poke.js";
 import { Fuss } from "./units/fuss.js";
-import { ALERTS, BATCH_MS, batchText, makeGate, alertLine } from "./ui/newsAlerts.js";
+import { ALERTS, BATCH_MS, batchText, makeGate, alertLine, makeBudget, quietAlert } from "./ui/newsAlerts.js";
 import { setTerrainDetail } from "./render/groundChunks.js";
 import { stepGridLines } from "./render/gridLines.js";
 import { gridShown } from "./ui/gridView.js";
@@ -233,7 +232,14 @@ function mount(w) {
   for (const ev of REWARD_EVENTS) world.on(ev, arg => { if (world !== mineR || !rewards) return;
     if (ev === "storyEnd" || (ev === "storyPiece" && arg?.id === "c4_reply")) return;   // 🗝 엔딩: 등대 연출 → 보름의 답장 편지를 닫은 뒤 큰 카드 하나(storyFx.onLetter)
     const r = rewardOf(ev, arg, world); if (r) rewards.push(r); });
-  const say = (ev, arg, tail = "") => { const n = newsFor(ev, arg, world); if (n && big(ev, arg)) { hud.logNote(`${n.icon} ${n.text}${tail}`, "good", noteTarget(arg)); return; } if (n) hud?.status(`${n.icon} ${n.text}${tail}`, { kind: ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good", queue: true, at: noteTarget(arg) }); };   // at: 누르면 그 갈매미·건물로(편의성 점검 5번)
+  // 하루 알림 예산(newsAlerts.js makeBudget): 이야기 > 관계 > 소원 > 나머지. 넘친 소식은 지난 알림에만(소식지는 world가 그대로 실음)
+  const budget = makeBudget();
+  const post = (ev, text, kind, at) => { if (!hud) return; if (budget(ev, world.time)) hud.status(text, { kind, queue: true, at }); else hud.logNote(text, kind, at); };
+  // 한 줄에 일 하나: 길안내·조언 덧말 없이 소식 문장만(누르면 그 갈매미·건물로 — 편의성 점검 5번). 선물 반응은 플레이어가 한 일의 대답 → 예산 밖
+  const say = (ev, arg) => { if (quietAlert(ev, arg)) return; const n = newsFor(ev, arg, world); if (!n || !hud) return; const text = `${n.icon} ${n.text}`, at = noteTarget(arg);
+    if (big(ev, arg)) { hud.logNote(text, "good", at); return; }
+    const kind = ev === "weather" ? (arg?.kind === "storm" ? "warn" : "info") : ev === "season" || ev === "gift" ? "info" : "good";
+    if (ev === "gift") hud.status(text, { kind, queue: true, at }); else post(ev, text, kind, at); };
   for (const ev of ["vaultLow", "vaultShort", "vaultOk"]) world.on(ev, () => hud?.bumpVault());   // 금고 얼마 안 남음·바닥·다시 참: 위쪽 금고 칩을 한 번 흔듦
   // 섬 꾸미기: 낸 값·돌려받은 값은 금고 칩 옆에 잠깐(−6 · +2) · 높이 도구가 땅↔물 경계에서 막히면 까닭을 상태 줄에(한 획에 칸마다 오므로 같은 글은 1.5초에 한 번)
   world.on("custom", e => hud?.customSpent(e));
@@ -251,45 +257,45 @@ function mount(w) {
     if (world !== mine || !hud || !gate(ev, arg, world.time)) return;
     const text = alertLine(ev, arg, world); if (!text) return;
     if (big(ev, arg)) { hud.logNote(text, a.kind, noteTarget(arg)); return; }                     // ✨ 반짝이 줍기 등: 보상 띠가 대신 보여 주고 소리도 냄
-    if (!a.batch) { const at = noteTarget(arg); hud.status(text, a.now ? { kind: a.kind, at } : { kind: a.kind, queue: true, at }); ring(a, arg); return; }
+    if (!a.batch) { const at = noteTarget(arg); if (a.now) hud.status(text, { kind: a.kind, at }); else post(ev, text, a.kind, at); ring(a, arg); return; }
     let b = batches.get(ev); if (!b) { b = { list: [], first: text }; batches.set(ev, b);
       setTimeout(() => { batches.delete(ev); if (world !== mine) return; const m = b.list.length > 1 && batchText(ev, b.list);
-        hud.status(m ? `${m.icon} ${m.text}` : b.first, { kind: a.kind, queue: true, at: m ? null : noteTarget(b.list[0]) }); ring(a, b.list[0]); }, BATCH_MS); }
+        post(ev, m ? `${m.icon} ${m.text}` : b.first, a.kind, m ? null : noteTarget(b.list[0])); ring(a, b.list[0]); }, BATCH_MS); }
     b.list.push(arg); });
-  world.on("season", s => { tintGround(); say("season", s, ` · ${SEASON_NOTE[s]}`); });
-  world.on("weather", e => say("weather", e, WEATHER_NOTE[e.kind] ? ` · ${WEATHER_NOTE[e.kind]}` : ""));
+  world.on("season", s => { tintGround(); say("season", s); });
+  world.on("weather", e => say("weather", e));
   // 드문 하늘: 무지개·유성우가 시작될 때, 겨울 첫눈, 유성우 밤에 주운 별조각
-  world.on("sky", e => { say("sky", e, ` · ${e.def.note} (📖 도감)`); sfx.chime(e.kind === "meteor" ? [988, 1319, 1568] : [659, 784, 988, 1175], 0.1, 0.14); });
-  world.on("firstSnow", e => { say("firstSnow", e, " (📖 도감 · 하늘 기록)"); sfx.chime([1175, 988, 784], 0.14, 0.12); });
-  world.on("starPiece", e => { say("starPiece", e, ` (${e.u.name}의 소지품)`); sfx.chime([1319, 1568], 0.08, 0.14); });
-  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; hud?.status(`💭 ${u.name}: "${wishText(d, world, u, wish)}" (${d.hint})`, { kind: "info", queue: true, at: noteTarget(u) }); });
-  world.on("friendship", e => { say("friendship", e, " (📱 관계도)"); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
-  world.on("wishLost", ({ wish, u, def }) => hud?.status(`💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요(이제 이루기 어려워요)`, { kind: "warn", queue: true, at: noteTarget(u) }));
-  world.on("rank", e => { say("rank", e, ` ${e.def.unlock.map(id => BUILDINGS[id].name).join(", ")} 건설 가능 · 모두에게 축하금 🪙${RANK_REWARD}`); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
-  world.on("beachcomb", e => say("beachcomb", e, ` (${e.u.name}의 소지품)`));
+  world.on("sky", e => { say("sky", e); sfx.chime(e.kind === "meteor" ? [988, 1319, 1568] : [659, 784, 988, 1175], 0.1, 0.14); });
+  world.on("firstSnow", e => { say("firstSnow", e); sfx.chime([1175, 988, 784], 0.14, 0.12); });
+  world.on("starPiece", e => { say("starPiece", e); sfx.chime([1319, 1568], 0.08, 0.14); });
+  world.on("wish", ({ wish, u }) => { const d = WISH_BY_ID[wish.id]; post("wish", `💭 ${u.name}: "${wishText(d, world, u, wish)}"`, "info", noteTarget(u)); });
+  world.on("friendship", e => { say("friendship", e); if (e.stage >= 2) sfx.chime([659, 784, 988], 0.09, 0.16); });
+  world.on("wishLost", ({ wish, u, def }) => post("wishLost", `💭 ${u.name}: "${wishText(def, world, u, wish)}" 소원은 접었어요`, "warn", noteTarget(u)));
+  world.on("rank", e => { say("rank", e); if (tools?.mode === "build") hud.showMode("build", hud.lastBuild); });
+  world.on("beachcomb", e => say("beachcomb", e));
   // 🗝 메인 스토리: 이야기 반짝이(누르면 그곳으로) · 조각·별씨·고침·엔딩·엽서(보상 카드가 크게, 알림은 지난 알림에) · 깜빡이는 대답
-  world.on("storySpark", e => { say("storySpark", e, " · 누르면 그곳으로"); sfx.chime([988, 1319, 1760], 0.07, 0.14); });
-  world.on("storyPiece", e => say("storyPiece", e, " (📱 🗝 비밀)"));
-  world.on("storySeed", e => say("storySeed", e)); world.on("storyPostcard", e => say("storyPostcard", e, " (📱 🗝 비밀)"));
+  world.on("storySpark", e => { say("storySpark", e); sfx.chime([988, 1319, 1760], 0.07, 0.14); });
+  world.on("storyPiece", e => say("storyPiece", e));
+  world.on("storySeed", e => say("storySeed", e)); world.on("storyPostcard", e => say("storyPostcard", e));
   world.on("storyRestore", e => say("storyRestore", e)); world.on("storyEnd", e => say("storyEnd", e));
-  world.on("storyBlink", e => { if (e.first) say("storyBlink", e, e.scene ? "" : " (📰 소식지)"); });
-  world.on("fish", e => { if (e.fish.season) say("fish", e, " (📖 도감)"); });
+  world.on("storyBlink", e => { if (e.first) say("storyBlink", e); });
+  world.on("fish", e => { if (e.fish.season) say("fish", e); });
   // 수족관: 크기 기록(흔한 물고기의 첫 기록은 조용히) · 기증 · 기념 선물
-  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common" || (e.up && e.medal >= 2)) say("fishRecord", e, " (📖 도감)"); if (e.up && e.medal >= 3 && !big("fishRecord", e)) sfx.chime([988, 1175, 1568], 0.09, 0.15); });
-  world.on("medalGift", e => { say("medalGift", e, " (🏠 집 꾸미기에서 놓아요)"); if (!big("medalGift", e)) sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
-  world.on("donate", e => { say("donate", e, " (📖 도감)"); if (!big("donate", e)) sfx.chime([784, 988, 1319], 0.09, 0.16); });
-  world.on("donateGift", e => say("donateGift", e, " (🏠 집 꾸미기에서 놓아요)"));
+  world.on("fishRecord", e => { if (!e.first || e.fish.rarity !== "common" || (e.up && e.medal >= 2)) say("fishRecord", e); if (e.up && e.medal >= 3 && !big("fishRecord", e)) sfx.chime([988, 1175, 1568], 0.09, 0.15); });
+  world.on("medalGift", e => { say("medalGift", e); if (!big("medalGift", e)) sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
+  world.on("donate", e => { say("donate", e); if (!big("donate", e)) sfx.chime([784, 988, 1319], 0.09, 0.16); });
+  world.on("donateGift", e => say("donateGift", e));
   // 선물 반응 · 하트 단계가 올라 받은 답례(답례가 뒤에 와서 알림 줄에 남음)
   world.on("gift", e => { say("gift", e); sfx.chime(e.tier >= 2 ? [784, 988, 1175] : e.tier ? [784, 988] : [440], 0.08, 0.14); });
-  world.on("bondStage", e => { say("bondStage", e, !e.gift ? "" : e.gift.kind === "furniture" ? " (🏠 집 꾸미기에서 놓아요)" : " (🎁 내 주머니)"); if (!big("bondStage", e)) sfx.chime([659, 784, 988, 1319], 0.09, 0.16); });
+  world.on("bondStage", e => { say("bondStage", e); if (!big("bondStage", e)) sfx.chime([659, 784, 988, 1319], 0.09, 0.16); });
   // 계절 축제의 날: 열림(색종이·팡파르) · 끝남(기념 가구)
-  world.on("festival", e => { say("festival", e, ` · 마을 시간 ${Math.round(FESTIVAL_SECS / 60)}분 동안 열려요 (📱 마을)`); sfx.fanfare(); });
-  world.on("festivalEnd", e => { say("festivalEnd", e, e.item ? " (🏠 집 꾸미기에서 놓아요 · 📱 마을에 도장)" : ""); if (!big("festivalEnd", e)) sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
-  world.on("wishDone", e => say("wishDone", e, world.economy ? ` 축하금 🪙${WISH_REWARD}` : ""));
+  world.on("festival", e => { say("festival", e); sfx.fanfare(); });
+  world.on("festivalEnd", e => { say("festivalEnd", e); if (!big("festivalEnd", e)) sfx.chime([784, 988, 1175, 1568], 0.1, 0.18); });
+  world.on("wishDone", e => say("wishDone", e));
   // 오늘의 부탁: 하나 끝날 때마다 알림(같은 일의 다른 알림에 묻히지 않게 한 박자 늦게), 모두 끝나면 도장
   world.on("dailyDone", e => { const w = world; setTimeout(() => { if (world !== w) return;
     if (big("dailyDone", e)) { hud.logNote(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개)` : `📋 오늘의 부탁 완료: ${e.req.text}`, "good"); return; }
-    hud?.status(e.all ? `🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요(모은 도장 ${e.stamps}개) · 📱 소원 → 도장 가게` : `📋 오늘의 부탁 완료: ${e.req.text}${e.left ? ` · ${e.left}개 남았어요` : ""}`, { kind: "good", queue: true });
+    post("dailyDone", e.all ? "🎉 오늘의 부탁을 모두 들어줬어요! 도장 하나 받았어요" : `📋 오늘의 부탁 완료: ${e.req.text}`, "good", null);
     sfx.chime(e.all ? [784, 988, 1175, 1568] : [880, 1175], 0.09, 0.15); }, 60); });
   if (tools) { Object.assign(tools, { world, chunks, stream, buildingViews }); tools.history = []; tools.redoStack = []; tools.onHistory?.(); tools.setMode("view"); hud.setWorld(world); unitControl.setFollow(null, true); world.instantBuild = hud.instantBuild; }   // 되돌리기 목록은 섬마다(다른 섬의 칸·꾸미기를 되돌리지 않게)
   return Promise.allSettled(waits);                 // 건물·나무를 다 그린 때(갈매미는 charPool.ready가 따로)
@@ -542,6 +548,7 @@ function frameBody() {
   if (quality.skip(performance.now())) { requestAnimationFrame(frame); return; }   // 성능 우선: 30fps 상한
   const dt = Math.min(clock.getDelta(), 0.05); simT += dt;
   const steps = simSteps(simSpeed, edition.speed);                                // ⏩ 배속(유료판 ×1·×2·×3) × 시간 배수(시험) — 프레임당 최대 12번, 한 번의 dt는 그대로(0.05초 이하)
+  world.showNumbers = !!tools && tools.mode !== "view";                           // 건설 모드에서만 갈매미 말풍선에 자원·돈 숫자(나무+2 · 🪙+12)
   if (ready) for (let k = 0; k < steps; k++) world.update(dt);                    // 불러오는 동안은 멈춤(탭이 숨으면 프레임 자체가 멈춤 + dt 상한 0.05초)
   stepGridLines(dt, gridShown({ mode: tools?.mode, on: hud?.gridOn, room: roomView.isOpen }));   // 건설 모드 격자선(▦, 땅 셰이더 세기만)
   if (roomView.isOpen) {                                                          // 방 화면: 섬은 그리지 않음

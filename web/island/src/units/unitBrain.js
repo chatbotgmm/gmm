@@ -36,6 +36,26 @@ const pick = (a, rnd) => a[Math.floor(rnd() * a.length)];
 const visible = u => !u.insideBuildingId && u.state !== US.Held;
 
 export function emote(u, text, secs = 1.6) { if (text == null || text === "") return; u.emoteText = String(text); u.emoteT = secs; }
+/** 혼잣말 말풍선(기분·일·밥 같은 저절로 나오는 말): 같은 말은 갈매미마다 마을 하루(600초)에 SAME_BUBBLE_DAY번까지만.
+ *  한글이 든 말만 셈(✨·♪·💤 같은 짧은 표시는 그대로). 플레이어가 한 일의 대답(선물·들기·톡톡)은 emote를 그대로 써서 늘 보임.
+ *  key: 뜻이 같은 말 묶음(배고픔 혼잣말 여러 가지 · 벌목 한마디 여러 가지)은 한 이름으로 셈 — 말만 바꿔 같은 잔소리를 되풀이하지 않게.
+ *  센 횟수는 저장 안 함(WeakMap) · 난수 안 씀(마을 진행에 영향 없음). 띄웠으면 true */
+export const SAME_BUBBLE_DAY = 3;
+const BUBBLE_DAY_SECS = 600, bubbleLog = new WeakMap();
+export function chatter(u, text, world, secs, key = null) {
+  if (text == null || text === "") return false; text = String(text);
+  if (/[가-힣]/.test(text)) {
+    const day = Math.floor((world?.time || 0) / BUBBLE_DAY_SECS); let m = bubbleLog.get(u);
+    if (!m || m.day !== day) bubbleLog.set(u, m = { day, n: new Map() });
+    const id = key || text, k = m.n.get(id) || 0; if (k >= SAME_BUBBLE_DAY) return false; m.n.set(id, k + 1);
+  }
+  emote(u, text, secs); return true;
+}
+/** 난수 없이 고르기(갈매미·마을 시간으로 돌아가며): 말풍선만 고를 때 — world.rnd 순서를 바꾸지 않게 */
+const vary = (list, u, world) => list[((Number.isFinite(u.unitId) ? u.unitId : 0) + Math.floor((world?.time || 0) / 7)) % list.length];
+/** 숫자 말풍선(나무+2 · 🪙+12)은 건설 모드에서만(world.showNumbers = 화면이 넣어 줌). 평소엔 기분 한마디 */
+const nums = world => !!world?.showNumbers;
+const CHOP_SAY = ["한 짐 했다", "나무 냄새 좋다", "영차, 다 됐다"], MINE_SAY = ["돌 캤다!", "단단하네", "후, 한 덩이"], IRON_SAY = ["철도 나왔다!", "반짝, 철이다"];
 
 // 공사 한 번(망치질 3번)에 드는 재료: 건물마다 cost(없으면 나무 1·돌 1), 3등급 이상 건물은 철 1도.
 // 짓는 갈매미 가방(inv: 스스로 캔 것) → 짐(load: 은행 창고에서 꺼내 온 것) 순으로 쓰고, 공식은행이 없는 섬(경제 없음)은 마을 자재(world.res)를 바로 씀.
@@ -380,7 +400,7 @@ function startActivityInner(u, kind, world, rnd) {
         }
       } else if (world.res.food < 1) return startActivity(u, "forage", world, rnd);
       setIdle(u, rnd, world); u.state = US.Eat;
-      doOnce(u, "Attack", () => { if (world.eatFood(u)) emote(u, J.isLazy(u) ? "배불러…" : "냠냠"); }, () => done(u, 1, rnd, world));
+      doOnce(u, "Attack", () => { if (world.eatFood(u)) chatter(u, J.isLazy(u) ? "배불러…" : "냠냠", world); }, () => done(u, 1, rnd, world));
       return true;
     }
     case "shore": {                                                               // 바닷가에서 직접 먹이 잡기(먹을 것도 살 곳도 없을 때)
@@ -391,7 +411,7 @@ function startActivityInner(u, kind, world, rnd) {
         const w2 = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([ax, az]) => g.isWater(x + ax, z + az)); if (w2) { best = [x, z, w2]; break; }
       }
       if (!best || !startPath(u, world, best[0], best[1])) return false;
-      u.state = US.GoShore; u.shoreDir = best[2]; emote(u, "바다로 먹이 잡으러"); return true;
+      u.state = US.GoShore; u.shoreDir = best[2]; chatter(u, "바다로 먹이 잡으러", world); return true;
     }
     case "deposit": {                                                             // 상인: 가공품을 공식은행에 팔러
       const bk = world.bankB(); if (!bk || E.total(u.goods) <= 0) return false;
@@ -587,7 +607,7 @@ export const BLOCKED_NAP = 20;
  *  남의 집·카페 같은 다른 건물에서는 자지 않음. 늘 true */
 function startSleep(u, world, rnd) {
   const home = u.home && world.buildings.get(u.home), d = b => Math.hypot(b.door.x - u.x, b.door.z - u.z);
-  const go = (b, say) => { u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.sleepy = true; emote(u, say, 2.4); return true; };
+  const go = (b, say) => { u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.sleepy = true; chatter(u, say, world, 2.4); return true; };
   if (home && world.isDone(home)) {
     if (startPath(u, world, home.door.x, home.door.z)) return go(home, CH.offHours(u, world) ? (CH.isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지") : "졸려… 집에 가서 자야지");
     setIdle(u, rnd, world, BLOCKED_NAP); u.state = US.Sleep; u.nap = true; emote(u, "🏠 집에 가는 길이 막혔어… 잠깐만 졸자", 2.6); return true;
@@ -772,10 +792,10 @@ function chooseNext(u, world, rnd) {
   // 만족도가 낮으면(75 아래) 스스로 동네를 고침: 집 앞 마당 고르기 · 장식 주문. 낮을수록 더 자주(길은 깔지 않고 부탁만 — 아래 askRoad)
   if (askRoad(u, world, rnd)) return;                                         // 집이 시장·은행과 길로 안 이어졌으면 가끔 멈춰 서서 길을 부탁(말풍선)
   if (world.economy && (u.sat ?? 100) < 75 && !u.committed && (u.needs?.energy ?? 100) >= M.TIRED && rnd() < (75 - (u.sat ?? 75)) / 75 + 0.12 && startImprove(u, world, rnd)) return;
-  if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); emote(u, pick(["z", "배불러…", "…"], rnd)); return; }   // 너무 불러서 뒹굴
+  if (J.isLazy(u) && rnd() < 0.5) { startActivity(u, "rest", world, rnd); chatter(u, pick(["z", "배불러…", "…"], rnd), world); return; }   // 너무 불러서 뒹굴
   if (u.needs && u.needs.energy <= CH.sleepBelow(u, world) && startActivity(u, "sleep", world, rnd)) return;   // 지치면 잠(밤낮·체질 상관없이 기력 20 이하)
   // 피곤하면(기력 TIRED 아래) 잠깐 숨 돌림 — BREATH_EVERY초에 한 번만: 매번 쉬면 숨 돌리기가 기력을 30 가까이 붙잡아 잠 문턱 20까지 안 내려감
-  if (u.needs && u.needs.energy < M.TIRED && !((world.time || 0) - (u.breathAt ?? -1e9) < M.BREATH_EVERY)) { startActivity(u, "rest", world, rnd); emote(u, pick(["🥱 좀 쉬자", "😮‍💨 피곤해", "후…"], rnd)); return; }
+  if (u.needs && u.needs.energy < M.TIRED && !((world.time || 0) - (u.breathAt ?? -1e9) < M.BREATH_EVERY)) { startActivity(u, "rest", world, rnd); chatter(u, pick(["🥱 좀 쉬자", "😮‍💨 피곤해", "후…"], rnd), world); return; }
   // 성격 + 직업 특기 × 욕구(급한 욕구를 채우는 일) × 배운 취향(해 보니 좋았던 일)
   let opts = J.activityWeights(u).map(([k, w]) => [k, w * M.needMult(u, k) * M.prefMult(u, k)]);
   if (u.sick) opts = opts.map(([k, w]) => [k, w * HL.sickWeight(u, k)]);       // 아프면 일 ×0.5 · 집 구경 ×3(집도 의원도 못 가는 갈매미)
@@ -797,7 +817,7 @@ function chooseNext(u, world, rnd) {
 }
 /** 제 일거리가 없을 때 다른 일을 도움(일손 돕기). 시작했으면 true */
 function helpOut(u, world, rnd) {
-  for (const k of J.helpJobs(u, world.res)) if (startActivity(u, k, world, rnd)) { emote(u, pick(HELP_SAY[k] || ["일손 돕기!"], rnd), 2); return true; }
+  for (const k of J.helpJobs(u, world.res)) if (startActivity(u, k, world, rnd)) { chatter(u, pick(HELP_SAY[k] || ["일손 돕기!"], rnd), world, 2); return true; }
   return false;
 }
 const HELP_SAY = { chop: ["🪓 나무 해 올게!", "일손 돕기!"], mine: ["⛏ 돌 캐 올게!", "일손 돕기!"], fish: ["🎣 낚시 도울게!", "일손 돕기!"] };
@@ -821,12 +841,24 @@ export function exitBuilding(u, world, rnd) {
   if (spot) { u.x = spot[0] + 0.5; u.z = spot[1] + 0.5; }
   u.insideBuildingId = null; u.activity = u.insideAct || null; u.insideAct = null; u.useFurni = null; u.dressT = 0; u.carried = false;   // 나서면 바로 옷을 고름 · 병원에 실려 왔던 것도 끝
   done(u, 0.7, rnd, world);                                                // 집 구경·잠 = 좋은 경험
-  if (u.lodgeSay) { emote(u, u.lodgeSay, 2.4); u.lodgeSay = null; }        // 빈 집에서 자고 나오면 숙박비 말풍선(안에 있을 땐 바깥 화면에 말풍선이 안 보임)
+  if (u.lodgeSay) { chatter(u, u.lodgeSay, world, 2.4); u.lodgeSay = null; }        // 빈 집에서 자고 나오면 숙박비 말풍선(안에 있을 땐 바깥 화면에 말풍선이 안 보임)
 }
 
 // ---------------------------------------------------------------- 매 프레임
 /** 기분 말풍선: 20~40초마다(갈매미마다 엇갈리게), 다른 말풍선이 없을 때 지금 기분을 보여 줌. 난수(rnd)는 안 씀(마을 진행에 영향 없음) */
-const MOODS = { sleep: ["💤", "zZ…"], hungry: ["😫 배고파", "🐟 먹고 싶다…"], tired: ["😮‍💨 피곤해", "🥱 쉬고 싶다"], happy: ["😊", "♪", "☺️ 좋다", "🌸 기분 좋아"], sit: ["☕ 편하다", "😌", "♪ 쉬는 중"], read: ["📖 재밌다", "📚 음…", "💭 그렇구나"], sad: ["😞", "😟 별로야…"], cold: ["🥶 추워", "❄️ 으슬으슬"], hot: ["🥵 더워", "🍦 시원한 거…"], sick: ["🤧 에취!", "🤒 으슬으슬…", "🤧 콜록"] };
+const MOODS = { sleep: ["💤", "zZ…"], hungry: ["배고파…", "먹고 싶다…", "꼬르륵…"], tired: ["😮‍💨 피곤해", "🥱 쉬고 싶다"], happy: ["😊", "♪", "☺️ 좋다", "🌸 기분 좋아"], sit: ["☕ 편하다", "😌", "♪ 쉬는 중"], read: ["📖 재밌다", "📚 음…", "💭 그렇구나"], sad: ["😞", "😟 별로야…"], cold: ["🥶 추워", "❄️ 으슬으슬"], hot: ["🥵 더워", "🍦 시원한 거…"], sick: ["🤧 에취!", "🤒 으슬으슬…", "🤧 콜록"] };
+/** 배고픔 혼잣말: 갈매미마다 3~4가지를 돌려 씀(반말 혼잣말, 초안 — 갈매미 목소리는 사용자가 고쳐 쓰기 좋게 여기 한곳에). 없는 이름은 MOODS.hungry */
+export const HUNGRY_SAY = {
+  "기본": ["배가 출출하네…", "밥때가 됐나", "뭐 좀 먹을까", "꼬르륵…"],
+  "목수": ["배고프면 망치도 무겁지", "한 입만 먹고 하자", "생선 한 마리면 딱인데"],
+  "미니": ["배고파아…", "꼬르륵 소리 났다!", "작은 거라도 먹고 싶어", "씨앗 한 톨이라도…"],
+  "자이언트": ["배가 텅 비었어…", "큰 물고기 먹고 싶다", "꼬르르르륵…", "한 솥은 먹겠다"],
+  "꽃": ["꽃잎 말고 진짜 밥…", "배고파서 힘이 안 나", "따뜻한 거 먹고 싶다"],
+  "황금": ["배고파도 장사는 해야지…", "뭐 사 먹을까", "꼬르륵… 이건 손해야"],
+  "물방울": ["바다에 뭐 없나?", "물고기 냄새 난다…", "첨벙 해서 잡아 올까"],
+  "불씨": ["배고파서 불씨가 꺼지겠어", "뜨끈한 거 먹고 싶어", "꼬르륵… 힘이 안 나"],
+  "그림자": ["…배고프다", "조용히 뭐 좀 먹고 싶어", "밤참 생각나…"],
+};
 export function moodBubble(u, dt, world) {
   const id = Number.isFinite(u.unitId) ? u.unitId : 0;
   if ((u.moodT = (u.moodT ?? 8 + (id * 7) % 20) - dt) > 0 || u.emoteT > 0 || u.state === US.Held || u.state === US.Faint) return;
@@ -835,7 +867,7 @@ export function moodBubble(u, dt, world) {
     : u.sick ? "sick" : (u.full ?? 80) < J.HUNGRY ? "hungry" : n && n.energy < 20 ? "tired"
     : u.useFurni && u.insideBuildingId ? (FURNITURE[u.useFurni.id]?.use === "read" ? "read" : FURNITURE[u.useFurni.id]?.use === "sit" ? "sit" : null) : !u.insideBuildingId && CLIM.isCold(u.bodyT) ? "cold" : !u.insideBuildingId && (u.bodyT ?? 40) >= CLIM.HOT_AT ? "hot"
     : sat >= 80 ? "happy" : sat < 30 ? "sad" : null;
-  if (!k) return; const list = MOODS[k]; emote(u, list[(id + Math.floor((world.time || 0) / 7)) % list.length] || list[0], 2.4);
+  if (!k) return; const list = k === "hungry" ? HUNGRY_SAY[u.name] || MOODS.hungry : MOODS[k]; chatter(u, list[(id + Math.floor((world.time || 0) / 7)) % list.length] || list[0], world, 2.4, k === "hungry" ? "mood:hungry" : null);
 }
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
@@ -906,7 +938,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     const c = u.curious; u.curious = null;
     if (Math.hypot(c.x - u.x, c.z - u.z) < 9) {
       setIdle(u, rnd, world, 1 + rnd()); face(u, c.x, c.z);
-      emote(u, { building: "오!", tree: "와!", fish: "우와!", drop: "?", site: "뭐 짓지?" }[c.kind] || "!");
+      chatter(u, { building: "오!", tree: "와!", fish: "우와!", drop: "?", site: "뭐 짓지?" }[c.kind] || "!", world);
       if (rnd() < 0.4 && pathBeside(u, world, Math.floor(c.x), Math.floor(c.z))) { u.state = US.Curious; u.curiousAt = c; }
     }
   }
@@ -1006,7 +1038,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const t = u.focus, chop = u.state === US.Chop; face(u, t.x + 0.5, t.z + 0.5);
       workLoop(u, dt, chop ? "Chop" : "Mine", u.workHits,
         () => { if (chop) world.hitTree(t, u); else world.hitOre(t, u); },
-        () => { emote(u, t.alive ? "💪" : chop ? `나무+${t.lastYield}` : `돌+${t.lastYield}${t.lastIron ? " 철+1" : ""}`);
+        () => { chatter(u, t.alive ? "💪" : nums(world) ? (chop ? `나무+${t.lastYield}` : `돌+${t.lastYield}${t.lastIron ? " 철+1" : ""}`) : vary(chop ? CHOP_SAY : t.lastIron ? IRON_SAY : MINE_SAY, u, world), world, undefined, t.alive || nums(world) ? null : chop ? "work:chop" : "work:mine");
           done(u, t.alive ? 0.4 : 0.8 + t.lastYield / 5 + (t.lastIron ? 0.5 : 0), rnd, world); });
       break;
     }
@@ -1067,7 +1099,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       break;
     }
     case US.GoSwim:
-      if (followPath(u, dt, world, rnd)) { u.state = US.Swim; u.swimming = true; u.timer = 8 + rnd() * 7; u.swimGoal = null; u.anim = "Swim"; emote(u, pick(["첨벙!", "♪", "시원해~"], rnd)); }
+      if (followPath(u, dt, world, rnd)) { u.state = US.Swim; u.swimming = true; u.timer = 8 + rnd() * 7; u.swimGoal = null; u.anim = "Swim"; chatter(u, pick(["첨벙!", "♪", "시원해~"], rnd), world); }
       break;
     case US.Swim: swimStep(u, dt, world, rnd); break;
     case US.GoToBuilding: {
@@ -1094,7 +1126,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Trade; face(u, world.stall.x + 0.5, world.stall.z + 0.5);
         doOnce(u, "Attack", () => { const l = world.trade(u); u.lastReward = l.sold > 0 ? 1 + Math.min(1, l.sold / 50) : l.bought > 0 ? 0.7 : 0.1;
-            emote(u, l.sold || l.bought ? `🐚 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : "손님이 없네", 2.2); },
+            chatter(u, l.sold || l.bought ? (nums(world) ? `🐚 +${l.sold}${l.bought ? ` −${l.bought}` : ""}` : l.sold ? "잘 팔렸다!" : "좋은 거 샀다") : "손님이 없네", world, 2.2); },
           () => done(u, u.lastReward ?? 0.5, rnd, world, 1 + rnd()));
       }
       break;
@@ -1107,35 +1139,35 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       if (followPath(u, dt, world, rnd)) {
         u.state = US.Farm; const planting = pl.stage === "empty"; if (planting) u.tool = "hoe";   // 심을 땐 괭이질, 거둘 땐 쪼기
         doOnce(u, planting ? "Hoe" : "Attack", () => { const r = world.farmPlot(pl, u); u.lastReward = r === "harvest" ? 1.3 : r === "plant" ? 0.6 : 0;
-            emote(u, r === "plant" ? "🌱" : r === "harvest" ? `🌾+${pl.lastYield}` : "…"); },
+            chatter(u, r === "plant" ? "🌱" : r === "harvest" ? (nums(world) ? `🌾+${pl.lastYield}` : "잘 익었다!") : "…", world); },
           () => { u.tool = null; done(u, u.lastReward ?? 0.5, rnd, world); });
       }
       break;
     }
     case US.Trade:                                                                // 경제: 시장 앞에서 시간이 다 되면 번 만큼 보람
-      if (world.economy && u.processing) { u.anim = "Build"; if (u.timer <= 0) { const n = world.processRaw(u); u.processing = false; emote(u, `📦 가공품 ${n}개`); done(u, 0.6 + n / 10, rnd, world); } break; }
-      if (world.economy && !u.once && u.timer <= 0) { const got = (u.coins || 0) - (u.tradeStart || 0); emote(u, got > 0 ? `🪙+${got}` : "오늘은 한산하네"); done(u, 0.4 + got / 4, rnd, world); }
+      if (world.economy && u.processing) { u.anim = "Build"; if (u.timer <= 0) { const n = world.processRaw(u); u.processing = false; chatter(u, nums(world) ? `📦 가공품 ${n}개` : "다 만들었다!", world); done(u, 0.6 + n / 10, rnd, world); } break; }
+      if (world.economy && !u.once && u.timer <= 0) { const got = (u.coins || 0) - (u.tradeStart || 0); chatter(u, got > 0 ? (nums(world) ? `🪙+${got}` : got >= 10 ? "오늘 장사 잘됐다!" : "조금 팔았다") : "오늘은 한산하네", world); done(u, 0.4 + got / 4, rnd, world); }
       break;
     case US.GoShore:                                                              // 바닷가: 물 쪽을 보고 쪼아 먹이를 잡음(쪼기 3번, 포만감 +18)
       if (followPath(u, dt, world, rnd)) {
         const d = u.shoreDir || [0, 1]; face(u, u.x + d[0], u.z + d[1]); u.state = US.Eat;
-        doOnce(u, "Attack", () => { u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 18); const it = world.beachcomb?.(u); emote(u, it ? `✨ ${it.name}!` : pick(["🐟 냠", "🦐 냠", "🐚 냠"], rnd), it ? 2.6 : 1.6); world.emit("ate", u); }, () => done(u, 0.6, rnd, world));
+        doOnce(u, "Attack", () => { u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 18); const it = world.beachcomb?.(u); chatter(u, it ? `✨ ${it.name}!` : pick(["🐟 냠", "🦐 냠", "🐚 냠"], rnd), world, it ? 2.6 : 1.6); world.emit("ate", u); }, () => done(u, 0.6, rnd, world));
       }
       break;
     case US.GoBank:                                                               // 공식은행: 가방의 물건을 팔고 새 돈을 받음
       if (followPath(u, dt, world, rnd)) {
-        const r = world.sellProcessed(u); emote(u, r.coins ? `🏦 가공품 🪙+${r.coins}` : "팔 게 없네", 2.2); done(u, 0.4 + r.coins / 20, rnd, world);
+        const r = world.sellProcessed(u); chatter(u, r.coins ? (nums(world) ? `🏦 가공품 🪙+${r.coins}` : "다 팔았다, 후련해") : "팔 게 없네", world, 2.2); done(u, 0.4 + r.coins / 20, rnd, world);
       }
       break;
     case US.GoMarket: {                                                           // 시장: 음식 또는 집을 삼
       if (!followPath(u, dt, world, rnd)) break;
       const shop = u.shop || {}; u.shop = null;
       if (shop.kind === "sell") {
-        const r = world.sellToMarket(u); emote(u, r.coins ? `🐚 원자재 🪙+${r.coins}` : "상인이 돈이 없대…", 2.2); done(u, r.coins ? 0.5 + r.coins / 20 : 0.1, rnd, world);
+        const r = world.sellToMarket(u); chatter(u, r.coins ? (nums(world) ? `🐚 원자재 🪙+${r.coins}` : "재료 잘 팔았다") : "상인이 돈이 없대…", world, 2.2); done(u, r.coins ? 0.5 + r.coins / 20 : 0.1, rnd, world);
       } else if (shop.kind === "peddle") {                                         // 소지품 팔기(조개는 내 것, 상인은 1개에 1조개)
-        const r = world.sellStash(u); emote(u, r.coins ? `🐚 소지품 ${r.n}개 🪙+${r.coins - r.cut}` : r.donated.length ? "🐠 수족관에 기증!" : "오늘은 안 팔래", 2.2); done(u, r.coins ? 0.5 + r.coins / 30 : 0.1, rnd, world);
+        const r = world.sellStash(u); chatter(u, r.coins ? (nums(world) ? `🐚 소지품 ${r.n}개 🪙+${r.coins - r.cut}` : "소지품 정리 끝!") : r.donated.length ? "🐠 수족관에 기증!" : "오늘은 안 팔래", world, 2.2); done(u, r.coins ? 0.5 + r.coins / 30 : 0.1, rnd, world);
       } else if (shop.kind === "process") {                                        // 가공: 개수만큼 망치질하는 시간
-        const n = E.total(u.raw); u.state = US.Trade; u.processing = true; u.timer = 1.5 + n * 0.6; u.tool = "hammer"; u.anim = "Build"; emote(u, `🔨 가공 중(${n})`);
+        const n = E.total(u.raw); u.state = US.Trade; u.processing = true; u.timer = 1.5 + n * 0.6; u.tool = "hammer"; u.anim = "Build"; chatter(u, nums(world) ? `🔨 가공 중(${n})` : "뚝딱뚝딱…", world);
       } else if (shop.kind === "food") {
         if (world.buyFood(u)) { emote(u, "🛒 음식"); world.eatFood(u); done(u, 0.8, rnd, world); } else { emote(u, "다 팔렸네…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "furnish") {
@@ -1143,7 +1175,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       } else if (shop.kind === "clothes") {
         if (world.buyClothes(u, shop.id)) { emote(u, `${CLOTHES[shop.id].icon} ${CLOTHES[shop.id].name}!`, 2.6); done(u, 1.2, rnd, world); } else { emote(u, "돈이 모자라…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "stock") {
-        const n = world.stockFood(u); emote(u, n ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고가 꽉 찼네", 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
+        const n = world.stockFood(u); chatter(u, n ? (nums(world) ? `🏚 저장고에 ${n}개 🪙+${n * E.GRANARY_BUY}` : "저장고 채웠다!") : "저장고가 꽉 찼네", world, 2.2); done(u, n ? 0.6 : 0.1, rnd, world);
       } else if (shop.kind === "granary") {
         const r = world.takeFood(u); if (r) { world.eatFood(u); emote(u, r === "buy" ? "🏚 저장고 음식 냠" : "🏚 나눠 받았어요", 2.2); done(u, 0.8, rnd, world); } else { emote(u, "저장고가 비었네…"); setIdle(u, rnd, world); }
       } else if (shop.kind === "share") {                                          // 2층집에 같이 살기(homes.js)
@@ -1200,7 +1232,7 @@ function waterLine(grid, ax, az, bx, bz) {
 /** 지금 자리(물 칸)에서 바로 헤엄 시작. 올라올 땅 칸(sx, sz)을 함께 줌. */
 export function startSwimHere(u, world, rnd, sx, sz) {
   setIdle(u, rnd, world); u.swim = { sx, sz, wx: Math.floor(u.x), wz: Math.floor(u.z) };
-  u.state = US.Swim; u.swimming = true; u.timer = 8 + rnd() * 7; u.swimGoal = null; u.anim = "Swim"; u.activity = "swim"; emote(u, "첨벙!");
+  u.state = US.Swim; u.swimming = true; u.timer = 8 + rnd() * 7; u.swimGoal = null; u.anim = "Swim"; u.activity = "swim"; chatter(u, "첨벙!", world);
 }
 /** 헤엄: 들어간 물 칸 둘레의 물 위를 천천히 오가다가, 시간이 다 되면 들어간 곳으로 돌아와 땅으로 올라온다. */
 function swimStep(u, dt, world, rnd) {
@@ -1219,7 +1251,7 @@ function swimStep(u, dt, world, rnd) {
   if (d > 1e-3) { let h = Math.atan2(dx, dz) - u.heading; h = Math.atan2(Math.sin(h), Math.cos(h)); u.heading += h * Math.min(1, dt * 3); }   // 물에서는 천천히 돈다
   if (d <= speed) {
     u.x = goal.x; u.z = goal.z; u.swimGoal = null;
-    if (goal.land) { u.swimming = false; u.swim = null; u.anim = null; emote(u, pick(["휴~ 상쾌!", "♪", "부르르"], rnd)); done(u, 0.6 + (100 - (u.needs?.fun ?? 100)) / 200, rnd, world); }
+    if (goal.land) { u.swimming = false; u.swim = null; u.anim = null; chatter(u, pick(["휴~ 상쾌!", "♪", "부르르"], rnd), world); done(u, 0.6 + (100 - (u.needs?.fun ?? 100)) / 200, rnd, world); }
     else if (!home) u.timer -= rnd() * 0.5;                                 // 잠깐 떠 있다가 다음 곳으로
     return;
   }

@@ -1,49 +1,46 @@
 // 알림 줄 표(순수: DOM·소리·타이머를 모름 → node 시험 가능).
-// 소식 문장은 news.js(newsFor)가 만들고, 이 표는 "알림 줄에서 어떻게 보일지"만 정함: 색(kind) · 덧말(tail) · 소리 이름(snd) · 거르기.
+// 소식 문장은 news.js(newsFor)가 만들고, 이 표는 "알림 줄에서 어떻게 보일지"만 정함: 색(kind) · 소리 이름(snd) · 거르기 · 하루 예산.
 // main.js가 표를 한 번 돌며 world.on을 걸고, 소리 이름을 실제 효과음으로 바꿈.
 //  · daily: 마을 하루(newsDay)에 한 번만(마을 전체에서)
 //  · every + 같은 갈매미: 그 갈매미의 같은 알림은 마을 시간 every초에 한 번만
 //  · batch: 짧은 사이(BATCH_MS)에 여러 번 오면 한 줄로 묶음(batchText)
 //  · now: 플레이어가 누른 일의 대답 → 차례를 기다리지 않고 바로 보임(소환 단추·반짝이 줍기)
 import { newsDay, newsFor, NEWS_DAY_SECS } from "../world/news.js";
-import { pocketCount } from "../world/bond.js";
 
 export const BATCH_MS = 400;   // 묶음 알림: 이 사이에 온 같은 알림은 한 줄로(밀린 품삯을 한꺼번에 치를 때 등)
 export const WAGE_GAP = 30;    // 같은 갈매미의 "품삯이 밀렸어요"는 마을 시간 30초에 한 번만
 
-/** 이벤트 → 알림 줄 모양. tail은 글 또는 (arg, world) → 글 */
+/** 이벤트 → 알림 줄 모양. 한 줄에 일 하나만: 덧말(길안내·조언·금고 잔액)은 붙이지 않음 — 줄을 누르면 그 갈매미·건물로 감(hud data-go) */
 export const ALERTS = {
-  vaultShort: { kind: "warn", tail: " (📱 은행)", snd: "low" },
+  vaultShort: { kind: "warn", snd: "low" },
   vaultOk: { kind: "good", snd: "coins" },
-  vaultLow: { kind: "warn", tail: " (🏦 금고 칩)" },
+  vaultLow: { kind: "warn" },
   wageOwed: { kind: "warn", every: WAGE_GAP },
   wagePaid: { kind: "good", batch: true, snd: "coins" },
-  loanRefused: { kind: "warn", tail: " (🏠 집을 못 샀어요)" },
+  loanRefused: { kind: "warn" },
   loanPaid: { kind: "good", snd: "bell" },
-  tax: { kind: "info", daily: true, tail: (a, w) => ` · 금고 🪙${Math.floor(w.bank?.vault ?? 0)}`, snd: "coins" },
-  lodging: { kind: "info" },                                      // 빈 집 손님 숙박비: 밤이 끝날 때(아침) 그 밤 합계 한 줄 — World.stepLodging이 한 번만 냄(마을 하루로 거르면 빨리 감을 때 아침 소식이 사라짐)
-  summonBlocked: { kind: "warn", tail: " · 📱 소환", now: true },   // 까닭 글 끝에 이미 (집 n채 · 갈매미 n마리)가 있어 괄호를 겹치지 않음
-  sparkle: { kind: "good", tail: (a, w) => ` (🎁 내 주머니 ${pocketCount(w)})`, snd: "glint", now: true },
+  summonBlocked: { kind: "warn", now: true },
+  sparkle: { kind: "good", snd: "glint", now: true },
   stashSale: { kind: "info", snd: "coins" },
   chill: { kind: "info", daily: true },
   cocoa: { kind: "info", batch: true },
   dress: { kind: "info", batch: true },
   buyClothes: { kind: "good", snd: "bag" },
-  sick: { kind: "warn", tail: (a, w) => w.clinics?.().length ? " (🏥 병원에서 쉬면 빨리 나아요)" : " (🏥 병원이 있으면 빨리 나아요)", snd: "sneeze" },
+  sick: { kind: "warn", snd: "sneeze" },
   healed: { kind: "good" },
   doctor: { kind: "good" },
-  faint: { kind: "warn", tail: a => a.clinic ? " → 🏥 병원으로 옮겨요" : " — 그 자리에서 자요 (🏥 병원이 있으면 실려 가 쉬어요)" },
-  upgradeStart: { kind: "info", tail: " (🪚 목수가 재료를 모아 지어요)", snd: "bell" },
+  faint: { kind: "warn" },
+  upgradeStart: { kind: "info", snd: "bell" },
   upgraded: { kind: "good", snd: "bell" },
-  roadAsk: { kind: "info", every: NEWS_DAY_SECS, tail: " (🖌 바닥 칠하기 → 돌길·데크)" },   // 갈매미 길 부탁: 같은 갈매미는 마을 하루에 한 번만
-  // 🏛 중앙은행: 물가 사태(world가 사태마다 한 번만 냄) · 옛 저장에 판이 처음 생김. 덧말은 판으로 가는 길
-  inflation: { kind: "warn", tail: " (📱 은행 · 🏛 중앙은행)" },
-  deflation: { kind: "warn", tail: " (📱 은행 · 🏛 중앙은행)" },
+  roadAsk: { kind: "info", every: NEWS_DAY_SECS },   // 갈매미 길 부탁: 같은 갈매미는 마을 하루에 한 번만
+  // 🏛 중앙은행: 물가 사태(world가 사태마다 한 번만 냄) · 옛 저장에 판이 처음 생김
+  inflation: { kind: "warn" },
+  deflation: { kind: "warn" },
   priceStable: { kind: "good", snd: "bell" },
-  monStart: { kind: "info", tail: " (📱 은행 · 🏛 중앙은행)" },
+  monStart: { kind: "info" },
 };
-/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수·쓰러져 실려 감은 소식지만(쓰러짐 알림 한 줄이 이미 알림) */
-export const SILENT = ["fee", "clinicVisit", "faintCarried", "monIssue", "monRate", "monGift", "monPrint", "capFull", "monAuto"];   // 중앙은행 손잡이(찍기·예산·금리·축하)는 플레이어가 누른 일 → 판의 상태 줄이 대답(hud.bankClick), 예산 참·자동 바꿈은 잦아서 소식지에만
+/** 일부러 알림 줄에 안 띄우는 소식(소식지에는 실림): 세금·숙박비 영수증은 금고 칩의 작은 +N(rewardFx small)과 소식지로 충분 · 설계비는 건설 도구가 상태 줄에 이미 씀 · 병원 접수·쓰러져 실려 감은 소식지만(쓰러짐 알림 한 줄이 이미 알림) */
+export const SILENT = ["tax", "lodging", "fee", "clinicVisit", "faintCarried", "monIssue", "monRate", "monGift", "monPrint", "capFull", "monAuto"];   // 중앙은행 손잡이(찍기·예산·금리·축하)는 플레이어가 누른 일 → 판의 상태 줄이 대답(hud.bankClick), 예산 참·자동 바꿈은 잦아서 소식지에만
 
 /** 묶음 한 줄: 같은 이벤트 list(arg 배열, 2개 이상) → { icon, text } */
 export function batchText(ev, list) {
@@ -65,9 +62,38 @@ export function makeGate() {
   };
 }
 
-/** 한 줄 글(덧말 포함). 문장이 없으면(newsFor가 null) null */
+/** 한 줄 글. 문장이 없으면(newsFor가 null) null */
 export function alertLine(ev, arg, world) {
   const n = newsFor(ev, arg, world); if (!n) return null;
-  const a = ALERTS[ev], tail = typeof a?.tail === "function" ? a.tail(arg, world) : a?.tail || "";
-  return `${n.icon} ${n.text}${tail}`;
+  return `${n.icon} ${n.text}`;
+}
+
+// ---- 조용히 넘기는 소식 · 하루 알림 예산
+/** 날씨 알림은 이 날씨로 바뀔 때만(맑음·흐림·비는 화면에 보이니 줄을 안 씀). 무지개·첫눈은 드문 하늘(sky·firstSnow)이 따로 알림 */
+export const WEATHER_SAY = ["storm", "snow"];
+/** 알림 줄에 아예 안 올리는 경우(소식지·지난 알림에도 따로 안 남김 — 소식지는 world가 알아서 실음) */
+export function quietAlert(ev, arg) {
+  if (ev === "weather") return !WEATHER_SAY.includes(arg?.kind);
+  if (ev === "beachcomb") return !arg?.first;                 // 해변 줍기: 그 물건을 마을에서 처음 주웠을 때만
+  return false;
+}
+/** 하루(마을 하루 newsDay) 알림 줄 예산. 넘치면 알림 줄 대신 지난 알림(hud.logNote)에만 — 소식지는 그대로 실림 */
+export const DAY_LINES = 6;
+/** 우선순위: 0 이야기 > 1 관계 > 2 소원 > 3 나머지. 낮은 단계는 예산을 다 쓰지 못하게 자리를 남겨 둠(늦게 온 이야기·관계 소식이 밀리지 않게) */
+const TIER_OF = {
+  storySpark: 0, storyPiece: 0, storySeed: 0, storyPostcard: 0, storyRestore: 0, storyEnd: 0, storyBlink: 0, festival: 0, festivalEnd: 0,
+  friendship: 1, bondStage: 1,
+  wish: 2, wishDone: 2, wishLost: 2, dailyDone: 2,
+};
+export const alertTier = ev => TIER_OF[ev] ?? 3;
+/** 단계별로 "오늘 띄운 줄 수가 이보다 적을 때만" 띄움: 이야기는 늘, 관계는 6줄까지, 소원은 5줄까지, 나머지는 4줄까지 */
+export const TIER_ROOM = [Infinity, DAY_LINES, DAY_LINES - 1, DAY_LINES - 2];
+/** take(ev, time) → true면 알림 줄에, false면 지난 알림에만. 플레이어가 누른 일의 대답(now)은 예산 밖 — main.js가 부르지 않음 */
+export function makeBudget() {
+  let day = -1, used = 0;
+  return function take(ev, time) {
+    const d = newsDay(time); if (d !== day) { day = d; used = 0; }
+    if (used >= TIER_ROOM[alertTier(ev)]) return false;
+    used++; return true;
+  };
 }

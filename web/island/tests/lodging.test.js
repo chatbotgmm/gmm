@@ -29,7 +29,9 @@ test("손님 숙박비: 빈 집에 자러 들어가면 갈매미 돈 −2, 금�
   assert.ok(sleepIn(w, u, h) >= 0, "빈 집에서 손님으로 잠");
   assert.equal(u.coins, 10 - BK.LODGING_FEE); assert.equal(w.bank.vault - v0, BK.LODGING_FEE);
   const e = w.bank.ledger.at(-1); assert.equal(e.lodging, BK.LODGING_FEE); assert.equal(e.returned, BK.LODGING_FEE);
-  assert.equal(u.emoteText, `🏠 숙박비 🪙${BK.LODGING_FEE}`); assert.equal(u.lodgeSay, u.emoteText, "나올 때 다시 보일 말풍선");
+  assert.equal(u.lodgeSay, "잘 잤다, 고마워", "나올 때 보일 기분 한마디(평소엔 숫자 없음)");
+  const b = isle(); b.w.showNumbers = true; b.u.coins = 10; assert.equal(b.w.lodge(b.u, b.h), BK.LODGING_FEE);
+  assert.equal(b.u.emoteText, `🏠 숙박비 🪙${BK.LODGING_FEE}`, "건설 모드에서는 숫자 말풍선"); assert.equal(b.u.lodgeSay, b.u.emoteText);
   assert.equal(h.owner ?? null, null, "주인이 되지 않음");
 });
 
@@ -44,7 +46,7 @@ test("같은 밤에 깼다 다시 자도 한 번만 · 다음 밤에 다시 자�
   const g = isle(6); g.u.coins = 20; assert.ok(sleepIn(g.w, g.u, g.h) >= 0);
   g.u.needs.energy = 95;                                                      // 건물 안 잠 초당 +0.12: 95 → 99.5에 약 38초
   for (let t = 0; t < 120 && g.u.insideBuildingId; t += 0.1) { g.u.full = 90; g.w.update(0.1); }
-  assert.equal(g.u.insideBuildingId ?? null, null, "기력이 가득 차 밤인데도 나옴"); assert.equal(g.u.emoteText, "🏠 숙박비 🪙2", "나올 때 숙박비 말풍선");
+  assert.equal(g.u.insideBuildingId ?? null, null, "기력이 가득 차 밤인데도 나옴"); assert.equal(g.u.emoteText, "잘 잤다, 고마워", "나올 때 기분 말풍선");
   g.w.time += 600;                                                           // 마을 하루가 바뀌어도
   g.u.needs.energy = 10; g.u.state = "Idle"; g.u.timer = 0; assert.ok(sleepIn(g.w, g.u, g.h) >= 0, "다시 지쳐 들어가 잠");
   assert.equal(g.u.coins, 18, "같은 밤이라 한 번만");
@@ -82,7 +84,7 @@ test("돈이 모자라면 가진 만큼, 0이면 공짜로 재우고 말풍선",
   u.coins = 1; assert.equal(w.lodge(u, h), 1); assert.equal(u.coins, 0); assert.equal(w.bank.vault - v0, 1);
   nextNight(w); const v1 = w.bank.vault;
   assert.equal(w.lodge(u, h), 0); assert.equal(u.coins, 0); assert.equal(w.bank.vault, v1, "금고 그대로");
-  assert.match(u.emoteText, /재워 준대요/);
+  assert.match(u.lodgeSay, /공짜로 재워 줬다/);
   u.coins = 0.7; nextNight(w); assert.equal(w.lodge(u, h), 0, "소수 조개는 버림(진료비와 같음)"); assert.equal(u.coins, 0.7);
 });
 

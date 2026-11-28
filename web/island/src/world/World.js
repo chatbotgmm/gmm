@@ -98,6 +98,9 @@ export function placeTownBank(w, R = 16) {
 const STORY_EVENTS = new Set(["sparkle", "bondStage", "pet", "donate", "festivalEnd", "firstSnow", "sky"]);
 export const SPEED_BOOST = 1.6;        // 섬은 마을보다 넓어서 걷기·달리기를 이만큼 빠르게(애니메이션도 같은 배율로 빨라짐)
 const START_WOOD = 6, START_STONE = 6;
+// 소원 다시 알림 말풍선(💭 아이콘): 소원이 생기고 WISH_NAG_AFTER초가 지난 뒤, 마을 전체에서 하루(마을 하루 600초)에 WISH_NAG_DAY번 · 사이 WISH_NAG_GAP초.
+// 예전엔 소원마다 20초마다 떠서 마을 열흘에 294번 → 소원 앱·알림 줄이 이미 알려 주니 가끔 떠올리게만
+export const WISH_NAG_AFTER = 60, WISH_NAG_DAY = 2, WISH_NAG_GAP = 120, WISH_NAG_DAY_SECS = 600;
 
 const clampIn = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -138,6 +141,7 @@ export class World {
     // 수족관: 기증한 물고기 종류 { id: true } · 종류별 가장 큰 크기(cm) · 받은 기증 기념 선물 수(예전 저장엔 없음 → 처음부터)
     this.donated = donatedFromSave(extra.donated); this.fishRecord = recordsFromSave(extra.fishRecord); this.donateGifts = Math.max(0, Math.min(DONATE_GIFTS.length, extra.donateGifts | 0));
     this.medalGifts = medalGiftsFromSave(extra.medalGifts);                       // 받은 금메달 기념 가구 수(메달은 fishRecord에서 셈 — medals.js)
+    this.beachSeen = Object.fromEntries(Object.keys(extra.beachSeen && typeof extra.beachSeen === "object" ? extra.beachSeen : {}).map(k => [k, 1]));   // 바닷가에서 주워 본 물건 { id: 1 }(예전 저장엔 없음 → 처음부터: 한 번씩 다시 "처음" 알림)
     this.keep = keepFromSave(extra.keep);                                         // 간직하기: { 물건·보물 id: true } → 상인이 팔지 않음(예전 저장엔 없음)
     // 드문 하늘: 지금 떠 있는 것 { kind, t 남은 초 }(저장하지 않음 → 불러오면 끝난 것으로) · 본 횟수 · 첫눈을 본 겨울(해, 화면이 winterYear를 넣어 줌)
     this.sky = null; this.skySeen = skySeenFromSave(extra.skySeen); this.firstSnowYear = extra.firstSnowYear ?? null; this.winterYear = null;
@@ -148,6 +152,7 @@ export class World {
     this.daily = null; this.stamps = Math.max(0, extra.stamps | 0); this.stampBought = stampBoughtFromSave(extra.stampBought);
     // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
     this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
+    this.showNumbers = false;                                                     // 건설 모드인지(화면이 넣어 줌): 그때만 갈매미 말풍선에 "나무+2"·"🪙+12" 같은 숫자를 보임. 저장 안 함
     this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
     // 🗝 메인 스토리(story.js): 기록(예전 저장엔 없음 → 0장부터) · 1초 시계 · 이야기 모임(엔딩 연출·노을 모임 { id, x, z, lx, lz, t }, 저장 안 함) · storyOff: 이야기를 끔(시험 비교용)
     this.story = ST.storyFromSave(extra.story); this.storyClock = 0; this.storyBlinkClock = 0; this.gather = null; this.gatherSeq = 0; this.storyOff = false; this.storyLitAt = -1;
@@ -730,7 +735,8 @@ export class World {
     if (this.rnd() >= 0.2 * this.fx.item) return null;                               // 무지개가 뜨면 조금 더 잘 주움
     const list = ITEMS.filter(i => i.season && i.season === this.season && !i.gift); if (!list.length) return null;
     const it = list[Math.floor(this.rnd() * list.length)]; stashAdd(u, it.id);
-    this.emit("beachcomb", { u, item: it }); this.notice(u.x, u.z, "fish", u); return it;
+    const first = !this.beachSeen[it.id]; this.beachSeen[it.id] = 1;               // 마을에서 처음 주운 물건인지(알림 줄은 처음 것만)
+    this.emit("beachcomb", { u, item: it, first }); this.notice(u.x, u.z, "fish", u); return it;
   }
   // ---- 계절·날씨
   /** 계절 × 날씨 효과 + 드문 하늘(item: 물건을 찾을 확률 배수, 무지개가 떠 있으면 1보다 큼) */
@@ -821,7 +827,9 @@ export class World {
     const key = this.stayKey(); if (u.lodgeNight === key) return -1; u.lodgeNight = key;
     const fee = Math.min(BK.LODGING_FEE, Math.max(0, Math.floor(u.coins || 0))); if (fee) { u.coins -= fee; this.deposit(fee, "returned", "lodging"); }
     const t = this.lodgeTally?.key === key ? this.lodgeTally : (this.lodgeTally = { key, n: 0, free: 0, coins: 0 }); t.n++; t.coins += fee; if (!fee) t.free++;
-    u.lodgeSay = fee ? `🏠 숙박비 🪙${fee}` : "🏠 조개가 없어도 재워 준대요 ♪"; emote(u, u.lodgeSay, 2.4);
+    // 말풍선: 건설 모드(showNumbers)에서만 숫자 · 평소엔 나올 때 기분 한마디(들어갈 땐 "신세 질게요"를 이미 말함)
+    if (this.showNumbers) { u.lodgeSay = fee ? `🏠 숙박비 🪙${fee}` : "🏠 숙박비 공짜"; emote(u, u.lodgeSay, 2.4); }
+    else u.lodgeSay = fee ? "잘 잤다, 고마워" : "공짜로 재워 줬다 ♪";
     return fee;
   }
   /** 의원 접수: 진료비(가진 만큼, 없으면 무료) → 금고, 당번 의사가 있으면 약 */
@@ -1188,8 +1196,15 @@ export class World {
         u.full = Math.min(J.FULL_MAX, (u.full ?? 80) + 10); emote(u, "♥ 소원 이뤘어요!", 3);
         this.emit("wishDone", { wish, u, def: d });
         if (wish.id === "festival") this.startFestival(wish.base);                // "축제 하자!"가 이루어지면 바로 축제가 열림
-      } else if (Math.floor(wish.age) % 20 === 0) emote(u, `💭 ${d.icon}`, 2.5);   // 20초마다 말풍선으로 다시 알림
+      } else if (wish.age >= WISH_NAG_AFTER && !u.insideBuildingId && this.wishNagOk()) emote(u, `💭 ${d.icon}`, 2.5);   // 다시 알림 말풍선: 마을 전체에서 하루 WISH_NAG_DAY번까지
     }
+  }
+
+  /** 소원 다시 알림 말풍선을 지금 띄워도 되나(띄우면 셈함): 마을 하루에 WISH_NAG_DAY번 · 사이 WISH_NAG_GAP초 이상. 저장 안 함(화면 표시만) */
+  wishNagOk() {
+    const day = Math.floor((this.time || 0) / WISH_NAG_DAY_SECS), n = this.wishNag?.day === day ? this.wishNag.n : 0;
+    if (n >= WISH_NAG_DAY || (this.time || 0) - (this.wishNag?.at ?? -1e9) < WISH_NAG_GAP) return false;
+    this.wishNag = { day, n: n + 1, at: this.time || 0 }; return true;
   }
 
   // ---- 벌목·채광(나무꾼은 도끼질이 세서 덜 하고 많이 얻음, 광부는 돌을 많이 얻고 철이 잘 나옴)
@@ -2257,7 +2272,7 @@ export class World {
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
       units: this.units.map(u => ({ name: u.name, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToNames(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
-      skySeen: this.skySeen, firstSnowYear: this.firstSnowYear,
+      skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,
       sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t }) => ({ k, x, z, t })), sparkClock: this.sparkClock, story: ST.storyToSave(this.story),

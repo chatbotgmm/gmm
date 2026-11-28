@@ -82,7 +82,7 @@ test("월드: 갈매미는 바닥을 바꾸지 않고, 집이 시장과 안 이�
   assert.ok(w.roadAsks.get(u.unitId), "world.roadAsks에 부탁한 길");
   // 알림 줄: 같은 갈매미는 마을 하루에 한 번
   const pass = makeGate();
-  assert.equal(alertLine("roadAsk", a, w), "🛣 불씨: 집에서 시장까지 길을 깔아 주세요 (🖌 바닥 칠하기 → 돌길·데크)");
+  assert.equal(alertLine("roadAsk", a, w), "🛣 불씨: 집에서 시장까지 길을 깔아 주세요", "덧말 없이 한 줄(누르면 그 갈매미로)");
   assert.equal(pass("roadAsk", a, 100), true); assert.equal(pass("roadAsk", a, 300), false); assert.equal(pass("roadAsk", a, 100 + NEWS_DAY_SECS), true);
   // 플레이어가 알려 준 길대로 깔면 이어지고 더는 부탁하지 않음
   for (const [x, z] of a.cells) if (w.canPaint(x, z)) w.paint(x, z, GroundType.Cobble);

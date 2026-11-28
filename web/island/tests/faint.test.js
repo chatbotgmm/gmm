@@ -40,7 +40,7 @@ test("기력이 2 이하로 떨어지면 그 자리에서 쓰러짐: 😵 · 알
   assert.equal(w.pickUpUnit(u), false, "쓰러진 갈매미는 들 수 없음");
   for (let k = 0; k < 50; k++) { u.full = 90; w.update(0.1); assert.equal(u.state, "Faint", "6초 동안 누워 있음"); assert.equal(u.committed, null, "누워 있는 동안 공사를 안 맡음"); }
   assert.ok(Math.hypot(u.x - x0, u.z - z0) < 0.6, "그 자리에서");
-  const n = newsFor("faint", seen[0], w); assert.match(n.text, /쓰러졌어요/); assert.match(alertLine("faint", seen[0], w), /그 자리에서 자요/);
+  const n = newsFor("faint", seen[0], w); assert.match(n.text, /쓰러졌어요/); assert.equal(alertLine("faint", seen[0], w), `😵 ${n.text}`, "알림 줄은 일 하나만(덧말 없음)");
 });
 
 test("병원(빈 침대)이 있으면: 6초 누워 있다 병원으로 실려 가 침대에서 잠 · 진료비 3(가진 만큼, 금고로) · 침대 빠르기 0.16/초로 차서 가득 차면 나옴", () => {
@@ -49,7 +49,7 @@ test("병원(빈 침대)이 있으면: 6초 누워 있다 병원으로 실려 �
   u.coins = 10; const v0 = w.bank.vault; holdChop(u); u.needs.energy = 2.5; u.full = 90;
   let tFaint = -1, tIn = -1; for (let t = 0; t < 20 && tIn < 0; t += 0.1) { u.full = 90; w.update(0.1); if (tFaint < 0 && u.state === "Faint") tFaint = t; if (u.insideBuildingId === c.id) tIn = t; }
   assert.ok(tFaint >= 0 && tIn > tFaint, "쓰러진 뒤 병원에 들어감"); assert.ok(Math.abs(tIn - tFaint - CH.FAINT_LIE) < 0.25, `누워 있던 시간 ${(tIn - tFaint).toFixed(1)}초`);
-  assert.equal(fx[0].clinic, true); assert.match(alertLine("faint", fx[0], w), /병원으로 옮겨요/);
+  assert.equal(fx[0].clinic, true); assert.doesNotMatch(alertLine("faint", fx[0], w), /병원/, "실려 가는 건 소식지(faintCarried)에만");
   assert.equal(u.insideAct, "sleep"); assert.equal(u.carried, true);
   assert.equal(car.length, 1); assert.equal(car[0].fee, HL.CLINIC_FEE); assert.equal(u.coins, 10 - HL.CLINIC_FEE); assert.equal(w.bank.vault - v0, HL.CLINIC_FEE, "진료비는 금고로");
   assert.match(newsFor("faintCarried", car[0], w).text, /실려 가 누웠어요 · 진료비 🪙3/);
