@@ -65,12 +65,13 @@ export class BuildingViews {
       if (p >= 1 && v.spin.length && focus && Math.abs(v.holder.position.x - focus.x) < 34 && Math.abs(v.holder.position.z - focus.z) < 34) this.animating = true;
     }
     // 전기가 들어온 집: 창가 불빛(밤에만 보임 — daylight.js가 houseGlow 세기를 정함). 2초마다 확인
+    // 불빛 크기는 발자국 × 0.85: 반지름이 높이(1.3 m)보다 크면 땅에 묻혀 아래가 칼처럼 잘리고 풀 위에 누런 네모 빛이 번졌음(예전 × 1.3)
     if ((this.glowT = (this.glowT || 0) - dt) > 0) return; this.glowT = 2;
     for (const v of this.views.values()) {
       const b = v.building, def = BUILDINGS[b.defId]; if (!def.house || !v.model) continue;
       const on = this.world.isDone(b) && !!this.world.powered?.(b);
       if (on && !v.glow) { v.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffc070, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); v.glow.name = "houseGlow"; v.glow.userData.noToon = true; v.glow.renderOrder = 3;
-        v.glow.scale.setScalar(Math.max(def.footprint.w, def.footprint.d) * 1.3); v.glow.position.set(0, Math.min(1.3, v.height * 0.5), def.footprint.d / 2 + 0.05); v.holder.add(v.glow); }
+        v.glow.scale.setScalar(Math.max(def.footprint.w, def.footprint.d) * 0.85); v.glow.position.set(0, Math.min(1.3, v.height * 0.5), def.footprint.d / 2 + 0.05); v.holder.add(v.glow); }
       if (v.glow) v.glow.userData.on = on;
     }
   }

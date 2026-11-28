@@ -117,7 +117,7 @@ export class Daylight {
   streetLamps() {
     const n = this.glow ?? 0, glow = 0.15 + 2.6 * n, lamps = [];   // 창·등불 유리: 아늑한 불빛이 밤 장면의 주인공이 되게(예전 2.2)
     this.scene.traverse(o => {
-      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.005 && this.hasPower(o); o.material.opacity = 0.9 * n; return; }   // 전기 들어온 집 창가 불빛(풍차를 철거하면 바로 꺼짐)
+      if (o.name === "houseGlow") { o.visible = !!o.userData.on && n > 0.005 && this.hasPower(o); o.material.opacity = 0.7 * n; return; }   // 전기 들어온 집 창가 불빛(풍차를 철거하면 바로 꺼짐)
       if (!o.isMesh) return; const m = o.material, src = m.userData?.src || m;
       if (src.name === "lanternGlow") return this.lantern(o, m, src, n, glow);
       if (src.name !== "lampBody") return;
