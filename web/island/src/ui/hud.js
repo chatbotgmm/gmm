@@ -28,6 +28,7 @@ import { appsVisible } from "./appUnlock.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
+import { TAG_MODE_DEFAULT, tagMode } from "./nameTagRules.js";
 import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge, formLineOf, evoBoxHtml, FORM_ICONS } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
@@ -54,7 +55,7 @@ const hudFormNow = (k = 1) => { const w = innerWidth / k, h = innerHeight / k; r
 // ---- 화면 맞춤 설정: 이 기기(브라우저)에만 기억하고 섬 저장과는 다른 칸에 둠. 배율은 galmaemiman-uiscale(%), 나머지는 galmaemiman-uiprefs
 const UI_SCALE_KEY = "galmaemiman-uiscale", UI_PREFS_KEY = "galmaemiman-uiprefs";
 const UI_SCALE_RANGE = [75, 150, 130];                                           // 가장 작게 · 가장 크게 · 터치 화면에서 가장 크게(%)
-const UI_PREFS_DEFAULT = { keyhint: "auto", hand: "right", motion: "auto", vibe: "on", adv: "off" };   // adv: 🔧 자세히 보기(관리자) off|on — 중앙은행 창구·세금·물가·숫자   // 키 힌트 auto|on|off · 손 right|left · 움직임 auto(기기 설정)|reduce|full · 진동 on|off
+const UI_PREFS_DEFAULT = { keyhint: "auto", hand: "right", motion: "auto", vibe: "on", adv: "off", tags: TAG_MODE_DEFAULT };   // tags: 🏷 갈매미 이름표 near(가까이 볼 때)|always|off (ui/nameTagRules.js)   // adv: 🔧 자세히 보기(관리자) off|on — 중앙은행 창구·세금·물가·숫자   // 키 힌트 auto|on|off · 손 right|left · 움직임 auto(기기 설정)|reduce|full · 진동 on|off
 const uiCoarse = () => matchMedia("(pointer: coarse)").matches;
 // 작은 화면은 덜 키움: 배율로 나눈 짧은 변이 300px 밑으로 가면 칩·카드·미니맵이 서로 덮음(320px 폭 130% = 246px) → 390px는 130%, 360px는 120%, 330px 미만은 100%까지
 const uiScaleMax = () => { const lim = Math.floor(Math.min(innerWidth, innerHeight) / 15) * 5; return Math.min(uiCoarse() ? UI_SCALE_RANGE[2] : UI_SCALE_RANGE[1], lim < 110 ? 100 : lim); };
@@ -282,6 +283,7 @@ export class Hud {
     $("uiScaleUp").onclick = () => this.setUiScale(this.uiScale + 5);
     $("uiScaleReset").onclick = () => this.setUiScale(100);
     $("segKeyhint").onclick = e => { const b = e.target.closest?.("button[data-v]"); if (b) this.setUiPref("keyhint", b.dataset.v); };
+    $("segTags").onclick = e => { const b = e.target.closest?.("button[data-v]"); if (b) this.setUiPref("tags", tagMode(b.dataset.v)); };
     $("motionBtn").onclick = () => this.setUiPref("motion", document.documentElement.dataset.motion === "reduce" ? "full" : "reduce");
     $("leftHand").onclick = () => this.setUiPref("hand", this.uiPrefs.hand === "left" ? "right" : "left");
     $("vibeBtn").onclick = () => { this.setUiPref("vibe", this.uiPrefs.vibe === "off" ? "on" : "off"); if (this.uiPrefs.vibe === "on") try { navigator.vibrate?.(12); } catch { /* 무시 */ } };
@@ -320,6 +322,7 @@ export class Hud {
     $("uiScaleDown").disabled = this.uiScale <= UI_SCALE_RANGE[0]; $("uiScaleUp").disabled = this.uiScale >= max; $("uiScaleReset").disabled = this.uiScale === 100;
     $("uiScaleNote").textContent = `75%~${max}%. 이 기기에만 기억하고, 섬 저장과는 따로예요.${this.uiAuto > 1 ? ` 큰 화면이라 기본 크기를 ${Math.round(this.uiAuto * 100)}%로 맞춰 뒀어요.` : ""}`;
     for (const b of $("segKeyhint").children) { const on = b.dataset.v === root.dataset.keyhint; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
+    for (const b of $("segTags").children) { const on = b.dataset.v === tagMode(this.uiPrefs.tags); b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); }
     const sw = (id, on) => { const b = $(id); b.classList.toggle("off", !on); b.setAttribute("aria-pressed", String(on)); };
     sw("motionBtn", root.dataset.motion === "reduce"); sw("leftHand", root.dataset.hand === "left"); sw("vibeBtn", root.dataset.vibe !== "off"); sw("advBtn", root.dataset.adv === "on");
   }

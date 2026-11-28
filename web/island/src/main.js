@@ -20,6 +20,7 @@ import { SiteSpendFx } from "./render/spendFx.js";
 import { Toon } from "./render/toon.js";
 import { BuildingViews, UnitViews, ModuleViews, setGroundShade } from "./render/views.js";
 import { LifeViews } from "./render/life.js";
+import { GullTags } from "./render/nameTags.js";
 import { Decor } from "./render/decor.js";
 import { WeatherViews } from "./render/weather.js";
 import { SkyShow } from "./render/skyshow.js";
@@ -131,7 +132,7 @@ const overlay = document.getElementById("overlay");
 const spendFx = new SiteSpendFx({ camera, overlay, getWorld: () => world, getViews: () => buildingViews });   // 건축에서 금고 돈이 나감: 공사장 위 🪙−n·설계비·품삯 밀림 + 칩에서 날아가는 🪙
 
 // ---------- 월드와 뷰(새 섬 / 불러오기 때 통째로 바꿈)
-let world, view, stream, waterWin, chunks, buildingViews, unitViews, lifeViews, sparkleView, dreams, dreamView, poke, fuss, fussMs = null, worldRoot, waterDirty = false, lastWater = 0;
+let world, view, stream, waterWin, chunks, buildingViews, unitViews, lifeViews, gullTags, sparkleView, dreams, dreamView, poke, fuss, fussMs = null, worldRoot, waterDirty = false, lastWater = 0;
 // 화질(자동·높음·낮음): 해상도·그림자·지형 조각 수. 자동이면 느릴 때 해상도를 낮춤.
 // 효과음(Kenney RPG sounds CC0 + 합성). 화면 중심에서 가까운 일만 들림
 const sfx = new Sfx();
@@ -214,7 +215,8 @@ function mount(w) {
   buildingViews = new BuildingViews(worldRoot, world, overlay);
   world.maxGulls = quality.cfg.maxGulls ?? 20;                                  // 갈매미 상한은 화질 설정(population.js)
   unitViews = new UnitViews(worldRoot, world, charPool); unitViews.setShadowDist(quality.cfg.shadows ? quality.cfg.gullShadowDist : 0);
-  lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
+  lifeViews = new LifeViews(worldRoot, world, overlay); lifeViews.canTip = u => unitViews.canTip(u);
+  gullTags = new GullTags(overlay); lifeViews.tagTop = i => gullTags.topOf(i); lifeViews.tagBlock = (i, x0, y0, x1, y1) => gullTags.block(i, x0, y0, x1, y1);   // 🏷 갈매미 이름표(render/nameTags.js) · 말풍선·🤧은 이름표 위로   // 물 줄 때 물방울은 손의 물뿌리개 끝에서
   sparkleView?.dispose(); sparkleView = new SparkleView(worldRoot);             // ✨ 반짝이(world.sparkles) · 주운 것은 위로 떠오르며 사라짐
   world.on("sparkleGone", s => { if (s.picked) sparkleView?.pop(s.id); });
   storyFx.mount(world, worldRoot);
@@ -598,6 +600,7 @@ function frameBody() {
   buildingViews.updateConstruction(dt, controls.target);
   tickFountains(dt, renderer.domElement.height);                                 // 분수 물·물방울 시간(셰이더가 움직임) · 물방울 크기는 그리는 화면 높이로
   evolveFx.update(world, dt);
+  gullTags.update(dt, world, unitViews, camera, innerWidth, innerHeight, { mode: hud.uiPrefs?.tags, build: tools.mode !== "view", follow: unitControl.follow, form: document.documentElement.dataset.form, night: (daylight.night ?? 0) > 0.5 });   // 말풍선보다 먼저(말풍선이 이름표 위로)
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
   sparkleEdge.update(dt, ready && tools.mode === "view" && !roomView.isOpen, edgeBox);

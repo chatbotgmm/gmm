@@ -207,18 +207,20 @@ export class LifeViews {
       if (!show) { showEl(e, false); if (e.dataset.t) e.dataset.t = ""; }
       tmp.set(toWorldX(u.x), u.y + (u.height ?? 0.8) + 0.12, toWorldZ(u.z));
       const dist = camera.position.distanceTo(tmp); tmp.project(camera);
+      const top = this.tagTop?.(i), by = (-tmp.y * 0.5 + 0.5) * h, y = Number.isFinite(top) && top - 2 < by ? top - 2 : by;   // 이름표가 떠 있으면 그 위로(render/nameTags.js — 이름은 그대로, 말풍선이 한 칸 올라감)
       const off = tmp.z > 1 || dist > 75 || Math.abs(tmp.x) > 1.3 || Math.abs(tmp.y) > 1.3;   // 너무 멀거나 화면 밖이면 숨김(화면이 어지럽지 않게)
-      if (sick) { const se = this.sickFor(i); if (!se.isConnected) this.overlay.appendChild(se); showEl(se, !off); if (!off) placeEl(se, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h); return; }
+      if (sick) { const se = this.sickFor(i); if (!se.isConnected) this.overlay.appendChild(se); showEl(se, !off); if (!off) placeEl(se, (tmp.x * 0.5 + 0.5) * w, y); return; }
       if (off) { showEl(e, false); return; }
       showEl(e, true);
       if (e.dataset.t !== u.emoteText) {                                          // 새 말: 모양 고르고 톡 튀어나오게
         e.dataset.t = u.emoteText; e.textContent = u.emoteText;
         const t = u.emoteText, think = t.startsWith("💭"), icon = [...t].length <= 2 || /^(…|zZ…|!\?)$/.test(t);
-        e.className = "emote" + (think ? " think" : icon ? " icon" : "") + (t === "❗" ? " bite" : ""); void e.offsetWidth; e.classList.add("pop");   // 입질(❗)은 크게
+        e.className = "emote" + (think ? " think" : icon ? " icon" : "") + (t === "❗" ? " bite" : ""); e._bw = e.offsetWidth; e._bh = e.offsetHeight; e.classList.add("pop");   // 입질(❗)은 크게 · 크기는 남의 이름표 가림 칸에(글이 바뀔 때만 잼)
       }
       const sc = THREE.MathUtils.clamp(1.15 - dist / 90, 0.6, 1.1).toFixed(2), op = Math.min(1, u.emoteT / 0.3).toFixed(2);   // 멀수록 작게 · 끝날 때 살짝 사라짐
-      placeEl(e, (tmp.x * 0.5 + 0.5) * w, (-tmp.y * 0.5 + 0.5) * h);
+      placeEl(e, (tmp.x * 0.5 + 0.5) * w, y);
       if (e._sc !== sc) { e._sc = sc; e.style.setProperty("--s", sc); } if (e._op !== op) { e._op = op; e.style.opacity = op; }
+      if (this.tagBlock && e._bw) { const k = +sc, x = (tmp.x * 0.5 + 0.5) * w, hw = e._bw * k / 2; this.tagBlock(i, x - hw, y - 10 - e._bh * k, x + hw, y); }   // 이 말풍선 밑의 남의 이름표는 옅게(render/nameTags.js)
     });
     for (const { z, e } of this.zoneEls) {
       const zy = z.id === "cave" ? Math.max(0, this.world.grid.get(Math.floor(z.x), Math.floor(z.z))?.elevation ?? 0) : 0;   // 동굴 이름표: 옮긴 자리 높이를 따라감(꾸미기)

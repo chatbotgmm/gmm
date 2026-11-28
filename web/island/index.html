@@ -229,6 +229,14 @@
   .roomBubbles { position: fixed; inset: 0; pointer-events: none; z-index: var(--z-roombubble); }   /* 방 터치판 위, 방 화면 판 아래 */
   .emote.pop { animation: bubblePop .28s cubic-bezier(.3, 1.6, .5, 1); }
   @keyframes bubblePop { from { transform: translate(-50%, calc(-100% - calc(4*var(--u)))) scale(calc(var(--s) * .4)); } to { transform: translate(-50%, calc(-100% - calc(10*var(--u)))) scale(var(--s)); } }
+  /* 갈매미 이름표(render/nameTags.js): 머리 바로 위 작은 둥근 표 · 짙은 반투명 바탕 + 흰 글(낮 풀밭·모래·밤 모두 읽힘) · 말풍선은 이 위로. 자리·크기(--s)·투명도는 JS(바뀔 때만) */
+  .ntag { position: absolute; left: 0; top: 0; --s: 1; transform: translate(-50%, calc(-100% - 2px)) scale(var(--s)); transform-origin: 50% 100%; pointer-events: none; white-space: nowrap;
+    display: flex; align-items: center; gap: calc(3*var(--u)); padding: calc(1*var(--u)) calc(7*var(--u)); border-radius: var(--r-pill); background: rgba(38, 30, 22, .62); color: #fffdf8;
+    font: 700 var(--fs-sm)/1.25 system-ui, sans-serif; letter-spacing: .01em; text-shadow: 0 1px 1px rgba(0,0,0,.35); box-shadow: 0 1px 3px rgba(0,0,0,.18); will-change: transform, opacity; }
+  .ntag[hidden] { display: none; }
+  .ntag .nt-h { font-style: normal; font-size: .82em; line-height: 1; color: #ffb3c6; } .ntag[data-bond="0"] .nt-h { display: none; } .ntag[data-bond="3"] .nt-h { color: #ff6f91; }   /* 하트 단계(정): 1~2 연분홍 · 3 진분홍 */
+  .ntag.focus { background: var(--c-accent-strong, #2a7a6a); color: var(--c-on-accent, #fff); box-shadow: 0 0 0 calc(2*var(--u)) rgba(255,253,248,.9), 0 2px 6px rgba(0,0,0,.25); z-index: 1; }   /* 따라가는 갈매미 */
+  #overlay[data-night] .ntag:not(.focus) { background: rgba(20, 18, 34, .72); box-shadow: 0 0 0 1px rgba(255,253,248,.45), 0 1px 3px rgba(0,0,0,.3); }   /* 밤: 어두운 땅에 묻히지 않게 밝은 테두리 */
   .zone { position: absolute; transform: translate(-50%, -50%); font-size: var(--fs-sm); padding: calc(2*var(--u)) calc(8*var(--u)); border-radius: var(--r-sm); background: rgba(255,255,255,.75); white-space: nowrap; }
   .dim { color: var(--c-ink-2); }
   .row .job { margin-right: calc(3*var(--u)); } .row .full { margin-left: auto; font-size: var(--fs-cap); color: var(--c-ink-2); font-variant-numeric: tabular-nums; }
@@ -1017,6 +1025,8 @@
         <h4>시점</h4><div class="srow"><span class="slab">둘러볼 때 카메라</span><div class="seg" id="segCam" role="group" aria-label="시점 고르기"><button data-v="near">가까운 비스듬히</button><button data-v="free">자유 회전</button></div>
           <p class="dim">가까운 비스듬히는 끌면 화면이 옮겨지고, ⟲ ⟳ 버튼이나 두 손가락 비틀기로 90°씩 돌아가요. 자유 회전은 끌어서 돌리고 기울여요. 건설 모드에서도 같은 시점을 써요.</p></div>
         <h4>보이기</h4><button id="zones" class="sw2" aria-pressed="true">구역 이름 보이기</button>
+        <div class="srow"><span class="slab">🏷 갈매미 이름표</span><div class="seg" id="segTags" role="group" aria-label="갈매미 이름표 보이기"><button data-v="near">가까이 볼 때</button><button data-v="always">항상</button><button data-v="off">끄기</button></div>
+          <p class="dim">머리 위에 이름이 떠요. 가까이 볼 때는 멀리 보면 옅어지고, 따라가는 갈매미는 늘 보여요. 이 기기에만 기억해요.</p></div>
         <button id="motionBtn" class="sw2 off" aria-pressed="false">움직임 줄이기</button>
         <div class="srow"><span class="slab">버튼 옆 단축키 글자</span><div class="seg" id="segKeyhint"><button data-v="auto">자동</button><button data-v="on">항상</button><button data-v="off">끔</button></div></div></div>
       <div class="spanel col" data-stab="sound" hidden><div class="qrow"><button id="sfxBtn">소리: 켬</button><input id="sfxVol" type="range" min="0" max="100" value="70" aria-label="소리 크기"></div><p class="dim" style="margin:2px 0 0">효과음: Kenney "RPG sounds" CC0. 물소리, 종소리, 천둥, 빗소리는 직접 만들었어요.</p></div>
