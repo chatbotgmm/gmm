@@ -170,9 +170,21 @@ test("6일이면 돌보지 않아도 변신(카운터가 적으면 든든한 기
   const { w, us } = town(1); const u = us[0];
   skipDays(w, 5); assert.deepEqual(w.evoPending, []); skipDays(w, 1); assert.deepEqual(w.evoPending, [u.unitId]);
   const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1)); assert.equal(back.evoDay, w.evoDay);
-  back.stepEvolve(0); assert.deepEqual(back.evoPending, [], "같은 날이면 다시 판정 안 함");
+  assert.deepEqual(back.evoPending, [u.unitId], "오늘 차례는 저장돼 이어짐");
+  back.stepEvolve(0); assert.ok(back.units[0].evoFx, "같은 날이면 다시 판정 안 함 · 한가하면 이어서 연출"); assert.deepEqual(back.evoPending, []);
   const bond0 = u.bond; w.startEvolve(u); while (u.evoFx) w.stepEvoFx(u, 0.1);
   assert.equal(u.form, "기본"); assert.equal(u.evo.stayed, true); assert.equal(u.title, "든든한"); assert.equal(u.bond, bond0 + 3); assert.equal(u.rarity, "common");
+});
+
+test("변신 연출 첫 절반(모습이 바뀌기 전)에 저장해도 오늘 차례를 잃지 않음", () => {
+  const { w, us } = town(1); const u = us[0];
+  skipDays(w, 6); assert.deepEqual(w.evoPending, [u.unitId]);
+  w.startEvolve(u); w.stepEvoFx(u, 0.3); assert.ok(u.evoFx && !u.evo); assert.deepEqual(w.evoPending, []);
+  const back = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1));
+  assert.deepEqual(back.evoPending, [u.unitId], "연출 중이던 갈매미가 다시 차례에");
+  w.stepEvoFx(u, 1); assert.ok(u.evo);
+  const after = World.fromJSON(JSON.parse(JSON.stringify(w.serialize())), seededRandom(1));
+  assert.deepEqual(after.evoPending, [], "이미 모습이 바뀐 갈매미는 다시 차례에 넣지 않음");
 });
 
 test("evolve()는 난수를 쓰지 않음: 호출 하나의 앞뒤로 rnd·wrnd·hrnd·skyRnd·sparkRnd 다음 값이 같음", () => {

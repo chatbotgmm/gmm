@@ -142,7 +142,7 @@ export class World {
     // 갈매미 성장·변신(evolve.js): 다음 갈매미 번호(u1~u9는 옛 저장 몫) · 지금까지 부른 수(성향 덱 차례) · 도감(본 모습) · 마지막으로 변신을 판정한 날(불러온 직후 날이 바뀐 것처럼 판정하지 않게 저장)
     this.nextGullNo = Math.max(10, extra.nextGullNo | 0); this.gullsMade = Math.max(0, extra.gullsMade | 0);
     this.formsSeen = new Set((Array.isArray(extra.formsSeen) ? extra.formsSeen : []).filter(f => UNITS.some(d => d.name === f)));
-    this.evoDay = Number.isFinite(extra.evoDay) ? extra.evoDay : null; this.evoPending = []; this.renamed = null;
+    this.evoDay = Number.isFinite(extra.evoDay) ? extra.evoDay : null; this.evoPending = (Array.isArray(extra.evoPending) ? extra.evoPending : []).filter(id => typeof id === "string"); this.renamed = null;   // 오늘 변신 차례(판정은 하루 한 번이라 저장해 둠 · 불러온 뒤 마을에 있고 아직 변신 안 한 갈매미만 남김: fromJSON)
     this.wishes = (extra.wishes || []).map(x => ({ ...x })); this.wishT = 45; this.wishDone = extra.wishDone || 0; this.wishClock = 0;
     // 시세: 상인이 사는 원자재 값·음식 값(5초마다 다시 셈) · 지난 값(20초마다 하나, 48개)
     this.prices = { ...E.MARKET_BUY, food: E.FOOD_PRICE }; this.priceHist = extra.priceHist || []; this.priceClock = 0; this.histClock = 0;
@@ -2489,6 +2489,7 @@ export class World {
       treasures: this.treasures, collection: this.collection, items: this.items, stall: this.stall,
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
       gulls: 1, minClient: "gulls1", nextGullNo: this.nextGullNo, gullsMade: this.gullsMade, formsSeen: [...this.formsSeen], evoDay: this.evoDay,
+      evoPending: [...new Set(this.evoPending.concat(this.units.filter(u => u.evoFx && !u.evo).map(u => u.unitId)))],   // 연출 첫 절반(모습이 바뀌기 전)에 저장해도 차례를 잃지 않게
       units: this.units.map(u => ({ id: u.unitId, name: u.name, form: EV.formOf(u), disp: u.disp || null, growth: Object.fromEntries(Object.entries(u.growth || {}).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])), born: u.bornDay ?? 0, evo: u.evo || null, job: u.job, rarity: u.rarity, tribe: u.tribe, ...(u.title ? { title: u.title } : {}), ...(u.guess ? { guess: u.guess } : {}), ...(u.guessHit ? { guessHit: 1 } : {}), x: Math.round(u.x * 100) / 100, z: Math.round(u.z * 100) / 100, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToIds(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
@@ -2523,6 +2524,7 @@ export class World {
       u.bodyT = Number.isFinite(+s.bodyT) && s.bodyT != null ? Math.max(35, Math.min(43, +s.bodyT)) : CLIM.BODY_NORMAL; u.feltCold = Math.max(0, s.feltCold | 0);   // 체온·추웠던 횟수(예전 저장엔 없음 → 40.0 · 0)
       u.clothes = CLO.clothesFromSave(s.clothes); u.wear = CLO.wearFromSave(s.wear, u.clothes);   // 가진 옷·입은 옷(예전 저장엔 없음 → 빈 옷장)
       u.sick = HL.sickFromSave(s.sick); u.immune = Math.max(0, Math.min(HL.IMMUNE_SECS, +s.immune || 0)); u.wet = Math.max(0, Math.min(1, +s.wet || 0)); });   // 병·면역(예전 저장엔 없음 → 건강)
+    w.evoPending = w.evoPending.filter(id => w.units.some(u => u.unitId === id && !u.evo));   // 저장해 둔 오늘 차례(없는 갈매미·이미 변신한 갈매미는 뺌)
     if (!gulls) w.migrateGulls(saved);                                              // 이름 = 모습이던 예전 저장 → id·모습·성향·새 이름(evolve.js)
     w.bank = BK.bankFromSave(j.bank, w.time);                                     // 갈매미를 다시 만든 뒤에(상인 창업 자금이 두 번 세지지 않게). 금고가 없는 예전 저장은 100 + 돌아온 돈
     w.bank.owed = w.units.reduce((s, u) => s + (u.wageOwed || 0), 0);

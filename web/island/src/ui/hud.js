@@ -1065,10 +1065,11 @@ export class Hud {
     k.ren = el("form", "iren"); k.ren.hidden = true; k.renIn = el("input"); k.renIn.maxLength = 8; k.renIn.setAttribute("aria-label", "새 이름(1~8자)"); k.renIn.placeholder = "새 이름(1~8자)";
     const renOk = el("button", "", "확인"), renNo = el("button", "ghost", "취소"); renOk.type = "submit"; renNo.type = "button"; k.renWhy = el("span", "dim"); k.ren.append(k.renIn, renOk, renNo, k.renWhy);
     k.ren.onsubmit = e => { e.preventDefault(); const u = this.follow; if (!u) return; const r = this.world.renameGull(u.unitId, k.renIn.value);
-      if (!r.ok) { cardPut(k.renWhy, r.reason); return; } k.ren.hidden = true; this.status(`🏷 이제 ${r.name}예요`, { kind: "good" }); this.setWorld(this.world); this.syncInfo(); };
+      if (!r.ok) { cardPut(k.renWhy, r.reason); return; } k.ren.hidden = true; this.status(`🏷 이제 ${r.name}예요`, { kind: "good" }); this.setWorld(this.world); this.showFollow(u); };   // 목록 줄 이름을 새로 쓰되(setWorld) 보던 카드는 그대로(setWorld가 follow를 비움)
     renNo.onclick = () => { k.ren.hidden = true; };
     k.name.classList.add("iname"); k.name.tabIndex = 0; k.name.setAttribute("role", "button"); k.name.dataset.tip = "이름을 누르면 바꿀 수 있어요";
-    k.name.onclick = () => { const u = this.follow; if (!u) return; k.ren.hidden = !k.ren.hidden; if (!k.ren.hidden) { k.renIn.value = u.name; cardPut(k.renWhy, ""); k.renIn.focus(); k.renIn.select(); } };
+    k.name.onclick = () => { const u = this.follow; if (!u) return; k.ren.hidden = !k.ren.hidden; if (!k.ren.hidden) { if (!this.infoOpen) { this.infoOpen = true; this.syncInfo(); } k.renIn.value = u.name; cardPut(k.renWhy, ""); k.renIn.focus(); k.renIn.select(); } };   // 접힌 카드(휴대폰 기본)면 펼쳐서 입력 칸이 보이게
+    k.name.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); k.name.onclick(); } };   // role=button이라 키보드로도
     k.evo.onclick = e => { const b = e.target.closest?.("[data-guess]"), u = this.follow; if (!b || !u) return; if (this.world.guessDisp(u.unitId, b.dataset.guess)) { this.evoHtml = null; this.syncInfo(); this.status("🎯 변신하는 날 맞았는지 알려 줄게요", { kind: "info" }); } };
     body.append(k.ren, k.form, doing, k.evo, needs, chips, more);
     // 행동 줄: 관계 먼저, 그다음 선물 · 쓰다듬기 · 집 보기
