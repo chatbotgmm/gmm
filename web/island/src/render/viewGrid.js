@@ -36,6 +36,8 @@ export class ViewGrid {
   }
   markAllDirty() { this.inner.markAllDirty(); }
   markDirty(x, z) { this.inner.markDirty(x, z); }
+  /** 이 칸이 건물 문 앞이면 그 건물 번호(시뮬 격자의 값 그대로, 바닥 그림의 문 앞 밟힌 땅 색 — groundChunks.js) */
+  doorOwner(x, z) { return this.inner.doorOwner?.(x, z) ?? null; }
 
   /** 데이터 청크(32칸) — 없으면 만든다. LRU: 꺼낼 때마다 맨 뒤로 */
   chunkData(cx, cz) {

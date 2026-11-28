@@ -54,11 +54,20 @@ function noise(x, z) {
 }
 const fbm = (x, z) => 0.6 * noise(x * 0.35, z * 0.35) + 0.4 * noise(x * 1.3 + 17, z * 1.3 - 9);
 
+/** 잔디 수채 얼룩: 10~20칸 크기의 큰 얼룩으로 밝기 ±10% 안팎, 따뜻한 노란 풀빛 ↔ 서늘한 짙은 풀빛으로 색조를 조금씩 — 빈 들판이 한 장의 평면으로 안 보이게(위치만의 함수라 이음매 없음) */
+const WORN = new THREE.Color(0xc6a676);                                           // 문 앞 밟힌 땅(흙길보다 연하게: 칠한 흙길과 헷갈리지 않게)
+const GRASS_WARM = new THREE.Color(0xb4c47a), GRASS_COOL = new THREE.Color(0x84b27a);
+function grassWash(out, gx, gz, n) {
+  const big = 0.65 * noise(gx * 0.065 + 41.3, gz * 0.065 - 7.9) + 0.35 * noise(gx * 0.13 - 3.3, gz * 0.13 + 22.1);   // 약 15칸 + 8칸
+  const hue = noise(gx * 0.05 - 19.7, gz * 0.05 + 5.3);                            // 약 20칸: 노란기 ↔ 푸른기
+  if (hue > 0.5) out.lerp(GRASS_WARM, Math.min(0.45, (hue - 0.5) * 1.1)); else out.lerp(GRASS_COOL, Math.min(0.45, (0.5 - hue) * 1.1));
+  return out.multiplyScalar(1 + (big - 0.5) * 0.5 + (n - 0.5) * 0.05);
+}
 /** 바닥 종류 하나의 색(위치에 따라 조금씩 다름). */
 function typeColor(type, gx, gz, out) {
   const n = fbm(gx, gz);
   out.copy(BASE[type]).lerp(ALT[type], n);
-  if (type === GroundType.Grass) out.offsetHSL((noise(gx * 0.12, gz * 0.12) - 0.5) * 0.04, 0, (n - 0.5) * 0.06);
+  if (type === GroundType.Grass) grassWash(out, gx, gz, n);
   else if (type === GroundType.Cobble) out.multiplyScalar(0.93 + 0.14 * noise(gx * 1.3, gz * 1.3));         // 큰 얼룩만(돌·틈은 셰이더 무늬, groundPattern.js)
   else if (type === GroundType.WoodDeck) out.multiplyScalar(0.95 + 0.1 * noise(gx * 0.9, gz * 0.9));         // 널빤지·틈은 셰이더(예전 sin 줄무늬는 꼭짓점 위치에서 늘 0이라 안 보였음)
   else if (type === GroundType.Dirt) out.multiplyScalar(0.92 + 0.14 * noise(gx * 1.6, gz * 1.6));
@@ -85,7 +94,7 @@ function groundColor(grid, rx, rz, out, own = null, hard = false) {
     const ddx = Math.max(x - gx, 0, gx - (x + 1)), ddz = Math.max(z - gz, 0, gz - (z + 1)), d = Math.hypot(ddx, ddz);
     if (d >= BLEND_R) continue;
     const w = (1 - d / BLEND_R) ** 2;
-    if (water) tmp2.copy(c.groundType === GroundType.Rock ? SEABED_ROCK : SEABED_COL); else typeColor(c.groundType, rx, rz, tmp2);
+    if (water) tmp2.copy(c.groundType === GroundType.Rock ? SEABED_ROCK : SEABED_COL); else { typeColor(c.groundType, rx, rz, tmp2); if (c.groundType === GroundType.Grass && grid.doorOwner?.(x, z) != null) tmp2.lerp(WORN, 0.45); }   // 문 앞 잔디는 밟혀 흙빛이 비침
     out.r += tmp2.r * w; out.g += tmp2.g * w; out.b += tmp2.b * w; tw += w;
     if (!water) { cl += snowClear(c.groundType) * w; const k = PATH_SLOT[c.groundType]; if (k !== undefined) lastPath[k] += w; }
   }
@@ -189,7 +198,7 @@ function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
   if (ha - la < 0.01 && hb - lb < 0.01) return;
   if (grid.get(x, z)?.groundType === GroundType.Rock && grid.isWater(x + nrm[0], z + nrm[2]) && !grid.isWater(x, z) && Math.max(ha - la, hb - lb) > 0.3) return seaCliff(b, grid, x, z, ha, hb, la, lb, ax, az, bx, bz, nrm);
   const tall = Math.max(ha - la, hb - lb) > 0.55 && la > -0.3, foot = 0.68;          // 높은 벽은 돌빛, 벽 밑동은 그늘로 어둡게
-  if (tall && Math.max(ha - la, hb - lb) > 0.8 && !grid.get(x, z)?.occupiedId) return strataWall(b, ha, hb, la, lb, ax, az, bx, bz, nrm);   // 높은 돌벽(고지대·언덕 단): 띠 지층(밀지 않음 → 옆 벽과 틈 없음)
+  if (tall && Math.max(ha - la, hb - lb) > 0.8 && !grid.get(x, z)?.occupiedId) return strataWall(b, ha, hb, la, lb, ax, az, bx, bz, nrm, grid.get(x, z)?.groundType === GroundType.Grass);   // 높은 돌벽(고지대·언덕 단): 띠 지층(밀지 않음 → 옆 벽과 틈 없음)
   b.quad([
     { p: toW(ax, ha, az), n: nrm, c: cliffColor(grid, x, z, ha, ax, az, tall) }, { p: toW(bx, hb, bz), n: nrm, c: cliffColor(grid, x, z, hb, bx, bz, tall) },
     { p: toW(bx, Math.min(lb, hb), bz), n: nrm, c: cliffColor(grid, x, z, lb, bx, bz, tall).multiplyScalar(foot) }, { p: toW(ax, Math.min(la, ha), az), n: nrm, c: cliffColor(grid, x, z, la, ax, az, tall).multiplyScalar(foot) },
@@ -200,14 +209,20 @@ function edgeWall(b, grid, x, z, my, nb, ax, az, bx, bz, nrm) {
  *  맨 위 띠는 바깥으로 살짝 내민 턱(윗면 가장자리가 둥글게 빛을 받음), 그 밑 띠는 안으로 들어가 그늘진 띠(턱 밑 그림자) → 아래 띠들은 앞뒤로 조금씩 엇갈림.
  *  꼭짓점을 미는 방향·양은 위치만의 함수(꼭짓점 둘레 물 칸 쪽 = 바깥, 잡음)라 모서리에서 만나는 두 벽의 같은 점이 똑같이 움직여 틈이 없음. 윗줄은 그대로(땅 윗면과 틈 없음) */
 const CLIFF_JIT = 0.14;
-const STRATA = [[0, 0, 0xc6a175], [0.13, 0.1, 0x8d6c52], [0.3, -0.07, 0xb08a66], [0.52, 0.04, 0x9b7e66], [0.76, -0.03, 0xa98764], [1, 0.02, 0x6e5848]];   // [높이 비율, 바깥으로 미는 양(m), 그 줄 아래 띠 색]
+// 띠 색: 줄무늬 대비를 예전(0xc6a175·0x8d6c52·0xb08a66·0x9b7e66·0xa98764·0x6e5848)의 절반으로 줄이고 조금 더 따뜻한 흙빛으로(수채 톤 — 케이크 단면처럼 안 보이게)
+const STRATA = [[0, 0, 0xb99060], [0.13, 0.1, 0x9c7550], [0.3, -0.07, 0xae8459], [0.52, 0.04, 0xa37e59], [0.76, -0.03, 0xaa8358], [1, 0.02, 0x8b6b4c]];   // [높이 비율, 바깥으로 미는 양(m), 그 줄 아래 띠 색]
 const STRATA_COL = STRATA.map(r => new THREE.Color(r[2]));
-function strataWall(b, ha, hb, la, lb, ax, az, bx, bz, nrm) {
-  const R = [0, 0.13, 0.3, 0.52, 0.76, 1], lo = t => la + (lb - la) * t, hi = t => ha + (hb - ha) * t;
+/** 잔디 단의 높은 벽: 맨 위는 얇은 잔디 처마(위·바깥을 함께 보는 법선 → 모서리가 둥글게 빛을 받고, 겨울엔 눈이 덮임), 그 아래는 흙빛 띠 */
+const LIP_R = 0.11;
+function strataWall(b, ha, hb, la, lb, ax, az, bx, bz, nrm, lip = false) {
+  const R = lip ? [0, LIP_R, 0.3, 0.52, 0.76, 1] : [0, 0.13, 0.3, 0.52, 0.76, 1], lo = t => la + (lb - la) * t, hi = t => ha + (hb - ha) * t;
+  const ln = lip ? (() => { const v = [nrm[0] * 0.55, 0.85, nrm[2] * 0.55], l = Math.hypot(...v); return v.map(a => a / l); })() : nrm;
   for (let r = 0; r < R.length - 1; r++) {
     const y = (t, f) => hi(t) + (lo(t) - hi(t)) * f, mx = (ax + bx) / 2, mz = (az + bz) / 2;
-    const col = new THREE.Color().copy(STRATA_COL[r]).multiplyScalar((0.9 + 0.2 * noise(mx * 1.3 + r * 3.1, mz * 1.3 - r * 2.3)) * (r === 1 ? 1.12 : 1) * (r === STRATA.length - 2 ? 1.25 : 1));   // 땅 위 벽은 턱 그늘·물 밑동 띠를 조금 밝게
-    b.quad([{ p: toW(ax, y(0, R[r]), az), n: nrm, c: col }, { p: toW(bx, y(1, R[r]), bz), n: nrm, c: col }, { p: toW(bx, y(1, R[r + 1]), bz), n: nrm, c: col }, { p: toW(ax, y(0, R[r + 1]), az), n: nrm, c: col }]);
+    const col = lip && r === 0 ? typeColor(GroundType.Grass, mx, mz, new THREE.Color()).multiplyScalar(0.9)
+      : new THREE.Color().copy(STRATA_COL[r]).multiplyScalar((0.9 + 0.2 * noise(mx * 1.3 + r * 3.1, mz * 1.3 - r * 2.3)) * (r === 1 ? 1.12 : 1) * (r === STRATA.length - 2 ? 1.25 : 1));   // 땅 위 벽은 턱 그늘·물 밑동 띠를 조금 밝게
+    const n = lip && r === 0 ? ln : nrm;
+    b.quad([{ p: toW(ax, y(0, R[r]), az), n, c: col }, { p: toW(bx, y(1, R[r]), bz), n, c: col }, { p: toW(bx, y(1, R[r + 1]), bz), n, c: col }, { p: toW(ax, y(0, R[r + 1]), az), n, c: col }]);
   }
 }
 function outward(grid, gx, gz) {                                                   // 꼭짓점 (gx, gz)에서 바깥(물) 쪽 방향: 둘레 네 칸 중 물 칸 가운데 쪽 합

@@ -69,7 +69,7 @@ export class BuildingViews {
     for (const v of this.views.values()) {
       const b = v.building, def = BUILDINGS[b.defId]; if (!def.house || !v.model) continue;
       const on = this.world.isDone(b) && !!this.world.powered?.(b);
-      if (on && !v.glow) { v.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffd28a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); v.glow.name = "houseGlow"; v.glow.userData.noToon = true; v.glow.renderOrder = 3;
+      if (on && !v.glow) { v.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffc070, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); v.glow.name = "houseGlow"; v.glow.userData.noToon = true; v.glow.renderOrder = 3;
         v.glow.scale.setScalar(Math.max(def.footprint.w, def.footprint.d) * 1.3); v.glow.position.set(0, Math.min(1.3, v.height * 0.5), def.footprint.d / 2 + 0.05); v.holder.add(v.glow); }
       if (v.glow) v.glow.userData.on = on;
     }

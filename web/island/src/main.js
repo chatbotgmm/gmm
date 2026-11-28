@@ -143,7 +143,8 @@ function hookSounds(w) {
   w.on("treeFell", e => sfx.play("creak", { pos: at(e.tree), vol: 0.8, rate: 0.8 }));
   w.on("oreHit", o => sfx.play("mine", { pos: at(o), vol: 0.7, rate: 0.75 }));
   w.on("buildingProgress", b => sfx.play("hammer", { pos: at(b.door), vol: 0.55, rate: 1.1 }));
-  w.on("buildingAdded", b => { if (ready) sfx.play("place", { pos: at(b.door) }); });
+  w.on("buildingAdded", b => { if (ready) sfx.play("place", { pos: at(b.door) }); if (b.door) w.grid.markDirty(b.door.x, b.door.z); });   // 문 앞 밟힌 땅 색(groundChunks.js)
+  w.on("buildingRemoved", b => { if (b.door) w.grid.markDirty(b.door.x, b.door.z); });
   w.on("buildingDone", b => { sfx.play("done", { pos: at(b.door), vol: 0.8 }); sfx.chime([659, 784], 0.08, 0.12); });
   w.on("fish", e => { sfx.splash(at(e.u), 0.8); if (e.fish.rarity !== "common" || e.fish.season) sfx.chime([880, 1175], 0.08, 0.15); });
   for (const ev of ["market", "bank", "foodSale", "granary"]) w.on(ev, e => sfx.play("coins", { pos: at(e.u || e.buyer), vol: 0.6 }));
