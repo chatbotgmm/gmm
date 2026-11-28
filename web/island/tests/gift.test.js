@@ -149,14 +149,16 @@ test("옛 섬 가판대(trade)는 내 주머니의 반짝이·도장 선물을 �
   assert.equal(w.items.shell, 2); assert.equal(w.items.goldLetter, 1); assert.equal(w.items.bottle, 0, "예전 칸의 물건은 예전처럼 팖"); assert.ok(Number.isFinite(w.res.coins));
 });
 
-test("반짝이: 20초 뒤 바닷가 1·마을 1, 칸 조건·간격, 하루에 많아야 6개·수명, 따로 굴리는 난수, 같은 씨앗이면 같은 자리, 줍기 → 내 주머니 → 선물", () => {
+test("반짝이: 20초 뒤 마을 1(화면 안) → 다음 회차 바닷가 1(번갈아), 칸 조건·간격, 동시에 많아야 2개·하루 2개·수명, 따로 굴리는 난수, 같은 씨앗이면 같은 자리, 줍기 → 내 주머니 → 선물", () => {
   const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }), spawned = [], gone = [];
   w.on("sparkleSpawn", s => spawned.push(s)); w.on("sparkleGone", s => gone.push(s));
   for (let i = 0; i < (S.SPARKLE_FIRST - 1) * 2; i++) w.update(0.5); assert.equal(w.sparkles.length, 0);
   for (let i = 0; i < 4; i++) w.update(0.5);
-  assert.equal(w.sparkles.length, 2); assert.equal(spawned.length, 2);
+  assert.equal(S.SPARKLE_EVERY, 300); assert.equal(S.SPARKLE_WAVE, 1); assert.equal(S.SPARKLE_MAX, 2);
+  assert.equal(w.sparkles.length, 1); assert.equal(spawned.length, 1);
   const sand = s => w.grid.get(s.x, s.z).groundType === GroundType.Sand;
-  assert.equal(w.sparkles.filter(sand).length, 1, "바닷가 하나"); assert.equal(w.sparkles.filter(s => !sand(s)).length, 1, "마을 하나");
+  assert.equal(w.sparkles.filter(s => !sand(s)).length, 1, "새 마을의 첫 반짝이는 마을(건물 둘레 — 처음 보는 화면 안)"); assert.equal(w.sparkNext, "beach");
+  w.spawnSparkles(); assert.equal(w.sparkles.length, 2); assert.equal(w.sparkles.filter(sand).length, 1, "다음 회차는 바닷가"); assert.equal(w.sparkNext, "village");
   for (const s of w.sparkles) {
     assert.ok(S.sparkleCellFree(w, s.x, s.z)); assert.ok(!w.grid.isWater(s.x, s.z)); assert.ok(ITEMS.find(i => i.id === s.k).sparkle === (sand(s) ? "beach" : "village"));
     assert.ok(s.t > 0 && s.t <= S.SPARKLE_LIFE);
@@ -164,17 +166,19 @@ test("반짝이: 20초 뒤 바닷가 1·마을 1, 칸 조건·간격, 하루에 
   const vil = w.sparkles.find(s => !sand(s)), bank = w.bankB(); assert.ok(bank.cells.some(([x, z]) => Math.max(Math.abs(x - vil.x), Math.abs(z - vil.z)) <= S.SPARKLE_NEAR), "마을 = 건물 둘레");
   // 다른 난수를 쓰지 않음
   let used = 0; const count = f => () => { used++; return f(); }; w.rnd = count(w.rnd); w.wrnd = count(w.wrnd); w.skyRnd = count(w.skyRnd);
-  w.spawnSparkles(); w.stepSparkles(1); assert.equal(used, 0, "마을·날씨·하늘 난수는 그대로");
-  assert.equal(w.sparkles.length, 4);
+  assert.deepEqual(w.spawnSparkles(), [], "2개면 꽉 참 → 건너뜀"); w.stepSparkles(1); assert.equal(used, 0, "마을·날씨·하늘 난수는 그대로");
+  assert.equal(w.sparkles.length, S.SPARKLE_MAX); assert.equal(w.sparkNext, "village", "건너뛴 회차는 차례를 안 바꿈");
   for (let i = 0; i < w.sparkles.length; i++) for (let k = i + 1; k < w.sparkles.length; k++) { const a = w.sparkles[i], b = w.sparkles[k]; assert.ok(Math.max(Math.abs(a.x - b.x), Math.abs(a.z - b.z)) > S.SPARKLE_GAP, "간격"); }
-  w.spawnSparkles(); assert.equal(w.sparkles.length, 6); assert.deepEqual(w.spawnSparkles(), [], "꽉 차면 건너뜀"); assert.equal(w.sparkles.length, S.SPARKLE_MAX);
   // 수명
   const first = w.sparkles[0]; first.t = 1; w.stepSparkles(1.5); assert.ok(!w.sparkles.includes(first)); assert.ok(gone.some(s => s.id === first.id));
-  // 하루를 돌려도 많아야 6개, 다 사라지고 새로 생김
-  const v = World.create(9, seededRandom(2), { wild: true, firstGull: true }); let most = 0, made = 0; v.on("sparkleSpawn", () => made++);
+  // 마을 이틀(1200초)을 줍지 않고 돌려도 동시에 많아야 2개 · 하루 2개(20·320 / 620·920초) · 바닷가·마을 번갈아 · 다 사라지고 새로 생김
+  const v = World.create(9, seededRandom(2), { wild: true, firstGull: true }); let most = 0; const made = [];
+  v.on("sparkleSpawn", s => made.push([Math.floor(v.time / 600) + 1, v.grid.get(s.x, s.z).groundType === GroundType.Sand ? "beach" : "village"]));
   const plain = () => v.sparkles.filter(s => !s.story);   // 🗝 이야기 반짝이(둘째 날 등대 문패)는 따로 셈(줍기 전까지 안 사라짐 · tests/story.test.js)
-  for (let i = 0; i < 1500; i++) { v.update(1); most = Math.max(most, plain().length); }
-  assert.ok(most <= S.SPARKLE_MAX); assert.ok(made >= 14, `생긴 수 ${made}`); assert.ok(plain().every(s => s.t <= S.SPARKLE_LIFE));
+  for (let i = 0; i < 1200; i++) { v.update(1); most = Math.max(most, plain().length); }
+  assert.equal(most, S.SPARKLE_MAX); assert.deepEqual(made, [[1, "village"], [1, "beach"], [2, "village"], [2, "beach"]], "하루 2개, 마을 → 바닷가 번갈아");
+  for (let i = 0; i < 300; i++) v.update(1);
+  assert.ok(plain().length <= S.SPARKLE_MAX && plain().every(s => s.t <= S.SPARKLE_LIFE)); assert.equal(made.length, 5);
   // 같은 씨앗이면 같은 자리·종류
   const a = World.create(7, seededRandom(1), { wild: true, firstGull: true }), b = World.create(7, seededRandom(5), { wild: true, firstGull: true });
   const pick = x => [x.spawnSparkles(), x.spawnSparkles()].flat().map(s => [s.k, s.x, s.z]);
@@ -188,7 +192,7 @@ test("반짝이: 20초 뒤 바닷가 1·마을 1, 칸 조건·간격, 하루에 
   assert.deepEqual(B.giftables(w).map(g => [g.id, g.n]), [[s.k, 1]]);
   const r = w.giveGift(u, s.k); assert.equal(r.tier, B.giftTier(u.name, s.k)); assert.equal(u.bond, B.GIFT_TIERS[r.tier].bond); assert.equal(w.items[s.k], 0);
   // 그사이 그 칸에 건물이 들어서면 사라짐
-  const t = w.sparkles[0]; w.grid.get(t.x, t.z).occupiedId = "막음"; w.stepSparkles(0.1); assert.ok(!w.sparkles.includes(t)); w.grid.get(t.x, t.z).occupiedId = null;
+  w.spawnSparkles(); const t = w.sparkles[0]; assert.ok(t); w.grid.get(t.x, t.z).occupiedId = "막음"; w.stepSparkles(0.1); assert.ok(!w.sparkles.includes(t)); w.grid.get(t.x, t.z).occupiedId = null;
 });
 
 test("도장 선물: 도장으로 사서 내 주머니로, 정이 두 배, 왕관 쿠키는 누구나 좋아함, 도장 가구도 예전처럼, 부탁 '선물 주기'는 주머니에 선물거리가 있을 때만", () => {
@@ -212,17 +216,17 @@ test("도장 선물: 도장으로 사서 내 주머니로, 정이 두 배, 왕�
 test("저장·불러오기: 소지품·반짝이·시계가 남고, 예전 저장은 한 번만 옮김(보물 → 낚시꾼, 간직 안 한 물건 → 갈매미, 별조각 → 야행성, 간직한 것·가구 → 내 가방)", () => {
   const w = World.create(7, seededRandom(1), { wild: true, firstGull: true }); for (const n of ["물방울", "불씨", "황금"]) w.addUnitByName(n);
   const fisher = w.units.find(u => u.name === "물방울"), fire = w.units.find(u => u.name === "불씨");
-  fisher.stash = { tuna: 2, chair: 1 }; w.spawnSparkles(); w.sparkClock = 77.5; w.sparkles[0].t = 123.25;
+  fisher.stash = { tuna: 2, chair: 1 }; w.spawnSparkles(); w.spawnSparkles(); w.sparkClock = 77.5; w.sparkles[0].t = 123.25; assert.equal(w.sparkNext, "village");
   const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(j.ownership, 1); assert.equal(j.version, 3);   // 넓은 섬 = 판 3(바뀐 칸만)
   const back = World.fromJSON(j, seededRandom(2));
   assert.deepEqual(back.units.find(u => u.name === "물방울").stash, { tuna: 2, chair: 1 }); assert.deepEqual(back.units.find(u => u.name === "기본").stash, {});
-  assert.deepEqual(back.sparkles.map(({ k, x, z, t }) => [k, x, z, t]), w.sparkles.map(({ k, x, z, t }) => [k, x, z, t])); assert.equal(back.sparkClock, 77.5);
+  assert.deepEqual(back.sparkles.map(({ k, x, z, t }) => [k, x, z, t]), w.sparkles.map(({ k, x, z, t }) => [k, x, z, t])); assert.equal(back.sparkClock, 77.5); assert.equal(back.sparkNext, "village", "바닷가·마을 차례도 남음");
   assert.ok(back.sparkles.every(s => Number.isInteger(s.id))); assert.equal(back.migrated, undefined, "새 저장은 옮기지 않음");
   { const ids = back.sparkles.map(s => s.id); assert.equal(new Set(ids).size, ids.length); const s = back.spawnSparkles()[0]; if (s) assert.ok(!ids.includes(s.id), "새 반짝이 id가 겹치지 않음"); }
   // 망가진 값은 걸러짐
   const odd = JSON.parse(JSON.stringify(j)); odd.units.find(u => u.name === "황금").stash = { tuna: -1, nope: 3, bottle: "2", shell: 4, flatfish: 1.7 };
   odd.sparkles = [{ k: "shell", x: 1.5, z: 2, t: 10 }, { k: "nope", x: 1, z: 1, t: 10 }, { k: "pearl", x: 1, z: 1, t: 10 }, { k: j.sparkles[0].k, x: j.sparkles[0].x, z: j.sparkles[0].z, t: 9999 }, j.sparkles[1]];
-  odd.sparkClock = 1e9; const o = World.fromJSON(odd, seededRandom(2));
+  odd.sparkClock = 1e9; odd.sparkNext = "moon"; const o = World.fromJSON(odd, seededRandom(2)); assert.equal(o.sparkNext, "village", "모르는 차례 → 마을");
   assert.deepEqual(o.units.find(u => u.name === "황금").stash, { flatfish: 1, bottle: 2 }); assert.deepEqual(o.sparkles.map(s => s.k), [j.sparkles[1].k]); assert.equal(o.sparkClock, S.SPARKLE_EVERY);
   assert.deepEqual(Be.stashFromSave("x"), {}); assert.deepEqual(S.sparklesFromSave(null), []);
   // 예전 저장 흉내(소지품 개편 전): 마을 가방에 갈매미가 잡은 것이 쌓여 있음
@@ -235,7 +239,7 @@ test("저장·불러오기: 소지품·반짝이·시계가 남고, 예전 저�
   assert.equal(m.items.pearl, 2, "간직한 것(답례)은 내 주머니"); assert.equal(m.items.chair, 1); assert.equal(m.items.festSummer, 1, "가구는 내 가방");
   assert.deepEqual(m.keep, { pearl: true }); assert.deepEqual(B.giftables(m).map(g => g.id), ["pearl"]);
   assert.equal(m.newsLog.filter(n => n.icon === "📦").length, 1); assert.match(m.newsLog.find(n => n.icon === "📦").text, /물고기 3마리·물건 2개를 갈매미들이 나눠 가졌어요/);
-  assert.equal(m.sparkClock, S.SPARKLE_EVERY - S.SPARKLE_FIRST); assert.deepEqual(m.sparkles, []);
+  assert.equal(m.sparkClock, S.SPARKLE_EVERY - S.SPARKLE_FIRST); assert.deepEqual(m.sparkles, []); assert.equal(m.sparkNext, "village");
   // 옮긴 마을을 다시 저장·불러와도 또 옮기지 않음
   const again = World.fromJSON(JSON.parse(JSON.stringify(m.serialize())), seededRandom(2));
   assert.equal(again.migrated, undefined); assert.deepEqual(Be.stashTotals(again), T); assert.equal(again.newsLog.filter(n => n.icon === "📦").length, 1);

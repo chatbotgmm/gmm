@@ -29,19 +29,19 @@ test("밤 반짝이 4종: ITEMS sparkleTime night, 낮/밤 거르기, 선물 갈
   assert.equal(S.sparkleLife("fireflyJar"), S.SPARKLE_NIGHT_LIFE); assert.equal(S.sparkleLife("shell"), S.SPARKLE_LIFE);
 });
 
-test("밤엔 밤 반짝이만 · 낮엔 낮 반짝이만 · 칸 수는 따로(낮 6 꽉 차도 밤 3) · 밤 수명 1800초 · 해 뜨면 20초 안에 사라짐", () => {
-  const w = town();
-  w.spawnSparkles(); w.spawnSparkles(); w.spawnSparkles(); assert.equal(w.sparkles.length, S.SPARKLE_MAX); assert.ok(w.sparkles.every(s => !S.isNightSparkle(s)));
+test("밤엔 밤 반짝이만 · 낮엔 낮 반짝이만 · 칸 수는 따로(낮 2 꽉 차도 밤 1) · 밤 수명 1800초 · 해 뜨면 20초 안에 사라짐", () => {
+  const w = town(); assert.equal(S.SPARKLE_NIGHT_MAX, 1);
+  w.spawnSparkles(); w.spawnSparkles(); assert.equal(w.sparkles.length, S.SPARKLE_MAX); assert.ok(w.sparkles.every(s => !S.isNightSparkle(s)));
   w.isNight = true;
-  const a = w.spawnSparkles(); assert.equal(a.length, 2, "낮 반짝이가 꽉 차도 밤 반짝이 자리는 따로");
+  const a = w.spawnSparkles(); assert.equal(a.length, 1, "낮 반짝이가 꽉 차도 밤 반짝이 자리는 따로");
   assert.ok(a.every(s => NIGHT.includes(s.k) && s.t === S.SPARKLE_NIGHT_LIFE));
-  const b = w.spawnSparkles(); assert.equal(b.length, 1); assert.deepEqual(w.spawnSparkles(), [], "밤 반짝이 3개면 건너뜀");
+  assert.deepEqual(w.spawnSparkles(), [], "밤 반짝이 1개면 건너뜀");
   assert.equal(w.sparkles.filter(S.isNightSparkle).length, S.SPARKLE_NIGHT_MAX);
   for (const s of w.sparkles) assert.ok(S.sparkleCellFree(w, s.x, s.z));
   for (let i = 0; i < w.sparkles.length; i++) for (let k = i + 1; k < w.sparkles.length; k++) assert.ok(cheb(w.sparkles[i], w.sparkles[k]) > S.SPARKLE_GAP, "간격 규칙은 낮·밤 모두");
   for (const s of w.sparkles) if (!S.isNightSparkle(s)) s.t = 1;   // 낮 반짝이는 그대로 600초(밤에 새로 생기지 않음)
-  w.stepSparkles(2); assert.equal(w.sparkles.length, 3); assert.ok(w.sparkles.every(S.isNightSparkle));
-  w.stepSparkles(700); assert.equal(w.sparkles.length, 3, "마을 하루(600초)보다 오래 남음");
+  w.stepSparkles(2); assert.equal(w.sparkles.length, 1); assert.ok(w.sparkles.every(S.isNightSparkle));
+  w.stepSparkles(700); assert.equal(w.sparkles.length, 1, "마을 하루(600초)보다 오래 남음 · 그사이 회차는 꽉 차서 건너뜀");
   // 해가 뜸
   w.isNight = false; w.stepSparkles(0.1); assert.ok(w.sparkles.every(s => s.t <= S.SPARKLE_DAWN_FADE));
   w.stepSparkles(S.SPARKLE_DAWN_FADE); assert.equal(w.sparkles.length, 0, "밤 전용: 낮까지 안 남음");
@@ -55,7 +55,7 @@ test("가로등 둘레 먼저: 전기 들어오는 다 지은 가로등 3칸 안
   const mill = placeAny(w, "windmill", 1e9, far, 4); assert.ok(mill && w.isDone(mill)); assert.equal(w.powered(lamp), true);
   cells = S.sparkleCells(w); const lit = [...cells.lamp.beach, ...cells.lamp.village];
   assert.ok(lit.length > 0); assert.ok(lit.every(([x, z]) => lamp.cells.some(([lx, lz]) => Math.max(Math.abs(lx - x), Math.abs(lz - z)) <= S.SPARKLE_LAMP_R)));
-  w.isNight = true; const made = w.spawnSparkles(); assert.equal(made.length, 2);
+  w.isNight = true; const made = w.spawnSparkles(); assert.equal(made.length, 1);
   const nearLamp = s => lamp.cells.some(([x, z]) => cheb({ x, z }, s) <= S.SPARKLE_LAMP_R);
   assert.ok(nearLamp(made[0]), "첫 밤 반짝이는 가로등 아래");
   for (const s of made) assert.equal(ITEMS.find(i => i.id === s.k).sparkle, w.grid.get(s.x, s.z).groundType === GroundType.Sand ? "beach" : "village", "모래면 바닷가 종류");
@@ -76,6 +76,13 @@ test("해가 지면 첫 밤 반짝이는 20초 안에 · 밤을 모르면(시험
   const list = [...Array(8)].map((_, i) => ({ k: "shell", x: i * 5, z: 1, t: 10 })).concat([...Array(5)].map((_, i) => ({ k: "moonShell", x: i * 5, z: 9, t: 1500 })), [{ k: "shell", x: 3, z: 3, t: 900 }]);
   const got = S.sparklesFromSave(list);
   assert.equal(got.filter(s => s.k === "shell").length, S.SPARKLE_MAX); assert.equal(got.filter(s => s.k === "moonShell").length, S.SPARKLE_NIGHT_MAX);
+  // 예전 저장(낮 6·밤 3까지 있던 때): 새 상한 2·1로 줄임 — 드문 반짝이 먼저, 그다음 저장 차례(같은 저장이면 늘 같은 것) · 남은 것의 차례는 저장 차례
+  const old = [{ k: "shell", x: 0, z: 0, t: 50 }, { k: "acorn", x: 5, z: 0, t: 60 }, { k: "moonShell", x: 0, z: 9, t: 900 }, { k: "goby", x: 10, z: 0, t: 70 },
+    { k: "postcard", x: 15, z: 0, t: 80, r: 1 }, { k: "glowWeed", x: 5, z: 9, t: 800, r: 1 }, { k: "seaglass", x: 20, z: 0, t: 90 }, { k: "moonShell", x: 10, z: 9, t: 700 }, { k: "clover", x: 25, z: 0, t: 99 }];
+  const trim = S.sparklesFromSave(old); assert.deepEqual(S.sparklesFromSave(old), trim, "결정적");
+  assert.deepEqual(trim.map(s => [s.k, s.x, !!s.rare]), [["shell", 0, false], ["postcard", 15, true], ["glowWeed", 5, true]], "드문 엽서·드문 야광 해초는 남고, 보통 것은 저장 차례로");
+  const ow = town(); const oj = JSON.parse(JSON.stringify(ow.serialize())); oj.sparkles = old; const ob = World.fromJSON(oj, seededRandom(1));
+  assert.ok(ob.sparkles.filter(s => !S.isNightSparkle(s)).length <= S.SPARKLE_MAX && ob.sparkles.filter(S.isNightSparkle).length <= S.SPARKLE_NIGHT_MAX, "불러온 마을도 새 상한 안");
   assert.ok(!got.some(s => s.t === 900), "낮 반짝이 수명(600초)을 넘는 것은 버림");
 });
 
@@ -91,9 +98,12 @@ test("밤 부탁: 밤에 고를 때만 후보 · 밤 반짝이 2개 주우면 �
   w.isNight = true; w.daily = D.rollDaily(key, w);
   w.isNight = false; const day = w.spawnSparkles()[0]; w.pickSparkle(day.id);
   const r = () => w.daily.reqs.find(q => q.id === "nightSparkle"); assert.equal(r().have, 0, "낮 반짝이는 안 셈");
-  w.isNight = true; const ns = w.spawnSparkles(); assert.equal(ns.length, 2);
-  for (const s of ns) assert.equal(w.pickSparkle(s.id).id, s.k);
-  assert.equal(r().have, 2); assert.equal(ns.reduce((n, s) => n + (w.items[s.k] > 0 ? 1 : 0), 0), 2, "주운 밤 반짝이는 내 주머니로");
+  w.isNight = true; const ns = [];   // 밤 반짝이는 한 번에 1개(SPARKLE_NIGHT_MAX): 주우면 다음 회차에 또 하나 → 2개 부탁은 회차 두 번(해 지고 20초 + 300초쯤)
+  for (let k = 0; k < 2; k++) {
+    const [s] = w.spawnSparkles(); assert.ok(s && S.isNightSparkle(s)); assert.deepEqual(w.spawnSparkles(), [], "줍기 전엔 더 안 생김");
+    const it = w.pickSparkle(s.id); assert.equal(it.id, s.rare ? S.rareSparkleOf(s.k).id : s.k); ns.push(it.id);
+  }
+  assert.equal(r().have, 2); assert.equal(ns.reduce((n, id) => n + (w.items[id] > 0 ? 1 : 0), 0), 2, "주운 밤 반짝이는 내 주머니로");
   assert.deepEqual(D.dailyFromSave(JSON.parse(JSON.stringify(w.daily))).reqs.find(q => q.id === "nightSparkle").have, 2);
 });
 

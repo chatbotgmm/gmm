@@ -47,8 +47,8 @@ import * as CLIM from "./climate.js";
 import * as CLO from "./clothes.js";
 import * as HL from "./health.js";
 import * as ST from "./story.js";
-import { STORY_PIECES, STORY_CHAPTERS, STORY_CHAIR } from "../data/story.js";
-import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk, sparkleKinds, rareSparkleOf } from "./sparkles.js";
+import { STORY_PIECES, STORY_CHAPTERS, STORY_CHAIR, STORY_WAVE_SECS } from "../data/story.js";
+import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, SPARKLE_WHERE, SPARKLE_FIRST_WHERE, sparkleNextWhere, sparkleSeed, sparkleCells, sparkleCellFree, rollSparkles, sparklesFromSave, sparkleRoom, sparkleLife, sparkleDusk, sparkleKinds, rareSparkleOf } from "./sparkles.js";
 
 /**
  * 새 넓은 섬에 공식은행을 놓음(예전 저장을 불러올 땐 쓰지 않음). 난수를 쓰지 않아 같은 섬 → 같은 자리.
@@ -172,8 +172,9 @@ export class World {
     this.daily = null; this.stamps = Math.max(0, extra.stamps | 0); this.stampBought = stampBoughtFromSave(extra.stampBought);
     // 오늘의 첫 인사(greetToday): 마지막으로 인사받은 실제 날짜 열쇠(예전 저장엔 없음 → 다음 접속에 인사) · 다녀온 사이 문 앞에서 기다리는 갈매미 id(저장 안 함)
     this.greetDay = typeof extra.greetDay === "string" ? extra.greetDay : null; this.doorGull = null; this.doorSay = null;
-    // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계 · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
-    this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST;
+    // ✨ 반짝이(sparkles.js): 지도에 있는 것 [{ id, k 물건 id, x, z, t 남은 초 }] · 다음 회차까지 쌓는 시계(SPARKLE_EVERY) · 다음 회차가 먼저 찾을 곳(바닷가·마을 번갈아) ·
+    //  이야기 차례 시계(STORY_WAVE_SECS — 반짝이 회차와 따로, 예전 200초 그대로) · 반짝이만 쓰는 난수(다른 일의 순서를 바꾸지 않음)
+    this.sparkles = []; this.sparkId = 1; this.sparkClock = SPARKLE_EVERY - SPARKLE_FIRST; this.sparkNext = SPARKLE_FIRST_WHERE; this.waveClock = STORY_WAVE_SECS - SPARKLE_FIRST;
     this.showNumbers = false;                                                     // 건설 모드인지(화면이 넣어 줌): 그때만 갈매미 말풍선에 "나무+2"·"🪙+12" 같은 숫자를 보임. 저장 안 함
     this.sparkRnd = seededRandom(sparkleSeed(extra.seed ?? 7, extra.time));
     // 🗝 메인 스토리(story.js): 기록(예전 저장엔 없음 → 0장부터) · 1초 시계 · 이야기 모임(엔딩 연출·노을 모임 { id, x, z, lx, lz, t }, 저장 안 함) · storyOff: 이야기를 끔(시험 비교용)
@@ -1598,7 +1599,7 @@ export class World {
   }
   /** 문 자리: 공식은행 문(없으면 마을 가운데) */
   doorSpot() { const b = this.bankB(); return b ? { x: b.door.x, z: b.door.z } : { x: Math.floor(this.center.x), z: Math.floor(this.center.z) }; }
-  /** 다녀온 사이 문 앞 선물: awayGiftCount개의 낮 반짝이를 은행 문 둘레(1~5칸)에 놓음. 반짝이 한도(SPARKLE_MAX)가 차면 남는 것은 바로 내 주머니로.
+  /** 다녀온 사이 문 앞 선물: awayGiftCount개의 낮 반짝이를 은행 문 둘레(1~5칸)에 놓음. 반짝이 한도(SPARKLE_MAX 2개, 지도에 있는 낮 반짝이와 함께 셈)가 차면 남는 것은 바로 내 주머니로.
    *  고르는 난수는 섬 씨앗·마을 시간·비운 분으로 따로 만듦(마을 난수·반짝이 난수를 쓰지 않음 → 같은 저장·같은 시간이면 같은 선물).
    *  돌려주는 값: [{ k, name, pocket }] */
   awayGifts(hours, ms) {
@@ -2452,8 +2453,8 @@ export class World {
     }
   }
 
-  // ---- ✨ 반짝이(sparkles.js): 하루 몇 번 생기고, 플레이어가 주우면 내 주머니로
-  /** 수명이 다했거나 그 칸을 이제 못 쓰면(그사이 건물·물) 지우고, SPARKLE_EVERY초마다 한 회차 */
+  // ---- ✨ 반짝이(sparkles.js): 마을 하루 두 번 생기고, 플레이어가 주우면 내 주머니로
+  /** 수명이 다했거나 그 칸을 이제 못 쓰면(그사이 건물·물) 지우고, SPARKLE_EVERY초마다 한 회차 · STORY_WAVE_SECS초마다 이야기 차례(예전 반짝이 회차와 같은 때) */
   stepSparkles(dt) {
     sparkleDusk(this);   // 🌙 해 뜨면 밤 반짝이 옅어짐 · 해 지면 첫 밤 반짝이를 곧
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
@@ -2462,12 +2463,14 @@ export class World {
       if ((s.t -= dt) > 0 && sparkleCellFree(this, s.x, s.z)) continue;
       this.sparkles.splice(i, 1); this.emit("sparkleGone", s);
     }
-    if ((this.sparkClock += dt) >= SPARKLE_EVERY) { this.sparkClock = 0; this.spawnSparkles(); this.storyEvent("wave"); }
+    if ((this.sparkClock += dt) >= SPARKLE_EVERY) { this.sparkClock = 0; this.spawnSparkles(); }
+    if ((this.waveClock += dt) >= STORY_WAVE_SECS) { this.waveClock = 0; this.storyEvent("wave"); }   // 🗝 이야기 차례: 보통 반짝이 자리가 없어도
   }
-  /** 한 회차: 바닷가 1 + 마을 1(sparkRnd만 씀). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
+  /** 한 회차: 1개(sparkRnd만 씀), 바닷가·마을을 회차마다 번갈아(this.sparkNext). 생긴 반짝이들을 돌려줌(시험 손잡이로도 씀) */
   spawnSparkles() {
     const night = this.isNight === true, plain = this.sparkles.filter(s => !s.story); if (sparkleRoom(plain, night) <= 0) return [];   // 이야기 반짝이는 세지 않음(보통 반짝이가 이야기와 상관없이 똑같이 생김)
-    const made = rollSparkles(sparkleCells(this), plain, this.season, this.sparkRnd, undefined, night).map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k), ...(s.rare ? { rare: true } : {}) }));   // rare: 🌟 드문 반짝이(주우면 rareSparkleOf)
+    const rolled = rollSparkles(sparkleCells(this), plain, this.season, this.sparkRnd, undefined, night, this.sparkNext); this.sparkNext = sparkleNextWhere(rolled, this.sparkNext);
+    const made = rolled.map(s => ({ id: this.sparkId++, k: s.k, x: s.x, z: s.z, t: sparkleLife(s.k), ...(s.rare ? { rare: true } : {}) }));   // rare: 🌟 드문 반짝이(주우면 rareSparkleOf)
     for (const s of made) { this.sparkles.push(s); this.emit("sparkleSpawn", s); }
     return made;
   }
@@ -2680,7 +2683,7 @@ export class World {
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought, greetDay: this.greetDay,
-      sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t, rare }) => rare ? { k, x, z, t, r: 1 } : { k, x, z, t }), sparkClock: this.sparkClock, story: ST.storyToSave(this.story),
+      sparkles: this.sparkles.filter(s => !s.story).map(({ k, x, z, t, rare }) => rare ? { k, x, z, t, r: 1 } : { k, x, z, t }), sparkClock: this.sparkClock, sparkNext: this.sparkNext, waveClock: this.waveClock, story: ST.storyToSave(this.story),
       buildings: [...this.buildings.values()].map(b => ({ id: b.id, defId: b.defId, x: b.x, z: b.z, rot: b.rot, hits: b.hits, interior: b.interior, owner: b.owner || null, ...(b.mates?.length ? { mates: b.mates } : {}), fee: b.fee || 0, ...(b.feeHeld ? { feeHeld: 1 } : {}), ...(b.feeTo ? { feeTo: b.feeTo } : {}), order: b.order ? { by: b.order.by, left: b.order.left } : null, ...(b.doctor ? { doctor: b.doctor } : {}), ...(b.upFrom ? { up: b.upFrom } : {}) })) };
   }
   /** 저장의 격자: version 3 = 바뀐 칸만(ChunkGrid) · 넓은 섬 예전 저장(192칸 격자 전체) = 그 격자를 시작 섬 기준으로 옮김 · 옛 작은 섬 = Grid 그대로 */
@@ -2718,9 +2721,12 @@ export class World {
     w.tidyResidents();
     for (const b of w.buildings.values()) if (b.feeHeld && w.isDone(b)) w.releaseFee(b);   // 다 지은 건물에 맡아 둔 설계비(⚡ 완공 고치기 전 저장): 갈매미를 다시 만든 뒤 건축가에게
     w.daily = dailyFromSave(j.daily);                                             // 오늘의 부탁은 다 만든 뒤에(불러오며 다시 놓는 건물을 세지 않게. 예전 저장엔 없음 → 화면이 날짜를 넣어 줄 때 새로 고름)
-    // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김). 시계가 없으면(예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
+    // 반짝이: 아는 것만, 그사이 못 쓰게 된 칸은 버림(id는 새로 매김 · 예전 저장의 낮 6·밤 3은 새 상한 2·1로 — sparklesFromSave). 시계가 없으면(아주 예전 저장) 첫 반짝이는 SPARKLE_FIRST초 뒤
+    //  이야기 차례 시계(waveClock)가 없는 예전 저장: 그때의 sparkClock이 곧 이야기 차례 시계(200초) → 그 값 그대로(이야기가 같은 때 이어짐), 반짝이 회차도 그 시각부터 셈
     w.sparkles = sparklesFromSave(j.sparkles).filter(s => sparkleCellFree(w, s.x, s.z)).map(s => ({ id: w.sparkId++, ...s }));
     if (Number.isFinite(j.sparkClock)) w.sparkClock = Math.min(SPARKLE_EVERY, Math.max(0, j.sparkClock));
+    const wave = Number.isFinite(j.waveClock) ? j.waveClock : j.sparkClock; if (Number.isFinite(wave)) w.waveClock = Math.min(STORY_WAVE_SECS, Math.max(0, wave));
+    if (SPARKLE_WHERE.includes(j.sparkNext)) w.sparkNext = j.sparkNext;
     w.storyRestoreSparks();                                                       // 🗝 줍지 않은 이야기 반짝이를 다시 놓음(그사이 막힌 칸이면 옆 칸)
     if (!j.ownership) { w.migrateOwnership(); if (!w.ownershipPending && w.aquariumB()) w.donateStashes(); }   // 소지품 개편 전 저장: 한 번만(다시 저장하면 ownership 표시가 붙음). 수족관이 있으면 옮겨 받은 물고기를 바로 기증
     w.nextId = j.nextId; return w;

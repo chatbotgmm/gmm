@@ -6,8 +6,8 @@ import { World } from "../src/world/World.js";
 import { seededRandom } from "../src/util.js";
 import { FISH, ITEMS, FURNITURE } from "../src/data/catalog.js";
 import * as ST from "../src/world/story.js";
-import { STORY_CHAPTERS, STORY_PIECES, STORY_PIECE_IDS, STORY_TOTAL, STORY_CHAIR, STORY_LETTER } from "../src/data/story.js";
-import { SPARKLE_EVERY } from "../src/world/sparkles.js";
+import { STORY_CHAPTERS, STORY_PIECES, STORY_PIECE_IDS, STORY_TOTAL, STORY_CHAIR, STORY_LETTER, STORY_EVERY, STORY_WAVE_SECS } from "../src/data/story.js";
+import { SPARKLE_EVERY, SPARKLE_FIRST } from "../src/world/sparkles.js";
 import { newsFor, awayLetter } from "../src/world/news.js";
 import { rewardOf, REWARD_EVENTS } from "../src/ui/rewardFx.js";
 import { storyAppHtml, storyBadge } from "../src/ui/storyView.js";
@@ -66,9 +66,29 @@ test("시작: 새 마을·예전 저장은 0장부터, 둘째 마을 날 첫 반
   assert.deepEqual(ST.storyFromSave(null), ST.newStory()); assert.deepEqual(ST.storyFromSave({ chapter: "x", found: { nope: 1 } }).found, {});
 });
 
-test("1장: 젖은 쪽지(5번째 줍기) · 할머니 이야기(♥♥ 갈매미) · 엽서(다녀온 사이 편지 / 사흘 뒤 줍기) · 2단계 힌트", () => {
-  const w = town(); start(w);
-  pickPlain(w, 4); assert.ok(!w.story.found.c1_note); pickPlain(w, 1); assert.ok(w.story.found.c1_note, "5번째");
+test("이야기 빠르기 그대로: 반짝이 회차(300초·1개)와 따로 이야기 차례는 예전처럼 200초마다 → 문패가 예전과 같은 마을 시각", () => {
+  // 예전(3b3b0be: 반짝이 200초마다 2개 = 이야기 차례)에서 같은 마을(씨앗 7, 0.5초씩)로 잰 값: 차례 20·220·420·620·820·1020초, 문패 620초(둘째 날 첫 차례)
+  assert.equal(STORY_WAVE_SECS, 200); assert.equal(SPARKLE_EVERY, 300);
+  const w = town(), waves = [], spawns = [], beats = [];
+  const se = w.storyEvent.bind(w); w.storyEvent = (ev, a) => { if (ev === "wave") waves.push(w.time); return se(ev, a); };
+  w.on("sparkleSpawn", () => spawns.push(w.time)); w.on("storySpark", e => beats.push([e.key, w.time]));
+  for (let i = 0; i < 1800 * 2; i++) w.update(0.5);
+  assert.deepEqual(waves, [20, 220, 420, 620, 820, 1020, 1220, 1420, 1620], "이야기 차례 = 예전 반짝이 회차 시각");
+  assert.deepEqual(spawns, [20, 320, 620, 920, 1220, 1520], "보통 반짝이는 300초마다 1개(첫 반짝이는 그대로 20초)");
+  assert.deepEqual(beats, [["c1_sign", 620]], "문패 반짝이 = 예전과 같은 620초");
+  // 해가 지면 예전처럼 두 시계를 함께 당김(첫 밤 반짝이 SPARKLE_FIRST초 뒤 · 이야기 차례도 예전과 같은 때)
+  const v = town(); v.stepSparkles(0); v.sparkClock = 0; v.waveClock = 0; v.isNight = true; v.stepSparkles(0);
+  assert.equal(v.sparkClock, SPARKLE_EVERY - SPARKLE_FIRST); assert.equal(v.waveClock, STORY_WAVE_SECS - SPARKLE_FIRST);
+  // 저장·불러오기: 이야기 차례 시계가 남고, 그 시계가 없는 예전 저장은 그때의 반짝이 시계(= 예전 이야기 차례 시계)를 그대로
+  w.waveClock = 123.5; const j = JSON.parse(JSON.stringify(w.serialize())); assert.equal(World.fromJSON(j).waveClock, 123.5);
+  const old = JSON.parse(JSON.stringify(j)); delete old.waveClock; old.sparkClock = 150; assert.equal(World.fromJSON(old).waveClock, 150);
+  old.sparkClock = 260; assert.equal(World.fromJSON(old).waveClock, STORY_WAVE_SECS, "200초를 넘는 값은 200으로(곧 차례)");
+});
+
+test("1장: 젖은 쪽지(2번째 줍기) · 할머니 이야기(♥♥ 갈매미) · 엽서(다녀온 사이 편지 / 사흘 뒤 줍기) · 2단계 힌트", () => {
+  const w = town(); start(w); assert.equal(STORY_EVERY, 2, "반짝이 하루 2개: 쪽지는 2번째 줍기(예전 하루 6개 · 5번째와 같은 때)");
+  pickPlain(w, STORY_EVERY - 1); assert.ok(!w.story.found.c1_note); pickPlain(w, 1); assert.ok(w.story.found.c1_note, "2번째");
+  assert.match(STORY_PIECES.c1_note.hint[1], /두 번/); assert.ok(!STORY_PIECE_IDS.some(id => STORY_PIECES[id].hint.some(h => /다섯/.test(h))), "힌트 글도 새 줍기 수");
   const u = w.units[0]; w.addBond(u, 13.5); assert.ok(!w.story.found.c1_tale); w.addBond(u, 1);
   assert.equal(w.story.found.c1_tale.who, u.name); assert.match(ST.pieceText("c1_tale", u.name), new RegExp(`^${u.name}:`));
   const r = w.applyAway(20 * 60000); assert.ok(w.story.found.c1_card, "다녀온 사이 편지"); assert.ok(r.story.some(l => l.includes("엽서")));
@@ -176,11 +196,12 @@ test("4장: 조개섬 말뚝(사흘 뒤 본섬 바닷가) · 깜빡이는 대답
 });
 
 test("저장/불러오기: 조각·별씨·줍기 수·이야기 반짝이(같은 칸)·대기열이 그대로", () => {
-  const w = town(); toChapter(w, 3); pickPlain(w, 2); wave(w); pickKey(w, "seed:B"); w.startSky("meteor", true);
+  const w = town(); toChapter(w, 3); pickPlain(w, 1); wave(w); pickKey(w, "seed:B"); w.startSky("meteor", true);
   const sp = sparkOf(w, "seed:A"); const j = JSON.parse(JSON.stringify(w.serialize()));
   assert.ok(!j.sparkles.some(s => s.k === "story"), "보통 반짝이 칸엔 안 섞임");
   const v = World.fromJSON(j);
-  assert.deepEqual(v.story.found, w.story.found); assert.equal(v.story.seeds, 1); assert.equal(v.story.pickN, 2); assert.equal(v.story.chapter, 3);
+  assert.deepEqual(v.story.found, w.story.found); assert.equal(v.story.seeds, 1); assert.equal(v.story.pickN, 1); assert.equal(v.story.chapter, 3);
+  assert.equal(ST.storyFromSave({ ...j.story, pickN: 4 }).pickN, STORY_EVERY - 1, "예전 저장의 줍기 수(5까지 세던 4)는 새 수 - 1로: 다음 줍기에 쪽지");
   const vs = sparkOf(v, "seed:A"); assert.ok(vs && vs.x === sp.x && vs.z === sp.z);
   pickKey(v, "seed:A"); assert.equal(v.story.seeds, 2);
   assert.deepEqual(ST.storyFromSave(ST.storyToSave(w.story)), ST.storyFromSave(j.story));

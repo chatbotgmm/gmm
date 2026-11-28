@@ -47,6 +47,9 @@ test("문 앞 선물: 은행 문 둘레에 2~4개, 같은 저장이면 같은 �
   const door = w.bankB().door;
   for (const g of r.gifts) { const s = w.sparkles.find(x => x.k === g.k); assert.ok(s && Math.max(Math.abs(s.x - door.x), Math.abs(s.z - door.z)) <= 5); }
   assert.equal(N.awayGiftCount(8), 4); assert.equal(N.awayGiftCount(0.2), 2);
+  { const t = town(), rt = t.applyAway(8 * H, seededRandom(5), NOON), door4 = rt.gifts.filter(g => !g.pocket);   // 반짝이 한도 2개: 4개면 문 앞 2 + 주머니 2
+    assert.equal(rt.gifts.length, 4); assert.equal(door4.length, 2); assert.equal(rt.gifts.filter(g => g.pocket).length, 2); assert.equal(t.sparkles.filter(x => !x.story).length, 2);
+    assert.ok(N.awayLetter(rt).lines.some(l => l.includes("문 앞이 꽉 차서"))); }
   const f = town(); for (let i = 0; i < 6; i++) f.sparkles.push({ id: 900 + i, k: "shell", x: i, z: 0, t: 100 });
   const p0 = f.items.shell || 0, rf = f.applyAway(8 * H, seededRandom(5), NOON); assert.ok(rf.gifts.every(g => g.pocket)); assert.equal(f.sparkles.length, 6);
   assert.equal(Object.values(f.items).reduce((a, b) => a + b, 0) - p0 - 0 >= rf.gifts.length, true);

@@ -85,16 +85,21 @@ function oldRoll(cells, existing, season, rnd, wave = S.SPARKLE_WAVE, night = fa
   return out;
 }
 
-test("드문 반짝이: 반짝이 난수의 자리·종류·순서는 그대로, 약 5%", () => {
+test("드문 반짝이: 반짝이 난수의 자리·종류·순서는 그대로, 약 15%(하루 2개 × 15% = 예전 하루 6개 × 5%와 같은 하루 0.3개)", () => {
   const cells = { beach: [], village: [], lamp: { beach: [[0, 0], [9, 9]], village: [[40, 0]] } };
   for (let i = 0; i < 40; i++) { cells.beach.push([i * 5, 0]); cells.village.push([i * 5, 30]); }
   let n = 0, rare = 0;
   for (const season of ["spring", "summer", "autumn", "winter"]) for (const night of [false, true]) for (let seed = 1; seed <= 400; seed++) {
-    const a = seededRandom(seed), b = seededRandom(seed), got = S.rollSparkles(cells, [], season, a, undefined, night), was = oldRoll(cells, [], season, b, undefined, night);
+    const a = seededRandom(seed), b = seededRandom(seed), got = S.rollSparkles(cells, [], season, a, 2, night), was = oldRoll(cells, [], season, b, 2, night);   // 두 개씩(바닷가 → 마을 차례까지 견줌)
     assert.deepEqual(got.map(({ rare, ...s }) => s), was); assert.equal(a(), b(), "난수를 더 쓰지 않음");
     for (const s of got) { n++; if (s.rare) { rare++; assert.ok(S.rareSparkleOf(s.k)); } }
   }
-  assert.ok(rare / n > 0.03 && rare / n < 0.07, `드문 비율 ${rare}/${n}`);
+  assert.equal(S.SPARKLE_RARE, 0.15); assert.ok(rare / n > 0.12 && rare / n < 0.18, `드문 비율 ${rare}/${n}`);
+  // 회차마다 1개: first로 바닷가·마을을 고름(난수는 똑같이 두 번) · 다음 차례는 놓인 곳의 반대쪽
+  for (const first of ["beach", "village"]) { const r = seededRandom(9), [one] = S.rollSparkles(cells, [], "summer", r, undefined, false, first); assert.equal(one.where, first); assert.equal(S.sparkleNextWhere([one], first), first === "beach" ? "village" : "beach"); }
+  assert.equal(S.sparkleNextWhere([], "beach"), "beach", "놓인 게 없으면 차례 그대로"); assert.equal(S.sparkleNextWhere([], undefined), S.SPARKLE_FIRST_WHERE);
+  const onlyBeach = { beach: cells.beach, village: [] }, [fb] = S.rollSparkles(onlyBeach, [], "summer", seededRandom(9), undefined, false, "village");
+  assert.equal(fb.where, "beach", "마을에 자리가 없으면 바닷가"); assert.equal(S.sparkleNextWhere([fb], "village"), "village", "다음엔 다시 마을부터");
 });
 
 test("드문 반짝이: 주우면 드문 물건, 저장·불러오기 그대로, 도감·선물 갈래", () => {

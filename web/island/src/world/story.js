@@ -1,6 +1,6 @@
 // 🗝 메인 스토리 「갈매미섬의 비밀」 계산(순수: 화면·기기 시계·난수를 모름 → tests/story.test.js).
 // 기록(world.story)을 받아 고치고, 월드가 해야 할 일(행동 목록)을 돌려줌. 월드(World.js)가 행동을 받아 반짝이를 놓고 알림을 냄.
-//  · 정해진 셈으로만 정함(5번째 줍기 · 마을 날 · 하트 단계 · 하늘 일). world.rnd·sparkRnd·skyRnd를 쓰지 않음 → 낚시·날씨·하늘·반짝이 순서가 그대로
+//  · 정해진 셈으로만 정함(STORY_EVERY번째 줍기 · 마을 날 · 하트 단계 · 하늘 일). world.rnd·sparkRnd·skyRnd를 쓰지 않음 → 낚시·날씨·하늘·반짝이 순서가 그대로
 //  · 단서: 플레이어가 줍는 반짝이(이야기 반짝이는 보통 반짝이와 따로, 줍기 전까지 안 사라짐) · 갈매미가 털어놓는 말(하트 단계·쓰다듬기)
 //    · 하늘(무지개·유성우·첫눈) · 다녀온 사이 편지·소식지 · 수족관(고래상어 기증) · 작은 섬(조개섬). 갈매미 소지품(낚은 것·주운 것·별조각)은 단서가 아님
 //  · 장 n이 열려 있으면 그 장과 앞 장의 조각을 얻을 수 있음(덤은 엔딩 뒤에도). 장마다 아무 조각 3개 + 고칠 곳 → 다음 장
@@ -129,7 +129,7 @@ export function storyOnEvent(s, ev, arg, w, day) {
   else if (ev === "sky") {
     if (arg?.kind === "rainbow" && canFind(s, "c2_rainbow") && !stSparkOf(s, "c2_rainbow")) out.push({ spark: "c2_rainbow", at: "ring" });
     if (arg?.kind === "meteor" && stSeedsWanted(s) && !stSparkOf(s, "seed:A")) out.push({ spark: "seed:A", at: "ring" });   // 별씨 첫째 길: 유성우 밤 등대 둘레
-  } else if (ev === "wave") {                                                      // 반짝이 차례(200초마다, 보통 반짝이 자리가 없어도)
+  } else if (ev === "wave") {                                                      // 이야기 차례(STORY_WAVE_SECS 200초마다 — 보통 반짝이 회차 300초와 따로, 예전 빠르기 그대로)
     if (s.chapter === 0 && day >= 2 && !stSparkOf(s, "c1_sign")) out.push({ spark: "c1_sign", at: "lighthouse" });
     for (const id of s.queue.splice(0)) if (!s.found[id] && !stSparkOf(s, id)) out.push({ spark: id, at: STORY_PIECES[id].at });
     if (stSeedsWanted(s) && s.seedDay !== day) { s.seedDay = day; out.push({ spark: "seed:B", at: "ring" }); }   // 둘째 길: 마을 날마다 아침 첫 반짝이 차례에 별씨 하나

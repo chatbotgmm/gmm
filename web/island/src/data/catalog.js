@@ -321,7 +321,7 @@ export const ITEMS = [
   { id: "stampShelf", name: "민트 책장",     rarity: "epic", furniture: "mintShelf", stamp: 3 },
   { id: "stampBed",   name: "별밤 침대",     rarity: "epic", furniture: "starBed",   stamp: 5 },
   // ---- 여기부터는 플레이어 몫 선물거리(gift: 낚시·바닷가 줍기로는 안 나오고 상인도 안 팖. 값 없음). 맨 뒤에 붙여 기존 낚시 결과가 그대로
-  // ✨ 반짝이(sparkle: 하루 몇 번 바닷가·마을에 생기고 플레이어가 탭해서 주움 → 내 주머니). 계절은 season 대신 sparkleSeason(낚시 계절 물건과 섞이지 않게)
+  // ✨ 반짝이(sparkle: 마을 하루 두 번 바닷가·마을에 생기고 플레이어가 탭해서 주움 → 내 주머니). 계절은 season 대신 sparkleSeason(낚시 계절 물건과 섞이지 않게)
   { id: "shell",    name: "조개껍데기",       rarity: "common", gift: true, sparkle: "beach" },
   { id: "seaglass", name: "바다 유리",         rarity: "common", gift: true, sparkle: "beach" },
   { id: "goby",     name: "웅덩이 망둥어",     rarity: "common", gift: true, sparkle: "beach" },

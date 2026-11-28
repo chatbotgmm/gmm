@@ -1008,7 +1008,7 @@ export class Hud {
     }
     box = fold("dex.note", "ℹ️ 도감 읽는 법", "");
     box.append(el("p", "dim", "🎁 주머니에 모은 반짝이와 도장 선물은 갈매미를 따라가며 건네요. 갈매미가 모은 것은 그 갈매미의 소지품이에요."));
-    box.append(el("p", "dim", "🌟 분홍빛으로 반짝이는 것은 드문 반짝이예요. 스무 번에 한 번쯤 보통 반짝이 대신 귀한 모습으로 나와요."));
+    box.append(el("p", "dim", "🌟 분홍빛으로 반짝이는 것은 드문 반짝이예요. 일곱 번에 한 번쯤 보통 반짝이 대신 귀한 모습으로 나와요."));
     box.append(el("p", "dim", "계절 물고기와 물건은 그 계절에만 나와요. 물건은 갈매미가 낚시하거나 바닷가에서 먹이를 잡다가 주워요."));
   }
   setQuality(mode) { if (!mode) return; for (const b of this.qBox.children) b.classList.toggle("on", b.dataset.q === mode); document.getElementById("qualityNote").textContent = QUALITY_NOTE[mode]; }
