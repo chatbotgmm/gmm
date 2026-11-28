@@ -35,6 +35,7 @@ import { BOND_MAX, BOND_STAGES, bondStage, GIFT_TIERS, giftDef, giftTier, PET_DA
 import { STASH_CUT, stashDef, stashPrice, stashFurniture, stashSellable, stashFromSave, stashAdd } from "./belongings.js";
 import * as BK from "./bank.js";
 import { undoBlock, feeUndoLedger } from "./buildUndo.js";
+import * as RL from "./relocate.js";
 import * as MON from "./monetary.js";
 import * as P from "./population.js";
 import * as HM from "./homes.js";
@@ -1869,6 +1870,10 @@ export class World {
     this.emit("buildUndo", { b, refund: fee });
     return { ok: true, reason: "", refund: fee, building: b };
   }
+  // ---- 건물 옮기기(relocate.js): 돈 안 듦, id·주인·실내·공사·전기 범위가 따라감, ↶로 제자리
+  moveBlock(b) { return RL.moveBlock(this, b); }
+  moveBuilding(id, ax, az, rot, opt = {}) { return RL.moveBuilding(this, id, ax, az, rot, opt); }
+  undoMove(rec) { return RL.undoMove(this, rec); }
   isDone(b) { return b.hits >= b.need; }
   /** 저장할 은행 창고: 짓는 갈매미가 공사 재료로 꺼내 들고 있는 짐(u.load, 저장 안 함)을 창고에 되돌려 셈 */
   resWithLoads() { const r = { ...this.res }; for (const u of this.units) for (const [k, n] of Object.entries(u.load || {})) r[k] = (r[k] || 0) + n; return r; }

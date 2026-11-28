@@ -146,6 +146,7 @@ function hookSounds(w) {
   w.on("buildingProgress", b => sfx.play("hammer", { pos: at(b.door), vol: 0.55, rate: 1.1 }));
   w.on("buildingAdded", b => { if (ready) sfx.play("place", { pos: at(b.door) }); if (b.door) w.grid.markDirty(b.door.x, b.door.z); });   // 문 앞 밟힌 땅 색(groundChunks.js)
   w.on("buildingRemoved", b => { if (b.door) w.grid.markDirty(b.door.x, b.door.z); });
+  w.on("buildingMoved", ({ b, from }) => { sfx.play("place", { pos: at(b.door) }); for (const d of [b.door, from.door]) w.grid.markDirty(d.x, d.z); for (const [x, z] of [...from.cells, ...b.cells]) w.grid.markDirty(x, z); });   // ↔ 옮기기: 문 앞 밟힌 땅 색 · 건물 밑 땅
   w.on("buildingDone", b => { sfx.play("done", { pos: at(b.door), vol: 0.8 }); sfx.chime([659, 784], 0.08, 0.12); });
   w.on("fish", e => { sfx.splash(at(e.u), 0.8); if (e.fish.rarity !== "common" || e.fish.season) sfx.chime([880, 1175], 0.08, 0.15); });
   for (const ev of ["market", "bank", "foodSale", "granary"]) w.on(ev, e => sfx.play("coins", { pos: at(e.u || e.buyer), vol: 0.6 }));
@@ -424,7 +425,7 @@ const powerRange = new PowerRange({ scene, camera, controls, getWorld: () => wor
 unitControl.onTapGround = (c, e) => {
   const s = (e && sparkleView?.hit(e.clientX, e.clientY, camera, renderer.domElement)) || world.sparkleNear(c.gx, c.gz);
   if (s && world.pickSparkle(s.id)) { hud.houseCard(null); powerRange.tap(null); noPower.tap(null); return; }   // 빈 땅을 누른 것처럼 열린 카드는 닫음
-  const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b || null); powerRange.tap(b || null, tools.ray.ray, c); noPower.tap(powerRange.sel ? null : b || null); };
+  const id = world.grid.get(c.x, c.z)?.occupiedId, b = id && world.buildings.get(id); hud.houseCard(b || null); powerRange.tap(b || null, tools.ray.ray, c); if (powerRange.sel) hud.moveBtnFor(powerRange.sel); noPower.tap(powerRange.sel ? null : b || null); };   // 풍차 카드에도 ↔ 옮기기
 const noPower = new NoPowerBadges({ camera, overlay, getWorld: () => world, getViews: () => buildingViews, card: document.getElementById("houseCard") });   // 전기 범위 밖 가로등·등불 건물 위 「전기 없음」 말풍선
 // 첫 탭 규칙(갈매미·땅보다 먼저): 💤 꿈방울을 누르면 터뜨려 잠꼬대 → ✨ 반짝이를 누르면 줍기. 아니면 unitControl이 하던 대로(갈매미 따라가기·땅 누르기)
 unitControl.onTapFirst = e => {

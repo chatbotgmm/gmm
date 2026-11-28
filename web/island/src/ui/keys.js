@@ -9,6 +9,7 @@ export const KEY_LIST = [
   { code: ["Digit4", "Numpad4"], key: "4", what: "🏠 건물 짓기", sel: '#tools [data-mode="build"]' },
   { code: ["Digit5", "Numpad5"], key: "5", what: "🧹 철거", sel: '#tools [data-mode="demolish"]' },
   { code: ["Digit6", "Numpad6"], key: "6", what: "🌳 자연·지형", sel: '#tools [data-mode="nature"]' },
+  { code: ["Digit7", "Numpad7"], key: "7", what: "↔ 건물 옮기기", sel: '#tools [data-mode="move"]' },
   { code: ["KeyP"], key: "P", what: "📱 갈매폰 열기·닫기", sel: "#phoneBtn" },
   { code: ["KeyM"], key: "M", what: "🗺 미니맵 켜기·끄기", sel: "#mapBtn" },
   { code: ["KeyJ"], key: "J", what: "💭 소원 · 오늘의 부탁", app: "wish" },
@@ -28,7 +29,7 @@ const KEY_KEEP_LIST = [
   ["Esc", "열린 것을 하나씩 닫기. 닫을 게 없으면 ☰ 메뉴"], ["Delete", "방에서 고른 가구 치우기"], ["Tab", "버튼 사이 옮기기, Enter로 누르기"],
 ];
 /** 버튼에 붙이는 작은 키 힌트(마우스로 할 때만 보임) */
-const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"],
+const KEY_HINTS = [['#tools [data-mode="view"]', "1"], ['#tools [data-mode="paint"]', "2"], ['#tools [data-mode="height"]', "3"], ['#tools [data-mode="build"]', "4"], ['#tools [data-mode="demolish"]', "5"], ['#tools [data-mode="nature"]', "6"], ['#tools [data-mode="move"]', "7"],
   ["#phoneBtn", "P"], ["#mapBtn", "M"], ["#cfBuild", "Enter"], ["#cfRot", "R"], ["#cfCancel", "Esc"], ["#tugBtn", "Space"], ["#phoneClose", "Esc"], ["#letterClose", "Esc"], ["#menuBtn", "Esc"], ["#viewL", "Z"], ["#viewR", "X"], ["#turnL", "Z"], ["#turnR", "X"], ["#gridBtn", "G"]];
 const KEY_OVERLAYS = ["ask", "cloudAsk", "letter", "phone"];                            // 위에 뜬 것부터(확인창 > 편지 > 갈매폰 시트 — 도감·메뉴도 이 안)
 const KEY_CONTROL_SEL = "button, a[href], summary, select, [role=button]";

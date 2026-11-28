@@ -16,5 +16,5 @@ export function pressKind({ dist, ms, pointer = "mouse", multi = false }) {
 
 /** 이 도구는 「톡 = 고르기, 끌기 = 화면 옮기기」인가. natKind: 자연·지형 도구의 kind(natureAction) */
 export function tapTool(mode, natKind = null) {
-  return mode === "build" || mode === "demolish" || (mode === "nature" && natKind === "move");
+  return mode === "build" || mode === "demolish" || mode === "move" || (mode === "nature" && natKind === "move");
 }

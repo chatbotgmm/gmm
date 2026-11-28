@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { CELL, toWorldX, toWorldZ, toGridX, toGridZ, WATER_Y } from "../config.js";
 import { BUILDINGS } from "../data/catalog.js";
-import { anchorFor } from "../world/placement.js";
+import { anchorFor, rotatedSize } from "../world/placement.js";
 import { josa } from "../util.js";
 import { terrainHeight } from "../world/terrain.js";
 import { findPath } from "../world/pathfinding.js";
@@ -16,6 +16,7 @@ import { pressKind, tapTool } from "./pressKind.js";
 import { nearestSpot, PREPLACE_R, SNAP_R } from "./buildSpot.js";
 import { natureAction, natureHover, strokeText, undoText, redoText } from "../ui/natureView.js";
 import { buildUndoText, demolishAsk } from "../ui/buildUndoView.js";
+import { relocStatus } from "../ui/moveView.js";
 const TOOLS_TOUCH = typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
 
 const OK = 0x4fcf78, BAD = 0xe0574f;
@@ -63,7 +64,7 @@ export class Tools {
   }
 
   setMode(mode, arg = null) {
-    this.commitNature?.();
+    this.commitNature?.(); this.drop?.();
     const near = this.mode === "build" && this.plan && !this.plan.bridge ? { x: this.plan.x, z: this.plan.z } : null;   // 건설 중 다른 건물로 바꾸면 정해 둔 자리 둘레에서 다시 찾음
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null; this.plan = null;
     this.heightOp = mode === "height" ? (arg || "raise") : null; this.shapeStart = null; this.commitStroke?.();
@@ -72,6 +73,7 @@ export class Tools {
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
     this.onStatus(""); if (mode === "build") this.prePlace(near); this.refresh(); this.onMode?.(mode, arg);
+    if (mode === "move") { if (arg == null || !this.liftUp(arg)) this.onStatus(relocStatus("", "pick")); }   // ↔ 옮기기: 건물 카드에서 왔으면 그 건물을 바로 듦
     this.askT = 0; this.tickAsks();
     if (mode === "paint" && this.askMesh.count) this.onStatus("🛣 노란 칸은 갈매미가 부탁한 길이에요. 돌길이나 데크로 칠해 주세요");
   }
@@ -210,6 +212,9 @@ export class Tools {
       const fails = []; let n = 0, refund = 0;
       for (const id of s.ids) { const r = this.world.undoBuild(id); if (r.ok) { n++; refund += r.refund; } else fails.push(r.reason); }
       text = buildUndoText({ name: s.name, n, total: s.ids.length, refund, fails });
+    } else if (s.kind === "move") {                                                     // ↔ 옮기기: 옛 자리로(그사이 또 옮겼거나 옛 자리가 막혔으면 못 함)
+      if (this.lift?.id === s.rec.id) this.drop();
+      const r = this.world.undoMove(s.rec); if (r.ok) this.redoStack.push(s); text = relocStatus(s.name, "undo", r.ok ? "" : r.reason);
     } else if (s.kind === "custom") {                                                   // 꾸미기: 월드가 만든 반대 일(낸 값 돌려받음, 그사이 바뀌었으면 못 함)
       const ok = [], fails = []; let refund = 0;
       for (const it of [...s.items].reverse()) { const r = this.world.applyInverse(it.inverse); if (r.ok) { ok.unshift(it); refund += r.refund || 0; } else fails.push(r.reason); }
@@ -223,7 +228,10 @@ export class Tools {
   redo() {
     const s = this.redoStack.pop(); if (!s) return this.onStatus("다시 할 게 없어요");
     let text;
-    if (s.kind === "custom") {                                                   // 꾸미기: 처음 한 일을 다시(값도 다시 냄)
+    if (s.kind === "move") {                                                     // ↔ 옮기기 다시: 옮겼던 자리로
+      if (this.lift?.id === s.rec.id) this.drop();
+      const t = s.rec.to, r = this.world.moveBuilding(s.rec.id, t.x, t.z, t.rot); if (r.ok) this.history.push({ ...s, rec: r.undo }); text = relocStatus(s.name, "redo", r.ok ? "" : r.reason);
+    } else if (s.kind === "custom") {                                                   // 꾸미기: 처음 한 일을 다시(값도 다시 냄)
       const ok = [], fails = []; let cost = 0;
       for (const it of s.items) { const r = this.world[it.redo.op](...it.redo.args, {}); if (r.ok) { ok.push({ ...it, inverse: r.inverse }); cost += r.cost || 0; } else fails.push(r.reason); }
       if (ok.length) this.history.push({ ...s, items: ok }); text = redoText({ n: ok.length, cost, fails });
@@ -386,6 +394,13 @@ export class Tools {
       if (a.kind === "dig" || a.kind === "fill") { this.natureCells(this.brushCells(h)); return; }
       const k = `${h.x},${h.z}`; if (this.stroke?.has(k)) return; this.stroke?.add(k);   // 한 번 끌 때 같은 칸은 한 번만
       const call = this.natureCall(a, h.x, h.z); this.natNote(call ? this.world[call.op](...call.args, {}) : { ok: false, reason: "치울 게 없어요" }, call); return;
+    } else if (this.mode === "move") {                                            // ↔ 옮기기: 건물을 톡 → 듦 → 자리를 톡(짓기처럼 2칸 안 빈 자리로 살짝 옮겨 줌) → ↔ 옮기기
+      if (!this.lift) { const b = this.world.buildingAt(h.x, h.z); if (b) this.liftUp(b.id); else this.onStatus(relocStatus("", "pick")); return; }
+      const d = this.moveDry(h.x, h.z); if (d.ok || d.reason === "지금 자리와 같아요") { this.plan = { x: h.x, z: h.z, lift: true }; this.refresh(); return; }   // 제자리를 누르면 제자리로
+      const s = nearestSpot((x, z) => this.moveOk(x, z, false), h.x, h.z, SNAP_R);
+      if (s && this.moveOk(s.x, s.z)) { this.plan = { x: s.x, z: s.z, lift: true, snapped: true }; this.refresh(); this.buzz(); return; }
+      this.plan = { x: h.x, z: h.z, lift: true }; this.refresh(); this.onBadSpot?.(d.reason);
+      return;
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z);
       if (b && BUILDINGS[b.defId].fixed) { this.onStatus(`${BUILDINGS[b.defId].name}은 철거할 수 없어요`); return; }
@@ -425,6 +440,13 @@ export class Tools {
       if (r.ok) { this.plan = null; this.natNote(r, { op: "moveLandmark", args: [p.defId, p.ax, p.az, p.rot] }); this.natBatch.arg = `move:${p.defId}`; this.commitNature(); return; }
       this.refresh(); this.onStatus(`🚫 ${r.reason}`); return;
     }
+    if (this.mode === "move" && h && this.lift) {                                   // ↔ 옮기기(공짜): 되돌리기 목록에 넣음
+      const L = this.lift, def = BUILDINGS[L.defId], a = anchorFor(def, h.x, h.z, this.rot), r = this.world.moveBuilding(L.id, a.x, a.z, this.rot);
+      if (!r.ok) { this.refresh(); this.onStatus(`🚫 ${r.reason}`); return; }
+      const s = { kind: "move", name: def.name, rec: r.undo }; this.history.push(s); if (this.history.length > 60) this.history.shift(); this.redoStack = []; this.onHistory?.();
+      this.lift = null; this.plan = null; this.buildingViews.preview?.(L.id, null); this.refresh(); this.onMoved?.(r.building);
+      this.onStatus(relocStatus(def.name, "done"), this.undoAct(s)); return;
+    }
     if (this.mode !== "build" || !h) return;
     if (h.bridge) {
       const { ok } = this.bridgeLine(h), put = []; let fee = 0; for (const [x, z] of ok) { const r = this.world.placeBuilding("bridge", x, z, 0); if (r.ok) { put.push(r.building); fee += r.building.fee || 0; } }
@@ -439,15 +461,31 @@ export class Tools {
   }
   /** 알림을 누르면 이 짓기를 되돌림(hud.status의 act) */
   undoAct(s) { return { act: { label: "↶ 되돌리기", run: () => this.undoEntry(s) } }; }
-  clearPlan() { this.plan = null; this.refresh(); }
+  clearPlan() { if (this.mode === "move" && this.lift) { const n = BUILDINGS[this.lift.defId].name; this.drop(); this.refresh(); this.onStatus(relocStatus(n, "cancel")); return; } this.plan = null; this.refresh(); }
+  // ---- ↔ 건물 옮기기(world/relocate.js): 든 건물(this.lift)은 진짜 모델이 고스트 자리로 떠서 따라옴(buildingViews.preview), 바닥 판은 초록·빨강
+  /** 건물을 듦: 지금 자리·방향에서 시작(고스트 가운데 칸 = 건물 가운데 칸). 못 옮기는 건물이면 까닭을 띄우고 false */
+  liftUp(id) {
+    const w = this.world, b = w.buildings.get(id), why = w.moveBlock(b); if (why) { this.onStatus(`🚫 ${why}`); this.onBadSpot?.(why); return false; }
+    this.drop(); const def = BUILDINGS[b.defId], s = rotatedSize(def, b.rot);
+    this.lift = { id, defId: b.defId }; this.rot = b.rot; this.plan = { x: b.x + Math.floor((s.w - 1) / 2), z: b.z + Math.floor((s.d - 1) / 2), lift: true, home: true };
+    this.refresh(); this.onStatus(relocStatus(def.name, "picked")); this.buzz(); return true;
+  }
+  /** 든 건물을 내려놓음(옮기지 않고 제자리 그대로) */
+  drop() { const L = this.lift; this.lift = null; if (this.plan?.lift) this.plan = null; if (L) { this.buildingViews.preview?.(L.id, null); this.buildingViews.setHighlight(null); } }
+  /** 누른 칸(x, z)을 가운데로 든 건물을 놓을 때의 판정(dry). links = false면 길 검사 없이 빠르게 */
+  moveDry(x, z, links = true) { const L = this.lift; if (!L) return { ok: false, reason: "든 건물이 없어요" }; const a = anchorFor(BUILDINGS[L.defId], x, z, this.rot); return this.world.moveBuilding(L.id, a.x, a.z, this.rot, { dry: true, links }); }
+  moveOk(x, z, links = true) { return this.world.grid.inBounds(x, z) && this.moveDry(x, z, links).ok; }
+  /** 지금 고스트로 보이는 건물 종류(짓기·옮기기) — 풍차 전기 범위 미리보기(powerRange.js) */
+  get ghostDef() { return this.mode === "build" ? BUILDINGS[this.buildId] : this.mode === "move" && this.lift ? BUILDINGS[this.lift.defId] : null; }
 
   // 미리보기 갱신: 칸 커서 / 고스트 색(초록 = 지을 수 있음, 빨강 = 못 지음 + 이유) / 철거 대상 강조
   refresh() {
-    const plan = this.mode === "build" || this.mode === "nature" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
-    this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false;
+    const plan = this.mode === "build" || this.mode === "nature" || this.mode === "move" ? this.plan : null, h = plan || this.hover, grid = this.world.grid;
+    this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.ghostBox.visible = true;
     // onPlan(보이나, 지을 수 있나, 자리) — 자리: 건물 { defId, ax, az, rot } · 다리 { bridge, ok: 놓을 수 있는 칸 수, water: 물 칸 수 }(확인창이 설계비·금고를 다시 셈)
     if (this.mode === "build" && plan?.bridge) { const L = this.bridgeLine(plan); this.onPlan?.(plan.done, L.ok.length > 0, { bridge: true, ok: L.ok.length, water: L.water.length }); }
     else if (this.mode === "nature" && plan?.move) { const p = this.movePlan(plan, plan.move); this.onPlan?.(true, !!p && this.world.moveLandmark(p.defId, p.ax, p.az, p.rot, { dry: true }).ok, p && { move: p.defId, ax: p.ax, az: p.az, rot: p.rot }); }
+    else if (this.mode === "move" && plan && this.lift) { const a = anchorFor(BUILDINGS[this.lift.defId], plan.x, plan.z, this.rot); this.onPlan?.(true, this.moveDry(plan.x, plan.z).ok, { relocate: this.lift.id, ax: a.x, az: a.z, rot: this.rot }); }
     else if (this.mode === "build" && plan) { const def = BUILDINGS[this.buildId], a = anchorFor(def, plan.x, plan.z, this.rot); this.onPlan?.(true, this.world.check(this.buildId, a.x, a.z, this.rot).ok, { defId: this.buildId, ax: a.x, az: a.z, rot: this.rot }); }
     else this.onPlan?.(false);
     if (!h) { this.buildingViews.setHighlight(null); return; }
@@ -481,6 +519,19 @@ export class Tools {
       this.onStatus(!r.ok ? r.reason : plan?.auto ? `${def.name}: 가까운 빈 자리에 놓아 봤어요. 다른 곳을 누르면 옮겨요`
         : plan?.snapped ? `${def.name}: 누른 곳은 못 지어서 바로 옆 빈 자리로 옮겼어요 · 🔨 건설을 누르면 지어요`
         : plan ? `${def.name} 자리를 정했어요. 🔨 건설을 누르면 지어요` : `${def.name}: 지을 자리를 눌러요`);
+    } else if (this.mode === "move" && this.lift) {                               // 든 건물: 진짜 모델이 살짝 떠서 놓을 자리로 · 바닥 판·문 앞 표시 · 못 놓으면 붉게
+      const L = this.lift, def = BUILDINGS[L.defId], r = this.moveDry(h.x, h.z), same = r.reason === "지금 자리와 같아요", ok = r.ok || same;
+      if (!r.cells) { this.buildingViews.preview?.(L.id, null); this.onStatus(`🚫 ${r.reason}`); return; }
+      const y = r.elevation || Math.max(0, cell?.elevation ?? 0), col = ok ? OK : BAD;
+      this.buildingViews.preview?.(L.id, { x: toWorldX(r.center.x), y: y + (same ? 0.12 : 0.3), z: toWorldZ(r.center.z), angle: r.angle });
+      this.buildingViews.setHighlight(ok ? null : L.id);
+      this.ghost.visible = true; this.ghost.position.set(toWorldX(r.center.x), y, toWorldZ(r.center.z)); this.ghost.rotation.y = r.angle;
+      this.ghostBox.scale.set(def.footprint.w * 0.9, def.height * 1.5, def.footprint.d * 0.9); this.ghostBox.position.y = def.height * 0.75; this.ghostBox.visible = false;   // 상자 대신 진짜 모델(확인 카드 자리 잴 때만 씀)
+      this.ghostFloor.scale.set(def.footprint.w, def.footprint.d, 1); this.ghostFloor.position.y = 0.04; this.ghostMat.color.setHex(col); this.ghostFloor.material.color.setHex(col);
+      this.doorMark.visible = true; this.doorMark.position.set(toWorldX(r.door.x + 0.5), y + 0.35, toWorldZ(r.door.z + 0.5));
+      this.onStatus(same ? relocStatus(def.name, "picked") : !r.ok ? `🚫 ${r.reason}` : plan?.snapped ? `${def.name}: 누른 곳 바로 옆 빈 자리로 맞췄어요` : `${josa(def.name, "을", "를")} 여기로 옮길까요?`);
+    } else if (this.mode === "move") {                                            // 고르는 중: 가리킨 칸(마우스) — 건물이면 초록
+      this.cursor.visible = true; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(this.world.buildingAt(h.x, h.z) ? OK : 0xffffff);
     } else if (this.mode === "demolish") {
       const b = this.world.buildingAt(h.x, h.z); this.buildingViews.setHighlight(b ? b.id : null);
       this.cursor.visible = !b; this.cursor.scale.set(1, 1, 1); this.cursor.position.set(toWorldX(h.x + 0.5), terrainHeight(grid, h.x + 0.5, h.z + 0.5) + 0.03, toWorldZ(h.z + 0.5)); this.cursor.material.color.setHex(BAD);

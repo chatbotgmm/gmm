@@ -139,7 +139,7 @@ function release(u) {
   if (f && f.busy === u.unitId && u.committed !== f.id) f.busy = null;   // 맡은 공사장(committed)은 끝날 때까지 찜 유지
   u.water = null;                                                       // 물주기 길(물 뜬 것 u.can은 그대로 들고 있음)
   u.fetch = null;                                                       // 은행 자재 예약도 풀림(가는 길에 그만두면 다른 건축가가 가져갈 수 있게)
-  u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined; u.bite = u.tugged = false; u.processing = false;
+  u.paidCycle = false; u.focus = null; u.work = null; u.once = null; u.tool = null; u.fishing = null; u.anim = null; u.fishT = undefined; u.bite = u.tugged = false; u.processing = false;
 }
 /** 맡은 공사를 내려놓음(완공·들어 올림·철거 때). */
 export function uncommit(u, world) {
@@ -844,6 +844,17 @@ export function exitBuilding(u, world, rnd) {
   if (u.lodgeSay) { chatter(u, u.lodgeSay, world, 2.4); u.lodgeSay = null; }        // 빈 집에서 자고 나오면 숙박비 말풍선(안에 있을 땐 바깥 화면에 말풍선이 안 보임)
 }
 
+/** 건물을 옮겼을 때(world/relocate.js): 그 건물로 가던 갈매미는 새 문으로, 짓던 갈매미는 새 공사장 옆으로 길을 다시 찾음(못 찾으면 그만둠).
+ *  망치질하던 갈매미는 이번 바퀴 재료를 이미 썼으므로 도착하면 재료를 또 쓰지 않고 바로 망치질(u.paidCycle) */
+export function rerouteMoved(u, world, b, rnd) {
+  if (u.insideBuildingId || u.state === US.Held) return;
+  if (u.state === US.GoToBuilding && u.targetBuildingId === b.id) { if (!startPath(u, world, b.door.x, b.door.z, u.running)) setIdle(u, rnd, world); return; }
+  if (u.focus === b && (u.state === US.GoBuild || u.state === US.Build)) {
+    const paid = u.state === US.Build || !!u.paidCycle, s = world.workSpot(b);
+    if (!s || !startPath(u, world, s.x, s.z)) { setIdle(u, rnd, world); return; }
+    u.state = US.GoBuild; u.work = null; u.anim = null; u.tool = null; u.once = null; u.paidCycle = paid;
+  }
+}
 // ---------------------------------------------------------------- 매 프레임
 /** 기분 말풍선: 20~40초마다(갈매미마다 엇갈리게), 다른 말풍선이 없을 때 지금 기분을 보여 줌. 난수(rnd)는 안 씀(마을 진행에 영향 없음) */
 const MOODS = { sleep: ["💤", "zZ…"], hungry: ["배고파…", "먹고 싶다…", "꼬르륵…"], tired: ["😮‍💨 피곤해", "🥱 쉬고 싶다"], happy: ["😊", "♪", "☺️ 좋다", "🌸 기분 좋아"], sit: ["☕ 편하다", "😌", "♪ 쉬는 중"], read: ["📖 재밌다", "📚 음…", "💭 그렇구나"], sad: ["😞", "😟 별로야…"], cold: ["🥶 추워", "❄️ 으슬으슬"], hot: ["🥵 더워", "🍦 시원한 거…"], sick: ["🤧 에취!", "🤒 으슬으슬…", "🤧 콜록"] };
@@ -1077,6 +1088,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = u.focus;
       if (!world.buildings.has(b.id) || world.isDone(b)) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
+        if (u.paidCycle) { u.paidCycle = false; u.state = US.Build; u.tool = "hammer"; break; }   // 건물을 옮겨 새 자리로 온 것: 이번 바퀴 재료는 이미 씀
         if (!hasMaterials(world, b, u)) { setIdle(u, rnd, world, 0.2); break; }  // 그새 재료가 떨어짐 → 구하러 감(맡은 건 유지)
         useMaterials(world, b, u);                                             // 도착하면 재료를 씀(가방 → 은행 창고 순)
         u.state = US.Build; u.tool = "hammer";

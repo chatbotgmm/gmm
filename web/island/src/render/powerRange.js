@@ -75,7 +75,7 @@ export class PowerRange {
   update(tools) {
     const w = this.getWorld(); if (!w) return;
     if (this.sel && w.buildings.get(this.sel.id) !== this.sel) { this.sel = null; if (this.card && this.mine) this.card.hidden = true; }   // 누른 풍차가 철거됨(새 섬 포함)
-    const def = tools?.mode === "build" && tools.ghost.visible ? BUILDINGS[tools.buildId] : null, want = [];
+    const def = tools?.ghost.visible ? tools.ghostDef ?? (tools.mode === "build" ? BUILDINGS[tools.buildId] : null) : null, want = [];   // 짓기·↔ 옮기기 고스트
     if (def?.power) want.push({ x: toGridX(tools.ghost.position.x), z: toGridZ(tools.ghost.position.z), marks: true });   // 풍차 자리 고르기: 놓을 자리의 범위
     else if (def && usesPower(def)) for (const s of powerSources(w)) want.push({ x: s.x, z: s.z });                       // 가로등·집 자리 고르기: 지금 전기가 닿는 곳
     else if (this.sel) { const p = centerOf(this.sel); want.push({ x: p.x, z: p.z, marks: true, dim: !w.isDone(this.sel) }); }

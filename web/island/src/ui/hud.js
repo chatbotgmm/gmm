@@ -38,6 +38,7 @@ import { storyAppHtml, storyBadge } from "./storyView.js";
 import { STORY_LETTER } from "../data/story.js";
 import { cardSide } from "../systems/buildSpot.js";
 import { NATURE_GROUPS, natureToolsFor, natureCard, natureAction, moveInfo, moveHtml } from "./natureView.js";
+import { relocInfo, relocHtml } from "./moveView.js";
 
 /** ⏩ 배속 설명은 여기 한 곳에만 둠(설정의 배속 줄 · 도움말 #speedHelp) */
 export const SPEED_NOTE = "갈매미 걸음과 일, 공사, 밭 일이 빨라져요. 해와 날짜는 실제 시각을 따라요.";
@@ -81,7 +82,7 @@ export class Hud {
     this.initUiPrefs();
     this.coach = new CoachMarks(this);                                               // 처음 안내(3단계 말풍선 · 처음 여는 앱 안내)
     // 도구 버튼: [아이콘, 이름, 휴대폰용 짧은 이름]. 건설 모드에서만 보이고, 맨 앞 ✓ 완료(view)를 누르면 평소 화면으로
-    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"], ["nature", "🌳", "자연·지형", "자연"]];
+    const modes = [["view", "✓", "완료", "완료"], ["paint", "🖌", "바닥 칠하기", "칠하기"], ["height", "⛰", "높이", "높이"], ["build", "🏠", "건물 짓기", "짓기"], ["demolish", "🧹", "철거", "철거"], ["nature", "🌳", "자연·지형", "자연"], ["move", "↔", "건물 옮기기", "옮기기"]];
     this.modeBtns = modes.map(([m, icon, label, short]) => { const b = this.toolBtn(m === "view" ? "done" : "", icon, label, short); b.dataset.mode = m; bar.appendChild(b);
       b.onclick = () => tools.setMode(m, m === "paint" ? (this.lastPaint || GROUND_TYPES[1]) : m === "build" ? (this.lastBuild || "house") : m === "height" ? (this.lastHeight || "raise") : m === "nature" ? (this.lastNature || "auto") : null); return b; });
     this.modeBtns[0].setAttribute("aria-label", "완료 — 건설 모드 끝내기");
@@ -342,7 +343,7 @@ export class Hud {
   houseCard(b) {
     const c = document.getElementById("houseCard"), x = c.querySelector(".hcx"), w = this.world, kind = b ? bldKindOf(b, w) : null;
     this.cardB = kind ? b : null; this.cardKind = kind; this.cardParts = [];
-    x.textContent = ""; if (!x.hidden) x.hidden = true;
+    x.textContent = ""; if (!x.hidden) x.hidden = true; this.moveBtnFor(kind ? b : null);
     if (kind === "clinic") mountUpgrade(c, this, w, b, x); else hideUpgrade(c);   // 병원: 종합병원 업그레이드 단추(ui/upgradeView.js) · 다른 카드엔 남지 않게
     if (!kind) { delete c.dataset.kind; c.hidden = true; return; }
     c.dataset.kind = kind; c.setAttribute("aria-label", BUILDINGS[b.defId].name);
@@ -355,6 +356,12 @@ export class Hud {
     }
     const card = this.bldCardOf(b, kind); c.querySelector("b").textContent = card.title; c.querySelector("span").textContent = card.sub;
     x.hidden = false; c.hidden = false; this.syncBldCard(card);
+  }
+  /** 건물 카드의 「↔ 옮기기」: 옮길 수 있는 건물이면 보이고, 누르면 카드를 닫고 건설 모드 ↔ 옮기기로 그 건물을 든 채 들어감(풍차 카드는 main.js가 powerRange 다음에 부름) */
+  moveBtnFor(b) {
+    const c = document.getElementById("houseCard"), mv = c.querySelector(".mv"); if (!mv) return;
+    const ok = !!b && !this.world.moveBlock(b); mv.hidden = !ok;
+    mv.onclick = ok ? () => { c.hidden = true; this.tools.setMode("move", b.id); } : null;
   }
   /** 🏵 도장 가게(소원 앱의 가게 접기를 펼친 채로): 건물 카드·가구 없는 방에서 */
   openStampShop() { this.openPhone(); this.openApp("wish"); const d = document.querySelector("#dailyBody details.sshop"); if (d) { d.open = true; d.scrollIntoView?.({ block: "nearest" }); } }
@@ -724,11 +731,12 @@ export class Hud {
     const p = this.planNow, box = document.getElementById("cfInfo"), w = this.world;
     if (!p || !box) { if (box && box.innerHTML) { box.innerHTML = ""; this.planHtmlNow = ""; } return; }
     let info;
-    if (p.move) info = moveInfo(w, p.move, w.moveLandmark(p.move, p.ax, p.az, p.rot, { dry: true }));   // 🚚 지형지물 옮기기(dry: 아무것도 안 바꿈)
+    if (p.relocate) info = relocInfo(w, w.buildings.get(p.relocate), w.moveBuilding(p.relocate, p.ax, p.az, p.rot, { dry: true }));   // ↔ 건물 옮기기(dry: 아무것도 안 바꿈)
+    else if (p.move) info = moveInfo(w, p.move, w.moveLandmark(p.move, p.ax, p.az, p.rot, { dry: true }));   // 🚚 지형지물 옮기기(dry: 아무것도 안 바꿈)
     else if (p.bridge) info = bridgeInfo(w, p.ok, p.water);
     else info = planInfo(w, p.defId, w.check(p.defId, p.ax, p.az, p.rot));
-    const html = p.move ? moveHtml(info) : planHtml(info);
-    const goText = p.move ? "🚚 옮기기" : "🔨 건설", cfGo = document.getElementById("cfBuild"); if (cfGo.firstChild?.nodeType === 3 && cfGo.firstChild.nodeValue !== goText) cfGo.firstChild.nodeValue = goText;   // 키 힌트(.kbd)는 그대로
+    const html = p.relocate ? relocHtml(info) : p.move ? moveHtml(info) : planHtml(info);
+    const goText = p.relocate ? "↔ 옮기기" : p.move ? "🚚 옮기기" : "🔨 건설", cfGo = document.getElementById("cfBuild"); if (cfGo.firstChild?.nodeType === 3 && cfGo.firstChild.nodeValue !== goText) cfGo.firstChild.nodeValue = goText;   // 키 힌트(.kbd)는 그대로
     if (html !== this.planHtmlNow) { this.planHtmlNow = html; box.innerHTML = html; }
     const cfBuild = document.getElementById("cfBuild"); if (cfBuild.disabled !== !info.ok) cfBuild.disabled = !info.ok;
     box.parentElement.classList.toggle("bad", !info.ok);
@@ -784,11 +792,12 @@ export class Hud {
     const terrain = mode === "paint" || mode === "height", nature = mode === "nature", sub = this.sub;
     if (!terrain && this.tools.cross) this.tools.setCross(false);                   // 십자선은 칠하기·높이에서만(켜 둔 채 짓기로 가면 누르기가 안 먹던 것)
     // 보조 줄: 도구에 맞는 것만
-    this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish"; this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
+    this.ecats.hidden = mode !== "build"; this.ehint.hidden = mode !== "demolish" && mode !== "move";
+    if (!this.ehint.hidden) { this.ehint.textContent = mode === "move" ? "↔ 건물을 들고 자리를 눌러요" : "🧹 건물을 누르면 철거할지 한 번 더 물어요"; this.ehint.dataset.mode = mode; } this.crossBtn.hidden = !terrain; this.crossBtn.classList.toggle("on", this.tools.cross);
     const tap = tapTool(mode, nature ? natureAction(arg).kind : null);             // 톡 = 고르기 · 끌기 = 화면 옮기기 도구: ✋가 필요 없음(켜 둔 채 오면 끔 — 켜져 있으면 톡이 안 먹음)
     if (tap && this.tools.hand) this.tools.setHand(false);
     this.handBtn.hidden = mode === "view" || tap;
-    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
+    this.undoBtns[0].hidden = this.undoBtns[1].hidden = !terrain && !nature && mode !== "build" && mode !== "move"; this.undoBtns[0].disabled = !this.tools.history.length; this.undoBtns[1].disabled = !this.tools.redoStack.length;   // 짓기에서도 ↶: 방금 놓은 공사장을 무름(편의성 점검 8번)
     for (const b of this.viewBtns) b.hidden = mode === "view" || this.camMode !== "near";   // 건설 모드의 ⟲ ⟳ · 둘러보기는 turnBox(둘 다 가까운 비스듬히일 때만)
     this.turnBox.hidden = mode !== "view" || this.camMode !== "near";
     this.auxSep.hidden = this.handBtn.hidden && this.undoBtns[0].hidden && this.crossBtn.hidden;   // 앞에 단추가 없으면 칸막이도 숨김
@@ -818,6 +827,7 @@ export class Hud {
       this.drawBuildTray(arg);                                                      // ↻ 돌리기는 자리를 정하면 뜨는 확인 막대에(R 키는 그대로) · ⚡ 바로 완공은 설정 → 🛠 개발자
     }
     if (mode === "demolish") this.status("🧹 철거: 없앨 건물을 톡 누르면 철거할지 한 번 더 물어요 · 끌면 화면 이동 · 다 지은 건물은 되돌릴 수 없어요");
+    if (mode === "move" && !this.tools.lift) this.status("↔ 옮기기: 건물을 톡 눌러 들고, 놓을 자리를 톡 눌러요. 공짜고 ↶로 되돌려요");
     if (keep) { sub.scrollLeft = keep[0]; sub.scrollTop = keep[1]; }
     else { sub.scrollLeft = sub.scrollTop = 0; }                                    // 다른 도구로 바꾸면 처음부터(세로 폰: 높이에서 밀어 둔 채 칠하기로 오면 「바닥」 묶음이 왼쪽 밖에 숨던 것)
     if (!keep && nature) { const c = this.natCards?.find(x => x.dataset.nat === arg); if (c && (c.offsetLeft + c.offsetWidth > sub.clientWidth || c.offsetTop + c.offsetHeight > sub.clientHeight)) { sub.scrollLeft = Math.max(0, c.offsetLeft - 8); sub.scrollTop = Math.max(0, c.offsetTop - 8); } }   // 들어올 때: 고른 도구가 보이게

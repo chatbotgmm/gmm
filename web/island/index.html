@@ -174,7 +174,7 @@
   /* 집 카드: 화면 폭을 넘지 않게(좁으면 줄바꿈), 저절로 닫히지 않음(✕ · 빈 땅 누르기 · 도구 바꾸기로 닫힘) */
   #houseCard { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--row-b) + calc(66*var(--u))); z-index: var(--z-context); background: var(--c-hud); border-radius: var(--r-md); padding: calc(8*var(--u)) calc(10*var(--u));
     box-shadow: var(--e-2); display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; width: max-content; max-width: calc(100vw - var(--safe-l) - var(--safe-r)); box-sizing: border-box; } #houseCard[hidden] { display: none; }
-  #houseCard button { min-height: var(--hit); } #houseCard .hx { margin-left: auto; }
+  #houseCard button { min-height: var(--hit); } #houseCard .hx { margin-left: auto; } #houseCard .mv[hidden] { display: none; }
   /* 화면 연결 6단계: 일반 건물 카드(공사장·밭·의원·잡화점) — 집 카드와 같은 상자에 아래 칸(.hcx)만 늘림. 폭을 정해 두고, 길면 카드 안에서 밀기 */
   #houseCard[data-kind]:not([data-kind="house"]) { width: min(calc(400*var(--u)), calc(100vw - var(--safe-l) - var(--safe-r))); max-height: calc(100dvh - var(--row-b) - calc(66*var(--u)) - calc(96*var(--u))); overflow-y: auto; overscroll-behavior: contain; align-items: flex-start; }
   #houseCard[data-kind]:not([data-kind="house"]) > b { order: -2; } #houseCard[data-kind]:not([data-kind="house"]) > .hx { order: -1; }
@@ -464,6 +464,7 @@
   #ebar .ecats { display: flex; gap: var(--s-1); flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior: contain; } #ebar .ecats::-webkit-scrollbar { display: none; }
   #ebar .ecats button { flex: none; min-width: var(--hit-sm); padding: 0 calc(10*var(--u)); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
   #ebar .ecats button.on { background: var(--c-accent-soft); box-shadow: inset 0 0 0 calc(2*var(--u)) var(--c-accent-strong); font-weight: 700; }
+  #ebar .ehint[data-mode="move"] { color: var(--c-ink-2); word-break: keep-all; }   /* ↔ 옮기기 안내는 조심 색이 아님 */
   #ebar .ehint { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); font-weight: 600; line-height: var(--lh-tight); color: var(--c-danger-ink); padding: 0 var(--s-1); }
   #ebar .eaux { display: flex; gap: var(--s-1); flex: none; margin-left: auto; }
   #ebar .abtn { min-width: var(--hit-sm); padding: 0 calc(6*var(--u)); font-size: var(--fs-title); line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
@@ -510,7 +511,7 @@
   #sub[data-kind="build"] { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, calc(98*var(--u))); grid-auto-columns: calc(104*var(--u)); gap: var(--s-1); overflow-x: auto; align-items: stretch; }   /* 태블릿·PC: 두 줄 격자 */
   /* 태블릿·좁은 PC 창(600~1199px): 두 칸이 똑같이 줄어 도구 탭 글자가 잘리던 것 — 탭은 짧은 이름으로 제 폭을 지키고 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림). 900px보다 좁으면 보조 줄을 탭 위 한 줄로 */
   html[data-form="medium"] #top { grid-template-columns: max-content minmax(0, 1fr); }
-  html[data-form="wide"] #tools .tbtn { flex: none; }
+  html[data-form="wide"] #tools .tbtn { flex: none; } html[data-form="wide"] #top { grid-template-columns: max-content minmax(0, 1fr); }   /* 도구 탭은 제 폭(일곱 개), 모자란 폭은 보조 줄이 양보(분류 칩이 옆으로 밀림) — 건물 갤러리가 넓으면 탭이 보조 줄 밑으로 깔리던 것 */
   html[data-form="medium"] #tools .tbtn { flex: none; } html[data-form="medium"] #tools .tbtn .tl { display: none; } html[data-form="medium"] #tools .tbtn .ts { display: inline; }
   html[data-form="medium"][data-narrow] #top { grid-template-columns: minmax(0, 1fr); grid-template-areas: "sub" "ebar" "tools"; } html[data-form="medium"][data-narrow] #tools .tbtn { flex: 1 1 auto; }
   /* 세로 폰: 아래에 한 판 — 트레이(한 줄, 옆으로 밀기, 오른쪽 끝이 흐려짐) → 보조 줄 → 도구 탭 */
@@ -1063,7 +1064,7 @@
     <div class="rtabs"><button data-tab="furniture">🛋 가구</button><button data-tab="floor">🟫 바닥</button><button data-tab="wall">🎨 벽지</button><button class="rexit rx2 ghost" aria-label="집에서 나가기">🚪 나가기</button></div>
     <div class="rlist"></div></div>
 </div>
-<div id="houseCard" hidden role="group" aria-label="집"><b></b><span class="dim"></span><div class="hcx" hidden></div><button class="go">🛋 들어가 꾸미기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
+<div id="houseCard" hidden role="group" aria-label="집"><b></b><span class="dim"></span><div class="hcx" hidden></div><button class="go">🛋 들어가 꾸미기</button><button class="mv ghost" hidden data-tip="건설 모드에서 이 건물을 들어 다른 자리로 옮겨요. 공짜예요">↔ 옮기기</button><button class="hx ghost" aria-label="닫기">✕</button></div>
 <div id="letter" hidden role="dialog" aria-modal="true" aria-labelledby="letterTitle"><div class="card"><div class="head"><b id="letterTitle">💌 다녀온 사이에</b></div><div id="letterBody"></div><div class="lbtns"><button id="letterNews">📰 소식지 보기</button><button id="letterClose" class="go">다 읽었어요</button></div></div></div>
 <div id="cloudAsk" hidden role="dialog" aria-modal="true" aria-labelledby="cloudAskTitle"><div class="card"><b id="cloudAskTitle"></b><p id="cloudAskBody"></p><div class="ca-cards"></div><p class="ca-foot"></p><div class="lbtns"></div></div></div>
 <div id="ask" hidden role="dialog" aria-modal="true" aria-labelledby="askTitle"><div class="card"><b id="askTitle"></b><p id="askBody"></p><div class="lbtns"><button id="askNo" class="ghost">취소</button><button id="askYes" class="go">확인</button></div></div></div>
