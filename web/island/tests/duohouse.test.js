@@ -109,7 +109,7 @@ test("집 없는 갈매미는 스스로 자리가 남은 2층집에 같이 살�
   mini.coins = 60; let t = 0;
   for (; t < 400 && !mini.home; t += 0.1) { for (const o of w.units) { o.full = 90; if (o.needs) o.needs.energy = 90; } w.update(0.1); }
   assert.equal(mini.home, c.id, `${t.toFixed(0)}초 안에 들어옴`); assert.deepEqual(c.mates, [mini.unitId]);
-  const nb = WISH_BY_ID.neighbor; assert.equal(nb.done(w, mini, { base: "기본" }), true, "단짝 옆집 소원: 한 집에 같이 살면 이룸"); assert.equal(nb.lost(w, mini, { base: "기본" }), false);
+  const nb = WISH_BY_ID.neighbor; assert.equal(nb.done(w, mini, { base: boss.unitId }), true, "단짝 옆집 소원: 한 집에 같이 살면 이룸"); assert.equal(nb.lost(w, mini, { base: boss.unitId }), false);
 });
 
 test("철거: 주인·같이 사는 갈매미 모두 집 없음, 주인의 남은 빚은 없애 줌 · 다시 같이 살 수 있음", () => {

@@ -28,7 +28,7 @@ import { appsVisible } from "./appUnlock.js";
 import { planInfo, bridgeInfo, planHtml, cardMeta } from "./buildView.js";
 import { summonHtml, summonButton } from "./summonView.js";
 import { bldKindOf, siteCardOf, fieldCardOf, clinicCardOf, shopCardOf, shopTabDefault } from "./bldView.js";
-import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge } from "./gullView.js";
+import { stateLabelOf, gullFlags, bodyTempOf, gullChips, gullMoreHtml, giftPickHtml, stampShopHtml, stampShopKey, stampBadge, formLineOf, evoBoxHtml, FORM_ICONS } from "./gullView.js";
 import { mountUpgrade, hideUpgrade } from "./upgradeView.js";
 import { townAppHtml, marketAppHtml, priceCellHtml, dailyHead, wishListHtml, decorHeadHtml, relHeadHtml, relLegendHtml, dexCounts, dexHeadHtml, newsAppHtml, toastHtml } from "./appViews.js";
 import { readGridPref, saveGridPref } from "./gridView.js";
@@ -676,25 +676,27 @@ export class Hud {
   /** 📱 관계도: 갈매미를 원 위에 놓고 친한 사이를 선으로(친할수록 굵고 따뜻한 색). 갈매미를 누르면 그 갈매미의 사이를 글로. */
   drawRelations() {
     const w = this.world, us = w.units, body = document.getElementById("relBody"), ST = M.FRIEND_STAGES;
-    if (!us.some(u => u.name === this.relSel)) this.relSel = null;
-    const g = M.relationGraph(us), sel = us.findIndex(u => u.name === this.relSel);
-    const key = `${this.relSel}|${us.map(u => u.name + u.job).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
+    if (!us.some(u => u.unitId === this.relSel)) this.relSel = null;                // 고른 갈매미는 unitId로(이름이 겹치거나 바뀌어도)
+    const g = M.relationGraph(us), sel = us.findIndex(u => u.unitId === this.relSel), n = us.length;
+    const key = `${this.relSel}|${us.map(u => u.unitId + u.name + u.job + (u.form || "")).join(",")}|${us.map(u => us.map(o => M.affinity(u, o).toFixed(1)).join(" ")).join(",")}`;
     if (key === this.relKey && body.firstChild) return;                             // 바뀐 게 없으면 다시 안 그림(누르기가 끊기지 않게)
     this.relKey = key;
     body.onclick = e => { const t = e.target.closest?.("[data-gull]"); if (!t) return; this.relSel = this.relSel === t.dataset.gull ? null : t.dataset.gull; this.drawRelations(); };
     if (!us.length) { body.innerHTML = `<p class="dim">갈매미가 아직 없어요. 📱 → 🥚 소환으로 불러 보세요.</p>`; return; }
+    const R = M.relNodeR(n), near = new Set(sel >= 0 ? [sel, ...g.links.filter(l => l.a === sel || l.b === sel).map(l => l.a === sel ? l.b : l.a)] : []);   // 마리가 많으면 원을 작게(20마리 넘으면 겹치지 않게)
     const lines = g.links.map(l => { const a = g.nodes[l.a], b = g.nodes[l.b], d = ST[l.stage], dim = sel >= 0 && l.a !== sel && l.b !== sel;
       return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${d.color}" stroke-width="${d.width}" stroke-linecap="round" opacity="${dim ? 0.2 : 1}"/>`; }).join("");
-    const dots = g.nodes.map((n, i) => `<g class="relnode" data-gull="${n.name}"><circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="26" fill="transparent"/>` +
-      `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="19" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
-      `<text class="ico" x="${n.x.toFixed(1)}" y="${n.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central">${JOBS[n.u.job]?.icon ?? n.name[0]}</text>` +
-      `<text x="${n.x.toFixed(1)}" y="${(n.y + 33).toFixed(1)}" text-anchor="middle">${n.name}</text></g>`).join("");
+    const dots = g.nodes.map((nd, i) => { const label = n <= 12 || near.has(i);                // 12마리 넘으면 이름표는 고른 갈매미와 그 친구에게만
+      return `<g class="relnode" data-gull="${escHtml(nd.u.unitId)}"><circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${(R + 7).toFixed(1)}" fill="transparent"/>` +
+      `<circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${R.toFixed(1)}" fill="${i === sel ? "#ffe9a8" : "#fbe3cf"}" stroke="${i === sel ? "#e0573e" : "#e3c9ad"}" stroke-width="${i === sel ? 3 : 1.5}"/>` +
+      `<text class="ico" x="${nd.x.toFixed(1)}" y="${nd.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central"${R < 14 ? ` font-size="${Math.round(R * 1.1)}"` : ""}>${JOBS[nd.u.job]?.icon ?? escHtml(nd.name[0])}</text>` +
+      (label ? `<text x="${nd.x.toFixed(1)}" y="${(nd.y + R + 14).toFixed(1)}" text-anchor="middle">${FORM_ICONS[nd.u.form] ?? ""}${escHtml(nd.name)}</text>` : "") + `</g>`; }).join("");
     let text;
-    if (us.length === 1) text = `<p class="dim">${us[0].name} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
+    if (us.length === 1) text = `<p class="dim">${escHtml(us[0].name)} 혼자예요. 🥚 소환으로 친구를 불러 주면 인사하며 친해져요.</p>`;
     else if (sel < 0) text = `<p class="dim av-tap">👆 갈매미를 누르면 누구와 친한지 보여 줘요</p>`;
     else { const u = us[sel], rows = us.filter(o => o !== u).map(o => [o, M.affinity(u, o)]).sort((a, b) => b[1] - a[1]).map(([o, v]) => { const d = ST[M.friendStage(v)];
-        return `<tr><td>${v ? d.icon : "·"} ${o.name}</td><td>${v ? `<b>${d.name}</b>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
-      text = `<h4>${JOBS[u.job]?.icon ?? ""} ${u.name}의 사이</h4><table class="tbl">${rows}</table>`; }
+        return `<tr><td>${v ? d.icon : "·"} ${escHtml(o.name)}</td><td>${v ? `<b>${d.name}</b>` : `<span class="dim">아직 잘 몰라요</span>`}</td></tr>`; }).join("");
+      text = `<h4>${JOBS[u.job]?.icon ?? ""} ${escHtml(u.name)}의 사이</h4><table class="tbl">${rows}</table>`; }
     body.innerHTML = relHeadHtml(g.links, us.length) + `<svg viewBox="0 0 300 300" role="img" aria-label="갈매미 관계도">${lines}${dots}</svg>` +
       text + this.more("rel.legend", "🎨 범례 · 읽는 법", relLegendHtml(ST));   // 머리(단짝 수) → 그림 → 고른 갈매미 사이 → 범례는 접기
   }
@@ -882,7 +884,7 @@ export class Hud {
   }
   /** 🥚 소환 페이지: 지금 부를 수 있는 수(인구 = 집 수) · 단추(못 부르면 꺼짐 + 까닭) · 다음 갈매미 · 자이언트 안내 · 자세히. 글이 같으면 안 씀(5Hz 갱신에 누름·펼침이 끊기지 않게) */
   setSummon(world) {
-    const info = world.summonInfo(), btn = summonButton(info), v = summonHtml(info, world.units, (k, t, h, o) => this.more(k, t, h, o));
+    const info = world.summonInfo(), btn = summonButton(info), v = summonHtml(info, world.units, (k, t, h, o) => this.more(k, t, h, o), world.formsSeen, [...world.buildings.values()]);
     if (this.summonBtn.textContent !== btn.text) this.summonBtn.textContent = btn.text;
     if (this.summonBtn.disabled !== btn.disabled) this.summonBtn.disabled = btn.disabled;
     const why = document.getElementById("summonWhy"), whyText = v.giantOnly ? "" : btn.why; if (why.textContent !== whyText) why.textContent = whyText; why.hidden = !whyText;
@@ -1097,14 +1099,25 @@ export class Hud {
     const more = k.more = el("details", "more imore"), sum = el("summary"); k.moreN = el("span", "more-n"); sum.append(el("span", "more-t", "자세히 보기"), k.moreN);
     k.moreB = el("div", "more-b"); more.append(sum, k.moreB); more.open = !!this.infoMoreOpen;
     more.addEventListener("toggle", () => { this.infoMoreOpen = more.open; this.infoMoreHtml = null; if (more.open) this.syncInfo(); });
-    body.append(doing, needs, chips, more);
+    // 모습·성향 줄 + 성장 칸(evolve.js: 변신 전 = 성향 ??? · 관찰 노트 · 요즘 모습 · 예고 · 성향 맞히기 칩) · 이름을 누르면 이름 바꾸기
+    k.form = el("div", "iform"); k.evo = el("div", "ievo");
+    k.ren = el("form", "iren"); k.ren.hidden = true; k.renIn = el("input"); k.renIn.maxLength = 8; k.renIn.setAttribute("aria-label", "새 이름, 8자까지"); k.renIn.placeholder = "새 이름, 8자까지";
+    const renOk = el("button", "", "확인"), renNo = el("button", "ghost", "취소"); renOk.type = "submit"; renNo.type = "button"; k.renWhy = el("span", "dim"); k.ren.append(k.renIn, renOk, renNo, k.renWhy);
+    k.ren.onsubmit = e => { e.preventDefault(); const u = this.follow; if (!u) return; const r = this.world.renameGull(u.unitId, k.renIn.value);
+      if (!r.ok) { cardPut(k.renWhy, r.reason); return; } k.ren.hidden = true; this.status(`🏷 이제 ${r.name}예요`, { kind: "good" }); this.setWorld(this.world); this.showFollow(u); };   // 목록 줄 이름을 새로 쓰되(setWorld) 보던 카드는 그대로(setWorld가 follow를 비움)
+    renNo.onclick = () => { k.ren.hidden = true; };
+    k.name.classList.add("iname"); k.name.tabIndex = 0; k.name.setAttribute("role", "button"); k.name.dataset.tip = "이름을 누르면 바꿀 수 있어요";
+    k.name.onclick = () => { const u = this.follow; if (!u) return; k.ren.hidden = !k.ren.hidden; if (!k.ren.hidden) { if (!this.infoOpen) { this.infoOpen = true; this.syncInfo(); } k.renIn.value = u.name; cardPut(k.renWhy, ""); k.renIn.focus(); k.renIn.select(); } };   // 접힌 카드(휴대폰 기본)면 펼쳐서 입력 칸이 보이게
+    k.name.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); k.name.onclick(); } };   // role=button이라 키보드로도
+    k.evo.onclick = e => { const b = e.target.closest?.("[data-guess]"), u = this.follow; if (!b || !u) return; if (this.world.guessDisp(u.unitId, b.dataset.guess)) { this.evoHtml = null; this.syncInfo(); this.status("🎯 변신하는 날 맞았는지 알려 줄게요", { kind: "info" }); } };
+    body.append(k.ren, k.form, doing, k.evo, needs, chips, more);
     // 행동 줄: 관계 먼저, 그다음 선물 · 쓰다듬기 · 집 보기
     k.rel = el("button", "", "💞 관계"); k.rel.type = "button"; k.rel.dataset.tip = "이 갈매미의 친구 사이를 관계도에서 봐요";
     k.goHome = el("button", "", "🏠 집 보기"); k.goHome.type = "button"; k.goHome.dataset.tip = "이 갈매미의 집으로 화면을 옮겨요";
     acts.append(k.rel, this.giftBtn, this.petBtn, k.goHome); c.append(head, body, acts);
     k.tog.onclick = () => { this.infoOpen = !this.infoOpen; if (this.infoEdit) this.infoWas = this.infoOpen; this.syncInfo(); };
     k.x.onclick = () => { if (this.follow) this.onUnitClick?.(this.follow); };       // 따라가기 그만(카드도 닫힘)
-    k.rel.onclick = () => { const u = this.follow; if (!u) return; this.relSel = u.name; if (this.phone.hidden) this.openPhone(); this.openApp("rel"); };
+    k.rel.onclick = () => { const u = this.follow; if (!u) return; this.relSel = u.unitId; if (this.phone.hidden) this.openPhone(); this.openApp("rel"); };
     k.goHome.onclick = () => { const u = this.follow, b = u && u.home && this.world.buildings.get(u.home); if (b) this.onGoto?.(b); };
   }
   /** 카드의 값만 고침. 1초에 5번(update) + 접기·모드가 바뀔 때 바로. 접혀 있어도 머리줄은 계속 고침 */
@@ -1117,7 +1130,7 @@ export class Hud {
     const open = this.infoOpen, job = JOBS[u.job], full = u.full ?? 80, sat = u.sat ?? 50;
     const bIn = u.insideBuildingId && w.buildings.get(u.insideBuildingId), doing = bIn ? `${BUILDINGS[bIn.defId].name} 안` : stateLabelOf(u);
     if (c.classList.contains("mini") === open) c.classList.toggle("mini", !open);
-    cardPut(k.name, u.name); cardPut(k.job, `${job.icon} ${job.name}`); cardPut(k.hearts, bondHearts(u.bond));
+    cardPut(k.name, `${u.title ? u.title + " " : ""}${u.name}`); cardPut(k.job, `${job.icon} ${job.name}`); cardPut(k.hearts, bondHearts(u.bond));
     const stage = BOND_STAGES[bondStage(u.bond)].name; if (k.hearts.title !== stage) k.hearts.title = stage;
     const exp = String(open); if (k.tog.getAttribute("aria-expanded") !== exp) { k.tog.setAttribute("aria-expanded", exp); k.tog.setAttribute("aria-label", open ? "카드 접기" : "카드 펼치기"); k.tog.dataset.tip = open ? "접기" : "펼치기"; }   // 카드는 아래에 붙어 있어 위로 펼쳐지고 아래로 접힘
     const homeB = u.home && w.buildings.get(u.home); if (k.goHome.hidden !== !homeB) k.goHome.hidden = !homeB;
@@ -1127,6 +1140,8 @@ export class Hud {
     cardPut(k.sub, `${tr ? `${tr.icon} ${u.tribe} · ` : ""}${r.name} · ${chronoLabel(u)}`);   // 체질: 🌅 아침형(밤에 더 빨리 지침) · 🌙 야행성(낮에)
     const note = J.isLazy(u) ? "배불러 게을러요" : full < J.HUNGRY ? "배고파요" : chronoNote(u, w);   // 급한 것(게으름·배고픔)이 없으면 체질 영향("밤이라 더 빨리 지쳐요")
     cardPut(k.doing, doing);   /* 펼친 카드는 🤧·💸 칩과 체온 줄이 따로 알림 */ cardPut(k.note, note ? ` · ${note}` : "");
+    cardPut(k.form, formLineOf(u));
+    const eh = evoBoxHtml(u, w); if (eh !== this.evoHtml || k.evo.dataset.u !== u.unitId) { this.evoHtml = eh; k.evo.dataset.u = u.unitId; k.evo.innerHTML = eh; } if (k.evo.hidden !== !eh) k.evo.hidden = !eh;
     const bt = bodyTempOf(u), tp = k.temp; if (tp.row.hidden !== !bt) tp.row.hidden = !bt;
     if (bt) { const wd = `${bt.pct}%`; if (tp.fill.style.width !== wd) tp.fill.style.width = wd; cardPut(tp.num, VIEW.adv ? bt.text : bt.word || "알맞아요"); cardPut(tp.label, `${bt.tone === "cold" ? "🥶" : bt.tone === "hot" ? "🥵" : ""}체온`); tp.row.title = bt.word ? `체온 ${bt.text} · ${bt.word}` : `체온 ${bt.text}`;
       if ((tp.row.dataset.tone || null) !== bt.tone) { if (bt.tone) tp.row.dataset.tone = bt.tone; else delete tp.row.dataset.tone; } }

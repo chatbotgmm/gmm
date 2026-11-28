@@ -9,6 +9,9 @@
 import { UnitState } from "../data/types.js";
 import { BUILDINGS, FURNITURE, PERSONA, CLOTHES, CLOTHES_ORDER } from "../data/catalog.js";
 import { residentsOf } from "../world/homes.js";
+import { personaOf, formOf, DISP_INFO, DISPS, GROWTH_LABEL, topGrowth, isCalling, formJob, BASE_FORM } from "../world/evolve.js";
+import { JOBS } from "../data/catalog.js";
+import { newsDay } from "../world/news.js";
 /** 둘이 사는 집이면 같이 사는 갈매미 이름(" · 💞 같이 사는 A") */
 const housemate = (u, b, world) => { const o = residentsOf(b).filter(id => id !== u.unitId).map(id => world.units?.find(x => x.unitId === id)?.name).filter(Boolean); return o.length ? ` · 같이 사는 ${o.join(", ")}` : ""; };
 import { SICK, secsLeft } from "../world/health.js";
@@ -87,6 +90,28 @@ export function gullChips(u, world) {
   };
 }
 
+// ---- 모습·성향(evolve.js): 카드 머리 아래 한 줄 + 성장 칸(관찰 노트 · 요즘 모습 · 예고 · 성향 맞히기)
+export const FORM_ICONS = { "기본": "🥚", "물방울": "💧", "그림자": "🌑", "불씨": "🔥", "목수": "🪚", "꽃": "🌼", "황금": "👑", "자이언트": "🗿", "미니": "🐣" };
+/** 모습 줄: 변신 전 "🥚 기본 · 성향 ???" · 변신 뒤 "💧 물방울 · 🌊 물가 성향 · 모습 특기: 낚시 · 천직 ✓" · 든든한 기본 */
+export function formLineOf(u) {
+  const f = formOf(u), icon = FORM_ICONS[f] || "🥚";
+  if (!u.evo) return `${icon} ${f} · 성향 ???`;
+  const d = DISP_INFO[u.disp], fj = JOBS[formJob(f)];
+  if (u.evo.stayed) return `🪨 든든한 기본${d ? ` · ${d.icon} ${d.name} 성향` : ""}`;
+  return `${icon} ${f}${d ? ` · ${d.icon} ${d.name} 성향` : ""}${fj ? ` · 모습 특기: ${fj.name}` : ""}${isCalling(f, u.job) ? " · 천직 ✓" : ""}`;
+}
+/** 성장 칸 HTML(변신 전만): 🌱 예고 · 요즘 모습(가장 많이 쌓인 자란 방식) · 🔍 관찰 노트(최근 단서 3개) · 성향 맞히기 칩(data-guess). 변신했으면 "" */
+export function evoBoxHtml(u, world) {
+  if (u.evo || !u.disp) return "";
+  const out = [], soon = u.evoSoon != null && u.evoSoon === newsDay(world.time || 0);   // 전날 예고(evoJudge가 내일 차례를 표시한 날)
+  if (u.evoFx || (world.evoPending || []).includes(u.unitId)) out.push(`<p class="ie-soon">✨ 오늘 무언가 달라질 것 같아요!</p>`);
+  else if (soon) out.push(`<p class="ie-soon">🌱 곧 무언가 달라질 것 같아요</p>`);
+  const g = topGrowth(u.growth); out.push(`<p class="ie-grow">요즘: ${g ? gvEsc(GROWTH_LABEL[g]) : "아직 별일 없이 지내요"}</p>`);
+  const notes = (u.notes || []).slice().reverse();
+  out.push(`<div class="ie-notes"><b>🔍 관찰 노트</b>${notes.length ? `<ul>${notes.map(x => `<li>${gvEsc(x.text)}${x.n > 1 ? ` ×${x.n}` : ""}</li>`).join("")}</ul>` : `<p class="dim">하는 짓을 잘 보면 타고난 성향이 보여요</p>`}</div>`);
+  out.push(`<div class="ie-guess"><span class="dim">성향 맞히기${u.guess ? "" : " (변신할 때 맞히면 도장 +1)"}</span>${DISPS.map(d => `<button type="button" data-guess="${d}"${u.guess === d ? ` class="on" aria-pressed="true"` : ` aria-pressed="false"`}>${DISP_INFO[d].icon} ${DISP_INFO[d].name}</button>`).join("")}</div>`);
+  return out.join("");
+}
 /** [자세히 보기] 안쪽. extra: { fav: 좋아하는 일 이름, friend: "단짝: 꽃" 같은 글, eff } — 마음(mind.js)은 부르는 쪽이 계산해 넘김 */
 export function gullMoreHtml(u, world, extra = {}) {
   const sec = (t, body) => `<div class="gm-sec"><b>${t}</b>${body}</div>`, out = [];
@@ -105,12 +130,13 @@ export function gullMoreHtml(u, world, extra = {}) {
 }
 
 /** 이 갈래를 좋아하는 갈매미 이름(PERSONA): best는 "모두" */
-export const likersOf = cat => cat === "best" ? ["모두"] : Object.keys(PERSONA).filter(n => PERSONA[n].likes?.includes(cat));
+export const likersOf = (cat, units = null) => cat === "best" ? ["모두"] : units ? units.filter(u => bondStage(u.bond) >= 1 && personaOf(u).likes?.includes(cat)).map(u => u.name)   // 마을 갈매미 중 아는 사이(♥ 1) 이상인 갈매미만(취향을 알게 된 갈매미)
+  : Object.keys(PERSONA).filter(n => PERSONA[n].likes?.includes(cat));
 
 /** 🎁 선물 판. 하트 1개부터 취향을 알려 주고 좋아하는 것을 ♥ 표시로 앞에. 도장 선물은 ⭐ 정 ×2 */
 export function giftPickHtml(u, world) {
-  const p = PERSONA[u.name] || {}, know = bondStage(u.bond) >= 1, names = c => c.map(k => GIFT_CAT_NAME[k]).filter(Boolean).join(", ");
-  const list = giftables(world).map((g, i) => ({ ...g, i, liked: know && giftTier(u.name, g.id) === 2 }))
+  const p = personaOf(u) || {}, know = bondStage(u.bond) >= 1, names = c => c.map(k => GIFT_CAT_NAME[k]).filter(Boolean).join(", ");
+  const list = giftables(world).map((g, i) => ({ ...g, i, liked: know && giftTier(u, g.id) === 2 }))
     .sort((a, b) => (b.liked - a.liked) || (a.i - b.i));
   const n = pocketCount(world) + list.filter(g => g.kind === "fish").reduce((s, g) => s + g.n, 0);
   const hint = know && p.likes?.length ? `${gvEsc(u.name)}의 취향: ♥ ${names(p.likes)}${p.dislikes?.length ? ` · 음… ${names(p.dislikes)}` : ""}` : `${gvEsc(u.name)}에게 무엇을 줄까요? 건네 보면 좋아하는 걸 알 수 있어요.`;
@@ -128,8 +154,8 @@ export function stampShopHtml(world) {
   const row = (s, sw, sub) => { const c = stampCost(s);
     return `<div class="sitem"><i style="background:${sw}"></i><div><b>${gvEsc(s.name)}</b><span class="dim">${sub}${bought(s.id) ? ` · ${bought(s.id)}개 받았어요` : ""}</span></div><button data-stamp="${gvEsc(s.id)}"${stamps < c ? " disabled" : ""}>도장 ${c}개</button></div>`; };
   const GIFT_SW = { letter: "#e8c66a", shiny: "#9fd0ff", plant: "#8fd18a", sea: "#f2a6c0", ice: "#cfe9f7", fish: "#f0b45a", best: "#f7d34a", warm: "#d9534f" };
-  const gifts = STAMP_GIFTS.map(s => { const cat = giftDef(s.id)?.cat, who = likersOf(cat);
-    const sub = s.clothes ? "따뜻한 옷 · 누구나 고마워해요 · 주면 바로 둘러요 🧣" : `${GIFT_CAT_NAME[cat] || "선물"} · ♥ ${who.length ? who.join("·") : "—"} · 정 ×${STAMP_GIFT_BOND}`;
+  const gifts = STAMP_GIFTS.map(s => { const cat = giftDef(s.id)?.cat, who = likersOf(cat, world.units || []);
+    const sub = s.clothes ? "따뜻한 옷 · 누구나 고마워해요 · 주면 바로 둘러요 🧣" : `${GIFT_CAT_NAME[cat] || "선물"} · ♥ ${who.length ? who.map(gvEsc).join("·") : "?"} · 정 ×${STAMP_GIFT_BOND}`;
     return row(s, GIFT_SW[cat] || "#ddd", sub); }).join("");
   const furn = STAMP_SHOP.map(s => { const f = FURNITURE[s.furniture]; return row(s, gvHex(f.colors[0]), `가구 · 아늑함 +${f.comfort}`); }).join("");
   return `<div class="sgroups"><div class="sgroup"><h5>🎁 귀한 선물 <span class="dim">🎁 주머니로</span></h5>${gifts}</div>` +

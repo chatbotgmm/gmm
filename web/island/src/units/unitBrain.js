@@ -24,6 +24,7 @@ import { FESTIVAL_JOIN_CHANCE, FESTIVAL_FUN, FESTIVAL_PAL } from "../world/festi
 import { STASH_SELL_AT, stashSellable } from "../world/belongings.js";
 import * as CLIM from "../world/climate.js";
 import * as CH from "./chrono.js";
+import { formOf, personaOf, strHash, hintLine, HINT_CHANCE, HINT_GAP, HINT_NOTE, addNote } from "../world/evolve.js";
 
 // 애니메이션 한 번의 길이와 타격 시점(초). 모델을 불러오면 뷰가 u.clip에 실제 값을 넣는다.
 const DEFAULT_CLIP = { Chop: { len: 1, hit: 0.5 }, Mine: { len: 1, hit: 0.5 }, Build: { len: 0.6, hit: 0.25 },
@@ -52,7 +53,7 @@ export function chatter(u, text, world, secs, key = null) {
   emote(u, text, secs); return true;
 }
 /** 난수 없이 고르기(갈매미·마을 시간으로 돌아가며): 말풍선만 고를 때 — world.rnd 순서를 바꾸지 않게 */
-const vary = (list, u, world) => list[((Number.isFinite(u.unitId) ? u.unitId : 0) + Math.floor((world?.time || 0) / 7)) % list.length];
+const vary = (list, u, world) => list[(strHash(u.unitId ?? "") + Math.floor((world?.time || 0) / 7)) % list.length];   // unitId("u3") 문자열 해시: 같은 모습 여럿이 같은 말을 동시에 하지 않게(예전엔 늘 0번)
 /** 숫자 말풍선(나무+2 · 🪙+12)은 건설 모드에서만(world.showNumbers = 화면이 넣어 줌). 평소엔 기분 한마디 */
 const nums = world => !!world?.showNumbers;
 const CHOP_SAY = ["한 짐 했다", "나무 냄새 좋다", "영차, 다 됐다"], MINE_SAY = ["돌 캤다!", "단단하네", "후, 한 덩이"], IRON_SAY = ["철도 나왔다!", "반짝, 철이다"];
@@ -316,13 +317,24 @@ function workLoop(u, dt, key, hits, onHit, onEnd) {
 // ---------------------------------------------------------------- 활동 시작
 function reach(u) { return 4 + 6 * Math.sqrt(u.scale || 1); }
 
+/** 🔍 성향 단서: 아직 기본인 갈매미가 한가할 때 활동을 고르는 순간 가끔(HINT_CHANCE · 같은 갈매미는 HINT_GAP초마다 · 하루 3번까지 chatter "hint")
+ *  성향 말풍선을 띄움. 난수는 갈매미 id·마을 시간 해시(월드 난수 안 씀). 관찰 노트(u.notes, 최근 3개, 저장 안 함)에 적음. 띄웠으면 true */
+export function maybeHint(u, world) {
+  if (!u.disp || u.evo || formOf(u) !== "기본" || u.insideBuildingId) return false;
+  const t = world.time || 0; if (t - (u.hintAt ?? -1e9) < HINT_GAP) return false;
+  if (strHash(`${u.unitId}|${Math.floor(t * 4)}`) / 4294967296 >= HINT_CHANCE) return false;
+  const line = hintLine(u.disp, u.unitId, t); if (!line || !chatter(u, `🔍 ${line}`, world, 2.6, "hint")) return false;
+  u.hintAt = t; addNote(u, HINT_NOTE[u.disp]);
+  world.emit?.("hint", { u, disp: u.disp }); return true;
+}
 function startActivity(u, kind, world, rnd) {
+  maybeHint(u, world);
   const ok = startActivityInner(u, kind, world, rnd);
   if (ok && !(kind === "build" && u.state !== US.GoBuild)) u.activity = kind;   // 재료 구하러 간 경우는 그 일(벌목·채광)로 기억
   return ok;
 }
 function startActivityInner(u, kind, world, rnd) {
-  const g = world.grid, persona = PERSONA[u.name] || PERSONA["기본"];
+  const g = world.grid, persona = personaOf(u);
   switch (kind) {
     case "rest": {                                                                // 쉬기 = 잠깐 숨 돌리기: 가까운 빈 벤치가 있으면 앉고(M.benchSecs), 없으면 서서(M.breathSecs). 기력을 채우는 건 잠
       u.breathAt = world.time || 0;
@@ -350,7 +362,7 @@ function startActivityInner(u, kind, world, rnd) {
     }
     case "visit": {
       // 가깝고 친한 친구일수록 먼저(호감 1당 6칸 거리만큼 더 가도 감)
-      const cands = world.units.filter(o => o !== u && visible(o) && !(PERSONA[o.name] || {}).loner && [US.Idle, US.Wander, US.Sit, US.Fish, US.Trade].includes(o.state) && !o.once && M.affinity(u, o) > -2);   // 쉬거나 산책·벤치·낚시·장사 중인 친구(한자리에 있는 친구)
+      const cands = world.units.filter(o => o !== u && visible(o) && !personaOf(o).loner && [US.Idle, US.Wander, US.Sit, US.Fish, US.Trade].includes(o.state) && !o.once && M.affinity(u, o) > -2);   // 쉬거나 산책·벤치·낚시·장사 중인 친구(한자리에 있는 친구)
       const f = cands.sort((a, b) => (Math.hypot(a.x - u.x, a.z - u.z) - 6 * M.affinity(u, a)) - (Math.hypot(b.x - u.x, b.z - u.z) - 6 * M.affinity(u, b)))[0];
       if (!f) return false;
       const [fx, fz] = cellOf(f);
@@ -608,6 +620,10 @@ export const BLOCKED_NAP = 20;
 function startSleep(u, world, rnd) {
   const home = u.home && world.buildings.get(u.home), d = b => Math.hypot(b.door.x - u.x, b.door.z - u.z);
   const go = (b, say) => { u.state = US.GoToBuilding; u.targetBuildingId = b.id; u.sleepy = true; chatter(u, say, world, 2.4); return true; };
+  if (home && world.isDone(home) && world.canFit && !world.canFit(u, home)) {    // 변신해 몸이 커졌는데(자이언트) 집이 작음: 집 문 앞까지 가서 그 앞에서 잠 · 밖 잠 벌(sleptOutAt)은 안 줌(자이언트의 집을 기다리는 중)
+    if (startPath(u, world, home.door.x, home.door.z)) { go(home, "🗿 집이 작아서 문 앞에서 잘게요"); u.doorNap = true; return true; }
+    setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false; emote(u, "🗿 집이 작아서 여기서 잘게요", 2.6); return true;
+  }
   if (home && world.isDone(home)) {
     if (startPath(u, world, home.door.x, home.door.z)) return go(home, CH.offHours(u, world) ? (CH.isNocturnal(u) ? "해가 떴네… 자야지" : "졸려… 집에 가야지") : "졸려… 집에 가서 자야지");
     setIdle(u, rnd, world, BLOCKED_NAP); u.state = US.Sleep; u.nap = true; emote(u, "🏠 집에 가는 길이 막혔어… 잠깐만 졸자", 2.6); return true;
@@ -693,7 +709,7 @@ function startWarm(u, world) {
   return false;
 }
 /** 지금 밖에 나가 있으면 추워질까(체온 목표가 추움 문턱 이하): 체질과 어긋난 시간(아침형의 밤)에 몸 녹이는 중이면 기력이 가득 찰 때까지 안에서 쉼 */
-const outdoorCold = (u, world) => CLIM.bodyTarget(CLIM.feelTemp(world.air ?? world.airNow?.() ?? CLIM.NEUTRAL_AIR, { warmth: world.warmthOf?.(u) ?? 0, name: u.name })) <= CLIM.COLD_AT;
+const outdoorCold = (u, world) => CLIM.bodyTarget(CLIM.feelTemp(world.air ?? world.airNow?.() ?? CLIM.NEUTRAL_AIR, { warmth: world.warmthOf?.(u) ?? 0, name: formOf(u) })) <= CLIM.COLD_AT;
 // ---------------------------------------------------------------- 병(health.js)
 /** 아프면 쉬러: 빈 침대가 있는 의원 → 내 집 → 가까운 공공건물. 피곤하면(기력 TIRED 아래) 맡은 공사도 내려놓음(은행 짐은 창고로). 난수 안 씀. 갈 수 있으면 true */
 function startSickRest(u, world) {
@@ -738,10 +754,10 @@ const WORKING = new Set(["Chop", "Mine", "Build", "Farm", "Trade", "Fish", "Impr
 function bodyTick(u, dt, world) {
   const air = world.air ?? CLIM.NEUTRAL_AIR, inside = !!u.insideBuildingId, f = world.festival;
   const extra = !inside && f && Math.hypot(f.x - u.x, f.z - u.z) <= CLIM.FEST_HEAT_R ? CLIM.FEST_HEAT : 0;
-  const working = !inside && WORKING.has(u.state), feel = CLIM.feelTemp(inside ? CLIM.indoorTemp(air) : air, { warmth: world.warmthOf?.(u) ?? 0, working, name: u.name, extra });
+  const working = !inside && WORKING.has(u.state), feel = CLIM.feelTemp(inside ? CLIM.indoorTemp(air) : air, { warmth: world.warmthOf?.(u) ?? 0, working, name: formOf(u), extra });
   u.chilly = !inside && feel - (working ? CLIM.WORK_HEAT : 0) < HL.CHILL_DAY;     // 추운 날 밖(일하는 열은 빼고): 젖음·과로 감기 굴림의 조건
   u.wet = HL.stepWet(u.wet, { inside, weather: world.weather?.kind, chilly: u.chilly }, dt); u.workRun = HL.stepWorkRun(u.workRun, { inside, working, chilly: u.chilly }, dt);
-  const was = u.bodyT ?? CLIM.BODY_NORMAL, now = CLIM.stepBody(was, CLIM.bodyTarget(feel), dt, CLIM.bodyTau(u.name)); u.bodyT = now;
+  const was = u.bodyT ?? CLIM.BODY_NORMAL, now = CLIM.stepBody(was, CLIM.bodyTarget(feel), dt, CLIM.bodyTau(formOf(u))); u.bodyT = now;
   if (was > CLIM.COLD_AT && now <= CLIM.COLD_AT) world.noteChill?.(u);
 }
 /** 축제가 열려 있고 너무 지치지 않았는가(이럴 땐 자다가도 깨어 광장에 감. 지쳤으면 그대로 잠) */
@@ -867,7 +883,7 @@ export function moodBubble(u, dt, world) {
     : u.sick ? "sick" : (u.full ?? 80) < J.HUNGRY ? "hungry" : n && n.energy < 20 ? "tired"
     : u.useFurni && u.insideBuildingId ? (FURNITURE[u.useFurni.id]?.use === "read" ? "read" : FURNITURE[u.useFurni.id]?.use === "sit" ? "sit" : null) : !u.insideBuildingId && CLIM.isCold(u.bodyT) ? "cold" : !u.insideBuildingId && (u.bodyT ?? 40) >= CLIM.HOT_AT ? "hot"
     : sat >= 80 ? "happy" : sat < 30 ? "sad" : null;
-  if (!k) return; const list = k === "hungry" ? HUNGRY_SAY[u.name] || MOODS.hungry : MOODS[k]; chatter(u, list[(id + Math.floor((world.time || 0) / 7)) % list.length] || list[0], world, 2.4, k === "hungry" ? "mood:hungry" : null);
+  if (!k) return; const list = k === "hungry" ? HUNGRY_SAY[formOf(u)] || MOODS.hungry : MOODS[k]; chatter(u, list[(id + Math.floor((world.time || 0) / 7)) % list.length] || list[0], world, 2.4, k === "hungry" ? "mood:hungry" : null);
 }
 export function updateUnit(u, dt, world, rnd = Math.random) {
   u.timer -= dt; if (u.emoteT > 0) u.emoteT -= dt;
@@ -906,7 +922,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
     if (u.once === o && o.t >= o.len) { u.once = null; u.anim = null; o.then && o.then(); }
     return settle(u, dt, world);
   }
-  const p = PERSONA[u.name] || PERSONA["기본"];
+  const p = personaOf(u);
   // 너무 배고프면 하던 일(공사·벌목·채광·낚시·밭일·장사)을 멈추고 먼저 먹으러(맡은 공사는 유지)
   if ((u.full ?? 80) < 12 && [US.Build, US.Chop, US.Mine, US.Fish, US.Farm, US.Trade, US.GoBuild, US.GoChop, US.GoMine].includes(u.state) && !u.once) {
     emote(u, "배고파…"); setIdle(u, rnd, world, 0); return settle(u, dt, world);
@@ -1106,6 +1122,7 @@ export function updateUnit(u, dt, world, rnd = Math.random) {
       const b = world.buildings.get(u.targetBuildingId);
       if (!b) { setIdle(u, rnd, world); break; }
       if (followPath(u, dt, world, rnd)) {
+        if (u.doorNap) { u.doorNap = false; u.sleepy = false; u.targetBuildingId = null; setIdle(u, rnd, world, 10 + rnd() * 6); u.state = US.Sleep; u.nap = false; emote(u, "💤", 2.2); break; }   // 자이언트: 작은 집 문 앞에서 잠
         const cocoa = u.cocoa; u.cocoa = false; enterBuilding(u, b, rnd, world); if (cocoa && b.defId === "cafe") world.buyCocoa?.(u);
         if (u.insideAct === "sleep") world.lodge?.(u, b);                         // 빈 집 손님이면 숙박비(하룻밤에 한 번, World.lodge가 가림)
         if (BUILDINGS[b.defId].clinic) { if (u.insideAct === "sick") world.clinicCheckIn?.(u, b); else if (u.insideAct === "doctor") world.doctorArrived?.(u, b); }

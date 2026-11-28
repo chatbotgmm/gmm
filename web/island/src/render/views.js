@@ -10,6 +10,9 @@ import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
 import { placeEl, showEl, textEl } from "../util.js";
 import { siteStepOf } from "../ui/bldView.js";
+import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { instanceChar } from "./charInstance.js";
+import { formOf } from "../world/evolve.js";
 
 const _badgeP = new THREE.Vector3(), _badgeQ = new THREE.Vector3(), _lineP = new THREE.Vector3(), _tipP = new THREE.Vector3();
 const SITE_NEAR = 34;                                                            // 공사장 배지 둘째 줄은 카메라에서 이 거리(m) 안에서만(전기 없음 배지와 같은 거리)
@@ -397,12 +400,16 @@ export class UnitViews {
     return v;
   }
   /** 메모리 캐시에 그 갈매미 모델이 있으면 붙임(새 섬에서도 같은 모델을 다시 씀 · 다시 받지 않음). 없으면 sync가 매 프레임 다시 봄 */
+  /** 모습(u.form)의 원본을 마리마다 복제해 붙임(charInstance.js: 같은 모습 여럿이 서로 빼앗지 않게, 재질도 마리마다). 변신하면 다시 붙임(옛 복제본은 떼기만 — 지오메트리는 원본과 같이 씀) */
   attach(v, u) {
-    const ch = this.pool?.get?.(u.name); if (!ch) return false;
-    ch.root.parent?.remove(ch.root); v.g.add(ch.root); v.ch = ch;
-    ch.anim = ""; ch.onceRef = null; for (const t of Object.values(ch.inHand)) t.visible = false;
+    const f = formOf(u), proto = this.pool?.get?.(f); if (!proto) return false;
+    if (v.ch) { v.ch.mixer?.stopAllAction?.(); v.ch.root.parent?.remove(v.ch.root); }
+    const ch = instanceChar(proto, { cloneRoot: SkeletonUtils.clone, Mixer: THREE.AnimationMixer }); this.instances = (this.instances || 0) + 1;
+    v.g.add(ch.root); v.ch = ch; v.form = f;
+    for (const t of Object.values(ch.inHand)) t.visible = false;
     ch.root.rotation.set(0, 0, 0); ch.root.position.set(0, 0, 0);
-    v.castOn = undefined;                                                         // 그림자는 거리 보고 sync에서 정함
+    v.castOn = undefined; v.sitBottom = undefined; v.sickOn = undefined; v.tip = undefined;   // 그림자는 거리 보고 sync에서 정함 · 앉은 키·낚싯대 끝은 새 몸으로 다시 잼
+    v.blob.scale.setScalar(0.32 * (u.scale || 1) + 0.08);                          // 발밑 그림자도 새 몸 크기로
     return true;
   }
   /** 이 갈매미 손의 물뿌리개 끝(월드 좌표, 보일 때만) — life.js 물방울이 여기서 나옴. 없으면 null */
@@ -449,7 +456,7 @@ export class UnitViews {
     this.frameNo = (this.frameNo || 0) + 1; this.casting = 0;                       // casting: 실제 그림자를 드리우는(밖에 나와 있는) 갈매미 수
     this.world.units.forEach((u, i) => {
       const v = this.views[i]; if (!v) return;                                     // 막 소환돼 아직 모습이 안 만들어진 갈매미
-      if (!v.ch) this.attach(v, u);                                                 // 모델이 아직 없으면(이론상 불러오는 중 화면 뒤엔 없음) 올 때까지 안 그림
+      if (!v.ch || v.form !== formOf(u)) this.attach(v, u);                        // 모델이 아직 없으면 올 때까지 안 그림 · 변신하면 새 모습으로(월드가 연출의 빛이 가장 밝을 때 form을 바꿈)
       const { g, ch, pick } = v; g.visible = !u.insideBuildingId && !!ch;
       const h = Math.max(0.6, u.height ?? 0.8 * (u.scale || 1)), r = Math.max(0.32, 0.28 * (u.scale || 1)); pick.scale.set(r, h, r);
       g.position.set(toWorldX(u.x), u.y, toWorldZ(u.z));

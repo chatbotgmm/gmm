@@ -12,7 +12,7 @@ const fresh = (seed = 3) => { const w = World.create(7, seededRandom(seed), { wi
 const awake = u => { u.state = "Idle"; u.once = null; u.path = null; u.insideBuildingId = null; u.timer = 5; u.full = 80; u.sick = null; if (u.needs) u.needs.energy = 90; };
 /** 미니 하나 + 4칸 옆 자이언트 + 미니 2칸 옆 해변 바위 */
 function perchSetup(seed = 3) {
-  const w = fresh(seed), mini = w.units[0]; mini.name = "미니"; awake(mini);
+  const w = fresh(seed), mini = w.units[0]; mini.form = "미니"; awake(mini);
   const g = w.grid; let spot = null;
   for (let z = g.box.z0 + 2; z < g.box.z1 - 2 && !spot; z++) for (let x = g.box.x0 + 6; x < g.box.x1 - 6 && !spot; x++)
     if ([0, 1, 2, -3].every(d => g.isWalkable(x + d, z) && !g.get(x + d, z).occupiedId)) spot = [x, z];
@@ -58,7 +58,7 @@ test("내려놓기가 실패해 바위로 돌아오면 소동이 이어짐", () 
 });
 
 test("야행성은 낮에만 꾸벅: 밤이 되거나 FUSS_LIFE초가 지나면 혼자 풀림(하트·소식 없음)", () => {
-  const w = fresh(), u = w.units[0]; u.name = "불씨"; awake(u); const f = new Fuss(w, 5), seen = []; w.on("fussSolved", e => seen.push(e));
+  const w = fresh(), u = w.units[0]; u.form = "불씨"; awake(u); const f = new Fuss(w, 5), seen = []; w.on("fussSolved", e => seen.push(e));
   const x0 = u.x; assert.ok(f.start("doze", u)); assert.equal(u.x, x0, "그 자리에서 졺");
   for (let t = 0; t < 30; t++) { updateUnit(u, 0.5, w, w.rnd); f.step(0.5); }
   assert.equal(f.of(u), "doze"); w.isNight = true; f.step(0.1); assert.equal(f.of(u), null, "밤엔 깸");
@@ -67,7 +67,7 @@ test("야행성은 낮에만 꾸벅: 밤이 되거나 FUSS_LIFE초가 지나면 
 });
 
 test("깨어 있는 갈매미만: 자는·졸린·배고픈·아픈 갈매미는 소동 안 함 · 소동 중 기력이 잠 문턱 가까이 떨어지면 풀림(잠이 먼저)", () => {
-  const w = fresh(), u = w.units[0]; u.name = "불씨"; awake(u);
+  const w = fresh(), u = w.units[0]; u.form = "불씨"; awake(u);
   assert.ok(fussAwake(u, w));
   u.needs.energy = SLEEP_BELOW + 5; assert.ok(!fussAwake(u, w), "기력 25(잠 문턱 20 + FUSS_AWAKE 이하)");
   awake(u); u.state = "Sleep"; assert.ok(!fussAwake(u, w));
@@ -77,7 +77,7 @@ test("깨어 있는 갈매미만: 자는·졸린·배고픈·아픈 갈매미는
 });
 
 test("하루 상한: 마을 하루에 FUSS_DAILY번, 처음엔 FUSS_FIRST초 기다리고 끝난 뒤 FUSS_GAP초 쉼", () => {
-  const w = fresh(), u = w.units[0]; u.name = "불씨"; const f = new Fuss(w, 5); f.rnd = () => 0;
+  const w = fresh(), u = w.units[0]; u.form = "불씨"; const f = new Fuss(w, 5); f.rnd = () => 0;
   awake(u); assert.equal(f.roll(), null, "연 지 얼마 안 됨");
   w.time += FUSS_FIRST; assert.ok(f.roll()); assert.equal(f.roll(), null, "한 번에 하나");
   f.end(false); awake(u); assert.equal(f.roll(), null, "쉬는 중"); w.time += FUSS_GAP;
@@ -116,7 +116,7 @@ test("흔들기 판정(shakeStep): 쭉 끌기·작은 손떨림은 아님, 0.6 m
 });
 
 test("화면 중심(near)에서 FUSS_SEE칸 넘게 떨어진 갈매미는 소동 안 함 · 소동 중 톡은 🆘 말풍선만(nudge)", () => {
-  const w = fresh(), u = w.units[0]; u.name = "불씨"; const f = new Fuss(w, 5); f.rnd = () => 0; w.time += FUSS_FIRST; awake(u);
+  const w = fresh(), u = w.units[0]; u.form = "불씨"; const f = new Fuss(w, 5); f.rnd = () => 0; w.time += FUSS_FIRST; awake(u);
   f.near = () => ({ x: u.x + FUSS_SEE + 1, z: u.z }); assert.equal(f.roll(), null, "화면 밖");
   f.near = () => ({ x: u.x + FUSS_SEE - 1, z: u.z }); assert.ok(f.roll(), "화면 안");
   assert.equal(f.nudge(w.units.find(o => o !== u) || {}), false);

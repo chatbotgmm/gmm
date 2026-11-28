@@ -111,6 +111,13 @@
   #info .need { display: grid; grid-template-columns: calc(42*var(--u)) 1fr calc(24*var(--u)); align-items: center; gap: var(--gap); font-size: var(--fs-cap); }
   #info .need i { height: calc(7*var(--u)); border-radius: var(--r-pill); background: rgba(0,0,0,.08); overflow: hidden; } #info .need i b { display: block; height: 100%; background: var(--c-good); border-radius: var(--r-pill); }
   #info .need i.low b { background: var(--c-danger); } #info .need em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; color: var(--c-ink-2); }
+  #info .iname { cursor: pointer; text-decoration: underline dotted rgba(0,0,0,.3); text-underline-offset: 3px; }
+  #info .iform { font-size: var(--fs-cap); font-weight: 600; margin-bottom: calc(3*var(--u)); color: #6a4c2c; }
+  #info .iren { display: flex; flex-wrap: wrap; gap: calc(4*var(--u)); align-items: center; margin-bottom: calc(4*var(--u)); } #info .iren input { flex: 1; min-width: 7em; min-height: var(--hit); font: inherit; padding: 0 calc(6*var(--u)); border-radius: var(--r-sm); border: 1px solid #d9c3a5; }
+  #info .ievo { background: #fff7e6; border-radius: var(--r-sm); padding: calc(5*var(--u)) calc(7*var(--u)); margin-bottom: calc(5*var(--u)); font-size: var(--fs-cap); }
+  #info .ievo p { margin: 0 0 calc(3*var(--u)); } #info .ievo .ie-soon { font-weight: 700; color: #b5650d; } #info .ievo ul { margin: calc(2*var(--u)) 0; padding-left: 1.2em; }
+  #info .ie-guess { display: flex; flex-wrap: wrap; gap: calc(3*var(--u)); align-items: center; margin-top: calc(3*var(--u)); } #info .ie-guess span { width: 100%; }
+  #info .ie-guess button { min-height: 30px; padding: 0 calc(6*var(--u)); font-size: var(--fs-cap); border-radius: 999px; } #info .ie-guess button.on { background: #ffd98a; box-shadow: inset 0 0 0 2px #e0a33a; }
   #info .ichips { display: flex; flex-wrap: wrap; gap: calc(5*var(--u)); margin-bottom: calc(4*var(--u)); } #info .ichips span { background: rgba(0,0,0,.05); border-radius: var(--r-sm); padding: calc(2*var(--u)) calc(7*var(--u)); font-size: var(--fs-cap); }
   /* 화면 연결 5단계: 따라가기 카드 체온 줄 · 칩 · 자세히 보기, 선물 판 머리, 도장 가게 두 묶음 */
   #info .need.itemp { grid-template-columns: calc(42*var(--u)) 1fr auto; } #info .itemp[hidden] { display: none; } #info .itemp > span:first-child { white-space: nowrap; }
@@ -729,6 +736,10 @@
   #pageSummon .sm-next { margin: 0 0 var(--s-2); font-size: var(--fs-body); }
   #pageSummon .sm-giant { margin: 0 0 var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--c-warm); font-size: var(--fs-body); }
   #pageSummon .sm-giant p { margin: 0 0 var(--s-2); font-weight: 600; } #pageSummon .sm-go { min-height: var(--hit); width: 100%; }
+  #pageSummon .sm-tip { margin: 0 0 var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--c-warm); font-size: var(--fs-body); }
+  #pageSummon .sm-dex { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-1); margin: 0 0 var(--s-2); }
+  #pageSummon .sm-dex span { display: flex; flex-direction: column; align-items: center; padding: var(--s-1); border-radius: var(--r-sm); background: var(--c-card, #fff6ea); font-size: var(--fs-small, 13px); line-height: 1.2; }
+  #pageSummon .sm-dex span i { font-style: normal; font-size: 22px; } #pageSummon .sm-dex .off { opacity: .45; filter: grayscale(1); } #pageSummon .sm-dex .rare { box-shadow: inset 0 0 0 2px #9152d0; }
   #pageSummon :is(.sm-list, .sm-rules) { margin: 0; padding-left: 1.2em; } #pageSummon :is(.sm-list, .sm-rules) li { margin: calc(3*var(--u)) 0; }
   details.more { border-top: 1px solid var(--c-line); }
   details.more > summary { display: flex; align-items: center; gap: var(--s-2); min-height: var(--hit-sm); box-sizing: border-box; padding: var(--s-1) 0; cursor: pointer; list-style: none; font-size: var(--fs-body); font-weight: 700; touch-action: manipulation; }   /* 요약 줄 = 누르는 칸 44px(터치) */

@@ -7,6 +7,7 @@
 //    삐침은 이 모듈 안(Map)에만 있어 저장하지 않음. 삐친 동안 톡 = 등 돌리고 "흥".
 //  · 첫 탭 규칙(systems/unitControl.js): 따라가지 않던 갈매미 탭 = 따라가기 + 반응, 이미 따라가는 갈매미 탭 = 톡.
 import { PERSONA } from "../data/catalog.js";
+import { personaOf, formOf, POKE_HINT, BASE_FORM, addNote } from "../world/evolve.js";
 import { UnitState } from "../data/types.js";
 const UST = UnitState;
 import { nearestWalkable } from "../world/pathfinding.js";
@@ -42,7 +43,7 @@ const FREE = new Set([UST.Idle, UST.Wander, UST.Avoid, UST.Curious]);
 export const isFree = (u, hopOk = false) => FREE.has(u.state) && (!u.once || (hopOk && u.once.key === "Jump")) && !u.insideBuildingId && !u.sailing && !u.swimming;
 /** 연타 끝: 뛰어놀기(활발한 종족·기운 있음) 또는 삐침(자이언트·그림자·지침·잠·바로 전에 뛰어놀았음) */
 export const comboKind = (u, zoomedAgo = Infinity) => {
-  const p = PERSONA[u.name] || PERSONA["기본"];
+  const p = personaOf(u);
   return isAsleep(u) || p.loner || !p.zoomies || (u.needs?.energy ?? 100) < 25 || zoomedAgo < POKE_ZOOM_REST || !isFree(u, true) ? "sulk" : "zoom";   // 톡 폴짝(Jump) 중이어도 뛰어놀기로
 };
 
@@ -81,7 +82,10 @@ export class Poke {
       this.later.push({ u, at: now + 0.8, f: () => { if (!isAsleep(u)) return; if (!u.insideBuildingId) u.heading += Math.PI * (0.4 + 0.3 * rnd()); emote(u, line, 2.2); } });
       return { kind: "sleep", line };
     }
-    const row = POKE_TABLE[u.name] || POKE_TABLE["기본"], line = row.lines[s.k++ % row.lines.length];
+    let row = POKE_TABLE[formOf(u)] || POKE_TABLE["기본"], line = row.lines[s.k % row.lines.length];
+    const hint = u.disp && !u.evo && formOf(u) === BASE_FORM ? POKE_HINT[u.disp] : null;   // 아직 기본인 갈매미: 3번에 1번꼴로 성향 대사·몸짓(단서)
+    if (hint && s.k % 3 === 2) { row = { act: hint.act }; line = hint.line; s.hinted = (s.hinted || 0) + 1; addNote(u, `톡: "${hint.line}"`); }
+    s.k++;
     if (!isFree(u)) { face(false); return { kind: "poke", act: "say", line: say(line) }; }   // 일하는 중: 말풍선만
     const act = row.act;
     if (act === "slow") { this.later.push({ u, at: now + 1.4, f: () => { if (isFree(u)) { setIdle(u, rnd, w, 3); face(false); } emote(u, line, 2.4); } }); emote(u, "…", 1.2); return { kind: "poke", act, line }; }

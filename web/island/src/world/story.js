@@ -8,6 +8,7 @@
 //       { move: 열쇠, at } (이야기 반짝이 옮기기) · { line: 글 } (다녀온 사이 편지에 붙는 줄)
 import { STORY_CHAPTERS, STORY_PIECES, STORY_PIECE_IDS, STORY_NEED, STORY_SEEDS, STORY_HINT_DAYS, STORY_CARD_DAYS, STORY_POLE_DAYS, STORY_EVERY, STORY_LAMP_R, STORY_WHALE, STORY_WHALE_GULL, STORY_POSTCARDS, STORY_BONUS } from "../data/story.js";
 import { bondStage } from "./bond.js";
+import { formOf } from "./evolve.js";
 
 export const STORY_VERSION = 1;
 /** 밤에 등불을 고친 뒤 첫 깜빡임까지 기다리는 마을 초(고침·켜진 등대 카드가 지나간 뒤) */
@@ -97,7 +98,7 @@ export function restoreCheck(s, w, n) {
 function stBondActs(s, u, stage, out) {
   if (stage >= 2 && canFind(s, "c1_tale")) out.push({ grant: "c1_tale", who: u.name });
   if (stage >= 3 && canFind(s, "c2_secret1")) out.push({ grant: "c2_secret1", who: u.name });
-  if (stage >= 3 && u.name === STORY_WHALE_GULL && canFind(s, "c3_whale")) out.push({ grant: "c3_whale", who: u.name });
+  if (stage >= 3 && formOf(u) === STORY_WHALE_GULL && canFind(s, "c3_whale")) out.push({ grant: "c3_whale", who: u.name });
 }
 /** 이미 지난 일로 채울 조각(장이 열릴 때·불러온 뒤): 이미 하트 단계에 닿은 갈매미가 털어놓음 · 이미 기증한 고래상어 */
 export function retroActs(s, w) {

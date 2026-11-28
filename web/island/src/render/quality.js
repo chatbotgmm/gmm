@@ -20,17 +20,18 @@ const DPR = typeof devicePixelRatio !== "undefined" ? devicePixelRatio : 1;
 const pr = (pc, touch) => Math.min(DPR, IS_TOUCH ? touch : pc);
 const MEM = (typeof navigator !== "undefined" && navigator.deviceMemory) || (IS_TOUCH ? 4 : 8);   // 기기 메모리(GB, 크롬만 알려 줌. 모르면 폰 4·PC 8로 봄)
 
+// maxGulls: 마을 갈매미 상한(마리마다 모델·믹서·재질 복제가 붙음 — 낮음 14 · 보통 20 · 높음 24, population.js MAX_GULLS 20이 기본)
 export const QUALITY = {
   ultra: { name: "최고 품질", maxPR: pr(2, 2), minPR: pr(2, 2), dynamic: false, shadows: true, shadow: 4096, soft: true, shadowEvery: 1,
-    terrainSub: 4, lodScale: 1.7, farDrop: false, gullShadowDist: 999, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 8, footprints: 500, lod: IS_TOUCH && MEM < 8 ? 1 : 0, drawDist: 260, fpsCap: 0, model: 1, liteModel: 1 },
+    maxGulls: 24, terrainSub: 4, lodScale: 1.7, farDrop: false, gullShadowDist: 999, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 8, footprints: 500, lod: IS_TOUCH && MEM < 8 ? 1 : 0, drawDist: 260, fpsCap: 0, model: 1, liteModel: 1 },
   high:  { name: "높음", maxPR: pr(2, 2), minPR: pr(2, 1.5), dynamic: IS_TOUCH, shadows: true, shadow: 2048, soft: true, shadowEvery: 1,
-    terrainSub: 4, lodScale: 1.2, farDrop: false, gullShadowDist: 45, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 6, footprints: 400, lod: IS_TOUCH ? 1 : 0, drawDist: 170, fpsCap: 0, model: 1, liteModel: 1 },
+    maxGulls: 24, terrainSub: 4, lodScale: 1.2, farDrop: false, gullShadowDist: 45, decor: { density: 1, simple: false, bushShadow: true }, lampLights: 6, footprints: 400, lod: IS_TOUCH ? 1 : 0, drawDist: 170, fpsCap: 0, model: 1, liteModel: 1 },
   medium: { name: "보통", maxPR: pr(1.75, 1.5), minPR: pr(1, 1), dynamic: true, shadows: true, shadow: IS_TOUCH ? 1024 : 2048, soft: !IS_TOUCH, shadowEvery: 2,
-    terrainSub: IS_TOUCH ? 2 : 4, lodScale: 1, farDrop: true, gullShadowDist: 28, decor: { density: 0.8, simple: true, bushShadow: true }, lampLights: 4, footprints: 200, lod: 1, drawDist: 120, fpsCap: 0, model: 0.4, liteModel: 1 },
+    maxGulls: 20, terrainSub: IS_TOUCH ? 2 : 4, lodScale: 1, farDrop: true, gullShadowDist: 28, decor: { density: 0.8, simple: true, bushShadow: true }, lampLights: 4, footprints: 200, lod: 1, drawDist: 120, fpsCap: 0, model: 0.4, liteModel: 1 },
   low:   { name: "낮음", maxPR: pr(1, 1.25), minPR: pr(0.85, 1), dynamic: true, shadows: true, shadow: 1024, soft: false, shadowEvery: 3,
-    terrainSub: 2, lodScale: 0.7, farDrop: true, gullShadowDist: 0, decor: { density: 0.5, simple: true, bushShadow: false }, lampLights: 2, footprints: 80, lod: 2, drawDist: 90, fpsCap: 0, model: 0.25, liteModel: 0.6, waterLite: true },
+    maxGulls: 14, terrainSub: 2, lodScale: 0.7, farDrop: true, gullShadowDist: 0, decor: { density: 0.5, simple: true, bushShadow: false }, lampLights: 2, footprints: 80, lod: 2, drawDist: 90, fpsCap: 0, model: 0.25, liteModel: 0.6, waterLite: true },
   perf:  { name: "성능 우선", maxPR: pr(0.7, 0.6), minPR: pr(0.7, 0.6), dynamic: false, shadows: false, shadow: 512, soft: false, shadowEvery: 4,
-    terrainSub: 1, lodScale: 0.5, farDrop: true, gullShadowDist: 0, decor: { density: 0.25, simple: true, bushShadow: false }, lampLights: 0, footprints: 0, lod: 3, drawDist: 70, fpsCap: 30, model: 0.2, liteModel: 0.4, waterLite: true },
+    maxGulls: 14, terrainSub: 1, lodScale: 0.5, farDrop: true, gullShadowDist: 0, decor: { density: 0.25, simple: true, bushShadow: false }, lampLights: 0, footprints: 0, lod: 3, drawDist: 70, fpsCap: 30, model: 0.2, liteModel: 0.4, waterLite: true },
 };
 export const ORDER = ["ultra", "high", "medium", "low", "perf"];
 export const QUALITY_NOTE = {

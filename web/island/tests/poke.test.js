@@ -34,10 +34,10 @@ test("톡: 정·돈·재미·쓰다듬기 횟수가 그대로고 월드 난수�
 
 test("미니는 폴짝 뛰고 도망, 그림자는 비켜섬, 자이언트는 한참 뒤에 대사", () => {
   const w = fresh(), u = w.units[0], p = new Poke(w, 5);
-  u.name = "미니"; idle(u, w); const r = p.poke(u, { x: u.x + 3, z: u.z });
+  u.form = "미니"; idle(u, w); const r = p.poke(u, { x: u.x + 3, z: u.z });
   assert.equal(r.act, "flee"); assert.equal(u.once?.key, "Jump"); u.once.then(); assert.equal(u.state, "Flee", "두 칸 도망");
-  u.name = "그림자"; idle(u, w); p.step(5); assert.equal(p.poke(u, { x: u.x + 3, z: u.z }).act, "aside"); assert.equal(u.state, "Avoid");
-  u.name = "자이언트"; idle(u, w); p.step(5); const g = p.poke(u, { x: u.x + 3, z: u.z });
+  u.form = "그림자"; idle(u, w); p.step(5); assert.equal(p.poke(u, { x: u.x + 3, z: u.z }).act, "aside"); assert.equal(u.state, "Avoid");
+  u.form = "자이언트"; idle(u, w); p.step(5); const g = p.poke(u, { x: u.x + 3, z: u.z });
   assert.equal(u.emoteText, "…"); p.step(1.0); assert.equal(u.emoteText, "…"); p.step(0.5); assert.equal(u.emoteText, g.line, "1.4초 뒤 천천히");
 });
 
@@ -61,7 +61,7 @@ test("자는 갈매미: 💤가 커졌다가 뒤척임, 깨우지 않음", () =>
 });
 
 test("연타 5번: 활발한 갈매미는 뛰어놀기, 바로 또 연타하면 삐침 · 간격이 길면 연타가 아님", () => {
-  const w = fresh(), u = w.units[0], p = new Poke(w, 5); u.name = "물방울"; idle(u, w);
+  const w = fresh(), u = w.units[0], p = new Poke(w, 5); u.form = "물방울"; idle(u, w);
   for (let i = 0; i < POKE_COMBO - 1; i++) { assert.equal(p.poke(u).kind, "poke"); p.step(0.3); idle(u, w); }
   const z = p.poke(u); assert.equal(z.kind, "zoom"); assert.equal(u.state, "Zoomies"); assert.equal(u.activity, null, "배움(활동 선호)도 안 바꿈");
   idle(u, w); p.step(1);
@@ -73,9 +73,9 @@ test("연타 5번: 활발한 갈매미는 뛰어놀기, 바로 또 연타하면 
 
 test("연타 끝: 자이언트·그림자·잠·지침은 삐침, 삐침은 저장하지 않음", () => {
   const w = fresh(), u = w.units[0];
-  idle(u, w); u.name = "자이언트"; assert.equal(comboKind(u), "sulk");
-  u.name = "그림자"; assert.equal(comboKind(u), "sulk");
-  u.name = "기본"; assert.equal(comboKind(u), "zoom"); u.needs.energy = 10; assert.equal(comboKind(u), "sulk"); u.needs.energy = 80;
+  idle(u, w); u.form = "자이언트"; assert.equal(comboKind(u), "sulk");
+  u.form = "그림자"; assert.equal(comboKind(u), "sulk");
+  u.form = "기본"; assert.equal(comboKind(u), "zoom"); u.needs.energy = 10; assert.equal(comboKind(u), "sulk"); u.needs.energy = 80;
   u.state = "Sleep"; assert.equal(comboKind(u), "sulk");
   const p = new Poke(w, 5); for (let i = 0; i < POKE_COMBO; i++) p.poke(u);
   assert.equal(u.state, "Sleep", "자는 갈매미는 삐쳐도 안 깸"); assert.ok(p.sulking(u));
@@ -83,7 +83,7 @@ test("연타 끝: 자이언트·그림자·잠·지침은 삐침, 삐침은 저�
 });
 
 test("폴짝(톡 반응) 중에 다섯 번째 톡이 와도 뛰어놀기 · stepReal은 실제 ms로 셈(프레임 dt 상한과 무관)", () => {
-  const w = fresh(), u = w.units[0], p = new Poke(w, 5); u.name = "기본"; idle(u, w);
+  const w = fresh(), u = w.units[0], p = new Poke(w, 5); u.form = "기본"; idle(u, w);
   for (let i = 0; i < POKE_COMBO - 1; i++) { p.poke(u); p.step(0.3); }
   assert.equal(u.once?.key, "Jump", "기본 갈매미 반응 = 폴짝");
   assert.equal(p.poke(u).kind, "zoom"); assert.equal(u.state, "Zoomies"); assert.equal(u.once, null);

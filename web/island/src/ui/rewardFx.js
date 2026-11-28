@@ -11,6 +11,9 @@ import { BOND_STAGES } from "../world/bond.js";
 import { MEDALS } from "../world/medals.js";
 import { josa } from "../util.js";
 import { VIEW } from "./viewPrefs.js";
+import { DISP_INFO, GROWTH_LABEL, topGrowth, rarityName } from "../world/evolve.js";
+/** 모습 아이콘(카드·도감) */
+export const FORM_EMOJI = { "기본": "🥚", "물방울": "💧", "그림자": "🌑", "불씨": "🔥", "목수": "🪚", "꽃": "🌼", "황금": "👑", "자이언트": "🗿", "미니": "🐣" };
 
 export const RF_MEDIUM_MS = 2600;   // 띠가 떠 있는 시간
 export const RF_BIG_MS = 4200;      // 큰 카드가 저절로 받아지는 시간(그 전에 누르면 바로)
@@ -58,13 +61,22 @@ export function rewardOf(ev, a, world) {
       return { tier: "medium", icon: a.req?.icon || "📋", title: "오늘의 부탁 완료!", line: `${a.req?.text ?? ""}${a.left ? ` · ${a.left}개 남음` : ""}`.trim(), to: null, snd: "chime", key: `daily:${a.req?.id ?? ""}` }; }
     case "bondStage": { const u = a.u, g = a.gift, st = BOND_STAGES[a.stage]; if (!u || !st) return null;
       const title = `${josa(u.name, "과", "와")} ${st.name}!`;
-      if (!g) return { tier: "medium", icon: "💝", title, line: "♥ 정이 깊어졌어요", to: null, snd: "chime", key: `bond:${u.name}:${a.stage}` };
+      if (!g) return { tier: "medium", icon: "💝", title, line: "♥ 정이 깊어졌어요", to: null, snd: "chime", key: `bond:${u.unitId}:${a.stage}` };
       const furni = g.kind === "furniture";
-      return { tier: furni || a.stage >= 3 ? "big" : "medium", icon: itemIcon(g.id), title: got(g.name), line: `💝 ${title} 답례 · ${furni ? `${u.name}네 ${g.where ?? "집"}에 들여놨어요` : "🎁 내 주머니로"}`, to: furni ? null : "bag", snd: furni || a.stage >= 3 ? "fanfare" : "chime", key: `bond:${u.name}:${a.stage}` }; }
+      return { tier: furni || a.stage >= 3 ? "big" : "medium", icon: itemIcon(g.id), title: got(g.name), line: `💝 ${title} 답례 · ${furni ? `${u.name}네 ${g.where ?? "집"}에 들여놨어요` : "🎁 내 주머니로"}`, to: furni ? null : "bag", snd: furni || a.stage >= 3 ? "fanfare" : "chime", key: `bond:${u.unitId}:${a.stage}` }; }
+    case "evolve": { const u = a.u; if (!u) return null;   // 🌟 변신(딱 한 번): 큰 카드 — 타고난 성향 공개 · 이렇게 자랐어요 · 도감 · 천직 · 성향 맞히기
+      const disp = DISP_INFO[a.disp], grew = topGrowth(u.growth), bits = [];
+      if (disp) bits.push(`타고난 성향: ${disp.icon} ${disp.name}`);
+      if (grew) bits.push(`이렇게 자랐어요: ${GROWTH_LABEL[grew]}`);
+      if (a.calling) bits.push("천직 ✓"); if (a.first && !a.stayed) bits.push("📖 도감에 새 모습!"); if (a.guessHit) bits.push("🎯 성향을 맞혔어요! 도장 +1");
+      if (a.stayed) return { tier: "big", icon: "🪨", kick: "✨ 변신의 날 ✨", title: `${josa(u.name, "은", "는")} 든든한 기본 갈매미!`, line: [`변신하지 않고 단단해졌어요. 정이 깊어졌어요`, ...bits].join(" · "), to: null, snd: "fanfare", key: `evolve:${u.unitId}` };
+      return { tier: "big", icon: FORM_EMOJI[a.to] || "🌟", kick: "🌟 변신! 🌟", title: `${josa(u.name, "이", "가")} ${a.to} 갈매미가 됐어요!`, line: [...bits, `✦ ${rarityName(u.rarity)} 등급`].join(" · "), to: null, snd: "fanfare", key: `evolve:${u.unitId}` }; }
+    case "giantMove": { const u = a.u; if (!u) return null;
+      return { tier: "medium", icon: "🗿", title: `${josa(u.name, "이", "가")} 자이언트의 집으로!`, line: "딱 맞는 집으로 이사했어요", to: null, snd: "chime", key: `giantMove:${u.unitId}` }; }
     case "wishDone": { const u = a.u; if (!u) return null;
-      return { tier: "medium", icon: "💖", title: "소원 성취!", line: `${u.name}의 소원이 이루어졌어요`, to: null, snd: "chime", key: `wish:${u.name}` }; }
+      return { tier: "medium", icon: "💖", title: "소원 성취!", line: `${u.name}의 소원이 이루어졌어요`, to: null, snd: "chime", key: `wish:${u.unitId}` }; }
     case "fussSolved": { const u = a.u; if (!u) return null;
-      return { tier: "medium", icon: "💕", title: `${josa(u.name, "이", "가")} 고마워해요!`, line: a.kind === "perch" ? "바위에서 내려 줬어요" : "포근한 곳으로 옮겨 줬어요", to: null, snd: "chime", key: `fuss:${u.name}` }; }
+      return { tier: "medium", icon: "💕", title: `${josa(u.name, "이", "가")} 고마워해요!`, line: a.kind === "perch" ? "바위에서 내려 줬어요" : "포근한 곳으로 옮겨 줬어요", to: null, snd: "chime", key: `fuss:${u.unitId}` }; }
     case "donate": { const f = a.fish; if (!f) return null;
       return { tier: "medium", icon: "🐠", title: `${f.name} 기증!`, line: "📖 수족관 도감에 새로 올랐어요", to: null, snd: "chime", key: `donate:${f.id}` }; }
     case "fishRecord": { if (!a.up || !(a.medal >= 2) || !a.fish) return null; const m = MEDALS[a.medal];   // 은·금메달로 오를 때만(흔한 첫 기록은 조용히)
@@ -84,7 +96,7 @@ export function rewardOf(ev, a, world) {
   }
 }
 /** 이 이벤트들은 보상 화면이 알림을 맡음(알림 줄에는 안 띄우고 지난 알림에만 남김). small(세금·숙박비)은 알림 줄 한 줄도 그대로 */
-export const REWARD_EVENTS = ["storyPiece", "storyRestore", "storyEnd", "storySeed", "storyPostcard", "sparkle", "stampBuy", "medalGift", "donateGift", "festivalEnd", "rank", "dailyDone", "bondStage", "wishDone", "fussSolved", "donate", "fishRecord", "tax", "lodging"];
+export const REWARD_EVENTS = ["storyPiece", "storyRestore", "storyEnd", "storySeed", "storyPostcard", "sparkle", "stampBuy", "medalGift", "donateGift", "festivalEnd", "rank", "dailyDone", "bondStage", "wishDone", "fussSolved", "donate", "fishRecord", "tax", "lodging", "evolve", "giantMove"];
 
 /** small 합치기: add(r, now) → 새로 띄울 것인지 합친 것인지. due(now) → 합치기가 끝나 날릴 것들 [{ to, n, icon, line }] */
 export function makeSmallSum(win = RF_SUM_MS) {

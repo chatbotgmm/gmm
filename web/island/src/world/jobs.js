@@ -1,5 +1,6 @@
 // 종족(직업)·희귀도·배고픔 규칙. 순수 함수만 둔다(시험하기 쉽게).
 import { JOBS, RARITY, FISH, ITEMS, UNIT_JOBS, PERSONA, BUILD_SPEED } from "../data/catalog.js";
+import { formOf, personaOf } from "./evolve.js";
 
 export const jobOf = u => JOBS[u.job] || null;
 export const rarityOf = u => RARITY[u.rarity] || RARITY.common;
@@ -8,7 +9,7 @@ export const skillMult = (u, skill) => (jobOf(u)?.skill === skill ? rarityOf(u).
 
 /** 직업·희귀도를 붙인다(이름으로 UNIT_JOBS에서 찾음). */
 export function assignJob(u) {
-  const [tribe, job, rarity] = UNIT_JOBS[u.name] || ["태초", "builder", "common"];
+  const [tribe, job, rarity] = UNIT_JOBS[formOf(u)] || ["태초", "builder", "common"];
   u.tribe = tribe; u.job = job; u.rarity = rarity;
 }
 
@@ -28,7 +29,7 @@ export const isLazy = u => u.full > OVERFULL;
 
 /** 활동 고를 때의 비중: 성격 비중 + 특기 보너스. 상인·농부 일은 그 직업만. 너무 부르면 쉬기·산책이 늘어남. */
 export function activityWeights(u) {
-  const p = { ...(PERSONA[u.name] || PERSONA["기본"]) }, job = jobOf(u);
+  const p = { ...personaOf(u) }, job = jobOf(u);
   p.trade = 0; p.farm = 0;
   if (job) p[job.skill] = (p[job.skill] || 0) * 2 + 4;
   if (isLazy(u)) { p.rest = (p.rest || 1) * 4; p.wander = (p.wander || 1) * 2; for (const k of ["build", "mine", "chop", "fish", "trade", "farm"]) p[k] = (p[k] || 0) * 0.3; }
