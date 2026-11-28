@@ -39,15 +39,21 @@ export const GROWTH_LABEL = { sea: "물가를 자주 찾아요", night: "밤에 
 export const JOB_GROWTH = { builder: "craft", carpenter: "craft", lumberjack: "big", miner: "big", fisher: "sea", farmer: "green", merchant: "shiny" };
 export const JOB_GROWTH_MULT = 0.4, AUTO_CAP_DAY = 3, PLAYER_CAP_DAY = 6;
 
+/** 성향 → 그 성향이 스스로 쌓는 카운터(느긋은 없음: 고르게 지냄) */
+export const DISP_KEY = { sea: "sea", night: "night", craft: "craft", green: "green", shiny: "shiny", big: "big", timid: "timid" };
+/** 성향과 같은 카운터는 스스로 쌓을 때 DISP_BOOST배(하루 상한도 그만큼): 타고난 끌림이 직업·우연보다 또렷이 보이게 */
+export const DISP_BOOST = 1.6;
 /** 카운터 올리기(상한 적용, 순수): src = "job"(제 직업 일, ×0.4) | "free"(한가할 때 스스로) | "player"(플레이어가 해 준 것).
- *  키마다 하루 상한: 갈매미 스스로(job+free) 3, 플레이어 몫 6. 변신이 끝났거나 성향이 없는(옛 받침) 갈매미는 안 셈. 실제로 더한 값 */
+ *  키마다 하루 상한: 갈매미 스스로(job+free) 3(성향과 같은 키는 ×DISP_BOOST), 플레이어 몫 6. 변신이 끝났거나 성향이 없는(옛 받침) 갈매미는 안 셈. 실제로 더한 값 */
 export function growthAdd(u, key, n, src = "free", day = 0) {
   if (!u || u.evo || !u.disp || !GROWTH_KEYS.includes(key) || !(n > 0)) return 0;
-  const player = src === "player", amt = n * (src === "job" ? JOB_GROWTH_MULT : 1);
+  const player = src === "player", mine = !player && DISP_KEY[u.disp] === key, amt = n * (src === "job" ? JOB_GROWTH_MULT : 1) * (mine ? DISP_BOOST : 1);
   let gd = u.growthDay; if (!gd || gd.day !== day) gd = u.growthDay = { day, auto: {}, player: {} };
-  const bucket = player ? gd.player : gd.auto, cap = player ? PLAYER_CAP_DAY : AUTO_CAP_DAY, add = Math.max(0, Math.min(amt, cap - (bucket[key] || 0)));
+  const bucket = player ? gd.player : gd.auto, cap = player ? PLAYER_CAP_DAY : AUTO_CAP_DAY * (mine ? DISP_BOOST : 1), add = Math.max(0, Math.min(amt, cap - (bucket[key] || 0)));
   if (!(add > 0)) return 0;
-  bucket[key] = (bucket[key] || 0) + add; (u.growth ||= {})[key] = (u.growth[key] || 0) + add; return add;
+  bucket[key] = (bucket[key] || 0) + add; (u.growth ||= {})[key] = (u.growth[key] || 0) + add;
+  if (player) (u.growthP ||= {})[key] = (u.growthP[key] || 0) + add;   // 플레이어 몫은 따로도 적어 둠(마을 평균 빼기에서 제외: villageRef)
+  return add;
 }
 export const growthSum = g => GROWTH_KEYS.reduce((s, k) => s + Math.max(0, +g?.[k] || 0), 0);
 /** 가장 많이 쌓인 카운터(카드 "요즘 모습" 한 줄). 없으면 null */
@@ -57,8 +63,8 @@ export function topGrowth(g) { let best = null, bv = 0; for (const k of GROWTH_K
 /** 모습별 가중치(카운터 비율에 곱함, 음수는 깎음) */
 export const FORM_WEIGHTS = {
   "물방울": { sea: 1.0, social: 0.2 },
-  "그림자": { night: 1.0, alone: 1.0, timid: 0.5, warm: -0.3, social: -0.2 },
-  "불씨":   { night: 1.0, warm: 1.0, big: 0.3, alone: -0.4 },
+  "그림자": { night: 1.0, alone: 0.6, timid: 0.7, warm: -0.3, social: -0.3 },
+  "불씨":   { night: 0.85, warm: 1.0, social: 0.5, big: 0.3, alone: -0.4 },
   "목수":   { craft: 1.0 },
   "꽃":     { green: 1.0, social: 0.2 },
   "황금":   { shiny: 1.0, social: 0.3 },
@@ -68,33 +74,51 @@ export const FORM_WEIGHTS = {
 /** 성향이 기울어지는 모습(첫째 DISP_BONUS, 둘째 DISP_BONUS2) */
 export const DISP_FORMS = { sea: [["물방울"], []], night: [["그림자", "불씨"], []], craft: [["목수"], []], green: [["꽃"], ["미니"]],
   shiny: [["황금"], []], big: [["자이언트"], ["불씨"]], timid: [["미니"], ["그림자"]], easy: [[], []] };
-export const DISP_BONUS = 0.25, DISP_BONUS2 = 0.12, BASE_SCORE = 0.30, EASY_BASE = 0.2;
-export const RARE_MIN_SHARE = 0.3, RARE_P = 0.5, RARE_P_OFF = 0.2, RARE_KEY = { "자이언트": "big", "미니": "timid" };
-export const EVO_MIN_DAYS = 3, EVO_MAX_DAYS = 6, EVO_MIN_GROWTH = 12;
+export const DISP_BONUS = 0.25, DISP_BONUS2 = 0.12, BASE_SCORE = 0.30, EASY_BASE = 0.28;
+/** 드문 관문: 그 카운터 비율이 RARE_MIN_SHARE 이상이고, 성향이 맞으면 RARE_P[모습], 아니면 RARE_P_OFF 확률로 통과.
+ *  자이언트는 먹보 비율을 넘기기가 더 어려워서(누구나 나무를 거듦) 통과 확률을 조금 높게 둠 */
+export const RARE_MIN_SHARE = 0.3, RARE_P = { "자이언트": 0.6, "미니": 0.55 }, RARE_P_OFF = 0.2, RARE_KEY = { "자이언트": "big", "미니": "timid" };
+export const EVO_MIN_DAYS = 3, EVO_MAX_DAYS = 6, EVO_MIN_GROWTH = 12, EVO_MIN_REL = 3;
 
 const evoHash = (...xs) => { let h = 0x811c9dc5; for (const x of xs) { const s = String(x); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } h ^= 0xff; h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
 export const strHash = s => evoHash(s);
-/** 모습마다 점수(순수) */
-export function evoScores(u) {
-  const g = u.growth || {}, tot = growthSum(g), s = {}; for (const k of GROWTH_KEYS) s[k] = tot > 0 ? Math.max(0, +g[k] || 0) / tot : 0;
+/** 마을 평균(순수): 누구나 하는 일(같이 나무 베기·물물교환·헤엄·친구 사귀기)은 마을 모두에게 쌓이므로, 이 갈매미 나이만큼의
+ *  "보통 갈매미 몫"을 빼고 남는 것만 그 갈매미의 끌림으로 봄. 다른 갈매미들이 스스로 쌓은 하루 몫(플레이어 몫 growthP는 빼고) 평균 × 나이 × REF_ALPHA.
+ *  플레이어 손길은 빼지 않음: 모두를 바다에 내려놓아도 모두 바다 쪽으로 자람.
+ *  다른 갈매미가 REF_MIN보다 적으면 그만큼 약하게(혼자 사는 섬에선 빼지 않음). 돌려줌 { key: 뺄 값 } 또는 null */
+export const REF_ALPHA = 0.9, REF_MIN = 4;
+export function villageRef(units, u, day) {
+  const others = (units || []).filter(o => o !== u && o.disp && o.growth && o.bornDay != null);
+  if (!others.length) return null;
+  const rate = Object.fromEntries(GROWTH_KEYS.map(k => [k, 0]));
+  for (const o of others) { const age = Math.max(1, (o.evo ? o.evo.day : day) - o.bornDay); for (const k of GROWTH_KEYS) rate[k] += Math.max(0, (+o.growth[k] || 0) - (+o.growthP?.[k] || 0)) / age; }
+  const age = Math.max(1, day - (u.bornDay ?? day)), a = REF_ALPHA * Math.min(1, others.length / REF_MIN);
+  for (const k of GROWTH_KEYS) rate[k] = rate[k] / others.length * age * a;
+  return rate;
+}
+/** 마을 평균을 뺀 카운터(없으면 그대로) */
+export const relGrowth = (g, ref, gp = null) => Object.fromEntries(GROWTH_KEYS.map(k => { const p = Math.min(+gp?.[k] || 0, +g?.[k] || 0); return [k, Math.max(0, (+g?.[k] || 0) - p - (ref?.[k] || 0)) + p]; }));
+/** 모습마다 점수(순수). ref = villageRef(마을 평균 몫, 없으면 그대로) */
+export function evoScores(u, ref = null) {
+  const raw = growthSum(u.growth || {}), g = relGrowth(u.growth, ref, u.growthP), tot = growthSum(g), s = {}; for (const k of GROWTH_KEYS) s[k] = tot > 0 ? g[k] / tot : 0;
   const out = {};
   for (const [form, w] of Object.entries(FORM_WEIGHTS)) { let v = 0; for (const [k, m] of Object.entries(w)) v += m * s[k]; out[form] = v; }
   const [first, second] = DISP_FORMS[u.disp] || [[], []];
   for (const f of first) out[f] += DISP_BONUS; for (const f of second) out[f] += DISP_BONUS2;
   out[BASE_FORM] = BASE_SCORE + (u.disp === "easy" ? EASY_BASE : 0);
-  return { scores: out, share: s, total: tot };
+  return { scores: out, share: s, total: raw, rel: tot };
 }
-/** 무엇이 될지(순수, 같은 씨앗·갈매미·카운터면 늘 같음). seed = 섬 씨앗. 돌려줌 { form, stayed, scores } */
-export function pickForm(u, seed = 7) {
-  const { scores, share, total } = evoScores(u);
-  if (total < EVO_MIN_GROWTH) return { form: BASE_FORM, stayed: true, scores, why: "few" };
+/** 무엇이 될지(순수, 같은 씨앗·갈매미·카운터·마을 평균이면 늘 같음). seed = 섬 씨앗. 돌려줌 { form, stayed, scores } */
+export function pickForm(u, seed = 7, ref = null) {
+  const { scores, share, total, rel } = evoScores(u, ref);
+  if (total < EVO_MIN_GROWTH || rel < EVO_MIN_REL) return { form: BASE_FORM, stayed: true, scores, why: "few" };
   const r = seededRandom(evoHash(seed, u.unitId, 0xE70));
   const order = Object.keys(FORM_WEIGHTS).map(f => [f, scores[f], r()]).sort((a, b) => b[1] - a[1] || a[2] - b[2]);
   for (const [f, v] of order) {
     if (v < scores[BASE_FORM]) break;
     if (RARE_FORMS.has(f)) {
       const match = (DISP_FORMS[u.disp]?.[0] || []).includes(f);
-      if (share[RARE_KEY[f]] < RARE_MIN_SHARE || r() >= (match ? RARE_P : RARE_P_OFF)) continue;   // 관문을 못 넘으면 다음 모습
+      if (share[RARE_KEY[f]] < RARE_MIN_SHARE || r() >= (match ? RARE_P[f] : RARE_P_OFF)) continue;   // 관문을 못 넘으면 다음 모습
     }
     return { form: f, stayed: false, scores };
   }
@@ -102,17 +126,20 @@ export function pickForm(u, seed = 7) {
 }
 
 // ---- 언제
-/** 오늘 변신할 때가 됐나: 빠른 길(3일 + 아는 사이 + 카운터 12) · 늦은 길(6일이면 무조건) */
+/** 오늘 변신할 때가 됐나: 빠른 길(3일 + 카운터 EVO_FAST_GROWTH, 아는 사이면 EVO_MIN_GROWTH) · 늦은 길(6일이면 무조건) */
+export const EVO_FAST_GROWTH = 18;
 export function evoDue(u, day, bondStage = 0) {
   if (!u || u.evo || !u.disp) return false;
-  const age = day - (u.bornDay ?? day);
-  return age >= EVO_MAX_DAYS || (age >= EVO_MIN_DAYS && bondStage >= 1 && growthSum(u.growth) >= EVO_MIN_GROWTH);
+  const age = day - (u.bornDay ?? day), g = growthSum(u.growth);
+  return age >= EVO_MAX_DAYS || (age >= EVO_MIN_DAYS && g >= (bondStage >= 1 ? EVO_MIN_GROWTH : EVO_FAST_GROWTH));
 }
-/** 오늘 변신할 차례: 나이 많은 순(같으면 unitId 순). 하루 한 마리, 밀린 갈매미가 3마리를 넘으면 2마리(비평 14) */
+/** 오늘 변신할 차례: 나이 많은 순(같으면 unitId 순). 하루 한 마리, 밀린 갈매미가 3마리를 넘으면 2마리(비평 14).
+ *  다만 6일이 찬 갈매미는 그날 모두(변신이 6일을 넘겨 밀리지 않게) */
 export function evoQueue(units, day, stageOf = () => 0) {
   const due = units.filter(u => evoDue(u, day, stageOf(u)))
     .sort((a, b) => (a.bornDay ?? day) - (b.bornDay ?? day) || String(a.unitId).localeCompare(String(b.unitId), "en", { numeric: true }));
-  return due.slice(0, due.length > 3 ? 2 : 1);
+  const late = due.filter(u => day - (u.bornDay ?? day) >= EVO_MAX_DAYS).length;
+  return due.slice(0, Math.max(late, due.length > 3 ? 2 : 1));
 }
 /** 내일 변신할 것 같은 갈매미(전날 예고): 내일 날짜로 보면 차례인 갈매미 */
 export const evoSoon = (units, day, stageOf) => evoQueue(units, day + 1, stageOf).filter(u => !evoDue(u, day, stageOf(u)));

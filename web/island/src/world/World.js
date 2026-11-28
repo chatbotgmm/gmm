@@ -59,10 +59,16 @@ import { SPARKLE_EVERY, SPARKLE_FIRST, SPARKLE_PICK_R, sparkleSeed, sparkleCells
  */
 /** 예전 저장 갈매미에게 새 이름을 주지 않고 모습 이름을 그대로 둘지(사용자가 고를 거리) */
 export const KEEP_OLD_NAMES = false;
+/** 들어서 내려놓은 자리가 그 갈매미 카운터에 더하는 값(60초에 한 번, 플레이어 몫 하루 상한 6) */
+export const DROP_GROWTH = 2;
+/** 나무 베기·돌 캐기 한 번의 먹보 카운터(×0.4 직업 일): 나무꾼·광부 0.5, 거드는 갈매미 0.2(모두가 거드는 일이라 누구에게나 쌓이지 않게) */
+const bigWork = u => u?.job === "lumberjack" || u?.job === "miner" ? 0.5 : 0.2;
+/** 밤에 따뜻함이 쌓이는 불빛 거리(칸) */
+const NEAR_LIGHT = 3;
+/** 내려놓은 자리가 '조용한 곳'인 거리(칸): 갈매미·건물이 이만큼 안에 없음 */
+const QUIET_R = 8;
 /** 변신 연출 길이(초): 빙글 → 흰 빛이 커짐 → 가장 밝을 때(절반) 모습이 바뀜 → 반짝 */
 export const EVO_FX_SECS = 2.2;
-/** 성향 → 한가할 때 쌓이는 자란 방식(느긋은 없음: 고르게 지내 기본으로 남기 쉬움) */
-const DISP_FREE_KEY = { sea: "sea", night: "night", craft: "craft", green: "green", shiny: "shiny", big: "big", timid: "timid" };
 
 export function placeTownBank(w, R = 16) {
   const def = BUILDINGS.bank, g = w.grid, B = g.box, mid = { x: (B.x0 + B.x1) / 2, z: (B.z0 + B.z1) / 2 }, ax0 = mid.x - Math.floor(def.footprint.w / 2), az0 = mid.z - Math.floor(def.footprint.d / 2);
@@ -272,7 +278,7 @@ export class World {
         if (key) this.noteGrowth(a.u, key, cat === "fish" ? 2 : 3, "player"); if (cat === "fish") this.noteGrowth(a.u, "sea", 1, "player"); break; }
     }
   }
-  /** 플레이어가 들어서 내려놓은 자리 → 카운터 +1(60초에 한 번): 바다 sea · 밭 green · 공사장 craft · 카페 warm · 시장 shiny · 다른 갈매미 곁 social (비평 9). 오른 키(없으면 null) */
+  /** 플레이어가 들어서 내려놓은 자리 → 카운터 +DROP_GROWTH(60초에 한 번): 바다 sea · 밭 green · 공사장 craft · 카페 warm · 시장 shiny · 나무·광석 곁 big · 다른 갈매미 곁 social · 아무도 없는 조용한 곳 timid. 오른 키(없으면 null) */
   dropGrowth(u, x = u?.x, z = u?.z) {
     if (!u || u.evo || !u.disp || (this.time - (u.dropAt ?? -1e9)) < 60) return null;
     const near = (b, r) => Math.hypot(b.door.x + 0.5 - x, b.door.z + 0.5 - z) <= r, bs = [...this.buildings.values()];
@@ -283,8 +289,10 @@ export class World {
     else if (bs.some(b => !this.isDone(b) && near(b, 3.5))) key = "craft";
     else if (bs.some(b => b.defId === "cafe" && near(b, 3.5))) key = "warm";
     else if (bs.some(b => BUILDINGS[b.defId].market && near(b, 3.5))) key = "shiny";
+    else if (this.trees.concat(this.ores).some(t => t.alive !== false && Math.hypot(t.x + 0.5 - x, t.z + 0.5 - z) < 2.5)) key = "big";   // 나무·광석 곁(힘쓰는 일)
     else if (this.units.some(o => o !== u && !o.insideBuildingId && Math.hypot(o.x - x, o.z - z) < 2)) key = "social";
-    if (!key || !this.noteGrowth(u, key, 1, "player")) return null;
+    else if (!this.units.some(o => o !== u && !o.insideBuildingId && Math.hypot(o.x - x, o.z - z) < QUIET_R) && !bs.some(b => near(b, QUIET_R))) key = "timid";   // 아무도 없는 조용한 곳
+    if (!key || !this.noteGrowth(u, key, DROP_GROWTH, "player")) return null;
     u.dropAt = this.time; emote(u, "✨", 1.6); return key;
   }
   /** 시간으로 쌓이는 카운터(30초마다): 밤에 깨어 있음 · 혼자 쉬기 · 추운 날 안에서 쉬기 · 헤엄 */
@@ -292,14 +300,22 @@ export class World {
     for (const u of this.units) {
       if (!u.disp || u.evo || u.evoFx) continue;
       const asleep = u.state === UnitState.Sleep, resting = [UnitState.Idle, UnitState.Sit].includes(u.state) && !u.path;
-      if (this.isNight && !asleep) this.noteGrowth(u, "night", st / 60);
+      if (this.isNight && !asleep) { this.noteGrowth(u, "night", st / 60);
+        if (this.nearLight(u)) this.noteGrowth(u, "warm", st / 30); }               // 밤에 깨어 불빛(등불 켜진 건물·가로등) 곁에서 지냄 → 따뜻함(밤 성향이 불씨로 갈 길). 어두운 데서 혼자면 그림자 쪽
       if (resting && !u.insideBuildingId && !this.units.some(o => o !== u && !o.insideBuildingId && Math.hypot(o.x - u.x, o.z - u.z) < 4)) this.noteGrowth(u, "alone", st / 60);
       if (u.insideBuildingId && !asleep && (this.air ?? 15) < 10) this.noteGrowth(u, "warm", st / 60);
       if (u.swimming) this.noteGrowth(u, "sea", st / 30);
-      const key = DISP_FREE_KEY[u.disp];                                         // 타고난 끌림: 한가할 때(쉬기·산책) 성향대로 지냄 → 그쪽이 조금씩 쌓임
+      const key = EV.DISP_KEY[u.disp];                                         // 타고난 끌림: 한가할 때(쉬기·산책) 성향대로 지냄 → 그쪽이 조금씩 쌓임
       if (key && !asleep && !u.insideBuildingId && [UnitState.Idle, UnitState.Wander, UnitState.Sit, UnitState.Swim, UnitState.Curious].includes(u.state)) this.noteGrowth(u, key, st / 60);
       if (u.evoSoon === day && !asleep && !u.insideBuildingId && this.skyRnd && (u.itchT = (u.itchT ?? 0) - st) <= 0) { u.itchT = 90; emote(u, "몸이 근질근질…", 2.4); }   // 전날 예고
     }
+  }
+  /** 불빛 곁인가: 등불이 있는 다 지은 건물(lit) 안이거나, 그 문·가로등에서 NEAR_LIGHT칸 안 */
+  nearLight(u) {
+    if (u.insideBuildingId) return !!BUILDINGS[this.buildings.get(u.insideBuildingId)?.defId]?.lit;
+    for (const b of this.buildings.values()) { const d = BUILDINGS[b.defId]; if (!(d.lit || b.defId === "streetlamp") || !this.isDone(b)) continue;
+      if (Math.hypot((b.door?.x ?? b.x) + 0.5 - u.x, (b.door?.z ?? b.z) + 0.5 - u.z) <= NEAR_LIGHT) return true; }
+    return false;
   }
   /** 매 프레임: 날이 바뀌면 한 번 판정(마지막 판정 날 evoDay는 저장 → 불러온 직후 가짜로 날이 바뀐 것처럼 보지 않음) · 차례인 갈매미가 한가해지면 연출 시작 */
   stepEvolve(dt) {
@@ -325,7 +341,7 @@ export class World {
   /** 변신 연출 시작(2.2초): 무엇이 될지는 지금 정함(evolve.pickForm, 난수 안 씀). 빛이 가장 밝을 때(1.1초) 모습이 바뀜 */
   startEvolve(u, to = null) {
     if (!u || u.evo || u.evoFx) return false;
-    const pick = to ? { form: to, stayed: to === EV.BASE_FORM } : EV.pickForm(u, this.seed ?? 7);
+    const pick = to ? { form: to, stayed: to === EV.BASE_FORM } : EV.pickForm(u, this.seed ?? 7, EV.villageRef(this.units, u, newsDay(this.time)));
     u.path = null; u.heading0 = u.heading; u.evoFx = { t: EVO_FX_SECS, dur: EVO_FX_SECS, from: EV.formOf(u), to: pick.form, stayed: pick.stayed, swapped: false };
     this.evoPending = this.evoPending.filter(id => id !== u.unitId);
     this.emit("evolveStart", { u, to: pick.form }); return true;
@@ -435,6 +451,7 @@ export class World {
       const u = this.addUnit(def, i, spot[0] + 0.5, spot[1] + 0.5, r, { id, name, restoring: true, job: s.job, rarity: s.rarity, tribe: s.tribe, disp: EV.DISPS.includes(s.disp) ? s.disp : null,
         bornDay: Number.isFinite(s.born) ? s.born : 0, evo: s.evo && typeof s.evo === "object" && s.evo.to ? { day: s.evo.day | 0, from: String(s.evo.from || EV.BASE_FORM), to: String(s.evo.to), ...(s.evo.stayed ? { stayed: true } : {}) } : null });
       for (const k2 of EV.GROWTH_KEYS) if (Number.isFinite(+s.growth?.[k2]) && +s.growth[k2] > 0) u.growth[k2] = +s.growth[k2];
+      for (const k2 of EV.GROWTH_KEYS) if (Number.isFinite(+s.gp?.[k2]) && +s.gp[k2] > 0) (u.growthP ||= {})[k2] = Math.min(+s.gp[k2], u.growth[k2] || 0);   // 그중 플레이어 몫
       u.title = typeof s.title === "string" ? s.title : null; u.guess = EV.DISPS.includes(s.guess) ? s.guess : null; u.guessHit = !!s.guessHit;
       const no = +String(u.unitId).slice(1); if (no >= this.nextGullNo) this.nextGullNo = no + 1;
       this.formsSeen.add(def.name);
@@ -1402,7 +1419,7 @@ export class World {
     if (!t.alive) return;
     t.hp -= who ? 3 / J.chopsNeeded(who) : 1; this.emit("treeHit", t);
     if (t.hp > 1e-6) return;
-    t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got; this.noteGrowth(who, "big", 0.5, "job");   // 벌목은 모두가 돕는 일(helpJobs)이라 직업 일처럼 ×0.4
+    t.alive = false; const got = who ? J.woodYield(who) : 2; this.gain(who, "wood", got); t.lastYield = got; this.noteGrowth(who, "big", bigWork(who), "job");   // 벌목은 모두가 돕는 일(helpJobs)이라 직업 일처럼 ×0.4
     this.emit("treeFell", { tree: t, dir: [t.x + 0.5 - who.x, t.z + 0.5 - who.z] }); this.notice(t.x + 0.5, t.z + 0.5, "tree", who);
     this.after(25 + this.rnd() * 15, () => { if (t.removed) return; t.alive = true; t.hp = 3; this.emit("treeGrow", t); });   // 그사이 치운 나무(꾸미기)는 되살리지 않음
   }
@@ -1411,7 +1428,7 @@ export class World {
     o.hp--; this.emit("oreHit", o);
     if (o.hp > 0) return;
     o.alive = false; const got = who ? J.stoneYield(who) : 2; this.gain(who, "stone", got); o.lastYield = got;
-    o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron); this.noteGrowth(who, "big", 0.5, "job");
+    o.lastIron = who && this.rnd() < J.ironChance(who) ? 1 : 0; if (o.lastIron) this.gain(who, "iron", o.lastIron); this.noteGrowth(who, "big", bigWork(who), "job");
     this.emit("oreBroke", o);
     this.after(20 + this.rnd() * 12, () => { if (o.removed) return; o.alive = true; o.hp = 3; this.emit("oreGrow", o); });
   }
@@ -2067,7 +2084,9 @@ export class World {
     if (this.isDone(b)) return;
     this.releaseFee(b);                                                             // 첫 망치질 = 공사 시작 → 맡아 둔 설계비가 건축가에게
     b.hits = Math.min(b.need, b.hits + (u ? J.hammerPower(u) : 1));       // 건축가는 한 번에 배율만큼
-    b.lastBuilder = u ? u.unitId : null; this.noteGrowth(u, "craft", this.isDone(b) ? 2.3 : 0.3, u?.job === "builder" || u?.job === "carpenter" ? "job" : "free"); this.emit("buildingProgress", b);
+    b.lastBuilder = u ? u.unitId : null; this.noteGrowth(u, "craft", 1); if (u) (b.crew ||= new Set()).add(u.unitId);   // 망치질은 직업 일이어도 ×0.4 하지 않음(짓는 일이 곧 손재주 · 목수로 갈 길)
+    if (this.isDone(b) && b.crew) { for (const id of b.crew) this.noteGrowth(this.units.find(o => o.unitId === id), "craft", 2); b.crew = null; }   // 다 지으면 거든 갈매미 모두 +2
+    this.emit("buildingProgress", b);
     if (this.isDone(b)) { this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (!u && b.order) this.settleOrder(b); if (u) emote(u, b.ramp ? "계단 완성!" : "🏠!"); this.notice(b.door.x + 0.5, b.door.z + 0.5, "building", u); }
   }
   finishAll() { for (const b of this.buildings.values()) if (!this.isDone(b)) { this.releaseFee(b); b.hits = b.need; this.completed(b); this.emit("buildingDone", b); this.builtNow(b); if (b.order) this.settleOrder(b); } }
@@ -2206,7 +2225,7 @@ export class World {
   /** 들어서 내려놓기. 내려놓은 자리가 그 갈매미 자란 방식에 들어감(dropGrowth: 바다·밭·공사장·카페·시장·친구 곁, 60초에 한 번) */
   dropUnit(u, x, z, at = null) {
     const r = this.dropUnitAt(u, x, z, at);
-    if (r.ok && u) { if (r.building?.defId === "cafe") { if (!u.evo && u.disp && (this.time - (u.dropAt ?? -1e9)) >= 60 && this.noteGrowth(u, "warm", 1, "player")) u.dropAt = this.time; } else if (!r.building) { const g = this.dropGrowth(u); if (g) r.grow = g; } }
+    if (r.ok && u) { if (r.building?.defId === "cafe") { if (!u.evo && u.disp && (this.time - (u.dropAt ?? -1e9)) >= 60 && this.noteGrowth(u, "warm", DROP_GROWTH, "player")) u.dropAt = this.time; } else if (!r.building) { const g = this.dropGrowth(u); if (g) r.grow = g; } }
     return r;
   }
   dropUnitAt(u, x, z, at = null) {                                           // at: 마우스가 가리킨 정확한 점(그 칸 안이면 거기에)
@@ -2469,7 +2488,7 @@ export class World {
     for (const u of this.units) {
       const f = EV.formOf(u); u.form = f;
       if (f === EV.BASE_FORM) { u.evo = null; u.disp = EV.dispFor(this.seed ?? 7, 0); } else { u.evo = { day, from: EV.BASE_FORM, to: f }; u.disp = EV.FORM_DISP[f]; }
-      u.bornDay = day; u.growth = {};
+      u.bornDay = day; u.growth = {}; u.growthP = null;
       if (!keepNames) { const to = pickName(this.seed ?? 7, this.units.filter(o => o !== u).map(o => o.name).concat(renamed.map(r => r.to))); renamed.push({ form: f, to, id: u.unitId }); }
     }
     for (const r of renamed) { const u = this.units.find(o => o.unitId === r.id); if (u) u.name = r.to; }
@@ -2490,7 +2509,7 @@ export class World {
       plots: this.plots.map(({ x, z, stage, t, grow, moisture }) => ({ x, z, stage, t, grow, moisture: Math.round((moisture ?? 1) * 1000) / 1000 })),
       gulls: 1, minClient: "gulls1", nextGullNo: this.nextGullNo, gullsMade: this.gullsMade, formsSeen: [...this.formsSeen], evoDay: this.evoDay,
       evoPending: [...new Set(this.evoPending.concat(this.units.filter(u => u.evoFx && !u.evo).map(u => u.unitId)))],   // 연출 첫 절반(모습이 바뀌기 전)에 저장해도 차례를 잃지 않게
-      units: this.units.map(u => ({ id: u.unitId, name: u.name, form: EV.formOf(u), disp: u.disp || null, growth: Object.fromEntries(Object.entries(u.growth || {}).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])), born: u.bornDay ?? 0, evo: u.evo || null, job: u.job, rarity: u.rarity, tribe: u.tribe, ...(u.title ? { title: u.title } : {}), ...(u.guess ? { guess: u.guess } : {}), ...(u.guessHit ? { guessHit: 1 } : {}), x: Math.round(u.x * 100) / 100, z: Math.round(u.z * 100) / 100, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToIds(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
+      units: this.units.map(u => ({ id: u.unitId, name: u.name, form: EV.formOf(u), disp: u.disp || null, growth: Object.fromEntries(Object.entries(u.growth || {}).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])), ...(u.growthP && Object.values(u.growthP).some(v => v > 0) ? { gp: Object.fromEntries(Object.entries(u.growthP).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}), born: u.bornDay ?? 0, evo: u.evo || null, job: u.job, rarity: u.rarity, tribe: u.tribe, ...(u.title ? { title: u.title } : {}), ...(u.guess ? { guess: u.guess } : {}), ...(u.guessHit ? { guessHit: 1 } : {}), x: Math.round(u.x * 100) / 100, z: Math.round(u.z * 100) / 100, coins: u.coins || 0, saved: u.saved || 0, inv: u.inv, home: u.home || null, raw: u.raw, goods: u.goods, friends: friendsToIds(u, this.units), bond: u.bond || 0, bondGifts: u.bondGifts || 0, petDay: u.petDay || 0, petN: u.petN || 0, lodgeNight: u.lodgeNight || null, cheer: Math.round(u.cheer || 0), stash: u.stash || {}, loan: u.loan || null, wageOwed: u.wageOwed || 0, loanRefused: !!u.loanRefused, bodyT: Math.round((u.bodyT ?? CLIM.BODY_NORMAL) * 10) / 10, feltCold: u.feltCold || 0, clothes: u.clothes || [], wear: u.wear || CLO.emptyWear(), sick: u.sick ? { kind: u.sick.kind, left: Math.round(u.sick.left), med: !!u.sick.med } : null, immune: Math.round(u.immune || 0), wet: Math.round((u.wet || 0) * 100) / 100 })), healthStats: this.healthStats, keep: this.keep, bank: this.bank, wild: !!this.wild, weather: this.weather, wishDone: this.wishDone, rank: this.rank, granary: this.granary, wishes: this.wishes, priceHist: this.priceHist, time: this.time, snow: this.snow, newsLog: this.newsLog, newsSeason: this.newsSeason, savedAt, donated: this.donated, fishRecord: this.fishRecord, donateGifts: this.donateGifts, medalGifts: this.medalGifts,
       skySeen: this.skySeen, firstSnowYear: this.firstSnowYear, beachSeen: this.beachSeen,
       festival: this.festival, festivals: this.festivals,
       daily: this.daily, stamps: this.stamps, stampBought: this.stampBought,

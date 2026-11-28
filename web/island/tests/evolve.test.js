@@ -39,9 +39,11 @@ test("변신 시기: 3일 + 아는 사이 + 카운터 12면 빠른 길 · 6일�
   const u = gull("sea", "fisher", { sea: 12 });
   assert.equal(EV.evoDue(u, 2, 1), false); assert.equal(EV.evoDue(u, 3, 0), false, "정이 없으면 빠른 길 아님");
   assert.equal(EV.evoDue(u, 3, 1), true); assert.equal(EV.evoDue(gull("sea"), 6, 0), true, "늦은 길");
-  const many = n => Array.from({ length: n }, (_, i) => ({ ...gull("sea"), unitId: `u${10 + i}`, bornDay: i % 2 }));
-  assert.equal(EV.evoQueue(many(3), 7).length, 1); assert.equal(EV.evoQueue(many(5), 7).length, 2);
-  assert.equal(EV.evoQueue(many(5), 7)[0].bornDay, 0, "나이 많은 순");
+  assert.equal(EV.evoDue(gull("sea", "fisher", { sea: 18 }), 3, 0), true, "카운터가 넉넉하면(18) 정이 없어도 빠른 길");
+  const many = n => Array.from({ length: n }, (_, i) => ({ ...gull("sea", "fisher", { sea: 20 }), unitId: `u${10 + i}`, bornDay: i % 2 }));
+  assert.equal(EV.evoQueue(many(3), 4).length, 1); assert.equal(EV.evoQueue(many(5), 4).length, 2);
+  assert.equal(EV.evoQueue(many(5), 4)[0].bornDay, 0, "나이 많은 순");
+  assert.equal(EV.evoQueue(many(5), 7).length, 5, "6일이 찬 갈매미는 그날 모두(6일을 넘겨 밀리지 않게)");
 });
 
 test("rarityAfter: 변신 → 희귀 · 드문 모습 → 영웅 · 천직이면 한 단계 더 · 기본으로 남으면 그대로", () => {
@@ -77,14 +79,14 @@ test("분포(몬테카를로 1,000마리: 성향 8 × 직업 7 × 무작위 하�
 
 test("키운 방식이 결과를 바꿈: 같은 물가 성향·건축가라도 플레이어가 꾸준히 미는 쪽(내려놓기·선물)에 따라 다른 모습", () => {
   const grow = pk => { const u = gull("sea", "builder", {}, "u20");
-    for (let d = 0; d < 4; d++) { EV.growthAdd(u, "craft", 10, "job", d); EV.growthAdd(u, "sea", 2, "free", d); EV.growthAdd(u, "social", 1, "free", d); if (pk) EV.growthAdd(u, pk, 5, "player", d); }
+    for (let d = 0; d < 4; d++) { EV.growthAdd(u, "craft", 10, "job", d); EV.growthAdd(u, "sea", 1, "free", d); EV.growthAdd(u, "social", 1, "free", d); if (pk) EV.growthAdd(u, pk, 6, "player", d); }
     return EV.pickForm(u, 7).form; };
   assert.equal(grow(null), "물방울", "그냥 두면 성향대로");
   assert.equal(grow("green"), "꽃"); assert.equal(grow("shiny"), "황금"); assert.equal(grow("craft"), "목수");
 });
 
 // ---------------------------------------------------------------- 월드에서(World + evolve)
-import { World, EVO_FX_SECS } from "../src/world/World.js";
+import { World, EVO_FX_SECS, DROP_GROWTH } from "../src/world/World.js";
 import { NEWS_DAY_SECS } from "../src/world/news.js";
 import { maybeHint } from "../src/units/unitBrain.js";
 import { Poke } from "../src/units/poke.js";
@@ -139,14 +141,18 @@ test("자란 방식이 결과를 바꿈(월드): 같은 성향 둘 — 하나는
   assert.equal(fa, "물방울"); assert.equal(fb, "꽃"); assert.ok(b.growth.green >= 12, "꽃 선물이 green으로");
 });
 
-test("들어서 내려놓기 손잡이: 바다 곁 → sea +1 (60초에 한 번) · 다른 갈매미 곁 → social", () => {
+test("들어서 내려놓기 손잡이: 바다 곁 → sea +2 (60초에 한 번) · 다른 갈매미 곁 → social · 아무도 없는 조용한 곳 → timid", () => {
   const w = wild(); const u = w.addGullOfForm("기본", { disp: "craft" }), o = w.addGullOfForm("기본", { disp: "sea" });
   let wx = null; for (let r = 0; r < 80 && !wx; r++) for (let k = 0; k < 32 && !wx; k++) { const x = Math.floor(w.center.x + Math.cos(k / 5) * r), z = Math.floor(w.center.z + Math.sin(k / 5) * r); if (w.grid.isWalkable(x, z) && w.grid.isWater(x + 1, z)) wx = [x, z]; }
   assert.ok(wx); w.time = 100;
-  assert.equal(w.dropGrowth(u, wx[0] + 0.5, wx[1] + 0.5), "sea"); assert.equal(u.growth.sea, 1);
+  assert.equal(w.dropGrowth(u, wx[0] + 0.5, wx[1] + 0.5), "sea"); assert.equal(u.growth.sea, DROP_GROWTH);
   assert.equal(w.dropGrowth(u, wx[0] + 0.5, wx[1] + 0.5), null, "60초에 한 번"); w.time += 61;
   o.x = 3.5 + Math.floor(w.center.x); o.z = Math.floor(w.center.z) + 0.5; o.insideBuildingId = null;
-  assert.equal(w.dropGrowth(u, o.x + 0.6, o.z), "social");
+  assert.equal(w.dropGrowth(u, o.x + 0.6, o.z), "social"); w.time += 61;
+  const busy = (x, z) => w.units.some(g => g !== u && Math.hypot(g.x - x, g.z - z) < 9) || [...w.buildings.values()].some(b => Math.hypot(b.door.x - x, b.door.z - z) < 10)
+    || w.trees.concat(w.ores).some(t => Math.hypot(t.x - x, t.z - z) < 3) || [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => w.grid.isWater(x + dx, z + dz));
+  let q = null; for (let r = 12; r < 70 && !q; r++) for (let k = 0; k < 48 && !q; k++) { const x = Math.floor(w.center.x + Math.cos(k / 7.6) * r), z = Math.floor(w.center.z + Math.sin(k / 7.6) * r); if (w.grid.inBounds(x, z) && w.grid.isWalkable(x, z) && !busy(x, z)) q = [x, z]; }
+  assert.ok(q); assert.equal(w.dropGrowth(u, q[0] + 0.5, q[1] + 0.5), "timid");
 });
 
 test("변신 시기와 연출: 3일 + 아는 사이 + 카운터 12 → 그날 차례 · 한가할 때 2.2초 연출, 빛이 가장 밝을 때 모습이 바뀜 · 하루 한 마리 · 이름·직업 그대로", () => {
@@ -197,7 +203,7 @@ test("드문 모습: 미니는 영웅·몸이 작아짐 · 천직이면 한 단�
   const { w, us } = town(5); const [a, b] = us;
   w.evolve(a, "미니"); assert.equal(a.rarity, "epic"); assert.ok(a.scale < 1);
   b.job = "farmer"; w.evolve(b, "꽃"); assert.equal(b.rarity, "epic", "꽃 = 농부 천직");
-  const { w: w2 } = town(5); skipDays(w2, 6); assert.equal(w2.evoPending.length, 2);
+  const { w: w2 } = town(5); for (const u of w2.units) u.growth = { sea: 20 }; skipDays(w2, 4); assert.equal(w2.evoPending.length, 2);
 });
 
 test("자이언트: 작은 집엔 못 들어가고 문 앞에서 잠(밖 잠 벌 없음) · giant 소원 · 자이언트의 집이 다 지어지면 이사(같이 살던 갈매미가 주인 · 대출 그대로)", () => {

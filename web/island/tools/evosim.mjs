@@ -9,6 +9,7 @@ export function raise(u, rnd, days = 4, playerKey = undefined) {
   for (let d = 0; d < days; d++) {
     growthAdd(u, JOB_GROWTH[u.job], 4 + rnd() * 6, "job", d);                     // 직업 일(하루 내내 → ×0.4 · 상한 3)
     for (const k of DISP_FREE[u.disp]) growthAdd(u, k, 0.6 + rnd() * 2.4 / DISP_FREE[u.disp].length * 1.5, "free", d);   // 성향이 이끄는 한가한 활동
+    if (u.disp === "night" && rnd() < 0.3) growthAdd(u, "warm", 0.5 + rnd(), "free", d);   // 밤에 깨어 불빛 곁에서 지내는 날(진짜 마을: World.nearLight)
     for (let j = 0; j < 2; j++) growthAdd(u, GROWTH_KEYS[Math.floor(rnd() * GROWTH_KEYS.length)], rnd() * 1.6, "free", d);   // 잡일·우연
     const pk = playerKey === undefined ? (rnd() < 0.45 ? GROWTH_KEYS[Math.floor(rnd() * 7)] : null) : playerKey;   // 플레이어가 미는 쪽(반쯤)
     if (pk) growthAdd(u, pk, 1 + rnd() * 4, "player", d);
