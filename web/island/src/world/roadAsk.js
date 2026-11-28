@@ -26,6 +26,8 @@ const BUBBLES = [l => `🛣 집에서 ${l}까지 길이 있으면 좋겠어`, l 
 export const askBubble = (label, rnd = Math.random) => BUBBLES[Math.min(BUBBLES.length - 1, Math.floor(rnd() * BUBBLES.length))](label);
 /** 알림 줄 글(아이콘 빼고) */
 export const askNotice = (name, label) => `${name}: 집에서 ${label}까지 길을 깔아 주세요`;
+/** 알림 줄 글: 여러 마리가 바랄 때 한 줄(아이콘 빼고) */
+export const askNoticeMany = (n, label) => `갈매미 ${n}마리가 집에서 ${label}까지 길을 바라요`;
 /** 다음 부탁까지 기다릴 시간(난수 한 번) */
 export const nextGap = (rnd = Math.random) => ASK_GAP_MIN + rnd() * (ASK_GAP_MAX - ASK_GAP_MIN);
 

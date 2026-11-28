@@ -237,6 +237,7 @@ function mount(w) {
   world.festKey = festivalKey(new Date());                                      // 계절 축제 열쇠: 진짜 기기 날짜로(설정의 계절 바꿔 보기·시간 배수와 상관없음)
   world.setSeason(seasonNow()); tintGround(); hookSounds(world);
   { const d0 = daylight.now(); if (world.isNight == null) world.isNight = (2 - sunPosition(d0).elev) / 8 > 0.5; world.hour ??= d0.getHours() + d0.getMinutes() / 60; }   // 첫 프레임 전에 밤인지·몇 시인지(tickClock과 같은 규칙): 저녁에 고른 부탁엔 밤 부탁이 낄 수 있음
+  if (!world.units.length) world.greetDay = dailyKey(new Date());               // 갓 만든 섬: 첫 인사는 다음 날부터(첫날 안내를 가리지 않게)
   world.setDay(dailyKey(new Date()));                                           // 오늘의 부탁: 진짜 기기 날짜로(설정의 시간 배수·계절 바꿔 보기와 상관없음). 계절이 정해진 뒤에 고름
   // 알림 줄: 소식지와 같은 문장(news.js) + 알림에만 붙는 덧말. 차례로 보여 주는 알림(앞 알림·버튼 안내를 덮지 않음), 종류 = 색 띠
   // 플레이어 보상(ui/rewardFx.js rewardOf): 띠·큰 카드·+N이 크게 보여 주고 소리도 냄 → 알림 줄에는 안 띄우고 지난 알림에만(같은 소식 두 번 아님). small(세금·숙박비)은 알림 줄도 그대로
@@ -361,8 +362,10 @@ function welcomeBack(w) {
   if (!r) return null;
   saveNow();                                       // 쳐 준 것을 바로 저장: 저장 전에 다시 불러와도 편지·낚은 물고기를 또 받지 않게
   const wishes = w.wishes.map(x => { const u = w.units.find(o => o.unitId === x.unitId), d = WISH_BY_ID[x.id]; return u && d ? { who: u.name, text: wishText(d, w, u, x) } : null; }).filter(Boolean);
-  return awayLetter(r, { post: !!w.postB(), news, wishes });
+  return { ...awayLetter(r, { post: !!w.postB(), news, wishes }), onClose: greetSoon };   // 편지를 닫으면 오늘의 첫 인사
 }
+/** 💛 오늘의 첫 인사(World.greetToday): 실제 날짜마다 한 번, 갈매미가 은행 문 앞으로 와서 작은 물건을 줌. 보상 띠(rewardFx greet)가 알림을 맡음 */
+function greetSoon() { const w = world, hi = ready && w.doorHello?.(); setTimeout(() => { if (ready && world === w) { w.greetToday(dailyKey(new Date())); w.doorGull = null; } }, hi ? 3500 : 600); }   // 기다리던 갈매미가 먼저 한마디(doorHello) → 첫 인사
 const firstLoad = mount(savedWorld || World.create(7, Math.random, { wild: true }));   // 넓은 섬: 자연 + 공식은행 + 다 지은 작은 집 한 채(갈매미 0) → 🥚 소환으로 첫 갈매미(집 한 채에 한 마리)
 const backLetter = savedWorld ? welcomeBack(world) : null;                        // 다 불러온 뒤에 보여 줌
 setInterval(() => { if (ready && !document.hidden) saveNow(); }, 60000);
@@ -377,7 +380,7 @@ const buildingThumbs = new BuildingThumbs(renderer);                            
 tools.stream = stream; lockView();                                         // 처음부터 조작 배치 적용(터치: 한 손가락 = 옮기기, 두 손가락 = 돌리기·확대 · 가까운 비스듬히는 왼쪽 끌기도 옮기기)
 hud = new Hud({ tools, world,
   onSave: () => saveNow(false),
-  onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); hud.showLetter(welcomeBack(world)); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
+  onLoad: () => { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return hud.status("저장한 섬이 없어요"); mount(World.fromJSON(JSON.parse(s))); hud.status("불러왔어요"); const L = welcomeBack(world); hud.showLetter(L); if (!L) greetSoon(); } catch (e) { hud.status("불러오지 못했어요: " + e.message); } },
   onReset: () => { mount(World.create(Math.floor(Math.random() * 1e6), Math.random, { wild: true })); cloud?.markReplace(); saveNow(); hud.setSummon(world); hud.status("새 섬을 만들었어요 · 🥚 소환으로 갈매미를 불러 보세요"); },
 });
 // 건설 모드에 들어가고 나와도 카메라는 그대로(플레이 시점 하나): 조작 배치만 tools.applyControls가 도구에 맞춤. 화면(HUD)은 hud.showMode가 맡음
@@ -396,9 +399,10 @@ hud.onGift = (u, id) => world.giveGift(u, id);
 // 도장 가게(오늘의 부탁을 모두 들어주고 받은 도장으로 한정 가구나 귀한 선물 사기)
 hud.onStampBuy = id => { const ok = world.buyStamp(id);   // 산 물건은 보상 카드(stampBuy → rewards)가 크게 보여 줌 · 알림은 지난 알림에만
   if (ok) hud.logNote(stampBuyText(id, ok, josa), "good"); else hud.status(stampBuyText(id, ok, josa)); return ok; };   // 가구·귀한 선물 둘 다(예전엔 가구 표만 찾아 선물을 사면 TypeError)
+// 쓰다듬기는 횟수 제한 없이 짧은 쉬는 시간(bond.js PET_COOL_MS, 실제 시간): 안내 글에도 남은 횟수·초 같은 숫자는 없음(♥ 둘레 동그라미로 보여 줌)
 hud.onPet = u => { const r = world.pet(u); if (r.ok) sfx.chime([880, 1047], 0.06, 0.1);
-  if (r.ok && !r.thanks.length) hud.status(r.left ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘 ${r.left}번 더 할 수 있어요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘은 여기까지예요`);
-  else if (!r.ok) hud.status(r.reason === "cap" ? `${josa(u.name, "은", "는")} 오늘 충분히 쓰다듬어 줬어요. 내일 또 해요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
+  if (r.ok && !r.thanks.length) hud.status(r.bond && r.bondLeft === 0 ? `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요. 오늘 정은 가득 들었어요. 그래도 쓰다듬으면 좋아해요` : `♥ ${josa(u.name, "을", "를")} 쓰다듬었어요`);
+  else if (!r.ok) hud.status(r.reason === "cool" ? `${josa(u.name, "은", "는")} 잠깐 쉬는 중이에요. 하트 둘레 동그라미가 다 차면 또 쓰다듬어 줘요` : `지금은 ${josa(u.name, "을", "를")} 쓰다듬을 수 없어요`);
   return r; };
 addEventListener("keydown", e => { if (e.code !== "Space" || e.repeat || e.target?.tagName === "INPUT" || roomView?.isOpen) return; if (tugNow()) e.preventDefault(); });
 // 집 꾸미기(방 화면): 섬 화면 대신 방을 그림. 마을 시간은 계속 흐름
@@ -426,7 +430,7 @@ hud.hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { r
 installKeys({ hud, tools, roomView });
 // ☁️ 계정 저장: 💾 저장 앱 맨 위 카드. 받은 계정 섬은 여기서 올림(다녀온 사이 편지는 계정 판마다 한 번만 — cloudSync.awayFor)
 cloud = installCloud({ hud, saveKey: SAVE_KEY, gridW: GRID_W, getWorld: () => world, saveLocal: () => saveNow(), fromJSON: j => World.fromJSON(j),
-  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); hud.showLetter(welcomeBack(world)); saveNow(); } });   // 받은 섬을 바로 이 기기에도(savedAt 새로 → 다시 열어도 보상 두 번 없음)
+  mountPulled: (w, awayBase) => { mount(w); world.savedAt = awayBase; hud.setSummon(world); const L = welcomeBack(world); hud.showLetter(L); if (!L) greetSoon(); saveNow(); } });   // 받은 섬을 바로 이 기기에도(savedAt 새로 → 다시 열어도 보상 두 번 없음)
 // 🎟 판(무료·유료)과 ⏩ 배속(유료판 전용, 마을 진행 ×1·×2·×3). 판은 systems/edition.js 한 곳에서만 읽고 씀(지금은 설정에서 고름, 나중엔 계정 값이 우선)
 const edition = createEdition();
 hud.edition = edition; hud.syncEdition();
@@ -498,7 +502,7 @@ Promise.all([assetsLoad, charPool.ready]).then(() => {
   if (world.renamed?.length) hud.status(`🏷 갈매미들이 이름을 갖게 됐어요. ${world.renamed.map(r => `${josa(r.form, "은", "는")} ${r.to}`).join(", ")}. 카드에서 이름을 누르면 바꿀 수 있어요`, { kind: "good", queue: true, full: true });
   if (loadProgress.failed) hud.status(`모델 ${loadProgress.failed}개를 못 불러와 임시 모양으로 보여요`, { kind: "warn", queue: true, full: true });
   else if (loadProgress.done < loadProgress.total) hud.status("아직 그림을 받고 있어요. 받는 대로 바뀌어요", { queue: true, full: true });
-  hud.showLetter(backLetter);
+  hud.showLetter(backLetter); if (!backLetter && resumed) greetSoon();          // 편지가 없으면 바로 오늘의 첫 인사(편지가 있으면 닫은 뒤)
   cloud.start();                                   // 계정 확인(같은 출처 /village3d/에서만 · 아니면 요청 없이 꺼짐)
   hud.coach.start({ fresh: !resumed });           // 처음 안내 3단계(새 섬일 때 · 편지·처음 알림이 지나간 뒤 말풍선이 뜸)
   loadingEl.classList.add("done"); setTimeout(() => { loadingEl.hidden = true; }, 450);
@@ -592,7 +596,7 @@ function frameBody() {
   tickClock();
   weatherViews.update(dt, world.weather.kind, controls.target); sfx.ambience(world.weather.kind, dt);
   seasonLook.update(dt, world.season, world.weather.kind, world.snow); footprints.update(dt, world); leaves.update(dt, world.season, world.weather.kind, controls.target);
-  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); world.setDay(dailyKey(new Date())); }
+  if (now - lastSeason > 1000) { lastSeason = now; world.setSeason(seasonNow()); world.festKey = festivalKey(new Date()); if (world.setDay(dailyKey(new Date())) && ready) greetSoon(); }   // 켜 둔 채 날짜가 바뀌어도 첫 인사
   followSun();                                                                  // 해(달) 방향은 시간대에 따라, 그림자 범위는 보는 곳을 따라
   if (now - lastToon > 700) { toon.sweep(); lastToon = now; }   // 새로 생긴 모델도 툰으로
   keyCamera(dt);

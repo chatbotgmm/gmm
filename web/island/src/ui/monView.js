@@ -86,7 +86,7 @@ export function monHtml(w, { more = (k, t, h, o) => moreBox(k, t, h, o), pstep =
 
   // 🧺 가공품 매입 예산(금고에서)
   const si = Math.max(0, MON.STEPS.indexOf(mi.step));
-  const buyBox = `<section><div class="mon-kh"><b>🧺 가공품 매입 예산 · ${MON.STEP_NAME[si]}</b><span>상인 가공품을 금고 돈으로 사요 · 오늘 남은 🪙${fmtNum(Math.min(mi.left, mi.buyLeft))} / ${fmtNum(mi.cap)}${MON.capOf(mi.step, w.units.length) !== mi.cap ? ` · 내일부터 하루 🪙${fmtNum(MON.capOf(mi.step, w.units.length))}` : ""}</span></div>` +
+  const buyBox = `<section><div class="mon-kh"><b>🧺 가공품 매입 예산 · ${MON.STEP_NAME[si]}</b><span>상인 가공품을 금고 돈으로 사요 · 오늘 남은 🪙${fmtNum(Math.min(mi.left, mi.buyLeft))} / ${fmtNum(mi.cap)}${MON.capOf(mi.step, w.units.length) !== mi.cap ? ` · 다음 날부터 하루 🪙${fmtNum(MON.capOf(mi.step, w.units.length))}` : ""}</span></div>` +
     mvSeg("mon-auto", "매입 예산 정하기", [{ act: "auto", v: 1, on: mi.auto, html: "🏛 은행장에게 맡기기" }, { act: "auto", v: 0, on: !mi.auto, html: "✋ 직접" }]) +
     (mi.auto ? "" : mvSeg("mon-steps", "매입 예산 단계", MON.STEPS.map((s, i) => ({ act: "issue", v: s, on: s === mi.step, html: `${MON.STEP_NAME[i]}<small>마리당 ${s}</small>` })))) +
     (mi.buyLeft < mi.left ? `<p class="mon-note">⚠️ 품삯 줄 돈 🪙${fmtNum(Math.ceil(MON.BUY_KEEP * mi.P))}은 남겨야 해서 오늘은 🪙${fmtNum(mi.buyLeft)}까지만 사요</p>` : "") + `</section>`;

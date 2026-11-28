@@ -47,6 +47,7 @@ export const FEE = {
   house: 10, cottage: 15, giantHouse: 15, manor: 30, bank: 0,
 };
 export const feeOf = defId => FEE[defId] ?? FEE_UNKNOWN;
+export const DECO_FREE_MAX = 3;      // 금고가 말랐을 때 설계비 없이 놓는 값싼 장식의 설계비 상한(World.rescueDeco)
 /** 금고가 모자랄 때 놓기 실패 사유(tools.js가 상태 줄에 그대로 띄움) */
 export const feeReason = (fee, vault) => `🏦 금고에 동전이 모자라요. 설계비 🪙${fee}, 금고 🪙${Math.floor(vault)}`;
 

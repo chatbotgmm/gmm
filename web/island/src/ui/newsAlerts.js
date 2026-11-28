@@ -5,7 +5,7 @@
 //  · every + 같은 갈매미: 그 갈매미의 같은 알림은 마을 시간 every초에 한 번만
 //  · batch: 짧은 사이(BATCH_MS)에 여러 번 오면 한 줄로 묶음(batchText)
 //  · now: 플레이어가 누른 일의 대답 → 차례를 기다리지 않고 바로 보임(소환 단추·반짝이 줍기)
-import { newsDay, newsFor, NEWS_DAY_SECS } from "../world/news.js";
+import { newsDay, newsFor } from "../world/news.js";
 
 export const BATCH_MS = 400;   // 묶음 알림: 이 사이에 온 같은 알림은 한 줄로(밀린 품삯을 한꺼번에 치를 때 등)
 export const WAGE_GAP = 30;    // 같은 갈매미의 "품삯이 밀렸어요"는 마을 시간 30초에 한 번만
@@ -33,7 +33,7 @@ export const ALERTS = {
   faint: { kind: "warn" },
   upgradeStart: { kind: "info", snd: "bell" },
   upgraded: { kind: "good", snd: "bell" },
-  roadAsk: { kind: "info", every: NEWS_DAY_SECS },   // 갈매미 길 부탁: 같은 갈매미는 마을 하루에 한 번만
+  roadAsk: { kind: "info", daily: true },   // 갈매미 길 부탁: 마을 하루에 한 줄만(갈매미마다 한 줄씩 늘어서지 않게 — 여럿이면 news.js가 "갈매미 N마리가…"로 묶음)
   // 🏛 중앙은행: 물가 사태(world가 사태마다 한 번만 냄) · 옛 저장에 판이 처음 생김
   inflation: { kind: "warn", app: "mon" },
   deflation: { kind: "warn", app: "mon" },

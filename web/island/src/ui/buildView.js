@@ -19,12 +19,12 @@ export function materialsOf(w, defId, times = 1) {
   const def = BUILDINGS[defId], b = { defId, hits: 0, need: 3 * (def.work ?? def.footprint.w * def.footprint.d) };
   return Object.entries(siteNeed(b).total).filter(([, n]) => n > 0).map(([k, n]) => [ITEM_ICON[k] ?? k, n * times, Math.floor(w.res?.[k] || 0)]);
 }
-/** 설계비가 0인 까닭(없으면 ""): 첫 시장 · 집이 모자라 은행이 대신 냄 */
+/** 설계비가 0인 까닭(없으면 ""): 첫 시장 · 집이 모자라 은행이 대신 냄 · 금고가 비어 값싼 장식을 은행이 대신 냄 */
 function bvFreeWhy(w, defId, fee) {
   if (!w.economy || fee > 0) return "";
   const base = BK.scaled(BK.feeOf(defId), w.priceMult());
   if (base <= 0) return "";
-  return BUILDINGS[defId].market ? "첫 시장이라 설계비가 없어요" : defId === "house" ? "집이 모자라 은행이 대신 내요" : "";
+  return BUILDINGS[defId].market ? "첫 시장이라 설계비가 없어요" : defId === "house" ? "집이 모자라 은행이 대신 내요" : BUILDINGS[defId].deco ? "금고가 비어도 작은 장식은 은행이 대신 내요" : "";
 }
 
 /** 건물 한 채 자리의 확인 정보. r = world.check(defId, …) 결과({ ok, reason, fee? }) */

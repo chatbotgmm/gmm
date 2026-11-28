@@ -23,6 +23,13 @@ export const SPARKLE_NIGHT_MAX = 3;
 export const SPARKLE_NIGHT_LIFE = 1800;
 export const SPARKLE_DAWN_FADE = 20;
 export const SPARKLE_LAMP_R = 3;
+// 🌟 드문 반짝이: 생길 때 SPARKLE_RARE 확률로 바탕 반짝이 대신 ITEMS의 rareOf 물건(색이 다른 조개·이름 있는 엽서…)이 됨.
+//  따로 난수를 굴리지 않고 종류를 고른 난수 한 번의 나머지(r × 종류 수의 소수 부분, 종류와 상관없이 고르게 0~1)로 정함
+//  → 반짝이 난수(world.sparkRnd)의 순서·자리·종류가 예전과 똑같음. 지도에는 { k: 바탕 id, rare: true }로 두고 주울 때 드문 물건으로 바꿈
+export const SPARKLE_RARE = 0.05;
+const RARE_OF = Object.fromEntries(ITEMS.filter(i => i.rareOf).map(i => [i.rareOf, i]));
+/** 이 반짝이(바탕 id)의 드문 모습(ITEMS 줄) 또는 null */
+export const rareSparkleOf = k => RARE_OF[k] || null;
 const NIGHT_IDS = new Set(ITEMS.filter(i => i.sparkle && i.sparkleTime === "night").map(i => i.id));
 /** 밤 반짝이인가(반짝이 { k } 또는 물건 id) */
 export const isNightSparkle = s => NIGHT_IDS.has(typeof s === "string" ? s : s?.k);
@@ -73,7 +80,7 @@ export function sparkleCells(world) {
   return out;
 }
 const farFrom = (list, x, z) => list.every(s => Math.max(Math.abs(s.x - x), Math.abs(s.z - z)) > SPARKLE_GAP);
-/** 한 회차에 생길 반짝이를 고름: [{ k, x, z, where }]. 하나 고를 때마다 rnd를 딱 두 번(칸·종류) 씀.
+/** 한 회차에 생길 반짝이를 고름: [{ k, x, z, where, rare? }]. 하나 고를 때마다 rnd를 딱 두 번(칸·종류) 씀(드문 모습은 종류 난수의 나머지로 — 위 SPARKLE_RARE).
  *  existing: 지금 지도에 있는 반짝이(간격·한도 셈) · cells: sparkleCells 결과 · night: 밤 반짝이를 고름(가로등 둘레 칸 먼저) */
 export function rollSparkles(cells, existing, season, rnd, wave = SPARKLE_WAVE, night = false) {
   const out = [], room = Math.min(wave, sparkleRoom(existing, night));
@@ -83,17 +90,17 @@ export function rollSparkles(cells, existing, season, rnd, wave = SPARKLE_WAVE, 
     for (const [where, list] of order) {
       const kinds = sparkleKinds(where, season, night), taken = existing.concat(out), cands = (list || []).filter(([x, z]) => farFrom(taken, x, z));
       if (!kinds.length || !cands.length) continue;
-      const [x, z] = cands[Math.floor(rnd() * cands.length)], k = kinds[Math.floor(rnd() * kinds.length)].id;
-      out.push({ k, x, z, where }); break;
+      const [x, z] = cands[Math.floor(rnd() * cands.length)], rk = rnd() * kinds.length, k = kinds[Math.floor(rk)].id;
+      out.push(rk - Math.floor(rk) < SPARKLE_RARE && RARE_OF[k] ? { k, x, z, where, rare: true } : { k, x, z, where }); break;
     }
   }
   return out;
 }
-/** 저장에서 읽은 반짝이(예전 저장엔 없음 → 빈 것): [{ k, x, z, t }] — 아는 반짝이·정수 칸·0 < t ≤ 수명(sparkleLife)만, 낮 반짝이 많아야 SPARKLE_MAX개 · 밤 반짝이 많아야 SPARKLE_NIGHT_MAX개 */
+/** 저장에서 읽은 반짝이(예전 저장엔 없음 → 빈 것): [{ k, x, z, t, rare? }] (저장의 r: 1 = 드문 모습) — 아는 반짝이·정수 칸·0 < t ≤ 수명(sparkleLife)만, 낮 반짝이 많아야 SPARKLE_MAX개 · 밤 반짝이 많아야 SPARKLE_NIGHT_MAX개 */
 export function sparklesFromSave(list) {
   const ok = (Array.isArray(list) ? list : []).filter(s => s && ITEMS.some(i => i.id === s.k && i.sparkle) && Number.isInteger(s.x) && Number.isInteger(s.z) && s.t > 0 && s.t <= sparkleLife(s.k));
   const day = ok.filter(s => !isNightSparkle(s)).slice(0, SPARKLE_MAX), nite = ok.filter(isNightSparkle).slice(0, SPARKLE_NIGHT_MAX);
-  return ok.filter(s => day.includes(s) || nite.includes(s)).map(s => ({ k: s.k, x: s.x, z: s.z, t: +s.t }));
+  return ok.filter(s => day.includes(s) || nite.includes(s)).map(s => s.r && RARE_OF[s.k] ? { k: s.k, x: s.x, z: s.z, t: +s.t, rare: true } : { k: s.k, x: s.x, z: s.z, t: +s.t });
 }
 /** 밤낮이 바뀔 때(World.stepSparkles가 매번 부름): 해가 뜨면 밤 반짝이를 SPARKLE_DAWN_FADE초 안에 사라지게 · 해가 지면 밤 반짝이가 없을 때 첫 회차를 SPARKLE_FIRST초 뒤로.
  *  밤을 모르면(world.isNight가 true가 아님: 시험 받침·화면 없음) 낮으로 봄. 돌려주는 값: 지금 밤인가 */

@@ -101,3 +101,20 @@ test("자세히 보기 안쪽: 만족도 내역(큰 값 먼저) · 소지품 · 
   assert.ok(h.indexOf("배고픔") < h.indexOf("집") && h.indexOf("집") < h.indexOf("길"), "큰 값 먼저, 0은 맨 아래");
   assert.match(h, /class="zero"/); assert.match(h, /×2/); assert.match(h, /털목도리/); assert.match(h, /2분 동안 감기에 안 걸려요/); assert.match(h, /단짝: 꽃/);
 });
+
+test("♥ 쓰다듬기 단추: 쉬는 동안 하트 둘레 동그라미가 0→1로 차오르고 글은 '쉬는 중', 다 쉬면 '쓰다듬기' · 숫자는 보이지도 읽히지도 않음 · 집 안이면 꺼짐", async () => {
+  const B = await import("../src/world/bond.js"), t = 1e12, u = { petAt: t };
+  const at = (dt, away) => G.petButtonOf(u, t + dt, away);
+  assert.deepEqual(G.petButtonOf({}, t), { cool: false, fill: 1, disabled: false, text: "쓰다듬기", aria: "쓰다듬기" }, "쓰다듬은 적 없음");
+  assert.equal(at(0).cool, true); assert.equal(at(0).fill, 0); assert.equal(at(0).text, "쉬는 중");
+  assert.equal(at(B.PET_COOL_MS / 2).fill, 0.5); assert.equal(at(B.PET_COOL_MS / 4).fill, 0.25);
+  assert.ok(at(B.PET_COOL_MS - 1).cool && at(B.PET_COOL_MS - 1).fill < 1, "다 차기 직전까지는 쉬는 중");
+  assert.deepEqual(at(B.PET_COOL_MS), G.petButtonOf({}, t), "다 쉬면 처음과 같음(동그라미 사라짐)");
+  for (let k = 0; k <= 20; k++) { const p = at(B.PET_COOL_MS * k / 20); assert.ok(p.fill >= 0 && p.fill <= 1); assert.ok(!/\d/.test(p.text + p.aria), `숫자 없음: ${p.text} / ${p.aria}`); }
+  for (let k = 1; k < 20; k++) assert.ok(at(B.PET_COOL_MS * k / 20).fill >= at(B.PET_COOL_MS * (k - 1) / 20).fill, "줄어들지 않고 차오르기만");
+  assert.match(at(10).aria, /쉬는 중.*동그라미/); assert.equal(at(10, true).disabled, true); assert.match(at(10, true).aria, /할 수 없어요/);
+  assert.equal(at(-5000).cool, false, "기기 시계가 뒤로 가도 막히지 않음");
+  // 월드와 같은 시계: 쓰다듬은 바로 뒤엔 쉬는 중
+  const w = fresh(), g = w.units.find(x => !x.insideBuildingId) ?? w.units[0]; g.insideBuildingId = null; let now = t; w.realNow = () => now;
+  assert.equal(w.pet(g).ok, true); assert.equal(G.petButtonOf(g, w.nowMs()).cool, true); now += B.PET_COOL_MS; assert.equal(G.petButtonOf(g, w.nowMs()).cool, false);
+});

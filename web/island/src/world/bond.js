@@ -1,7 +1,7 @@
 // 갈매미와 나(플레이어) 사이의 정: 선물 주기 · 쓰다듬기 · 답례(순수 계산: 화면·난수를 모름).
 // 정(u.bond, 0~BOND_MAX)은 선물과 쓰다듬기로만 오르고 줄지 않음. 하트 단계(0~3)에 처음 닿으면 갈매미가 답례를 한 번 남김.
 import { ITEMS, FISH, FURNITURE, PERSONA } from "../data/catalog.js";
-import { personaOf } from "./evolve.js";
+import { personaOf, formOf } from "./evolve.js";
 
 export const BOND_MAX = 40;
 // 하트 단계: 정이 min 이상이면 그 단계. held = 들어 올렸을 때 하는 말(친해질수록 덜 놀람)
@@ -38,7 +38,7 @@ export const GIFT_TIERS = [
 ];
 /** 선물할 수 있는 것의 정의: 가구가 아닌 가방 물건 또는 보물 물고기(희귀 이상). 아니면 null. 음식은 선물하지 않음(먹거리 살림을 건드리지 않게) */
 export function giftDef(id) {
-  const it = ITEMS.find(i => i.id === id && !i.furniture); if (it) return { ...it, kind: "item", cat: GIFT_CATS[id] || null };
+  const it = ITEMS.find(i => i.id === id && !i.furniture); if (it) return { ...it, kind: "item", cat: GIFT_CATS[id] || GIFT_CATS[it.rareOf] || null };   // 드문 반짝이(rareOf)는 바탕 반짝이와 같은 갈래
   const f = FISH.find(f => f.id === id && f.rarity !== "common"); return f ? { ...f, kind: "fish", cat: "fish" } : null;
 }
 /** 지금 선물할 수 있는 것들: [{ id, name, kind, cat, n }] (내 가방 world.items의 선물거리 → 예전 저장에 남은 보물 물고기 world.treasures 순서).
@@ -59,19 +59,39 @@ export function giftTier(who, id) {
   return cat && p.likes?.includes(cat) ? 2 : cat && p.dislikes?.includes(cat) ? 0 : 1;
 }
 
-// 쓰다듬기: 갈매미마다 하루(마을 날짜, news.js의 newsDay) PET_DAILY번까지
-export const PET_DAILY = 3, PET_BOND = 0.5, PET_FUN = 4;
-/** 오늘 더 쓰다듬을 수 있는 횟수 */
-export const petsLeft = (u, day) => Math.max(0, PET_DAILY - (u.petDay === day ? u.petN || 0 : 0));
+// 쓰다듬기: 횟수 제한 없음. 한 번 쓰다듬으면 그 갈매미는 PET_COOL_MS(실제 1분 반) 동안 잠깐 쉼(♥ 둘레에 차오르는 동그라미, 숫자 없음).
+//  정(PET_BOND)은 갈매미마다 하루(실제 날짜 열쇠 — 오늘의 부탁과 같은 daily.js dailyKey, World.petKey) 처음 PET_BOND_DAILY번만 오름
+//  → 계속 쓰다듬어도 정을 끝없이 쌓을 수 없음(예전 하루 5번과 같은 하루 정 상한). 그 뒤로도 기뻐하는 반응과 재미(PET_FUN)는 그대로.
+//  쉬는 시간은 마을 시간(배속·멈춤에 따라 늘고 줄)이 아니라 실제 시간(World.nowMs, 기본 Date.now · 시험은 w.realNow로 바꿔 끼움):
+//  사람이 기다리는 시간이므로 배속·프레임과 상관없이 늘 같고, 저장했다 다시 열어도 이어짐(u.petAt = 마지막으로 쓰다듬은 실제 시각, ms).
+export const PET_COOL_MS = 90_000, PET_BOND_DAILY = 5, PET_BOND = 0.5, PET_FUN = 4;
+/** 오늘 정이 더 오를 수 있는 쓰다듬기 횟수(day = 날짜 열쇠, 글자 또는 예전 저장의 마을 날짜 수 — 다른 날이면 새로 셈) */
+export const petBondsLeft = (u, day) => Math.max(0, PET_BOND_DAILY - (u.petDay === day ? u.petN || 0 : 0));
+/** 다시 쓰다듬을 수 있을 때까지 남은 실제 시간(ms, 0~PET_COOL_MS). 쓰다듬은 적 없으면(petAt 0) 0.
+ *  기기 시계가 뒤로 갔으면(now < petAt) 쉬었다고 봄 → 시계를 되돌려도 쉬는 시간이 끝없이 이어지지 않음 */
+export const petCoolLeft = (u, now) => { const at = +u?.petAt || 0, d = now - at; return at > 0 && d >= 0 && d < PET_COOL_MS ? PET_COOL_MS - d : 0; };
+/** 쉬는 시간이 얼마나 지났는지(0 = 막 쓰다듬음 · 1 = 다시 쓰다듬을 수 있음): ♥ 둘레 동그라미가 차오르는 정도 */
+export const petCoolDone = (u, now) => 1 - petCoolLeft(u, now) / PET_COOL_MS;
 
 // 답례: 하트 단계(1~3)에 처음 닿았을 때 한 번. item = 마을 가방에 들어가는 물건(ITEMS의 id),
 // furniture = 그 갈매미 집 창고에 들어가는 가구(집이 없으면 대신 item을 마을 가방에)
 export const BOND_THANKS = [null, { item: "bottle" }, { furniture: "plant", item: "chair" }, { item: "pearl" }];
-/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지) */
-export function thanksFor(stage, hasHome) {
+// 취향 답례: 아는 사이(1)·소중한 사이(3)의 물건 답례는 그 갈매미가 좋아하는 갈래(PERSONA likes)에서 고름. 모르는 모습이면 BOND_THANKS 그대로.
+//  좋아하는 갈래가 둘이면 아는 사이는 첫째, 소중한 사이는 둘째(likes[floor(단계 / 2) % 개수]) → 같은 날 여러 마리가 아는 사이가 돼도 답례가 저마다 다름
+export const THANKS_BY_TASTE = {
+  1: { letter: "bottle", plant: "petal", sea: "conch", shiny: "seaglass", fish: "goby", ice: "icicle" },
+  3: { letter: "goldLetter", plant: "bouquet", sea: "rainbowShell", shiny: "pearl", fish: "fishTin", ice: "snowGlobe" },
+};
+/** 갈매미의 모습(성격·취향 표 PERSONA의 열쇠) = evolve.js formOf(u.form, 옛 받침은 u.name) */
+export const gullForm = u => formOf(u);
+/** 이 단계의 답례를 풀어 줌: { kind: "furniture" | "item", id, name } (hasHome: 가구를 둘 집이 있는지 ·
+ *  who: 갈매미(취향 = personaOf: 모습 + 아직 변신 전이면 숨은 성향의 취향 — 선물 반응 giftTier와 같은 취향) 또는 모습 이름(옛 받침). 주면 취향 답례)
+ *  → 아직 모두 기본 모습인 첫 며칠에도 갈매미마다 답례가 다름(모습 표 PERSONA만 보면 기본은 모두 같은 답례가 됨) */
+export function thanksFor(stage, hasHome, who) {
   const t = BOND_THANKS[stage]; if (!t) return null;
   if (t.furniture && hasHome && FURNITURE[t.furniture]) return { kind: "furniture", id: t.furniture, name: FURNITURE[t.furniture].name };
-  const it = ITEMS.find(i => i.id === t.item); return it ? { kind: "item", id: it.id, name: it.name } : null;
+  const likes = (typeof who === "string" ? PERSONA[who] : who ? personaOf(who) : null)?.likes || [], cat = likes.length ? likes[Math.floor(stage / 2) % likes.length] : null, id = THANKS_BY_TASTE[stage]?.[cat] || t.item;
+  const it = ITEMS.find(i => i.id === id); return it ? { kind: "item", id: it.id, name: it.name } : null;
 }
 /** 저장에서 읽은 간직하기 표시(예전 저장엔 없음 → 빈 것). 선물할 수 있는 것만 */
 export const keepFromSave = j => Object.fromEntries(Object.keys(j && typeof j === "object" ? j : {}).filter(id => j[id] && giftDef(id)).map(id => [id, true]));

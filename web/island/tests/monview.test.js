@@ -61,7 +61,7 @@ test("손잡이: 금리 0~5 · 매입 예산 자동이면 단계 칸 숨김, 직
   assert.match(h, /data-mon="rate" data-v="1" class="on"/);
   assert.ok(!/data-mon="issue"/.test(h), "자동이면 단계 칸 없음");
   w.setIssue(30); h = monHtml(w);
-  assert.equal([...h.matchAll(/data-mon="issue"/g)].length, MON.STEPS.length); assert.match(h, /data-mon="issue" data-v="30" class="on"/); assert.match(h, /내일부터 하루 🪙/, "단계를 바꾸면 한도는 다음 날부터라고 알림");
+  assert.equal([...h.matchAll(/data-mon="issue"/g)].length, MON.STEPS.length); assert.match(h, /data-mon="issue" data-v="30" class="on"/); assert.match(h, /다음 날부터 하루 🪙/, "단계를 바꾸면 한도는 다음 날부터라고 알림");
 });
 
 test("돈 흐름 표: 찍은 돈은 새 돈, 품삯은 금고 → 마을, 탭은 중앙은행이 있을 때만", () => {
