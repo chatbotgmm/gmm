@@ -69,7 +69,7 @@ export class Tools {
     this.mode = mode; this.paintType = mode === "paint" ? arg : null; this.buildId = mode === "build" ? arg : null; this.plan = null;
     this.heightOp = mode === "height" ? (arg || "raise") : null; this.shapeStart = null; this.commitStroke?.();
     this.natArg = mode === "nature" ? (arg || "auto") : null; this.natLast = null;
-    const na = this.natAct; if (na?.kind === "move") this.rot = this.world.landmark(na.what)?.rot || 0;   // 옮기기: 지금 방향에서 시작(↻·R로 돌림)
+    const na = this.natAct; if (na?.kind === "move") this.rot = this.world.landmark(na.what)?.rot || 0;   // 옮기기: 지금 방향에서 시작(돌리기·R로 돌림)
     this.cursor.visible = false; this.ghost.visible = false; this.doorMark.visible = false; this.buildingViews.setHighlight(null);
     this.cancelStroke(); this.applyControls();
     this.onStatus(""); if (mode === "build") this.prePlace(near); this.refresh(); this.onMode?.(mode, arg);
@@ -269,7 +269,7 @@ export class Tools {
     if (on) { this.crossHeld = true; this.stroke = new Set(); this.flatTarget = this.hover ? this.world.grid.get(this.hover.x, this.hover.z).elevation : 0; this.apply(); this.crossT = setInterval(() => { this.stroke = new Set(); this.apply(); }, 220); }
     else { this.crossHeld = false; clearInterval(this.crossT); this.commitStroke(); }
   }
-  rotate() { this.rot = (this.rot + 1) % 4; this.refresh(); }
+  rotate() { this.rot = (this.rot + 3) % 4; this.refresh(); }   // 위에서 보아 시계 방향 90°(rot +1은 모델이 반시계로 돎 — 단추 그림·방 가구 돌리기와 같은 쪽으로)
   /** 붓 크기(한 변 칸 수, 홀수 1·3·5·7). 가리킨 칸이 가운데. */
   setBrush(n) { this.brush = Math.max(1, Math.min(7, n | 1)); this.refresh(); this.onBrush?.(this.brush); }
   brushCells(h) {

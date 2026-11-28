@@ -82,7 +82,7 @@ test("옮기기 확인창: 값·금고 → 남는 금고, 못 옮기면 까닭, 
   assert.match(moveHtml(bad), /🚫 못 옮겨요<\/b> · 지금 자리와 같아요/);
   const ok = moveInfo(w, "cave", { ok: true, cost: 15 });
   assert.deepEqual([ok.cost, ok.vault, ok.after], [15, w.bank.vault, w.bank.vault - 15]);
-  assert.match(moveHtml(ok), /🦇 동굴 옮기기<\/b> · <span class="cf-nw"><b>🪙15<\/b><\/span>/); assert.match(moveHtml(ok), /↻ 돌리기로 입구 방향/);
+  assert.match(moveHtml(ok), /🦇 동굴 옮기기<\/b> · <span class="cf-nw"><b>🪙15<\/b><\/span>/); assert.match(moveHtml(ok), /돌리기로 입구 방향/);
   w.bank.vault = 4; const poor = moveInfo(w, "cave", { ok: false, reason: "🏦 금고에 조개가 모자라요", cost: 15, short: true });
   assert.match(moveHtml(poor), /금고가 🪙11 모자라요/);
   void cave;

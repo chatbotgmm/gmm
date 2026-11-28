@@ -16,7 +16,7 @@ export function relocHtml(info) {
   const nw = t => `<span class="cf-nw">${t}</span>`;
   const main = `<b>↔ ${relocEsc(info.name)} 옮기기</b> · ${nw("공짜예요")}`;
   const bad = info.ok ? "" : info.home ? `<div class="cf-sub">${nw("옮길 자리를 땅에서 톡 눌러요")}</div>` : `<div class="cf-bad"><b>🚫 못 놓아요</b> · ${relocEsc(info.reason)}</div>`;
-  const sub = `${nw("↻ 돌리기로 방향을 바꿔요")} · ${nw("↶ 되돌릴 수 있어요")}`;
+  const sub = `${nw("돌리기로 방향을 바꿔요")} · ${nw("↶ 되돌릴 수 있어요")}`;
   return `<div class="cf-main">${main}</div>${bad}<div class="cf-sub">${sub}</div>`;
 }
 /** 상태 줄. phase: pick(고를 건물) · picked(들었음) · done(옮김) · cancel(내려놓음) · undo(↶ 제자리) · redo(↷) */
