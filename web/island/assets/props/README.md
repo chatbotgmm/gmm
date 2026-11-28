@@ -15,6 +15,7 @@
 | cottage (2층집) | 14,304 | 2층집.glb (2026-11-25, 아래) |
 | field_plot | 9,436 | tripo_convert_1547a90d… |
 | flower_box | 8,998 | flower_box_3d_model.glb |
+| fountain (분수) | 28,113 (+셰이더 물: 웅덩이 1,320 · 물줄기 960 · 물방울 점 최대 144) | ornate_fountain_3d_model.glb (2026-11-28, 아래 · 원본 텍스처 8192px) |
 | hospital (종합병원) | 14,162 (+등불 발광 마스크 512px, 등불 4) | 3880e5d9-….glb (2026-11-26, 아래) |
 | house (작은 집) | 14,646 (+등불 발광 마스크 512px, 등불 1) | round_cottage_3d_model.glb |
 | giant_house (자이언트의 집) | 14,154 | fantasy_temple_3d_model.glb (2026-11-25, 아래) |
@@ -135,3 +136,22 @@ Kenney building-type-d·b와 지붕 색 바꾸기(roof)는 뺌(파일은 assets/
     세기는 다른 건물 등불과 같음(daylight.js lantern(): 낮 0.15 → 밤 2.35) → 낮에는 수조가 조금 더 맑아 보이는 정도, 밤에 물빛으로 빛남. catalog `lit: true`(풍차 전기가 닿을 때만 켜짐, 범위 밖이면 「전기 없음」 배지).
 - 갤러리 사진: `node tools/thumbs.cjs windmill aquarium`(assets/thumbs/windmill.webp 3,540 · aquarium.webp 3,928 bytes)
 
+
+## 분수(fountain_4k / 2k / 1k), 2026-11-28
+사용자가 컨셉 그림으로 만든 Tripo 모델 ornate_fountain_3d_model.glb(gltfpack, EXT_meshopt_compression + KHR_mesh_quantization, 메시 1개, 28,113면 · 27,386 정점, 기본색 **8192px** 1장).
+둥근 흰 물받이(모서리 돌 4) · 남색·금색 띠 두 단 · 꼭대기 금빛 날개 보석. **물은 모델에 없음**(웅덩이 바닥이 회색 돌, 물구멍도 없음) → 물은 셰이더로 얹음(아래).
+- 만든 방법: `node tools/demopt.mjs 원본.glb 푼.glb`(meshopt 풀기, meshoptimizer npm 필요) → `python3 tools/import_prop.py fountain 푼.glb assets/props`
+  (한 메시 소품 일반 도구: 면 그대로, 기본색만 4096 / 2048 / 1024px JPEG 92 — 원본 8192px를 줄임, metallic 0.1·roughness 0.8, KHR_mesh_quantization, 노멀 바이트 그대로, doubleSided 뺌)
+- 파일: fountain_4k 2,586,120 / 2k 1,487,000 / 1k 1,071,380 bytes
+- 크기: 원본 1.0 × 0.613 × 1.0(x·높이·z). 2×2칸에 비율 그대로 꽉 채움(fit 없음) → 폭 1.90 m · 높이 1.16 m(def.height 1.2 그대로). 물받이 테 0.32 m, 컨셉과 같은 납작한 비율. 날개는 ±x로 펼침, 방향 없음(modelYaw 0)
+- 물(src/render/fountain.js, 모델 wrap 안에 원본 좌표로 붙음 — views.js buildingModel, catalog `fountainFx: true`). 물 높이는 모델 면을 위→아래 광선으로 재서 정함:
+  - 큰 물받이: 바닥 −0.167 · 테 위 −0.14 → 수면 −0.150(반지름 0.372, 테 속까지) / 가운데 단: 바닥 −0.094 · 테 −0.071 → −0.081(0.178) / 위 단: 바닥 0.038 · 테 0.06 → 0.051(0.122) (원본 좌표, ×1.9 = m)
+  - 웅덩이 셰이더: 잔물결(잡음 기울기로 면 방향) · 가운데서 퍼지는 물결 · 물 떨어지는 4곳의 동그라미 물결과 흰 거품 · 물빛 그물(가벼운 물 설정에선 뺌) · 프레넬 하늘빛 · 해 반짝임 · 반투명.
+    색은 바다(water.js)의 얕은 물 0x8ff0de · 중간 0x2fbfc4, 밤에는 바다와 같은 남색·밝기(daylight.js → setFountainSky), 빛나지 않음
+  - 물줄기(흘러내리는 무늬가 아래로 흐르는 띠 12개): 기둥 물구멍 4(위 단으로 휘는 줄기, 45°마다) · 위 단 테 → 가운데 단 4장(45°) · 가운데 단 테 → 큰 물받이 4장(0°·90°…)
+  - 물방울: 분수 하나에 Points 하나, 세 종류(물구멍 물보라 · 장막 앞 방울 · 떨어진 자리 튐)를 셰이더가 시간으로 계산(CPU 일 없음). 설정별 수 `fountainDrops`: 최고·높음 144 · 보통 96 · 낮음 48 · 성능 우선 0.
+    움직임 줄이기면 물방울 끄고 물결은 0.3배 빠르기. 분수마다 놓인 자리로 시간 차. 공사 중에는 물을 숨김. 멀면 다른 소품처럼 안 그림(main.js 그리기 거리), 화면 밖이면 three가 빼냄(경계 구 지정)
+  - 그리기: 분수 하나에 +4번(모델 1 + 웅덩이 1 · 물줄기 1 · 물방울 1, 물은 그림자 없음), 삼각형 +30,393(모델 28,113 + 물 2,280) + 점 144. 재질·모양은 모든 분수가 같이 씀
+    (측정, 높음 설정 같은 카메라: 분수 0개 49번 → 1개 53번 → 5개 69번, 점 420 → 564 → 1,140)
+- 모델을 못 받으면 예전 코드 분수(views.js decoModel "fountain", 움직이는 fountainWater 원뿔) 그대로
+- 갤러리 사진: `node tools/thumbs.cjs fountain`(assets/thumbs/fountain.webp — 밤에 찍어도 분수 물은 낮 밝기, thumbs.js withFountainDay)

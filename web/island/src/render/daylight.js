@@ -1,6 +1,7 @@
 // 현실 시간대: 기기 시계로 해의 높이·방향을 계산해 햇빛·하늘·안개·바다·구름 색을 바꿈. 밤에는 푸른 달빛과 등대 불빛.
 // 해 위치 계산은 world/sun.js(서울 위치 가정, 균시차·경도 보정).
 import * as THREE from "three";
+import { setFountainSky } from "./fountain.js";
 
 import { sunPosition } from "../world/sun.js";
 import { dayLook, moonMix, nightLook, lightElev, shadeTint } from "./dayKeys.js";
@@ -70,6 +71,7 @@ export class Daylight {
     if (this.scene.fog) this.scene.fog.color.copy(this.hor);
     this.water.userData.setLight?.(k[17] * (0.75 + 0.25 * wl));
     this.water.userData.setSky?.(this.dir, this.sun.color, this.hor, this.glow ?? 0);   // 해·달 빛길·지평선 밝기·밤 남색(water.js)
+    setFountainSky(k[17] * (0.75 + 0.25 * wl), this.dir, this.sun.color, this.glow ?? 0);   // 분수 물(render/fountain.js)도 바다와 같은 밝기·밤빛
     for (const o of this.clouds.children) if (o.isSprite) o.material.color.copy(this.hor).lerp(this.white, 0.55);
   }
   /** 날씨 밝기(0.45~1). 움직이는 동안은 다음 프레임에 바로, 그 밖에는 0.5초마다 하는 다시 계산 때 반영 */

@@ -10,6 +10,7 @@ import { ChunkStream } from "./render/chunkStream.js";
 import { WaterWindow } from "./render/waterWindow.js";
 import { terrainHeight } from "./world/terrain.js";
 import { createWater } from "./render/water.js";
+import { setFountainQuality, tickFountains } from "./render/fountain.js";
 import { skyBackground, createClouds } from "./render/sky.js";
 import { Daylight } from "./render/daylight.js";
 import { sunPosition } from "./world/sun.js";
@@ -197,7 +198,9 @@ const quality = new Quality(renderer, sun, c => {
   if (decor && worldRoot) { decor.dispose(); decor = new Decor(worldRoot, world, c.decor); seasonLook?.applyDecor(decor, world.season); }
   weatherViews?.setAmount(c.decor.density); leaves?.setAmount(c.decor.density); festaView?.setAmount(c.decor.density); footprints?.setCapacity(c.footprints);
   water.userData.setLite(c.waterLite);                                           // 낮음·성능 우선: 가벼운 물
+  setFountainQuality(c);                                                         // 분수 물방울 수 · 가벼운 분수 물
 });
+setFountainQuality(quality.cfg);
 water.userData.setLite(quality.cfg.waterLite); weatherViews.setAmount(quality.cfg.decor.density); leaves.setAmount(quality.cfg.decor.density); festaView.setAmount(quality.cfg.decor.density); footprints.setCapacity(quality.cfg.footprints);
 function mount(w) {
   if (worldRoot) { scene.remove(worldRoot); chunks.dispose(); stream.dispose(); poolFor(worldRoot).dispose(); overlay.innerHTML = ""; }
@@ -579,6 +582,7 @@ function frameBody() {
   keyCamera(dt);
   unitViews.sync(ready ? dt * steps : dt, playAnim, WALK_SCALE, RUN_SCALE, SPEED_BOOST, simT, camera);
   buildingViews.updateConstruction(dt, controls.target);
+  tickFountains(dt, renderer.domElement.height);                                 // 분수 물·물방울 시간(셰이더가 움직임) · 물방울 크기는 그리는 화면 높이로
   lifeViews.update(dt, camera, innerWidth, innerHeight);
   sparkleView.update(dt, world, camera, innerHeight);
   sparkleEdge.update(dt, ready && tools.mode === "view" && !roomView.isOpen, edgeBox);

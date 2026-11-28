@@ -10,6 +10,7 @@ import { terrainHeight } from "../world/terrain.js";
 import { poolFor } from "./instances.js";
 import { placeEl, showEl, textEl } from "../util.js";
 import { siteStepOf } from "../ui/bldView.js";
+import { fountainWater } from "./fountain.js";
 
 const _badgeP = new THREE.Vector3(), _badgeQ = new THREE.Vector3(), _lineP = new THREE.Vector3(), _tipP = new THREE.Vector3();
 const SITE_NEAR = 34;                                                            // 공사장 배지 둘째 줄은 카메라에서 이 거리(m) 안에서만(전기 없음 배지와 같은 거리)
@@ -60,8 +61,9 @@ export class BuildingViews {
         v.scaffold.position.y = Math.max(0.6, v.height - 0.3) / 2; v.holder.add(v.scaffold); void size;
       }
       if (v.scaffold) v.scaffold.visible = p < 1;
-      if (!v.spin) { v.spin = []; v.model.traverse(o => { if (o.name === "windBlades" || o.name === "fountainWater") v.spin.push(o); }); }   // 움직이는 부분은 한 번만 찾아 둠(매 프레임 모델 전체를 훑지 않게)
-      if (p >= 1) for (const o of v.spin) { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; }   // 풍차 날개 돌기 · 분수 물
+      if (!v.spin) { v.spin = []; v.fx = []; v.model.traverse(o => { if (o.userData.fx) v.fx.push(o); else if (o.name === "windBlades" || o.name === "fountainWater") v.spin.push(o); }); }   // 움직이는 부분은 한 번만 찾아 둠(매 프레임 모델 전체를 훑지 않게)
+      if (p >= 1) for (const o of v.spin) { if (o.name === "windBlades") o.rotation.z += dt * 1.6; else o.scale.y = 1 + Math.sin(performance.now() / 300) * 0.12; }   // 풍차 날개 돌기 · 분수 물(모델을 못 받았을 때의 코드 분수)
+      for (const o of v.fx) o.visible = p >= 1;                                      // 분수 물(셰이더가 움직임, render/fountain.js): 다 지은 뒤에만. 그림자를 안 드리워 animating에 넣지 않음
       if (p >= 1 && v.spin.length && focus && Math.abs(v.holder.position.x - focus.x) < 34 && Math.abs(v.holder.position.z - focus.z) < 34) this.animating = true;
     }
     // 전기가 들어온 집: 창가 불빛(밤에만 보임 — daylight.js가 houseGlow 세기를 정함). 2초마다 확인
@@ -111,7 +113,8 @@ export class BuildingViews {
 /** 건물 종류 하나의 모델(문 = +z, 바닥 가운데가 원점). 섬에 놓인 건물과 건설 갤러리 사진(thumbs.js)이 같은 것을 씀.
  *  ramp: 계단 높이({ h0, h1 }), season: 계절 장식의 모습 */
 export async function buildingModel(def, { ramp = null, season = null } = {}) {
-  const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape ? decoModel(def.decoShape, season) : await modelFor(def, () => def.power ? windmillModel() : buildingPlaceholder(def));   // 풍차: 사용자 모델(windBlades 노드가 돎), 못 받으면 코드로 만든 풍차
+  const model = def.stairs ? await stairsProp(def, ramp) : def.field ? await fieldProp(def) : def.dock ? dockModel() : def.bridge ? bridgeModel() : def.pier ? pierModel() : def.decoShape && !def.asset ? decoModel(def.decoShape, season) : await modelFor(def, () => def.power ? windmillModel() : def.decoShape ? decoModel(def.decoShape, season) : buildingPlaceholder(def));   // 풍차·분수: 사용자 모델, 못 받으면 코드로 만든 풍차·분수
+  if (def.fountainFx && model.children.length === 1 && !model.getObjectByName("fountainWater")) { const fx = fountainWater(); fx.position.copy(model.children[0].position); model.add(fx); }   // 분수 모델(normalize한 wrap 안, 원본 좌표) 위에 셰이더 물·물줄기·물방울
   if (def.asset) { tintRoofs(model, def.roof); model.rotation.y = def.modelYaw ?? 0; model.position.x += def.modelShift ?? 0; }   // 지붕 초록 → 테라코타·하늘색, 정문을 +z로, 문이 문 칸 앞에 오게 옆으로(modelShift m, 칸 안에서)
   return model;
 }

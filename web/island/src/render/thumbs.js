@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { BUILDINGS } from "../data/catalog.js";
 import { buildingModel } from "./views.js";
 import { Toon } from "./toon.js";
+import { withFountainDay } from "./fountain.js";
 
 export const THUMB_DIR = "assets/thumbs/";
 const THUMB_W = 192, THUMB_H = 128, THUMB_SUPER = 2;                              // 저장 크기(px, 3:2) · 찍을 때는 2배로 그려 줄여 담음(매끈하게)
@@ -68,7 +69,7 @@ export class BuildingThumbs {
     const pr = r.getPixelRatio(), q = Math.max(0.25, Math.min(THUMB_SUPER, cv.width / THUMB_W, cv.height / THUMB_H)), pw = Math.floor(THUMB_W * q), ph = Math.floor(THUMB_H * q);
     const vp = r.getViewport(new THREE.Vector4()), sc = r.getScissor(new THREE.Vector4()), st = r.getScissorTest(), ex = r.toneMappingExposure;
     r.setViewport(0, 0, pw / pr, ph / pr); r.setScissor(0, 0, pw / pr, ph / pr); r.setScissorTest(true); r.toneMappingExposure = 1.12;   // 밤에도 사진은 낮 밝기로
-    try { r.render(this.scene, cam); const g = this.canvas.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(cv, 0, cv.height - ph, pw, ph, 0, 0, THUMB_W, THUMB_H); }
+    try { withFountainDay(ph, () => r.render(this.scene, cam)); const g = this.canvas.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(cv, 0, cv.height - ph, pw, ph, 0, 0, THUMB_W, THUMB_H); }
     finally { r.setViewport(vp); r.setScissor(sc); r.setScissorTest(st); r.toneMappingExposure = ex; this.holder.clear(); }
     return this.canvas.toDataURL("image/webp", 0.86);
   }
